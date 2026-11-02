@@ -413,6 +413,51 @@ body.menu-arrastrando .side-scrim{transition:none}
 .sheet.open{transform:translateY(0);box-shadow:0 -20px 50px rgba(0,0,0,.4)}
 .sheet-handle{width:40px;height:4px;background:var(--line2);border-radius:3px;margin:6px auto 16px}
 .sheet-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+/* Redes → Hotel por post */
+.po-badge:empty{display:none}
+.po-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:10.5px;font-weight:800}
+.po-barra{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:14px 0}
+.po-barra .seg-group{margin:0}
+.po-buscar{flex:1 1 220px;max-width:340px;padding:9px 12px;font-size:13px}
+.po-card .tt-row{align-items:flex-start}
+.po-thumb{width:62px;height:62px;flex:none;object-fit:cover}
+.po-thumb-vacia{display:grid;place-items:center;color:var(--muted2);background:var(--panel)}
+.po-texto{font-size:12.5px;line-height:1.4;color:var(--txt);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+.po-oferta{display:flex;gap:9px;align-items:center;margin-top:11px;padding:9px 11px;border-radius:10px;border:1px dashed var(--line2);color:var(--muted)}
+.po-oferta>i{font-size:14px;width:16px;text-align:center}
+.po-oferta div{display:flex;flex-direction:column;min-width:0}
+.po-oferta b{font-size:12.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-oferta span{font-size:11px}
+.po-oferta.on{border-style:solid;border-color:rgba(var(--accent-rgb),.35);background:var(--accent-soft)}
+.po-oferta.on>i{color:var(--accent)}
+.po-post{display:flex;gap:11px;align-items:flex-start;padding:9px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.po-post img{width:54px;height:54px;border-radius:8px;object-fit:cover;flex:none}
+.po-post p{margin:0;font-size:12px;line-height:1.4;color:var(--muted);display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+.po-hoteles-nota{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);margin:11px 2px 7px}
+.po-hoteles-nota:empty{display:none}
+.po-hoteles{display:flex;flex-direction:column;gap:4px;max-height:38vh;overflow-y:auto;margin:0 -2px;padding:2px}
+.po-hoteles-vacio{padding:11px 2px}
+.po-hotel{display:flex;align-items:center;gap:11px;width:100%;min-height:52px;padding:7px 11px 7px 7px;border:1px solid transparent;border-radius:10px;background:none;color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:background .16s,border-color .16s}
+.po-hotel:hover{background:var(--panel)}
+.po-hotel.on{border-color:var(--accent);background:var(--accent-soft)}
+.po-hotel img,.po-hotel-sinfoto{width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none}
+.po-hotel-sinfoto{display:grid;place-items:center;background:var(--panel);color:var(--muted2)}
+.po-hotel-txt{display:flex;flex-direction:column;min-width:0;flex:1}
+.po-hotel-txt b{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-hotel-txt small{font-size:11px;color:var(--muted)}
+.po-hotel-check{color:var(--accent)}
+.po-promos{display:flex;flex-direction:column;gap:4px;margin-top:7px}
+.po-promo{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:border-color .16s,background .16s}
+.po-promo:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.po-promo input{margin-top:2px;accent-color:var(--accent)}
+.po-promo span{display:flex;flex-direction:column;min-width:0}
+.po-promo b{font-size:12.5px}
+.po-promo small{font-size:11px;color:var(--muted)}
+.po-acciones{display:flex;gap:9px;margin-top:14px}
+.po-acciones .dbtn{flex:1}
+.po-quitar{color:var(--danger)}
+.po-quitar[hidden]{display:none}
+#po-promos-wrap{margin-top:14px}
 /* Barra de acciones fija al pie de las hojas de formulario en móvil. Antes
    "Crear lead", "Guardar y facturar" y "Guardar" quedaban a 891-1287px en una
    pantalla de 844: había que scrollear dentro de la hoja para encontrarlos.
@@ -9733,6 +9778,27 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
     </div>
 
+    <!-- Hotel/promo de una publicación (Redes → Hotel por post) -->
+    <div class="sheet po-sheet" id="po-sheet" role="dialog" aria-labelledby="po-sheet-titulo">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="po-sheet-titulo">Hotel de la publicación</div>
+      <div class="po-post" id="po-post"></div>
+      <label class="fl" for="po-hotel-buscar">Hotel</label>
+      <input class="ei" id="po-hotel-buscar" type="search" placeholder="Buscar por hotel o destino" autocomplete="off">
+      <div class="po-hoteles-nota" id="po-hoteles-nota"></div>
+      <div class="po-hoteles" id="po-hoteles" role="listbox" aria-label="Hoteles"></div>
+      <div id="po-promos-wrap" hidden>
+        <div class="fl">Promoción (opcional)</div>
+        <div class="po-promos" id="po-promos"></div>
+      </div>
+      <div class="edit-err" id="po-error"></div>
+      <div class="sheet-acciones po-acciones">
+        <button class="dbtn po-quitar" id="po-quitar" type="button">Quitar hotel</button>
+        <button class="dbtn" id="po-cancelar" type="button">Cancelar</button>
+        <button class="dbtn save" id="po-guardar" type="button">Guardar</button>
+      </div>
+    </div>
+
     <!-- Horario semanal de un asesor (reparto de redes, solo admin) -->
     <div class="sheet" id="horario-sheet">
       <div class="sheet-handle"></div>
@@ -11168,6 +11234,27 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <button class="seg on" data-red="instagram"><i class="fa-brands fa-instagram"></i> Instagram</button>
         <button class="seg" data-red="tiktok"><i class="fa-brands fa-tiktok"></i> TikTok</button>
         <button class="seg" data-red="facebook"><i class="fa-brands fa-facebook"></i> Facebook</button>
+        <button class="seg" data-red="ofertas"><i class="fas fa-tags"></i> Hotel por post <span class="po-badge" id="po-cuenta-sin"></span></button>
+      </div>
+      <div id="redes-ofertas-panel" hidden>
+        <div class="card" style="margin-top:14px">
+          <h2><i class="fas fa-tags"></i> Hotel de cada publicación</h2>
+          <div class="csub">Cuando alguien comenta, la IA usa el hotel y la promo que marques acá. Sin marcar, lo deduce del texto y, si el post no nombra el hotel, puede ofrecer otro del mismo destino.</div>
+          <div class="po-barra">
+            <div class="seg-group" id="po-red">
+              <button class="seg on" type="button" data-red="instagram"><i class="fa-brands fa-instagram"></i> Instagram</button>
+              <button class="seg" type="button" data-red="facebook"><i class="fa-brands fa-facebook"></i> Facebook</button>
+            </div>
+            <div class="seg-group" id="po-filtro">
+              <button class="seg on" type="button" data-f="sin">Sin hotel</button>
+              <button class="seg" type="button" data-f="con">Con hotel</button>
+              <button class="seg" type="button" data-f="todos">Todos</button>
+            </div>
+            <input class="ei po-buscar" id="po-buscar" type="search" placeholder="Buscar en el texto del post" aria-label="Buscar en el texto del post">
+          </div>
+          <div id="po-aviso"></div>
+          <div class="lt-grid" id="po-grid"></div>
+        </div>
       </div>
       <div class="seg-group" id="redes-periodo" style="margin-top:8px">
         <button class="seg" data-p="7d">7 días</button>

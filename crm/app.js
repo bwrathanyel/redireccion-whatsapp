@@ -15520,9 +15520,10 @@ function setupRedes() {
   document.getElementById('redes-chat-send').onclick = enviarChatRedes;
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatRedes(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  setupOfertasPosts();
   addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
 }
-function cargarRedActual() { loadRedesZernio(redesRed); }
+function cargarRedActual() { redesRed === 'ofertas' ? cargarOfertasPosts() : loadRedesZernio(redesRed); }
 // Con todo en 0 Chart.js dibuja un eje 0,0–1,0 sin sentido: se cambia por un aviso.
 function chartVacio(id, hayDatos, msg) {
   const cv = document.getElementById(id); if (!cv) return;
@@ -15622,12 +15623,173 @@ function fbPintarCuentas(plat) {
   box.innerHTML = cs.map(c => `<button class="seg${c.id === redesFbCuenta[plat] ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
   box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta[plat] = b.dataset.id; fbPintarCuentas(plat); loadRedesZernio(plat); });
 }
-// Facebook, Instagram y TikTok comparten panel. Con rol marketing (la EF es solo admin)
+// Facebook, Instagram y TikTok comparten panel. Con rol marketing (el resumen de la EF es solo oficina)
 // Instagram y TikTok caen a sus paneles de siempre, alimentados desde Supabase.
 function redesPanelesVista(zernio) {
-  document.getElementById('redes-ig-panel').style.display = !zernio && redesRed === 'instagram' ? '' : 'none';
-  document.getElementById('redes-tiktok-panel').style.display = !zernio && redesRed === 'tiktok' ? '' : 'none';
-  document.getElementById('redes-fb-panel').style.display = zernio ? '' : 'none';
+  const ofertas = redesRed === 'ofertas';
+  document.getElementById('redes-ig-panel').style.display = !ofertas && !zernio && redesRed === 'instagram' ? '' : 'none';
+  document.getElementById('redes-tiktok-panel').style.display = !ofertas && !zernio && redesRed === 'tiktok' ? '' : 'none';
+  document.getElementById('redes-fb-panel').style.display = !ofertas && zernio ? '' : 'none';
+  document.getElementById('redes-ofertas-panel').hidden = !ofertas;
+  document.getElementById('redes-periodo').style.display = ofertas ? 'none' : '';
+}
+
+/* ---------- Oferta de cada publicación: hotel/promo que la IA usa al contestar ---------- */
+// Se guarda en publicacion_oferta; zernio-comentarios-webhook lo pone primero en
+// el contexto del cerebro, así un post que no nombra el hotel no empata entre
+// todos los del destino.
+const PO = { red: 'instagram', filtro: 'sin', q: '', posts: [], ofertas: {}, hoteles: null, puntos: new Map(), promos: new Map(), gen: 0, sel: null };
+const poNorm = rvSinTildes;
+const poSegOn = (grupo, b) => document.querySelectorAll(`#${grupo} .seg`).forEach(x => x.classList.toggle('on', x === b));
+function setupOfertasPosts() {
+  document.querySelectorAll('#po-red .seg').forEach(b => b.onclick = () => { poSegOn('po-red', b); PO.red = b.dataset.red; cargarOfertasPosts(); });
+  document.querySelectorAll('#po-filtro .seg').forEach(b => b.onclick = () => { poSegOn('po-filtro', b); PO.filtro = b.dataset.f; pintarOfertasPosts(); });
+  document.getElementById('po-buscar').oninput = e => { PO.q = poNorm(e.target.value.trim()); pintarOfertasPosts(); };
+  document.getElementById('po-grid').onclick = e => { const b = e.target.closest('[data-po-post]'); if (b) abrirOfertaPost(b.dataset.poPost); };
+  document.getElementById('po-hotel-buscar').oninput = pintarHotelesOferta;
+  document.getElementById('po-hoteles').onclick = e => { const b = e.target.closest('[data-po-hotel]'); if (b) elegirHotelOferta(+b.dataset.poHotel); };
+  document.getElementById('po-promos').onchange = e => { if (e.target.name === 'po-promo' && PO.sel) PO.sel.promocion_id = e.target.value ? +e.target.value : null; };
+  document.getElementById('po-cancelar').onclick = () => closeSheet('po-sheet');
+  document.getElementById('po-guardar').onclick = () => guardarOfertaPost(false);
+  document.getElementById('po-quitar').onclick = () => guardarOfertaPost(true);
+}
+async function cargarHotelesOferta() {
+  if (PO.hoteles) return;
+  const { data, error } = await sb.from('productos')
+    .select('id,nombre,destino,tipo,producto_fotos(storage_path,orden,activo,es_principal)')
+    .eq('activo', true).eq('cliente_id', 1).neq('tipo', 'info').eq('producto_fotos.es_principal', true).order('destino').order('nombre');
+  if (error) throw error;
+  PO.hoteles = data.map(p => {
+    const f = (p.producto_fotos || []).find(x => x.activo !== false);
+    return { id: p.id, nombre: p.nombre, destino: p.destino || 'Sin destino', tipo: p.tipo, foto: f ? fotoMini(f.storage_path, 256) : null, n: poNorm(`${p.nombre} ${p.destino || ''}`) };
+  });
+}
+async function cargarOfertasPosts() {
+  const gen = ++PO.gen, aviso = document.getElementById('po-aviso');
+  aviso.innerHTML = fbAviso('fa-spinner fa-spin', 'Cargando publicaciones con comentarios...');
+  document.getElementById('po-grid').innerHTML = '';
+  try {
+    if (!redesFbCuentas[PO.red]) {
+      redesFbCuentas[PO.red] = (await redesFbInvocar({ accion: 'cuentas', plataforma: PO.red })).cuentas.filter(c => c.activo);
+      redesFbCuenta[PO.red] = redesFbCuentas[PO.red][0]?.id || null;
+    }
+    const cuenta = redesFbCuenta[PO.red];
+    if (!cuenta) { if (gen === PO.gen) aviso.innerHTML = fbAviso('fa-circle-info', `No hay cuentas de ${FB_RED[PO.red].nombre} conectadas en Zernio.`); return; }
+    const [{ publicaciones }] = await Promise.all([redesFbInvocar({ accion: 'publicaciones', plataforma: PO.red, accountId: cuenta }), cargarHotelesOferta()]);
+    const { data, error } = await sb.rpc('ofertas_publicaciones', { p_post_ids: publicaciones.map(p => p.id) });
+    if (error) throw error;
+    if (gen !== PO.gen) return;
+    PO.posts = publicaciones; PO.ofertas = data || {};
+    aviso.innerHTML = '';
+    pintarOfertasPosts();
+  } catch (e) {
+    console.error('ofertas de publicaciones', e);
+    if (gen === PO.gen) aviso.innerHTML = fbAviso('fa-triangle-exclamation', 'No se pudieron cargar las publicaciones. Intenta de nuevo en un momento.');
+  }
+}
+function pintarOfertasPosts() {
+  const sinMarcar = PO.posts.filter(p => !PO.ofertas[p.id]).length;
+  document.getElementById('po-cuenta-sin').textContent = sinMarcar ? String(sinMarcar) : '';
+  const lista = PO.posts.filter(p => (PO.filtro === 'todos' || (PO.filtro === 'sin') === !PO.ofertas[p.id]) && (!PO.q || poNorm(p.texto).includes(PO.q)));
+  const vacio = !PO.posts.length ? 'Sin publicaciones con comentarios recientes' : PO.filtro === 'sin' && !sinMarcar ? 'Todas las publicaciones tienen su hotel marcado' : 'Nada coincide con el filtro';
+  document.getElementById('po-grid').innerHTML = lista.length ? lista.map(tarjetaOfertaPost).join('') : `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${vacio}</div>`;
+}
+function poResumenOferta(o) {
+  return o
+    ? `<div class="po-oferta on"><i class="fas fa-hotel"></i><div><b>${esc(o.producto)}</b><span>${esc([o.destino, o.promocion].filter(Boolean).join(' · '))}</span></div></div>`
+    : '<div class="po-oferta"><i class="fas fa-circle-question"></i><div><b>Sin hotel marcado</b><span>La IA lo deduce del texto y puede equivocarse</span></div></div>';
+}
+function tarjetaOfertaPost(p, i) {
+  const o = PO.ofertas[p.id], mini = fbHttps(p.portada), url = fbHttps(p.url);
+  const meta = [p.fecha ? fmtFechaSolo(p.fecha.slice(0, 10)) : '', p.comentarios ? `${fmt(p.comentarios)} comentarios` : ''].filter(Boolean).join(' · ');
+  return `<article class="lt-card po-card" style="--i:${Math.min(i, 20)}">
+    <div class="tt-row">
+      ${mini ? `<img class="tt-thumb po-thumb" src="${esc(mini)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<div class="tt-thumb po-thumb po-thumb-vacia"><i class="fas fa-image"></i></div>'}
+      <div class="po-texto" title="${esc(p.texto)}">${esc(p.texto || 'Sin texto')}</div>
+    </div>
+    ${poResumenOferta(o)}
+    <div class="lt-card-pie">
+      <span class="csub" style="margin:0 auto 0 0">${esc(meta)}</span>
+      ${url ? `<a class="btn-sm" href="${esc(url)}" target="_blank" rel="noopener" aria-label="Ver publicación" title="Ver publicación"><i class="fa-brands ${FB_RED[PO.red].icono}"></i></a>` : ''}
+      <button class="btn-sm lt-primario" type="button" data-po-post="${esc(p.id)}">${o ? 'Cambiar' : 'Elegir hotel'}</button>
+    </div>
+  </article>`;
+}
+function abrirOfertaPost(id) {
+  const p = PO.posts.find(x => x.id === id);
+  if (!p || !PO.hoteles) return;
+  const o = PO.ofertas[id], t = poNorm(p.texto);
+  PO.sel = { post: p, producto_id: o?.producto_id ?? null, promocion_id: o?.promocion_id ?? null };
+  // Sugeridos: hotel nombrado en el texto primero, después los del destino del post.
+  PO.puntos = new Map(PO.hoteles.map(h => {
+    const destino = poNorm(h.destino).split(',')[0].trim(), nombre = poNorm(h.nombre).replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return [h.id, (nombre.length >= 5 && t.includes(nombre) ? 2 : 0) + (destino.length >= 4 && t.includes(destino) ? 1 : 0)];
+  }).filter(([, n]) => n));
+  const mini = fbHttps(p.portada);
+  document.getElementById('po-post').innerHTML = `${mini ? `<img src="${esc(mini)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<p>${esc(p.texto || 'Sin texto')}</p>`;
+  document.getElementById('po-hotel-buscar').value = '';
+  document.getElementById('po-error').textContent = '';
+  document.getElementById('po-quitar').hidden = !o;
+  pintarHotelesOferta();
+  pintarPromosOferta();
+  openSheet('po-sheet');
+}
+function pintarHotelesOferta() {
+  const q = poNorm(document.getElementById('po-hotel-buscar').value.trim()), sel = PO.sel?.producto_id;
+  let hs = PO.hoteles.filter(h => q ? q.split(/\s+/).every(w => h.n.includes(w)) : PO.puntos.has(h.id) || h.id === sel);
+  hs = hs.sort((a, b) => (b.id === sel) - (a.id === sel) || (PO.puntos.get(b.id) || 0) - (PO.puntos.get(a.id) || 0));
+  document.getElementById('po-hoteles-nota').textContent = q
+    ? `${hs.length} ${hs.length === 1 ? 'resultado' : 'resultados'}${hs.length > 60 ? ', se muestran 60' : ''}`
+    : hs.length ? 'Sugeridos por el texto del post' : '';
+  document.getElementById('po-hoteles').innerHTML = hs.length ? hs.slice(0, 60).map(h => `
+    <button type="button" class="po-hotel${h.id === sel ? ' on' : ''}" role="option" aria-selected="${h.id === sel}" data-po-hotel="${h.id}">
+      ${h.foto ? `<img src="${esc(h.foto)}" alt="" loading="lazy">` : '<span class="po-hotel-sinfoto"><i class="fas fa-hotel"></i></span>'}
+      <span class="po-hotel-txt"><b>${esc(h.nombre)}</b><small>${esc(h.destino)}${h.tipo !== 'hotel' ? ` · ${esc(h.tipo)}` : ''}</small></span>
+      ${h.id === sel ? '<i class="fas fa-check po-hotel-check"></i>' : ''}
+    </button>`).join('')
+    : `<div class="csub po-hoteles-vacio">${q ? 'Ningún hotel coincide.' : 'El texto no nombra un destino del tarifario: busca el hotel arriba.'}</div>`;
+}
+function elegirHotelOferta(id) {
+  if (!PO.sel || PO.sel.producto_id === id) return;
+  PO.sel.producto_id = id;
+  PO.sel.promocion_id = null;
+  pintarHotelesOferta();
+  pintarPromosOferta();
+}
+async function pintarPromosOferta() {
+  const wrap = document.getElementById('po-promos-wrap'), box = document.getElementById('po-promos'), id = PO.sel?.producto_id;
+  wrap.hidden = !id;
+  if (!id) return;
+  box.innerHTML = '<div class="csub">Cargando promociones...</div>';
+  const { data, error } = await sb.from('promociones').select('id,titulo,precio_texto,fecha_venta_fin,ia_estado').eq('producto_id', id).order('id', { ascending: false });
+  if (PO.sel?.producto_id !== id) return;
+  if (error) { box.innerHTML = '<div class="csub">No se pudieron cargar las promociones.</div>'; return; }
+  const h = hoy(), vivas = (data || []).filter(p => (!p.fecha_venta_fin || p.fecha_venta_fin >= h) && p.ia_estado !== 'quitar');
+  vivas.forEach(p => PO.promos.set(p.id, p.titulo));
+  if (PO.sel.promocion_id && !vivas.some(p => p.id === PO.sel.promocion_id)) PO.sel.promocion_id = null;
+  const op = (v, titulo, sub) => `<label class="po-promo"><input type="radio" name="po-promo" value="${v}"${String(PO.sel.promocion_id ?? '') === String(v) ? ' checked' : ''}><span><b>${esc(titulo)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`;
+  box.innerHTML = op('', 'Sin promoción específica', vivas.length ? 'La IA ofrece la tarifa que calce con el post' : 'Este hotel no tiene promociones vigentes')
+    + vivas.map(p => op(p.id, p.titulo || `Promoción ${p.id}`, p.precio_texto)).join('');
+}
+async function guardarOfertaPost(quitar) {
+  const s = PO.sel, err = document.getElementById('po-error');
+  if (!s) return;
+  if (!quitar && !s.producto_id) { err.textContent = 'Elige un hotel de la lista.'; return; }
+  const btn = document.getElementById(quitar ? 'po-quitar' : 'po-guardar');
+  btn.disabled = true;
+  const { error } = await sb.rpc('asignar_oferta_publicacion', {
+    p_post_id: s.post.id, p_canal: PO.red, p_producto_id: quitar ? null : s.producto_id, p_promocion_id: quitar ? null : s.promocion_id,
+  });
+  btn.disabled = false;
+  if (error) { console.error('asignar oferta', error); err.textContent = 'No se pudo guardar. Intenta de nuevo.'; return; }
+  if (quitar) delete PO.ofertas[s.post.id];
+  else {
+    const h = PO.hoteles.find(x => x.id === s.producto_id);
+    PO.ofertas[s.post.id] = { producto_id: h.id, producto: h.nombre, destino: h.destino, promocion_id: s.promocion_id, promocion: s.promocion_id ? PO.promos.get(s.promocion_id) || null : null };
+  }
+  closeSheet('po-sheet');
+  okToast(quitar ? 'Hotel quitado de la publicación' : 'Hotel guardado: la IA ya lo usa en los próximos comentarios');
+  pintarOfertasPosts();
 }
 const loadRedesFacebook = () => loadRedesZernio('facebook');
 async function loadRedesZernio(plat) {
@@ -36842,6 +37004,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-02', emoji: '🏨', titulo: 'Redes: hotel de cada publicación', texto: 'En Redes › Hotel por post se ven las publicaciones de Instagram y Facebook que reciben comentarios. Elegí el hotel (y si querés la promoción) de cada una: cuando alguien comente, la IA le habla de ese hotel y le manda sus fotos, aunque el texto del post no lo nombre.', roles: ['admin', 'marketing'] },
   { fecha: '2026-10-31', emoji: '🗓️', titulo: 'Pagos por verificar: se ve la cuota del plan de abonos', texto: 'Los pagos de un plan de abonos ahora muestran «Plan de abonos · Cuota 1 de 4» (o «Saldo completo») y ya no salen en rojo con «el monto no coincide». Verifique el monto y la referencia contra el banco como siempre.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-31', emoji: '📣', titulo: 'Promocionar post: más claro y con cuenta de Instagram', texto: 'En Marketing › Anuncios Meta › Promocionar post, al tocar una publicación la pantalla baja sola al formulario (nombre, botón, presupuesto, días y países). Si la cuenta publicitaria tiene varias cuentas de Instagram, ahora podés elegir con cuál anunciar.', roles: ['admin'] },
   { fecha: '2026-10-30', emoji: '🧳', titulo: 'Un solo «Voucher de la reserva»', texto: 'En Reservas > Servicios, «Voucher del paquete» y «Voucher de abonos» ahora son un solo botón: «Voucher de la reserva». Trae todos los servicios y, si la reserva tiene abonos, la tabla de abonos con el resumen de pago. Al generarlo, el voucher anterior de la reserva (también los de abonos) deja de estar vigente. El voucher de cada servicio sigue en su tarjeta. Se quitó el botón «Subir ticket o voucher» de la barra: los archivos se suben en la pestaña Documentos, y boletería sigue cargando tickets desde el menú ⋯ del boleto.', roles: ['admin', 'asesor', 'administrativo', 'boleteria'] },
