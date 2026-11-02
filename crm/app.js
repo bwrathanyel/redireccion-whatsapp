@@ -3576,7 +3576,7 @@ let PV_CAMPANAS = null;
 let ADS_META = null;
 const adsMeta = () => ADS_META ||= crearAdsMeta({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('ads-root') });
 let MARKETING = null;
-const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, rol: ROL, raiz: document.getElementById('contenido-root') });
+const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root') });
 const pvCampanas = () => PV_CAMPANAS ||=crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
@@ -34395,7 +34395,7 @@ const NAV_ITEMS = [
   { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Quienes escriben al bot para ofrecer algo' },
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
   { sec: 'ads', icon: 'fas fa-bullhorn', label: 'Anuncios Meta', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Gasto, leads y ventas por anuncio' },
-  { sec: 'contenido', icon: 'fas fa-layer-group', label: 'Contenido', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok', sub: 'Marcas de clientes y conexión de su Instagram' },
+  { sec: 'contenido', icon: 'fas fa-layer-group', label: 'Contenido', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok', sub: 'Calendario de publicaciones y marcas de clientes' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
   { sec: 'induccion', icon: 'fas fa-graduation-cap', label: 'Inducción', padre: 'grp-equipo', roles: 'nav-admin-only', sub: 'Cómo le fue a cada persona en el modo de prueba' },
