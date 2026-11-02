@@ -17,6 +17,10 @@ button.cd-fila:hover .cd-prov{color:var(--accent-ink)}
 .cd-fila.off{opacity:.55}
 .cd-tot{display:flex;justify-content:space-between;padding-top:9px;margin-top:4px;border-top:1px solid var(--line2);font-size:12px;font-weight:700}
 .cd-cobrado{color:var(--green)}
+.cd-pend{display:flex;flex-wrap:wrap;gap:6px}
+.cd-chip{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:999px;border:1px dashed var(--line2);background:transparent;color:var(--muted);font-size:11.5px;font-weight:700}
+button.cd-chip{cursor:pointer}
+button.cd-chip:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
 .cd-vacio{padding:18px 0;text-align:center;color:var(--muted);font-size:12px}
 `;
 const GRUPOS = [
@@ -24,7 +28,7 @@ const GRUPOS = [
   ['automatizacion', 'Automatización y mensajería', 'fa-comments'],
   ['infraestructura', 'Infraestructura', 'fa-server'],
 ];
-const FUENTES = { ventas: 'Bot de ventas', tarifario: 'Carga del tarifario', habitaciones: 'Fotos de habitaciones' };
+const FUENTES = { ventas: 'Bot de ventas (DeepSeek)',tarifario: 'Carga del tarifario', habitaciones: 'Fotos de habitaciones' };
 const ERRORES = {
   falta_proveedor: 'Falta el proveedor.', grupo_invalido: 'Elegí un grupo.', monto_invalido: 'El monto tiene que ser mayor a 0.',
   ciclo_invalido: 'Ciclo inválido.', dia_invalido: 'El día de cobro va del 1 al 28.', mes_invalido: 'Un plan anual necesita el mes de cobro.',
@@ -71,40 +75,39 @@ export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs
     else if (a === 'editar') editar((datos?.suscripciones || []).find(s => String(s.id) === b.dataset.id));
   }
 
-  function cobroTxt(s) {
-    if (!s.activa) return 'Pausada';
-    if (s.cargo) return `<span class="cd-cobrado">Cobrado ${dd(s.cargo.fecha)}</span>`;
-    const anual = s.ciclo === 'anual', mes = Number(datos.mes.slice(5, 7));
-    if (anual && s.mes_cobro !== mes) return `Se cobra el ${s.dia_cobro} de ${MESES[s.mes_cobro - 1]}`;
-    return `Se cobra el día ${s.dia_cobro}`;
-  }
+  // Una suscripción cuenta en el mes solo cuando ya se cobró (pedido del dueño 2026-11-02);
+  // las del mes que faltan quedan como «Por cobrar», sin sumar.
+  const porCobrar = s => s.activa && s.vigente && !s.cargo && (s.ciclo === 'mensual' || s.mes_cobro === Number(datos.mes.slice(5, 7)));
 
   function filaSus(s) {
-    const ciclo = s.ciclo === 'anual' ? `Anual ${usd(s.monto_usd)}` : 'Mensual';
-    const sub = [s.plan ? esc(s.plan) : '', ciclo, cobroTxt(s)].filter(Boolean).join(' · ');
+    const sub = [s.plan ? esc(s.plan) : '', s.ciclo === 'anual' ? 'Anual' : 'Mensual', `<span class="cd-cobrado">Cobrado ${dd(s.cargo.fecha)}</span>`].filter(Boolean).join(' · ');
     const tag = admin ? 'button' : 'div';
-    return `<${tag} class="cd-fila${s.vigente ? '' : ' off'}"${admin ? ` type="button" data-cd="editar" data-id="${s.id}" title="Editar"` : ''}>
-      <div><span class="cd-prov">${esc(s.proveedor)}</span><small>${sub}</small></div><b>${usd(s.mensual)}</b></${tag}>`;
+    return `<${tag} class="cd-fila"${admin ? ` type="button" data-cd="editar" data-id="${s.id}" title="Editar"` : ''}>
+      <div><span class="cd-prov">${esc(s.proveedor)}</span><small>${sub}</small></div><b>${usd(s.cargo.monto)}</b></${tag}>`;
   }
+  const chipPend = s => `<${admin ? `button type="button" data-cd="editar" data-id="${s.id}" title="Editar"` : 'span'} class="cd-chip">${esc(s.proveedor)}${s.plan ? ' · ' + esc(s.plan) : ''} · día ${s.dia_cobro} · ${usd(s.monto_usd)}</${admin ? 'button' : 'span'}>`;
 
   function render() {
-    const d = datos, t = d.totales || {}, a = d.anterior || {}, total = Number(t.fijo) + Number(t.consumo);
+    const d = datos, t = d.totales || {}, a = d.anterior || {}, total = Number(t.cargado) + Number(t.consumo);
+    const pend = d.suscripciones.filter(porCobrar);
     $('#cd-etiqueta').textContent = mesTxt(d.mes);
     $('[data-cd="sig"]').disabled = off >= 0;
     const dif = total - Number(a.total || 0);
     pintarKPIs($('#cd-kpis'), [
       { t: 'Total del mes', v: usd(total), d: Number(a.total) ? `${dif >= 0 ? '+' : '−'}${usd(Math.abs(dif))} vs ${mesTxt(new Date(Date.UTC(+d.mes.slice(0, 4), +d.mes.slice(5, 7) - 2, 1)).toISOString())}` : 'Suscripciones + consumo de IA', i: 'fa-wallet', c: 'var(--accent)' },
-      { t: 'Suscripciones', v: usd(t.fijo), d: `${d.suscripciones.filter(s => s.vigente).length} activas · ${usd(t.cargado)} ya cobrado`, i: 'fa-repeat', c: 'var(--blue)' },
+      { t: 'Suscripciones', v: usd(t.cargado), d: `${d.suscripciones.filter(s => s.cargo).length} cobradas${pend.length ? ` · ${pend.length} por cobrar (${usd(pend.reduce((n, s) => n + Number(s.monto_usd), 0))})` : ''}`, i: 'fa-repeat', c: 'var(--blue)' },
       { t: 'Consumo de IA', v: usd(t.consumo), d: 'Medido por uso (tokens)', i: 'fa-microchip', c: 'var(--amber)' },
     ]);
     const tarjetas = GRUPOS.map(([g, nombre, icono]) => {
-      const lista = d.suscripciones.filter(s => s.grupo === g), suma = lista.filter(s => s.vigente).reduce((n, s) => n + Number(s.mensual), 0);
+      const lista = d.suscripciones.filter(s => s.grupo === g && s.cargo), suma = lista.reduce((n, s) => n + Number(s.cargo.monto), 0);
+      const pg = pend.filter(s => s.grupo === g);
       return `<div class="ria-card"><h2><i class="fas ${icono}"></i> ${nombre}</h2>
-        ${lista.length ? lista.map(filaSus).join('') + `<div class="cd-tot"><span>Por mes</span><span>${usd(suma)}</span></div>` : `<div class="cd-vacio">Sin suscripciones cargadas.</div>`}</div>`;
+        ${lista.length ? lista.map(filaSus).join('') + `<div class="cd-tot"><span>Cobrado en el mes</span><span>${usd(suma)}</span></div>` : `<div class="cd-vacio">Nada cobrado este mes.</div>`}
+        ${pg.length ? `<div class="ria-sub" style="margin:12px 0 6px">Por cobrar este mes (no suma hasta su día):</div><div class="cd-pend">${pg.map(chipPend).join('')}</div>` : ''}</div>`;
     });
     const cons = d.consumo || [];
     tarjetas.push(`<div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Consumo medido de IA</h2>
-      <div class="ria-sub">Lo que se paga por uso (OpenRouter, DeepSeek...). No se carga como suscripción para no contarlo dos veces.</div>
+      <div class="ria-sub">Se paga por uso (DeepSeek, OpenRouter...), estimado por tokens. Puede diferir unos centavos del panel del proveedor.</div>
       ${cons.length ? cons.map(c => {
         const [base, sub] = String(c.fuente).split(':');
         const nombre = sub ? `Tareas · ${sub}` : (FUENTES[base] || base);
