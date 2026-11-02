@@ -98,13 +98,11 @@ export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs
       { t: 'Suscripciones', v: usd(t.cargado), d: `${d.suscripciones.filter(s => s.cargo).length} cobradas${pend.length ? ` · ${pend.length} por cobrar (${usd(pend.reduce((n, s) => n + Number(s.monto_usd), 0))})` : ''}`, i: 'fa-repeat', c: 'var(--blue)' },
       { t: 'Consumo de IA', v: usd(t.consumo), d: 'Medido por uso (tokens)', i: 'fa-microchip', c: 'var(--amber)' },
     ]);
-    const tarjetas = GRUPOS.map(([g, nombre, icono]) => {
-      const lista = d.suscripciones.filter(s => s.grupo === g && s.cargo), suma = lista.reduce((n, s) => n + Number(s.cargo.monto), 0);
-      const pg = pend.filter(s => s.grupo === g);
-      return `<div class="ria-card"><h2><i class="fas ${icono}"></i> ${nombre}</h2>
-        ${lista.length ? lista.map(filaSus).join('') + `<div class="cd-tot"><span>Cobrado en el mes</span><span>${usd(suma)}</span></div>` : `<div class="cd-vacio">Nada cobrado este mes.</div>`}
-        ${pg.length ? `<div class="ria-sub" style="margin:12px 0 6px">Por cobrar este mes (no suma hasta su día):</div><div class="cd-pend">${pg.map(chipPend).join('')}</div>` : ''}</div>`;
-    });
+    // Una sola tarjeta para todas las suscripciones (pedido del dueño 2026-11-02); el grupo queda como dato.
+    const lista = d.suscripciones.filter(s => s.cargo), suma = lista.reduce((n, s) => n + Number(s.cargo.monto), 0);
+    const tarjetas = [`<div class="ria-card"><h2><i class="fas fa-repeat"></i> Suscripciones</h2>
+      ${lista.length ? lista.map(filaSus).join('') + `<div class="cd-tot"><span>Cobrado en el mes</span><span>${usd(suma)}</span></div>` : `<div class="cd-vacio">Nada cobrado este mes.</div>`}
+      ${pend.length ? `<div class="ria-sub" style="margin:12px 0 6px">Por cobrar este mes (no suma hasta su día):</div><div class="cd-pend">${pend.map(chipPend).join('')}</div>` : ''}</div>`];
     const cons = d.consumo || [];
     tarjetas.push(`<div class="ria-card"><h2><i class="fas fa-gauge-high"></i> Consumo medido de IA</h2>
       <div class="ria-sub">Se paga por uso (DeepSeek, OpenRouter...), estimado por tokens. Puede diferir unos centavos del panel del proveedor.</div>
