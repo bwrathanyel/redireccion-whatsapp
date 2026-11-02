@@ -15640,6 +15640,9 @@ function redesPanelesVista(zernio) {
 // todos los del destino.
 const PO = { red: 'instagram', filtro: 'sin', q: '', posts: [], ofertas: {}, hoteles: null, puntos: new Map(), promos: new Map(), gen: 0, sel: null };
 const poNorm = rvSinTildes;
+const poTiene = o => !!o?.producto_id;
+const PO_UNIDAD = { persona: 'por persona', habitacion: 'por habitación', total: 'total' };
+const poPrecio = p => p?.monto ? `${p.moneda === 'USD' ? '$' : p.moneda + ' '}${fmt(p.monto)} ${PO_UNIDAD[p.unidad] || ''}${p.noches ? ` · ${p.noches + 1}D/${p.noches}N` : ''}${p.ocupacion ? ` · ${p.ocupacion}` : ''}` : '';
 const poSegOn = (grupo, b) => document.querySelectorAll(`#${grupo} .seg`).forEach(x => x.classList.toggle('on', x === b));
 function setupOfertasPosts() {
   document.querySelectorAll('#po-red .seg').forEach(b => b.onclick = () => { poSegOn('po-red', b); PO.red = b.dataset.red; cargarOfertasPosts(); });
@@ -15688,16 +15691,20 @@ async function cargarOfertasPosts() {
   }
 }
 function pintarOfertasPosts() {
-  const sinMarcar = PO.posts.filter(p => !PO.ofertas[p.id]).length;
+  const sinMarcar = PO.posts.filter(p => !poTiene(PO.ofertas[p.id])).length;
   document.getElementById('po-cuenta-sin').textContent = sinMarcar ? String(sinMarcar) : '';
-  const lista = PO.posts.filter(p => (PO.filtro === 'todos' || (PO.filtro === 'sin') === !PO.ofertas[p.id]) && (!PO.q || poNorm(p.texto).includes(PO.q)));
+  const lista = PO.posts.filter(p => (PO.filtro === 'todos' || (PO.filtro === 'sin') === !poTiene(PO.ofertas[p.id])) && (!PO.q || poNorm(p.texto).includes(PO.q)));
   const vacio = !PO.posts.length ? 'Sin publicaciones con comentarios recientes' : PO.filtro === 'sin' && !sinMarcar ? 'Todas las publicaciones tienen su hotel marcado' : 'Nada coincide con el filtro';
   document.getElementById('po-grid').innerHTML = lista.length ? lista.map(tarjetaOfertaPost).join('') : `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${vacio}</div>`;
 }
+// origen 'ia': sugerencia de analizar-publicaciones; el bot ya la usa. Guardar desde la hoja la pasa a manual.
 function poResumenOferta(o) {
-  return o
-    ? `<div class="po-oferta on"><i class="fas fa-hotel"></i><div><b>${esc(o.producto)}</b><span>${esc([o.destino, o.promocion].filter(Boolean).join(' · '))}</span></div></div>`
-    : '<div class="po-oferta"><i class="fas fa-circle-question"></i><div><b>Sin hotel marcado</b><span>La IA lo deduce del texto y puede equivocarse</span></div></div>';
+  const ia = o?.origen === 'ia';
+  const tag = ia ? ` <span class="po-ia">IA · ${esc(o.confianza || 'baja')}</span>` : '';
+  const razon = ia && o.razon ? `<span class="po-razon" title="${esc(o.razon)}">${esc(o.razon)}</span>` : '';
+  if (poTiene(o)) return `<div class="po-oferta on"><i class="fas fa-${ia ? 'wand-magic-sparkles' : 'hotel'}"></i><div><b>${esc(o.producto)}${tag}</b><span>${esc([o.destino, o.promocion, poPrecio(o.precio_leido)].filter(Boolean).join(' · '))}</span>${razon}</div></div>`;
+  if (ia) return `<div class="po-oferta"><i class="fas fa-wand-magic-sparkles"></i><div><b>La IA no identificó el hotel${tag}</b>${razon}</div></div>`;
+  return '<div class="po-oferta"><i class="fas fa-circle-question"></i><div><b>Sin hotel marcado</b><span>La IA lo deduce del texto y puede equivocarse</span></div></div>';
 }
 function tarjetaOfertaPost(p, i) {
   const o = PO.ofertas[p.id], mini = fbHttps(p.portada), url = fbHttps(p.url);
@@ -15711,7 +15718,7 @@ function tarjetaOfertaPost(p, i) {
     <div class="lt-card-pie">
       <span class="csub" style="margin:0 auto 0 0">${esc(meta)}</span>
       ${url ? `<a class="btn-sm" href="${esc(url)}" target="_blank" rel="noopener" aria-label="Ver publicación" title="Ver publicación"><i class="fa-brands ${FB_RED[PO.red].icono}"></i></a>` : ''}
-      <button class="btn-sm lt-primario" type="button" data-po-post="${esc(p.id)}">${o ? 'Cambiar' : 'Elegir hotel'}</button>
+      <button class="btn-sm lt-primario" type="button" data-po-post="${esc(p.id)}">${poTiene(o) ? 'Cambiar' : 'Elegir hotel'}</button>
     </div>
   </article>`;
 }
@@ -15729,7 +15736,7 @@ function abrirOfertaPost(id) {
   document.getElementById('po-post').innerHTML = `${mini ? `<img src="${esc(mini)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<p>${esc(p.texto || 'Sin texto')}</p>`;
   document.getElementById('po-hotel-buscar').value = '';
   document.getElementById('po-error').textContent = '';
-  document.getElementById('po-quitar').hidden = !o;
+  document.getElementById('po-quitar').hidden = !poTiene(o);
   pintarHotelesOferta();
   pintarPromosOferta();
   openSheet('po-sheet');
@@ -15785,7 +15792,7 @@ async function guardarOfertaPost(quitar) {
   if (quitar) delete PO.ofertas[s.post.id];
   else {
     const h = PO.hoteles.find(x => x.id === s.producto_id);
-    PO.ofertas[s.post.id] = { producto_id: h.id, producto: h.nombre, destino: h.destino, promocion_id: s.promocion_id, promocion: s.promocion_id ? PO.promos.get(s.promocion_id) || null : null };
+    PO.ofertas[s.post.id] = { origen: 'manual', producto_id: h.id, producto: h.nombre, destino: h.destino, promocion_id: s.promocion_id, promocion: s.promocion_id ? PO.promos.get(s.promocion_id) || null : null };
   }
   closeSheet('po-sheet');
   okToast(quitar ? 'Hotel quitado de la publicación' : 'Hotel guardado: la IA ya lo usa en los próximos comentarios');
@@ -37004,6 +37011,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-02', emoji: '✨', titulo: 'Hotel por post: la IA lo marca sola', texto: 'Cada publicación nueva la analiza la IA (texto, carteles del video y lo que dice la voz) y marca el hotel y el precio publicado. Se ven con la etiqueta «IA · alta/media/baja» y una línea con el motivo. Si está mal, tocá «Cambiar» y guardá: lo que marques a mano siempre manda.', roles: ['admin', 'marketing'] },
   { fecha: '2026-11-02', emoji: '🏨', titulo: 'Redes: hotel de cada publicación', texto: 'En Redes › Hotel por post se ven las publicaciones de Instagram y Facebook que reciben comentarios. Elegí el hotel (y si querés la promoción) de cada una: cuando alguien comente, la IA le habla de ese hotel y le manda sus fotos, aunque el texto del post no lo nombre.', roles: ['admin', 'marketing'] },
   { fecha: '2026-10-31', emoji: '🗓️', titulo: 'Pagos por verificar: se ve la cuota del plan de abonos', texto: 'Los pagos de un plan de abonos ahora muestran «Plan de abonos · Cuota 1 de 4» (o «Saldo completo») y ya no salen en rojo con «el monto no coincide». Verifique el monto y la referencia contra el banco como siempre.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-10-31', emoji: '📣', titulo: 'Promocionar post: más claro y con cuenta de Instagram', texto: 'En Marketing › Anuncios Meta › Promocionar post, al tocar una publicación la pantalla baja sola al formulario (nombre, botón, presupuesto, días y países). Si la cuenta publicitaria tiene varias cuentas de Instagram, ahora podés elegir con cuál anunciar.', roles: ['admin'] },
