@@ -21,6 +21,7 @@ button.cd-fila:hover .cd-prov{color:var(--accent-ink)}
 .cd-chip{display:inline-flex;align-items:center;min-height:32px;padding:0 12px;border-radius:999px;border:1px dashed var(--line2);background:transparent;color:var(--muted);font-size:11.5px;font-weight:700}
 button.cd-chip{cursor:pointer}
 button.cd-chip:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
+.cd-desc{font-size:12px;color:var(--muted)}
 .cd-vacio{padding:18px 0;text-align:center;color:var(--muted);font-size:12px}
 `;
 const GRUPOS = [
@@ -28,6 +29,19 @@ const GRUPOS = [
   ['automatizacion', 'Automatización y mensajería', 'fa-comments'],
   ['infraestructura', 'Infraestructura', 'fa-server'],
 ];
+// Para qué sirve cada servicio, en lenguaje de negocio (pedido del dueño: que lo entienda el jefe).
+const DESC = {
+  Claude: 'asistente de inteligencia artificial con el que se construye y mejora el CRM y la página web',
+  Supabase: 'donde se guarda toda la información del CRM: clientes, ventas, reservas y pagos',
+  Zernio: 'conecta Instagram, Facebook y WhatsApp con el CRM para responder mensajes y publicar',
+  ManyChat: 'respondía de forma automática los mensajes de Instagram y Facebook',
+  DeepSeek: 'la inteligencia artificial que atiende a los clientes por chat',
+};
+const DESC_FUENTE = {
+  ventas: 'la IA que atiende a los clientes por chat y les pide sus datos',
+  tarifario: 'la IA que lee y carga los precios de hoteles y paquetes',
+  habitaciones: 'la IA que ordena las fotos de las habitaciones',
+};
 const FUENTES = { ventas: 'Bot de ventas (DeepSeek)',tarifario: 'Carga del tarifario', habitaciones: 'Fotos de habitaciones' };
 const ERRORES = {
   falta_proveedor: 'Falta el proveedor.', grupo_invalido: 'Elegí un grupo.', monto_invalido: 'El monto tiene que ser mayor a 0.',
@@ -83,7 +97,7 @@ export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs
     const sub = [s.plan ? esc(s.plan) : '', s.ciclo === 'anual' ? 'Anual' : 'Mensual', `<span class="cd-cobrado">Cobrado ${dd(s.cargo.fecha)}</span>`].filter(Boolean).join(' · ');
     const tag = admin ? 'button' : 'div';
     return `<${tag} class="cd-fila"${admin ? ` type="button" data-cd="editar" data-id="${s.id}" title="Editar"` : ''}>
-      <div><span class="cd-prov">${esc(s.proveedor)}</span><small>${sub}</small></div><b>${usd(s.cargo.monto)}</b></${tag}>`;
+      <div><span class="cd-prov">${esc(s.proveedor)}</span>${DESC[s.proveedor] ? `<span class="cd-desc"> — ${DESC[s.proveedor]}</span>` : ''}<small>${sub}</small></div><b>${usd(s.cargo.monto)}</b></${tag}>`;
   }
   const chipPend = s => `<${admin ? `button type="button" data-cd="editar" data-id="${s.id}" title="Editar"` : 'span'} class="cd-chip">${esc(s.proveedor)}${s.plan ? ' · ' + esc(s.plan) : ''} · día ${s.dia_cobro} · ${usd(s.monto_usd)}</${admin ? 'button' : 'span'}>`;
 
@@ -109,7 +123,7 @@ export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs
       ${cons.length ? cons.map(c => {
         const [base, sub] = String(c.fuente).split(':');
         const nombre = sub ? `Tareas · ${sub}` : (FUENTES[base] || base);
-        return `<div class="cd-fila"><div><span class="cd-prov">${esc(nombre)}</span><small>${[c.modelo, `${Number(c.llamadas || 0).toLocaleString('es-VE')} llamadas`].filter(Boolean).map(esc).join(' · ')}</small></div><b>${usd(c.usd)}</b></div>`;
+        return `<div class="cd-fila"><div><span class="cd-prov">${esc(nombre)}</span>${DESC_FUENTE[base] ? `<span class="cd-desc"> — ${DESC_FUENTE[base]}</span>` : ""}<small>${[c.modelo, `${Number(c.llamadas || 0).toLocaleString('es-VE')} llamadas`].filter(Boolean).map(esc).join(' · ')}</small></div><b>${usd(c.usd)}</b></div>`;
       }).join('') + `<div class="cd-tot"><span>Total</span><span>${usd(t.consumo)}</span></div>` : '<div class="cd-vacio">Sin consumo registrado este mes.</div>'}</div>`);
     $('#cd-cuerpo').innerHTML = tarjetas.join('');
   }
