@@ -31396,8 +31396,8 @@ function vcReset() {
   ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-modalidad', 'vc-habitaciones', 'vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos',
     'vc-total-dias', 'vc-status', 'vc-total-general', 'vc-monto-pagado', 'vc-resta', 'vc-forma-pago', 'vc-referencia', 'vc-lead-q'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   vcServicios = []; vcServSuma = 0; vcPlanOtro = false; vcPintarServicios(); vcHotelSoltar();
-  ['vc-cliente-seccion', 'vc-hospedaje-seccion', 'vc-pago-seccion'].forEach(id => document.getElementById(id).open = true);
-  ['vc-servicios-seccion', 'vc-horarios-seccion'].forEach(id => document.getElementById(id).open = false);
+  ['vc-cliente-seccion', 'vc-hospedaje-seccion', 'vc-servicios-seccion', 'vc-pago-seccion'].forEach(id => document.getElementById(id).open = true);
+  document.getElementById('vc-horarios-seccion').open = false;
   document.getElementById('vc-fecha-entrada').min = cbHoy();
   document.getElementById('vc-ref-box').classList.remove('falta');
   document.getElementById('vc-check-in').value = '3:00 PM'; document.getElementById('vc-check-out').value = '12:00 PM';
