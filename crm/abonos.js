@@ -642,10 +642,10 @@ export function crearAbonos(c) {
   async function verRecibo(documentoId, btn) {
     if (btn) btn.disabled = true;
     const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: Number(documentoId) } });
-    if (btn) btn.disabled = false;
-    if (error || !data?.ok) return c.error('No se pudo abrir el recibo. Reintenta en unos segundos.');
-    const w = window.open(data.url, '_blank');
-    if (w) w.opener = null; else c.error('El navegador bloqueó la ventana. Permite las ventanas emergentes para ver el recibo.');
+    if (error || !data?.ok) { if (btn) btn.disabled = false; return c.error('No se pudo abrir el recibo. Reintenta en unos segundos.'); }
+    try { await c.entregarUrl(data.url, data.nombre || 'Recibo de abono.pdf', data.mime || 'application/pdf'); }
+    catch { c.error('No se pudo abrir el recibo. Reintenta en unos segundos.'); }
+    finally { if (btn) btn.disabled = false; }
   }
 
   async function reintentarDocumentos(id, btn) {

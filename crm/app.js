@@ -3734,8 +3734,7 @@ const PV_RAPIDOS = {
   vencidos: ['seguimientos vencidos', 'fa-clock', 'var(--danger)', c => c.etapa !== 'CERRADO' && !!c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < Date.now()],
   sin_seg: ['sin seguimiento', 'fa-bell-slash', 'var(--muted)', c => c.etapa !== 'CERRADO' && !c.proximo_seguimiento_at],
   saldo: ['con saldo', 'fa-coins', 'var(--accent)', c => Number(c.saldo_pendiente) > 0],
-  pasajeros: ['sin pasajeros', 'fa-users', 'var(--purple)', c => (c.falta_resumen || []).some(f => f.codigo === 'pasajeros')],
-  documentos: ['faltan documentos', 'fa-folder-open', 'var(--blue)', c => (c.falta_resumen || []).some(f => f.codigo === 'documentos' || f.codigo === 'voucher')],
+  documentos: ['falta voucher', 'fa-folder-open', 'var(--blue)', c => (c.falta_resumen || []).some(f => f.codigo === 'voucher')],
   volvio: ['ya viajaron', 'fa-house-chimney', 'var(--muted)', c => pvViaje(c).bucket === 'volvio'],
   incidencia: ['con incidencia', 'fa-triangle-exclamation', 'var(--danger)', c => !!c.incidencia_abierta],
 };
@@ -4053,9 +4052,10 @@ async function pvEliminarReserva(c, btn) {
 }
 // Chips de «Falta» de la tarjeta: una por motivo (las repetidas se cuentan) y una última si no hay seguimiento.
 function pvFaltaChips(c, vencido) {
-  const m = new Map(), etq = { pasajeros: 'Pasajeros', voucher: 'Voucher hotel', documentos: 'Documentos de pasajeros', cuotas: 'Cuotas vencidas' };
+  const m = new Map(), etq = { voucher: 'Voucher hotel', cuotas: 'Cuotas vencidas' };
   // Cada chip lleva `cod`/`sid` (código del faltante y servicio) para que al tocarlo abra la pestaña que lo resuelve (rvIr).
-  c.falta_resumen.forEach(f => {
+  // Pasajeros y documentos ya no son faltantes (20261102235000); se filtran por si llega una respuesta vieja.
+  c.falta_resumen.filter(f => f.codigo !== 'pasajeros' && f.codigo !== 'documentos').forEach(f => {
     const t = f.codigo === 'saldo' ? `Saldo ${money(c.saldo_pendiente)}` : f.codigo === 'servicio' ? (f.texto || 'Servicio por confirmar').replace(/ \d{2}\/\d{2}/, '') : etq[f.codigo] || f.texto;
     const x = m.get(t);
     if (x) x.n++; else m.set(t, { n: 1, cod: f.codigo, sid: f.servicio_id || '' });
@@ -4702,6 +4702,12 @@ async function rvChecklist() {
   if (id !== RV_RESERVA_ID) return;
   if (error || !data?.ok) { box.innerHTML = ''; if (error) console.error('reserva_checklist', error); return; }
   const f = data.faltantes || [];
+  // El chip «Sin voucher» de cada hospedaje sigue lo que dice el servidor (también cuenta el PDF del voucher vinculado).
+  if (RV_DET) {
+    const sin = new Set(f.filter(x => x.codigo === 'voucher').map(x => x.servicio_id)), antes = RV_DET.sin_voucher;
+    RV_DET.sin_voucher = sin;
+    if (!antes || antes.size !== sin.size || [...sin].some(x => !antes.has(x))) rvRenderServicios(true);
+  }
   if (data.completa) { box.innerHTML = '<div class="rv-check ok"><i class="fas fa-circle-check"></i> Reserva completa: nada pendiente</div>'; return; }
   const orden = Object.keys(RV_PASOS), ord = x => { const i = orden.indexOf(x.codigo); return i < 0 ? 99 : i; };
   const lista = [...f].sort((a, b) => ord(a) - ord(b)), primero = RV_PASOS[lista[0].codigo];
@@ -5114,7 +5120,9 @@ function rvServicioSub(s) {
   return [fechas, pax, loc];
 }
 // Misma regla que reserva_faltantes: un hospedaje confirmado necesita un voucher suyo o de la reserva en general.
-const rvTieneVoucher = s => (RV_DET?.documentos || []).some(d => d.tipo === 'voucher' && (d.servicio_id === s.id || d.servicio_id == null));
+// Con el checklist ya cargado (rvChecklist) manda el servidor, que también acepta el PDF del voucher de Lotus vinculado.
+const rvTieneVoucher = s => RV_DET?.sin_voucher ? !RV_DET.sin_voucher.has(s.id)
+  : s.detalle?.voucher != null || (RV_DET?.documentos || []).some(d => d.tipo === 'voucher' && (d.servicio_id === s.id || d.servicio_id == null));
 const rvChip = (txt, cls = '', ico = '') => `<span class="rv-chip${cls ? ' ' + cls : ''}">${ico ? `<i class="fas ${ico}"></i>` : ''}${esc(txt)}</span>`;
 function rvChipsServicio(s) {
   const c = [], apto = RV_APTOS[s.id];
@@ -5123,7 +5131,8 @@ function rvChipsServicio(s) {
   if (apto) c.push(rvChip(apto.apartamento + (apto.proveedor ? ' · ' + apto.proveedor : ''), '', 'fa-building'));
   if (rvVeCostos() && s.proveedor) c.push(rvChip('Proveedor: ' + s.proveedor));
   if (s.tipo === 'hospedaje' && ['confirmado', 'emitido'].includes(s.estado) && !rvTieneVoucher(s)) c.push(rvChip('Sin voucher', 'warn'));
-  if (s.tipo === 'boleto_aereo') {
+  // Tramos, tickets y emisión son de Boletería: el asesor no los ve como pendientes.
+  if (s.tipo === 'boleto_aereo' && rvAgente()) {
     const tramos = (RV_DET.tramos || []).filter(t => t.servicio_id === s.id).length;
     const pax = (RV_DET.pasajeros || []).length || Number(s.pax_adultos || 0) + Number(s.pax_ninos || 0);
     const tks = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).length;
@@ -5155,7 +5164,7 @@ function rvServicioHtml(s, vista) {
   const menu = anulado ? [] : rvMenuItems(s, editable);
   const btn = (acc, txt) => `<button class="btn-sm" type="button" data-rv-accion="${acc}" data-id="${s.id}">${txt}</button>`;
   const acciones = anulado ? '' : `<div class="rv-svc-acc">${editable ? btn('editar-servicio', 'Editar') : ''}${vista === 'boleteria' ? btn('emitir', 'Localizador, estado y TL') + btn('subir-boleto', 'Subir boleto') : ''}${btn('voucher', 'Voucher')}${menu.length ? `<button class="btn-sm rv-svc-mas-btn" type="button" data-rv-accion="menu" aria-haspopup="menu" aria-expanded="false" aria-label="Más acciones: ${esc(titulo)}"><i class="fas fa-ellipsis"></i></button>` : ''}</div>${menu.length ? `<div class="rv-menu" role="menu" hidden>${menu.join('')}</div>` : ''}`;
-  const boleto = s.tipo === 'boleto_aereo' && !anulado ? `<details class="rv-svc-mas"${vista === 'boleteria' ? ' open' : ''}><summary>Tramos, tickets e historial</summary>${rvBoletoHtml(s)}</details>` : '';
+  const boleto = s.tipo === 'boleto_aereo' && !anulado && rvAgente() ? `<details class="rv-svc-mas"${vista === 'boleteria' ? ' open' : ''}><summary>Tramos, tickets e historial</summary>${rvBoletoHtml(s)}</details>` : '';
   const chips = anulado ? '' : rvChipsServicio(s);
   return `<article class="rv-svc${anulado ? ' rv-anulado' : ''}">
     <div class="rv-svc-top"><div class="rv-svc-ic"><i class="fas ${t[1]}"></i></div>
@@ -5248,7 +5257,7 @@ function rvFormServicio(p) {
     <div id="rv-s-apto"></div>
     <div class="rv-3"><div id="rv-s-hora-box"><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
     <div class="rv-2"><div><label class="fl">Localizador <span style="font-weight:400">(opcional)</span></label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
-    ${s?.tipo === 'boleto_aereo' ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
+    ${s?.tipo === 'boleto_aereo' && rvAgente() ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
     <div id="rv-s-detalle"></div>
     <div class="eb-title" style="margin-top:14px"><i class="fas fa-tag"></i> Precio al cliente</div>
     <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
@@ -5257,8 +5266,12 @@ function rvFormServicio(p) {
   desc.dataset.manual = desc.value ? '1' : '';
   desc.addEventListener('input', () => { desc.dataset.manual = desc.value ? '1' : ''; });
   rvDetalleCampos(s?.detalle || {});
+  // Boleto nuevo cargado por el asesor: llega emitido (la emisión la hace Boletería antes de pasarlo).
+  const est = document.getElementById('rv-s-estado');
+  est.addEventListener('change', () => { est.dataset.manual = '1'; });
   document.getElementById('rv-s-tipo').onchange = () => {
     if (desc.dataset.manual !== '1') desc.value = '';
+    if (!s && !rvAgente() && est.dataset.manual !== '1') est.value = val('rv-s-tipo') === 'boleto_aereo' ? 'emitido' : 'cotizado';
     rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible();
   };
   ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = () => { rvAptoCampo(); rvNochesCampo(); }; });
@@ -5567,7 +5580,7 @@ async function rvGuardarServicio(btn) {
       if (!String(datos.detalle.aerolinea || '').trim()) { err.textContent = 'Falta la aerolínea del boleto.'; return; }
       if (!String(datos.detalle.ruta || datos.descripcion || '').trim()) { err.textContent = 'Falta la ruta del boleto (ej.: Valencia - Porlamar - Valencia).'; return; }
       if (!String(datos.descripcion || '').trim()) datos.descripcion = String(datos.detalle.ruta).trim();
-      if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_inicio) { err.textContent = 'Falta la fecha de ida.'; return; }
+      if (!tramosPrevios.length && !datos.fecha_inicio) { err.textContent = 'Falta la fecha de ida.'; return; }
       if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_fin) { err.textContent = 'Para ida y vuelta cargá la fecha de vuelta.'; return; }
     }
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
@@ -5842,7 +5855,7 @@ function rvTicketsDocsHtml(s) {
           : leyendo ? '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Leyendo el ticket…</div>'
           : `<div class="csub">${ia ? 'No detecté pasajeros en este ticket' : 'Sin lectura: probá Releer'}</div>`}
         ${det ? `<div class="rv-tk-det">${esc(det)}</div>` : ''}
-        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
+        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}">${docBotonVer()}</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
       </div>
     </div>`;
   }).join('');
@@ -6329,7 +6342,7 @@ function rvRenderDocumentos(suave) {
     return `<div class="rv-doc"><div class="rv-doc-file">${esc(rvDocExt(d))}</div>
       <div class="rv-doc-main"><div class="rv-doc-n" title="${esc(d.nombre)}">${esc(d.nombre)}</div><div class="rv-doc-sub">${esc(detalle)}</div></div>
       <span class="rv-chip${d.tipo === 'comprobante' ? ' ok' : ''}">${esc(RV_DOC_TIPOS[d.tipo] || d.tipo)}</span>
-      <div class="rv-doc-acc"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}" title="Descargar con nombre legible" aria-label="Descargar ${esc(d.nombre)}"><i class="fas fa-download"></i></button>${vista !== 'boleteria' && rvPuedeEditar() ? `<button class="rv-doc-x" type="button" data-rv-accion="anular-documento" data-id="${d.id}" title="Quitar" aria-label="Quitar ${esc(d.nombre)}"><i class="fas fa-trash"></i></button>` : ''}</div></div>`;
+      <div class="rv-doc-acc"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}">${docBotonVer()}</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}" title="Descargar con nombre legible" aria-label="Descargar ${esc(d.nombre)}"><i class="fas fa-download"></i></button>${vista !== 'boleteria' && rvPuedeEditar() ? `<button class="rv-doc-x" type="button" data-rv-accion="anular-documento" data-id="${d.id}" title="Quitar" aria-label="Quitar ${esc(d.nombre)}"><i class="fas fa-trash"></i></button>` : ''}</div></div>`;
   }).join('') : '<div class="pv-empty">Sin documentos cargados</div>';
   const tipoSug = rvDocTipoSugerido();
   const caja = puedeSubir ? `<div class="rv-subir" data-rv-drop>
@@ -6376,12 +6389,15 @@ async function rvSubirDocumento(btn) {
 }
 async function rvDescargar(id, btn) {
   btn.disabled = true;
-  const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: id } });
-  btn.disabled = false;
-  if (error || !data?.ok) { const m = await msgErrorFn(error, data); errToast('No se pudo abrir: ' + (RV_ERR[m] || m)); return; }
-  // La URL firmada dura 120 s; si el navegador bloquea la ventana, queda el link a mano.
-  const w = window.open(data.url, '_blank');
-  if (w) w.opener = null; else linkToast(`<a href="${esc(data.url)}" target="_blank" rel="noopener">Abrir ${esc(data.nombre || 'documento')}</a>`);
+  try {
+    const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: id } });
+    if (error || !data?.ok) { const m = await msgErrorFn(error, data); errToast('No se pudo abrir: ' + (RV_ERR[m] || m)); return; }
+    const d = (RV_DET?.documentos || []).find(x => x.id === id) || { nombre: data.nombre, mime: data.mime };
+    await docEntregarUrl(data.url, rvDocNombreArchivo(d), d.mime || data.mime || 'application/pdf');
+  } catch (e) {
+    console.error('rvDescargar', e);
+    errToast('No se pudo abrir el documento');
+  } finally { btn.disabled = false; }
 }
 // Nombre legible para un documento de la reserva: si ya viene con el estándar
 // nuevo se respeta; si no, se arma con el tipo, el nombre original útil, el
@@ -20680,6 +20696,32 @@ async function pdfEntregar(blob, nombre) {
   }
   cbDescargar(blob, nombre);
 }
+// Documento ya guardado en Storage: se entrega el archivo con nombre legible, nunca la URL
+// firmada (compartida desde el navegador, a WhatsApp llegaba el link largo de Supabase).
+const docTactil = () => matchMedia('(pointer: coarse)').matches;
+const docBotonVer = (texto = 'Ver') => docTactil() ? '<i class="fas fa-share-nodes"></i> Compartir' : `<i class="fas fa-eye"></i> ${texto}`;
+async function docEntregarUrl(url, nombre, mime = 'application/pdf') {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('sin_archivo');
+  const file = new File([await res.blob()], nombre, { type: mime });
+  if (docTactil() && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) {
+      if (e.name === 'AbortError') return;
+      // iOS pierde el gesto del usuario durante el fetch: un toque más comparte el archivo ya cargado.
+      if (e.name === 'NotAllowedError') { docToastCompartir(file); return; }
+    }
+  }
+  const u = URL.createObjectURL(file), w = window.open(u, '_blank');
+  if (w) w.opener = null; else descargarArchivo(file, nombre);
+  setTimeout(() => URL.revokeObjectURL(u), 60000);
+}
+function docToastCompartir(file) {
+  const t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = `<i class="fas fa-share-nodes"></i> <div><button class="btn-sm lt-primario" type="button">Compartir ${esc(file.name)}</button></div>`;
+  t.querySelector('button').onclick = () => { navigator.share({ files: [file], title: file.name }).catch(() => {}); t.remove(); };
+  document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 15000);
+}
 async function exportarVentaPdf(id) {
   const f = FACT_VENTAS_CACHE.find(x => x.id === id);
   if (!f) return;
@@ -30652,6 +30694,7 @@ function abonosModulo() {
     logo: () => cargarImagenBase64('logolotus-integrado.png'),
     pdfVoucher: async d => new Blob([await construirVoucherPdf(d)], { type: 'application/pdf' }),
     descargar: vcDescargar,
+    entregarUrl: docEntregarUrl,
     nombreArchivo: docNombrePorTipo,
     confirmar: confirmarSheet,
     // app.js es módulo: sin esto abonos.js no ve estas funciones (leer_comprobante no se medía).
@@ -31490,7 +31533,7 @@ async function cargarHistorialVouchers(append) {
       <div><span>Total</span><b>${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</b></div>
     </div>
     <div class="lt-card-pie">
-      <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})"><i class="fas ${v.pdf_path ? 'fa-file-pdf' : 'fa-rotate'}"></i> ${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button>
+      <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? docBotonVer('Ver PDF') : '<i class="fas fa-rotate"></i> Reconstruir'}</button>
       ${DR?.acciones('voucher', v) || ''}
       ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>`
         : vcPuedePasar(v) ? `<button class="btn-sm" type="button" data-vc-pasar="${v.id}" title="Vincular con el cliente y crear su ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> Pasar a Reservas</button>` : ''}
@@ -31532,9 +31575,13 @@ function cargarMasVouchers() { vcOffset += VC_PAGE_SIZE; cargarHistorialVouchers
 window.cargarMasVouchers = cargarMasVouchers;
 window.verVoucherPdf = async function verVoucherPdf(pdfPath, numeroFactura) {
   if (pdfPath) {
-    const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(pdfPath, 60);
+    const [{ data, error }, { data: v }] = await Promise.all([
+      sb.storage.from('vouchers-pdf').createSignedUrl(pdfPath, 60),
+      sb.from('vouchers').select('numero_factura,cliente_nombre,destino_hospedaje,fecha_entrada,revision').eq('numero_factura', numeroFactura).maybeSingle()
+    ]);
     if (error || !data?.signedUrl) { errToast('No se pudo abrir el PDF'); return; }
-    window.open(data.signedUrl, '_blank');
+    try { await docEntregarUrl(data.signedUrl, docNombrePorTipo('voucher', v || { numero_factura: numeroFactura })); }
+    catch (e) { console.error('verVoucherPdf', e); errToast('No se pudo abrir el PDF'); }
     return;
   }
   // Voucher generado antes de guardar el PDF real -- se reconstruye desde los
@@ -31631,7 +31678,7 @@ function vcPintarHecho(h) {
   const box = document.getElementById('vc-hecho');
   box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
     ${h.avisos.map(a => `<small style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</small>`).join('')}
-    <div class="vc-hecho-acc">${h.reservaId && h.codigo ? `<button class="vc-mini" type="button" data-vc-abrir>Abrir ficha ${esc(h.codigo)}</button>` : ''}<button class="vc-mini" type="button" data-vc-ver>Ver PDF</button></div>`;
+    <div class="vc-hecho-acc">${h.reservaId && h.codigo ? `<button class="vc-mini" type="button" data-vc-abrir>Abrir ficha ${esc(h.codigo)}</button>` : ''}<button class="vc-mini" type="button" data-vc-ver>${docBotonVer('Ver PDF')}</button></div>`;
   box.hidden = false;
   box.querySelector('[data-vc-abrir]')?.addEventListener('click', e => abrirReservaDeLead(h.reservaId, h.codigo, e.currentTarget));
   box.querySelector('[data-vc-ver]').addEventListener('click', () => verVoucherPdf(h.pdfPath || '', h.numero));
@@ -37174,6 +37221,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-02', emoji: '📎', titulo: 'Compartir vouchers y documentos como archivo', texto: 'En el celular, el botón «Compartir» de vouchers, documentos de la reserva y recibos abre la hoja de compartir con el PDF adjunto y un nombre claro (ej. «Lotus 360 - Voucher 000123 - Cliente…»). A WhatsApp llega el documento, ya no el link largo. Si aparece un aviso «Compartir…», tocalo una vez más.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
   { fecha: '2026-11-02', emoji: '✨', titulo: 'Hotel por post: la IA lo marca sola', texto: 'Cada publicación nueva la analiza la IA (texto, carteles del video y lo que dice la voz) y marca el hotel y el precio publicado. Se ven con la etiqueta «IA · alta/media/baja» y una línea con el motivo. Si está mal, tocá «Cambiar» y guardá: lo que marques a mano siempre manda.', roles: ['admin', 'marketing'] },
   { fecha: '2026-11-02', emoji: '🏨', titulo: 'Redes: hotel de cada publicación', texto: 'En Redes › Hotel por post se ven las publicaciones de Instagram y Facebook que reciben comentarios. Elegí el hotel (y si querés la promoción) de cada una: cuando alguien comente, la IA le habla de ese hotel y le manda sus fotos, aunque el texto del post no lo nombre.', roles: ['admin', 'marketing'] },
   { fecha: '2026-10-31', emoji: '🗓️', titulo: 'Pagos por verificar: se ve la cuota del plan de abonos', texto: 'Los pagos de un plan de abonos ahora muestran «Plan de abonos · Cuota 1 de 4» (o «Saldo completo») y ya no salen en rojo con «el monto no coincide». Verifique el monto y la referencia contra el banco como siempre.', roles: ['admin', 'administrativo'] },
