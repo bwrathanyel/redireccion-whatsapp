@@ -3817,6 +3817,12 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-serv-cab>b{font-variant-numeric:tabular-nums;color:var(--accent-ink)}
 .vc-serv-hint{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:-2px}
 .vc-serv-hint .vc-pill{font-size:9.5px}
+.vc-bol{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--line2);padding-top:8px}
+.vc-bol-tit{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.vc-bol-tit>span{flex:1}
+.vc-bol-fila{display:grid;grid-template-columns:.8fr 1fr 1fr 1.25fr .8fr .8fr auto;gap:8px;align-items:end}
+.vc-bol-fila.pax{grid-template-columns:2fr 1.2fr 1fr 1.4fr auto}
+.vc-bol-fila .vc-quitar{padding-bottom:10px}
 .vc-add{display:flex;flex-wrap:wrap;gap:6px}
 .vc-add button{background:transparent;border:1.5px dashed var(--line2);color:var(--muted);border-radius:999px;padding:6px 13px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;width:auto}
 .vc-add button:hover{color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
@@ -3900,7 +3906,7 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-chip-res{background:var(--accent-soft);color:var(--accent-ink);border:0;border-radius:999px;padding:3px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:700;cursor:pointer;width:auto}
 :is(.vc-res,.vc-lead,.vc-sugerencia,.vc-hecho)[hidden]{display:none}
 @media (max-width:1100px){.vc-wrap{grid-template-columns:minmax(0,1fr)}.vc-boleto-col{position:static;width:100%;max-width:420px;margin:0 auto}}
-@media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}.vc-planes{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-c.s3{grid-column:1/-1}.vc-add button{padding:9px 14px}.vc-ref{max-width:none}}
+@media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}.vc-planes{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-c.s3{grid-column:1/-1}.vc-add button{padding:9px 14px}.vc-ref{max-width:none}.vc-bol-fila,.vc-bol-fila.pax{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-bol-fila .vc-quitar{justify-self:end}}
 /* Formularios de documentos: grupos plegables y controles alineados. */
 :is(#sec-voucher,#sec-cotizacion-boletos) .doc-seccion{min-width:0;border:0;border-top:1px solid var(--line);padding:0;margin:0}
 :is(#sec-voucher,#sec-cotizacion-boletos) .doc-seccion>summary{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 0;list-style:none;cursor:pointer;color:var(--txt);font-size:13px;font-weight:700}
@@ -10396,16 +10402,18 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           </details>
 
           <details class="vc-grupo doc-seccion" id="vc-servicios-seccion">
-            <summary><span>Servicios adicionales</span><small id="vc-servicios-resumen">Opcional · excursiones, traslados y otros</small><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+            <summary><span>Servicios adicionales</span><small id="vc-servicios-resumen">Opcional · excursiones, traslados, boletos y otros</small><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
             <div class="doc-contenido">
             <div class="vc-servs" id="vc-servicios"></div>
             <div class="vc-add" id="vc-add" aria-label="Anexar servicio del tarifario">
               <button type="button" data-vc-add="excursion"><i class="fas fa-umbrella-beach"></i> Excursión / full day</button>
               <button type="button" data-vc-add="traslado"><i class="fas fa-van-shuttle"></i> Traslado</button>
               <button type="button" data-vc-add="paquete"><i class="fas fa-suitcase"></i> Paquete</button>
+              <button type="button" data-vc-add="boleto"><i class="fas fa-plane"></i> Boleto aéreo</button>
               <button type="button" data-vc-add="otro"><i class="fas fa-plus"></i> Otro servicio</button>
             </div>
             <datalist id="vc-dl-excursion"></datalist><datalist id="vc-dl-traslado"></datalist><datalist id="vc-dl-paquete"></datalist>
+            <datalist id="vc-dl-aerolinea"></datalist><datalist id="vc-dl-aeropuerto"></datalist>
             </div>
           </details>
 

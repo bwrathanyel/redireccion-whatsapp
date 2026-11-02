@@ -30764,6 +30764,7 @@ function setupVoucher() {
     const id = e.target.id;
     if (id === 'vc-lead-q') { clearTimeout(vcLeadTimer); vcLeadTimer = setTimeout(vcBuscarLeadsQ, 250); return; }
     if (e.target.dataset.sk) { vcServInput(e.target); return; }
+    if (e.target.dataset.st || e.target.dataset.sp) { vcBolInput(e.target); return; }
     if (id === 'vc-plan-selector') {
       const p = e.target.value;
       if (p === '__otra') { vcElegirPlan(''); return; }
@@ -30782,6 +30783,8 @@ function setupVoucher() {
   });
   form.addEventListener('change', e => {
     if (e.target.dataset.sk === 'nombre') { const c = e.target.closest('[data-si]'), s = vcServicios[Number(c.dataset.si)]; if (s && c.dataset.key !== vcServKey(s)) vcPintarServicios(); }
+    // «Caracas» o «Porlamar» -> código IATA, si el catálogo lo resuelve sin ambigüedad.
+    if (e.target.dataset.st === 'origen' || e.target.dataset.st === 'destino') { const c = rvIataDe(e.target.value); if (c && c !== e.target.value) { e.target.value = c; vcBolInput(e.target); } }
     if (e.target.id !== 'vc-lead-q') vcActualizarPreview();
   });
   form.addEventListener('click', e => {
@@ -30792,6 +30795,7 @@ function setupVoucher() {
     else if ('plan' in d) vcElegirPlan(d.plan);
     else if (d.vcAdd) vcAgregarServicio(d.vcAdd);
     else if ('vcSquitar' in d) { vcServicios.splice(Number(d.vcSquitar), 1); vcPintarServicios(); vcAjustarTotal(); vcActualizarPreview(); }
+    else if ('vcTadd' in d || 'vcTquitar' in d || 'vcPadd' in d || 'vcPquitar' in d) vcBolClick(d);
     else if ('vcLead' in d) { const l = vcLeadsRes[Number(d.vcLead)]; if (l) vcElegirLead(l); }
     else if ('vcQuitar' in d) { vcLead = null; vcReservas = null; vcReservasError = false; vcPintarLead(); vcActualizarPreview(); }
     else if ('vcSin' in d || 'vcCon' in d) { vcSinReserva = 'vcSin' in d; vcActualizarPreview(); }
@@ -30831,7 +30835,7 @@ function vcResumenSecciones() {
   texto('vc-cliente-resumen', [val('vc-cliente-nombre').trim(), val('vc-documento').trim(), val('vc-telefono').trim(), val('vc-asesor'), vcLead?.estado, reserva?.codigo], 'Buscar o completar datos');
   texto('vc-hospedaje-resumen', [val('vc-destino').trim(), val('vc-habitaciones').trim(), val('vc-modalidad').trim(), val('vc-fecha-entrada') && vcFechaCorta(val('vc-fecha-entrada')), val('vc-fecha-salida') && 'al ' + vcFechaCorta(val('vc-fecha-salida')), val('vc-adultos') && val('vc-adultos') + ' adultos', val('vc-ninos').trim() && 'Niños: ' + val('vc-ninos').trim()], 'Hotel, fechas y pasajeros');
   texto('vc-horarios-resumen', ['Entrada ' + (val('vc-check-in').trim() || '3:00 PM'), 'salida ' + (val('vc-check-out').trim() || '12:00 PM'), val('vc-total-dias').trim(), val('vc-status').trim()], '');
-  texto('vc-servicios-resumen', vcServicios.length ? [vcServicios.length + ' servicio' + (vcServicios.length === 1 ? '' : 's'), vcMoney(vcServSuma)] : [], 'Opcional · excursiones, traslados y otros');
+  texto('vc-servicios-resumen', vcServicios.length ? [vcServicios.length + ' servicio' + (vcServicios.length === 1 ? '' : 's'), vcMoney(vcServSuma)] : [], 'Opcional · excursiones, traslados, boletos y otros');
   texto('vc-pago-resumen', vcNum('vc-total-general') || vcNum('vc-monto-pagado') ? ['Total ' + vcMoney(vcNum('vc-total-general')), 'pagado ' + vcMoney(vcNum('vc-monto-pagado')), 'resta ' + vcMoney(vcNum('vc-resta')), val('vc-forma-pago').trim()] : [val('vc-forma-pago').trim()], 'Total, abono y forma de pago');
 }
 function vcElegirPlan(p) {
@@ -30957,8 +30961,103 @@ const VC_SERV_TIPOS = {
   excursion: { nombre: 'Excursión / full day', pdf: 'EXCURSIÓN', icono: 'fa-umbrella-beach', ph: 'Buscar excursión o full day del tarifario' },
   traslado: { nombre: 'Traslado', pdf: 'TRASLADO', icono: 'fa-van-shuttle', ph: 'Buscar traslado del tarifario' },
   paquete: { nombre: 'Paquete', pdf: 'PAQUETE', icono: 'fa-suitcase', ph: 'Buscar paquete del tarifario' },
+  boleto: { nombre: 'Boleto aéreo', pdf: 'BOLETO AÉREO', icono: 'fa-plane', ph: 'Avior, Laser, Conviasa...' },
   otro: { nombre: 'Otro servicio', pdf: '', icono: 'fa-plus', ph: 'Seguro de viaje, cena, entrada...' },
 };
+// Boleto aéreo (2026-11-02): aerolínea, localizador, tramos y pasajeros con su N° de boleto viajan en vouchers.servicios.
+const VC_BOL_ESTADOS = { EMITIDO: 'Emitido', RESERVADO: 'Reservado', 'POR EMITIR': 'Por emitir' };
+const VC_BOL_VIAJES = { ida_vuelta: 'Ida y vuelta', ida: 'Solo ida', multi: 'Multidestino' };
+const VC_BOL_PAX = { adulto: 'Adulto', nino: 'Niño', infante: 'Infante' };
+// Resumen de «Servicio de boletos aéreos» de las condiciones generales, más el aviso de confirmar el vuelo.
+const VC_BOL_AVISOS = [
+  'Preséntese en el aeropuerto 2 horas antes de un vuelo nacional y 4 horas antes de uno internacional.',
+  'En el check in muestre su documento de identidad o pasaporte vigente, con fotografía. El nombre debe coincidir con el del boleto.',
+  'Menores de edad: partida de nacimiento y permiso de viaje expedido por el ente encargado.',
+  'Revise nombre, apellido y documento de cada pasajero: tiene 3 horas desde la emisión para reportar un error; después, la multa corre por cuenta del cliente.',
+  'Si no se presenta al primer tramo, la aerolínea cancela automáticamente el tramo de regreso.',
+  'Boletos no reembolsables, no transferibles y no endosables. Cambios sujetos a las condiciones de la tarifa y de la aerolínea.',
+  'Los horarios pueden cambiar por decisión de la aerolínea: confirme el estatus de su vuelo 24 horas antes.',
+];
+const vcBolTramo = (fecha = '', origen = '', destino = '') => ({ vuelo: '', origen, destino, fecha, sale: '', llega: '' });
+// CCS → PMV → CCS: une los tramos sin repetir la escala.
+function vcBolRuta(s) {
+  const r = [];
+  (s.tramos || []).forEach(t => { const o = String(t.origen || '').trim().toUpperCase(), d = String(t.destino || '').trim().toUpperCase(); if (o && r[r.length - 1] !== o) r.push(o); if (d) r.push(d); });
+  return r.join(' → ');
+}
+const vcBolNombre = s => [vcBolRuta(s), String(s.aerolinea || '').trim()].filter(Boolean).join(' · ');
+const vcBolPax = s => { s.adultos = s.ninos = s.infantes = 0; (s.pasajeros || []).forEach(p => { s[{ nino: 'ninos', infante: 'infantes' }[p.tipo] || 'adultos']++; }); };
+const vcFechaDma = f => (f ? String(f).split('-').reverse().join('/') : '');
+const vcHora12 = h => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(h || '').trim()); return m ? `${Number(m[1]) % 12 || 12}:${m[2]} ${Number(m[1]) < 12 ? 'AM' : 'PM'}` : String(h || '').trim(); };
+function vcBolFechas(s) {
+  const fs = (s.tramos || []).map(t => t.fecha).filter(Boolean).sort();
+  if (!fs.length) return '';
+  return fs[0] === fs[fs.length - 1] ? [vcFechaDma(fs[0]), vcHora12(s.tramos.find(t => t.fecha === fs[0])?.sale)].filter(Boolean).join(' ') : `${vcFechaDma(fs[0])} al ${vcFechaDma(fs[fs.length - 1])}`;
+}
+function vcBolCatalogo() {
+  bolAsegurarCatalogo().then(() => {
+    const c = bolCatalogo || {}, llenar = (id, html) => { const el = document.getElementById(id); if (el && !el.childElementCount) el.innerHTML = html; };
+    llenar('vc-dl-aerolinea', (c.aerolineas || []).filter(a => a.activa !== false && a.activo !== false).map(a => `<option value="${esc(a.nombre)}">`).join(''));
+    llenar('vc-dl-aeropuerto', (c.aeropuertos || []).map(a => `<option value="${esc(a.iata_code)}" label="${esc(rvAeropuertoTxt(a))}">`).join(''));
+  });
+}
+function vcBoletoHtml(s, i, f) {
+  const sel = (k, label, ops) => `<label class="vc-c"><span>${label}</span><select class="ei" data-sk="${k}">${Object.entries(ops).map(([v, t]) => `<option value="${esc(v)}"${v === s[k] ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+  const c = (attr, k, label, v, attrs = '') => `<label class="vc-c"><span>${label}</span><input class="ei" data-${attr}="${k}" value="${esc(String(v ?? ''))}" ${attrs}></label>`;
+  const quitar = (attr, n, que) => `<button class="vc-quitar" type="button" data-${attr}="${i}:${n}" title="Quitar ${que}" aria-label="Quitar ${que} ${n + 1}"><i class="fas fa-xmark"></i></button>`;
+  const tramos = (s.tramos || []).map((t, j) => `<div class="vc-bol-fila" data-ti="${j}">
+      ${c('st', 'vuelo', 'Vuelo', t.vuelo, 'maxlength="12" autocomplete="off" placeholder="9V 1234"')}
+      ${c('st', 'origen', 'Origen', t.origen, 'list="vc-dl-aeropuerto" maxlength="40" autocomplete="off" placeholder="CCS"')}
+      ${c('st', 'destino', 'Destino', t.destino, 'list="vc-dl-aeropuerto" maxlength="40" autocomplete="off" placeholder="PMV"')}
+      ${c('st', 'fecha', 'Fecha', t.fecha, 'type="date"')}${c('st', 'sale', 'Sale', t.sale, 'type="time"')}${c('st', 'llega', 'Llega', t.llega, 'type="time"')}
+      ${quitar('vc-tquitar', j, 'tramo')}</div>`).join('');
+  const pax = (s.pasajeros || []).map((p, j) => `<div class="vc-bol-fila pax" data-pi="${j}">
+      ${c('sp', 'nombre', 'Nombre como en el documento', p.nombre, 'maxlength="120" autocomplete="off"')}${c('sp', 'documento', 'Documento', p.documento, 'maxlength="30" autocomplete="off" placeholder="V-12345678"')}
+      <label class="vc-c"><span>Tipo</span><select class="ei" data-sp="tipo">${Object.entries(VC_BOL_PAX).map(([v, t]) => `<option value="${v}"${v === (p.tipo || 'adulto') ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      ${c('sp', 'ticket', 'N° de boleto', p.ticket, 'maxlength="20" inputmode="numeric" autocomplete="off" placeholder="Al emitir"')}
+      ${quitar('vc-pquitar', j, 'pasajero')}</div>`).join('');
+  return `<div class="vc-fila">
+      ${f('aerolinea', 'Aerolínea', `list="vc-dl-aerolinea" autocomplete="off" placeholder="${esc(VC_SERV_TIPOS.boleto.ph)}"`, ' s2')}
+      ${f('localizador', 'Localizador (PNR)', 'maxlength="20" autocomplete="off" spellcheck="false" placeholder="ABC123"')}${sel('estado', 'Estado', VC_BOL_ESTADOS)}
+      ${sel('viaje', 'Tipo de viaje', VC_BOL_VIAJES)}${f('clase', 'Clase / cabina', 'placeholder="Económica"')}
+      ${f('familia', 'Tarifa (opcional)', 'placeholder="Light, Classic, Flex..."', ' s2')}
+      ${f('equipaje_mano', 'Equipaje de mano', 'placeholder="1 pieza de 10 kg"', ' s2')}${f('equipaje_bodega', 'Equipaje en bodega', 'placeholder="1 pieza de 23 kg, o No incluye"', ' s2')}
+      <div class="vc-bol"><div class="vc-bol-tit"><span>Itinerario</span><button class="vc-mini" type="button" data-vc-tadd="${i}"><i class="fas fa-plus"></i> Tramo</button></div>${tramos}</div>
+      <div class="vc-bol"><div class="vc-bol-tit"><span>Pasajeros y boletos</span><button class="vc-mini" type="button" data-vc-padd="${i}"><i class="fas fa-plus"></i> Pasajero</button></div>${pax}</div>
+      ${f('monto', 'Monto (USD)', 'type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"')}
+      ${f('detalle', 'Observaciones (opcional)', 'placeholder="Asientos, servicios especiales, condición de la tarifa..."', ' s3')}
+    </div>`;
+}
+function vcBolInput(el) {
+  const s = vcServicios[Number(el.closest('[data-si]')?.dataset.si)]; if (!s) return;
+  if (el.dataset.st) s.tramos[Number(el.closest('[data-ti]').dataset.ti)][el.dataset.st] = el.value;
+  else { s.pasajeros[Number(el.closest('[data-pi]').dataset.pi)][el.dataset.sp] = el.value; vcBolPax(s); }
+  s.nombre = vcBolNombre(s); s.fecha = s.tramos[0]?.fecha || '';
+  vcActualizarPreview();
+}
+function vcBolClick(d) {
+  const [i, j] = String(d.vcTadd ?? d.vcTquitar ?? d.vcPadd ?? d.vcPquitar).split(':').map(Number), s = vcServicios[i];
+  if (!s) return;
+  let foco = null;
+  if ('vcTadd' in d) { const u = s.tramos[s.tramos.length - 1]; s.tramos.push(vcBolTramo('', u?.destino || '')); foco = `[data-ti="${s.tramos.length - 1}"] [data-st="${u?.destino ? 'destino' : 'origen'}"]`; }
+  else if ('vcTquitar' in d) s.tramos.splice(j, 1);
+  else if ('vcPadd' in d) { s.pasajeros.push({ nombre: '', documento: '', tipo: 'adulto', ticket: '' }); foco = `[data-pi="${s.pasajeros.length - 1}"] [data-sp="nombre"]`; }
+  else s.pasajeros.splice(j, 1);
+  vcBolPax(s); s.nombre = vcBolNombre(s); s.fecha = s.tramos[0]?.fecha || '';
+  vcPintarServicios(); vcActualizarPreview();
+  if (foco) document.querySelector(`#vc-servicios [data-si="${i}"] ${foco}`)?.focus();
+}
+// El boleto no se guarda incompleto: aerolínea, cada tramo con origen, destino y fecha, y al menos un pasajero.
+function vcBolFalta(s) {
+  if (!String(s.aerolinea || '').trim()) return ['[data-sk="aerolinea"]', 'Falta la aerolínea del boleto'];
+  if (!(s.tramos || []).length) return ['[data-vc-tadd]', 'Agregá al menos un tramo al boleto'];
+  for (const [j, t] of s.tramos.entries()) {
+    const k = ['origen', 'destino', 'fecha'].find(x => !String(t[x] || '').trim());
+    if (k) return [`[data-ti="${j}"] [data-st="${k}"]`, `Completá origen, destino y fecha del tramo ${j + 1} del boleto`];
+  }
+  if (!(s.pasajeros || []).some(p => String(p.nombre || '').trim())) return [(s.pasajeros || []).length ? '[data-pi="0"] [data-sp="nombre"]' : '[data-vc-padd]', 'Falta al menos un pasajero en el boleto'];
+  return null;
+}
 let vcServicios = [], vcServSuma = 0, vcTarifario = null, vcTarifarioPromesa = null;
 function vcCargarTarifario() {
   if (vcTarifarioPromesa) return vcTarifarioPromesa;
@@ -31015,7 +31114,7 @@ function vcServHtml(s, i) {
   return `<div class="vc-serv" data-si="${i}" data-key="${vcServKey(s)}">
     <div class="vc-serv-cab"><i class="fas ${t.icono}"></i><span>${t.nombre}</span><b data-s-importe>${s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''}</b>
       <button class="vc-quitar" type="button" data-vc-squitar="${i}" title="Quitar servicio" aria-label="Quitar ${esc(t.nombre)}"><i class="fas fa-trash"></i></button></div>
-    <div class="vc-fila">
+    ${s.tipo === 'boleto' ? vcBoletoHtml(s, i, f) + '</div>' : `<div class="vc-fila">
       ${f('nombre', conTarifario ? 'Servicio' : 'Descripción', `placeholder="${esc(t.ph)}"${conTarifario ? ` list="vc-dl-${s.tipo}" autocomplete="off"` : ''}`, ' s2')}
       ${prod?.tarifas.length ? `<label class="vc-c s2"><span>Tarifa / opción</span><select class="ei" data-sk="tarifa_id">${prod.tarifas.map(x => `<option value="${x.id}"${x.id === s.tarifa_id ? ' selected' : ''}>${esc(vcTarifaTxt(x))}</option>`).join('')}</select></label>`
         : f('opcion', 'Opción', `placeholder="${s.tipo === 'traslado' ? 'Privado, compartido, ida y vuelta...' : 'Opcional'}"`, ' s2')}
@@ -31025,17 +31124,27 @@ function vcServHtml(s, i) {
       ${f('adultos', 'Adultos', 'type="number" min="0" step="1" inputmode="numeric"')}${f('ninos', 'Niños', 'type="number" min="0" step="1" inputmode="numeric"')}
       ${f('monto', 'Monto (USD)', `type="number" min="0" step="0.01" inputmode="decimal" placeholder="${prod && !s.montoManual && s.monto === '' ? 'Sin precio en USD' : '0.00'}"`)}
       ${f('detalle', 'Detalle (opcional)', `placeholder="${s.tipo === 'traslado' ? 'Aeropuerto PMV → hotel, vuelo de las 10:30 AM' : 'Qué incluye, punto de encuentro...'}"`, ' s3')}
-    </div></div>`;
+    </div></div>`}`;
 }
 function vcPintarServicios() {
   const box = document.getElementById('vc-servicios'), a = document.activeElement;
   const foco = a && box.contains(a) && a.dataset.sk ? { i: a.closest('[data-si]').dataset.si, k: a.dataset.sk } : null;
   box.innerHTML = vcServicios.map(vcServHtml).join('');
+  if (vcServicios.some(s => s.tipo === 'boleto')) vcBolCatalogo();
   const el = foco && box.querySelector(`[data-si="${foco.i}"] [data-sk="${foco.k}"]`);
   if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (_e) { /* date/number/select no tienen cursor */ } }
 }
 function vcAgregarServicio(tipo) {
   const ni = val('vc-ninos').trim();
+  if (tipo === 'boleto') {
+    const ad = parseInt(val('vc-adultos'), 10) || 1, nn = /^\d+$/.test(ni) ? Number(ni) : 0;
+    const pasajeros = [...Array(Math.min(ad + nn, 9))].map((_, k) => ({ nombre: k ? '' : val('vc-cliente-nombre').trim(), documento: k ? '' : val('vc-documento').trim(), tipo: k < ad ? 'adulto' : 'nino', ticket: '' }));
+    const s = { tipo, producto_id: null, tarifa_id: null, nombre: '', opcion: '', fecha: val('vc-fecha-entrada'), hora: '', aerolinea: '', localizador: '', estado: 'EMITIDO', viaje: 'ida_vuelta',
+      clase: 'Económica', familia: '', equipaje_mano: '', equipaje_bodega: '', tramos: [vcBolTramo(val('vc-fecha-entrada')), vcBolTramo(val('vc-fecha-salida'))], pasajeros, monto: '', detalle: '' };
+    vcBolPax(s); vcServicios.push(s); vcPintarServicios();
+    document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="aerolinea"]`)?.focus();
+    return;
+  }
   vcServicios.push({ tipo, producto_id: null, tarifa_id: null, nombre: '', opcion: '', fecha: tipo === 'traslado' ? val('vc-fecha-entrada') : '', hora: '',
     adultos: parseInt(val('vc-adultos'), 10) || '', ninos: /^\d+$/.test(ni) ? Number(ni) : '', monto: '', detalle: '' });
   vcPintarServicios();
@@ -31049,7 +31158,11 @@ function vcServInput(el) {
   if (k === 'tarifa_id') { s.tarifa_id = Number(el.value); s.tarifaManual = true; s.montoManual = false; repintar = true; }
   else if (k === 'monto') { s.montoManual = el.value !== ''; s.monto = el.value === '' ? '' : Number(el.value); }
   else s[k] = k === 'adultos' || k === 'ninos' ? (el.value === '' ? '' : Number(el.value)) : el.value;
-  if (k === 'nombre' && s.tipo !== 'otro') {
+  if (s.tipo === 'boleto') {
+    // Pasar a ida y vuelta con un solo tramo arma el regreso invertido.
+    if (k === 'viaje' && el.value === 'ida_vuelta' && s.tramos.length === 1) { const t = s.tramos[0]; s.tramos.push(vcBolTramo(val('vc-fecha-salida'), t.destino, t.origen)); repintar = true; }
+    s.nombre = vcBolNombre(s);
+  } else if (k === 'nombre' && s.tipo !== 'otro') {
     const p = vcTarifario?.porLabel[s.tipo]?.get(el.value.trim()) || null;
     if ((p?.id || null) !== s.producto_id) {
       s.producto_id = p?.id || null; s.tarifa_id = null; s.tarifaManual = s.montoManual = false;
@@ -31079,8 +31192,17 @@ const vcServLimpio = s => {
   const tar = vcServTarifa(s), n = x => (x === '' || x == null ? null : Number(x));
   return { tipo: s.tipo, producto_id: s.producto_id || null, tarifa_id: tar ? tar.id : null, nombre: String(s.nombre || '').trim(),
     opcion: tar ? vcTarifaTxt(tar) : String(s.opcion || '').trim(), fecha: s.fecha || null, hora: String(s.hora || '').trim(),
-    adultos: n(s.adultos), ninos: n(s.ninos), monto: n(s.monto), detalle: String(s.detalle || '').trim() };
+    adultos: n(s.adultos), ninos: n(s.ninos), monto: n(s.monto), detalle: String(s.detalle || '').trim(), ...(s.tipo === 'boleto' ? vcBolLimpio(s) : {}) };
 };
+function vcBolLimpio(s) {
+  const t = x => String(x ?? '').trim();
+  const tramos = (s.tramos || []).map(x => ({ vuelo: t(x.vuelo).toUpperCase(), origen: t(x.origen).toUpperCase(), destino: t(x.destino).toUpperCase(), fecha: x.fecha || null, sale: t(x.sale), llega: t(x.llega) }))
+    .filter(x => x.vuelo || x.origen || x.destino || x.fecha);
+  return { nombre: vcBolNombre({ ...s, tramos }), opcion: '', fecha: tramos[0]?.fecha || null, hora: tramos[0]?.sale || '',
+    aerolinea: t(s.aerolinea), localizador: t(s.localizador).toUpperCase(), estado: t(s.estado) || 'EMITIDO', viaje: s.viaje || 'ida_vuelta',
+    clase: t(s.clase), familia: t(s.familia), equipaje_mano: t(s.equipaje_mano), equipaje_bodega: t(s.equipaje_bodega), infantes: Number(s.infantes) || 0, tramos,
+    pasajeros: (s.pasajeros || []).map(p => ({ nombre: t(p.nombre), documento: t(p.documento), tipo: p.tipo || 'adulto', ticket: t(p.ticket) })).filter(p => p.nombre) };
+}
 
 // Lead elegido + sus reservas activas. vcReservas null = cargando (o sin lead pagado).
 let vcLead = null, vcReservas = null, vcReservasError = false, vcConVoucher = new Set(), vcUltimaVinculada = null;
@@ -31528,6 +31650,10 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     document.getElementById('vc-ref-box').classList.add('falta'); docEnfocar('vc-referencia');
     errToast('Colocá el número de referencia del pago móvil'); return;
   }
+  for (const [i, s] of vcServicios.entries()) {
+    const falta = s.tipo === 'boleto' && vcBolFalta(s);
+    if (falta) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${i}"] ${falta[0]}`)); errToast(falta[1]); return; }
+  }
   const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
   if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
   const planInicial = vcPlan();
@@ -31620,10 +31746,14 @@ const VC_PRUEBA = {
   destino_hospedaje: 'Hotel de prueba, Los Roques', fecha_entrada: '2026-11-10', check_in: '15:00',
   fecha_salida: '2026-11-14', check_out: '11:00', modalidad: 'Todo incluido', total_dias: '4 días / 3 noches',
   habitaciones: '1 habitación doble', adultos: 2, ninos: '1', status_reserva: 'CONFIRMADA',
-  total_general: 500, forma_pago: 'Pago móvil', referencia_pago: '123456', monto_pagado: 250, resta: 250,
+  total_general: 860, forma_pago: 'Pago móvil', referencia_pago: '123456', monto_pagado: 250, resta: 610,
   servicios: [
     { tipo: 'excursion', nombre: 'Full day Cayo Sal', opcion: 'Con almuerzo', fecha: '2026-11-11', hora: '08:00', adultos: 2, ninos: 1, monto: 80 },
     { tipo: 'traslado', nombre: 'Aeropuerto - hotel', fecha: '2026-11-10', hora: '13:00', adultos: 2, ninos: 1, monto: 40 },
+    { tipo: 'boleto', nombre: 'CCS → LRV → CCS · Aerolínea de prueba', fecha: '2026-11-10', hora: '08:00', aerolinea: 'Aerolínea de prueba', localizador: 'ABC123', estado: 'EMITIDO',
+      viaje: 'ida_vuelta', clase: 'Económica', familia: '', equipaje_mano: '1 pieza de 10 kg', equipaje_bodega: '1 pieza de 23 kg', adultos: 2, ninos: 1, infantes: 0, monto: 360,
+      tramos: [{ vuelo: 'XX 101', origen: 'CCS', destino: 'LRV', fecha: '2026-11-10', sale: '08:00', llega: '08:45' }, { vuelo: 'XX 102', origen: 'LRV', destino: 'CCS', fecha: '2026-11-14', sale: '16:30', llega: '17:15' }],
+      pasajeros: [{ nombre: 'Cliente de prueba', documento: 'V-00000000', tipo: 'adulto', ticket: '0000000000001' }, { nombre: 'Acompañante de prueba', documento: 'V-00000001', tipo: 'adulto', ticket: '0000000000002' }, { nombre: 'Niño de prueba', documento: 'Partida de nacimiento', tipo: 'nino', ticket: '' }] },
   ],
 };
 window.generarVoucherPrueba = async function generarVoucherPrueba() {
@@ -31705,7 +31835,8 @@ function vcpDibujarVoucher(doc, v, ctx) {
   // ---------- Banda de título ----------
   const servs = Array.isArray(v.servicios) ? v.servicios : [];
   const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
-  const titulo = txt(v.titulo_voucher) || (conHosp ? 'VOUCHER DE HOSPEDAJE' : 'VOUCHER DE SERVICIO');
+  const boletos = Array.isArray(v.boletos) ? v.boletos : [];
+  const titulo = txt(v.titulo_voucher) || (conHosp ? 'VOUCHER DE HOSPEDAJE' : boletos.length === servs.length ? 'VOUCHER DE BOLETO AÉREO' : 'VOUCHER DE SERVICIO');
   doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, 114, VCP_W, 42, 'F');
   font('bold', 14.5, [255, 255, 255]); doc.text(titulo, VCP_X0 + 14, 140.5, { charSpace: .6 });
   font('semibold', 10, [255, 255, 255]); doc.text(v.numero_factura ? `FACTURA N° ${txt(v.numero_factura)}` : `RESERVA N° ${txt(v.codigo_reserva)}`, VCP_X1 - 14, 132, { align: 'right' });
@@ -31743,28 +31874,56 @@ function vcpDibujarVoucher(doc, v, ctx) {
     filaStatus,
   ], y) + gap;
 
+  // Tabla de filas con encabezado oscuro (servicios, pasajeros, itinerario).
+  const listado = (head, body, yL, columnStyles = {}, pad = 6) => conBorde({
+    startY: yL, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
+    styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pad, bottom: pad, left: 9, right: 9 } },
+    headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+    columnStyles, head: [head], body,
+  }, VCP_X0, VCP_W);
+
   // ---------- Servicios adicionales ----------
   if (servs.length) {
+    y = listado([txt(v.etiqueta_servicios) || 'SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO'], servs.map(s => [s.nombre, s.fecha, s.pax, usd(s.monto)]), y,
+      { 0: { cellWidth: 250 }, 3: { halign: 'right', fontStyle: st('semibold') } }) + gap;
+  }
+
+  // ---------- Boletos aéreos: datos del boleto, itinerario, pasajeros con N° de boleto e indicaciones ----------
+  const segunTarifa = 'Según la tarifa de la aerolínea';
+  const lugar = c => { const a = c && (bolCatalogo?.aeropuertos || []).find(x => x.iata_code === c); return a?.ciudad ? `${c} · ${a.ciudad}` : txt(c) || '—'; };
+  boletos.forEach(b => {
+    if (y + 160 > 742) { doc.addPage(); y = 40; }
+    const estado = txt(b.estado).toUpperCase();
+    y = tabla(`BOLETO AÉREO · ${txt(b.aerolinea).toUpperCase()}`, [
+      ['LOCALIZADOR (PNR)', { content: txt(b.localizador).toUpperCase() || '—', styles: { fontStyle: st('bold'), fontSize: 11, charSpace: 1 } },
+        'ESTADO', { content: estado || '—', styles: { fontStyle: st('bold'), textColor: estado === 'EMITIDO' ? VCP.verde : VCP.ambarOsc, charSpace: .6 } }],
+      ['TIPO DE VIAJE', VC_BOL_VIAJES[b.viaje] || '—', 'CLASE', txt(b.clase) || '—'],
+      ...(txt(b.familia) ? [['TARIFA', ancho(b.familia)]] : []),
+      ['EQUIPAJE DE MANO', txt(b.equipaje_mano) || segunTarifa, 'EQUIPAJE BODEGA', txt(b.equipaje_bodega) || segunTarifa],
+      ...(txt(b.detalle) ? [['OBSERVACIONES', ancho(b.detalle)]] : []),
+    ], y) + 8;
+    y = listado(['VUELO', 'ORIGEN', 'DESTINO', 'FECHA', 'SALE', 'LLEGA'], (b.tramos || []).map(t => [
+      { content: txt(t.vuelo) || '—', styles: { fontStyle: st('semibold') } }, lugar(t.origen), lugar(t.destino), vcFechaDma(t.fecha) || '—', vcHora12(t.sale) || '—', vcHora12(t.llega) || '—']), y,
+      { 0: { cellWidth: 62 }, 3: { cellWidth: 70 }, 4: { cellWidth: 58 }, 5: { cellWidth: 58 } }, 5) + 8;
+    y = listado(['PASAJERO', 'TIPO', 'DOCUMENTO', 'N° DE BOLETO'], (b.pasajeros || []).map(p => [
+      txt(p.nombre).toUpperCase() || '—', VC_BOL_PAX[p.tipo] || 'Adulto', txt(p.documento) || '—',
+      txt(p.ticket) ? { content: txt(p.ticket), styles: { fontStyle: st('bold'), charSpace: .4 } } : { content: 'Por emitir', styles: { textColor: VCP.ambarOsc } }]), y,
+      { 1: { cellWidth: 60 }, 2: { cellWidth: 110 }, 3: { cellWidth: 130 } }, 5) + gap;
+  });
+  if (boletos.length) {
+    if (y + 125 > 742) { doc.addPage(); y = 40; }
     y = conBorde({
-      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
-      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
-      columnStyles: { 0: { cellWidth: 250 }, 3: { halign: 'right', fontStyle: st('semibold') } },
-      head: [[txt(v.etiqueta_servicios) || 'SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO']],
-      body: servs.map(s => [s.nombre, s.fecha, s.pax, usd(s.monto)]),
+      startY: y, theme: 'plain', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
+      styles: { font: F, fontStyle: st('normal'), fontSize: 7.8, textColor: VCP.cuerpo, cellPadding: { top: 2.2, bottom: 2.2, left: 12, right: 12 } },
+      headStyles: { fillColor: VCP.suave, textColor: VCP.navy, fontStyle: st('semibold'), fontSize: 7.6, cellPadding: { top: 6, bottom: 4, left: 12, right: 12 } },
+      head: [[{ content: 'INDICACIONES PARA SU VIAJE', styles: { charSpace: .8 } }]],
+      body: VC_BOL_AVISOS.map((a, i, all) => [{ content: `•  ${a}`, styles: i === all.length - 1 ? { cellPadding: { top: 2.2, bottom: 7, left: 12, right: 12 } } : {} }]),
     }, VCP_X0, VCP_W) + gap;
   }
 
   // ---------- Pasajeros (opcional: el voucher del paquete los lista) ----------
   if (Array.isArray(v.pasajeros) && v.pasajeros.length) {
-    y = conBorde({
-      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
-      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
-      columnStyles: { 1: { cellWidth: 170 } },
-      head: [['PASAJEROS', 'DOCUMENTO']],
-      body: v.pasajeros.map(p => [p.nombre || '—', p.documento || '—']),
-    }, VCP_X0, VCP_W) + gap;
+    y = listado(['PASAJEROS', 'DOCUMENTO'], v.pasajeros.map(p => [p.nombre || '—', p.documento || '—']), y, { 1: { cellWidth: 170 } }) + gap;
   }
 
   // ---------- Pago ----------
@@ -31929,13 +32088,17 @@ async function construirVoucherPdf(v) {
   try { const d = await cargarImagenBase64('logo-color.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
   const ctx = { F, st, logo };
   const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
-  const servicios = (Array.isArray(v.servicios) ? v.servicios : []).map(s => ({
-    nombre: [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion, s.detalle].filter(Boolean).join('\n'),
-    fecha: s.fecha_texto || [s.fecha ? s.fecha.split('-').reverse().join('/') : '', s.hora].filter(Boolean).join(' '),
-    pax: [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños')].filter(Boolean).join(' + '),
+  const lista = Array.isArray(v.servicios) ? v.servicios : [], boletos = lista.filter(s => s.tipo === 'boleto');
+  const servicios = lista.map(s => ({
+    // Helvetica (sin Poppins) no tiene «→»: en el PDF la ruta va como CCS-PMV-CCS.
+    nombre: s.tipo === 'boleto' ? [`BOLETO AÉREO: ${String(s.nombre || '').replace(/ → /g, '-')}`,s.localizador ? `Localizador: ${s.localizador}` : ''].filter(Boolean).join('\n')
+      : [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion, s.detalle].filter(Boolean).join('\n'),
+    fecha: s.fecha_texto || (s.tipo === 'boleto' ? vcBolFechas(s) : [vcFechaDma(s.fecha), s.hora].filter(Boolean).join(' ')),
+    pax: [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños'), pl(s.infantes, 'infante', 'infantes')].filter(Boolean).join(' + '),
     monto: s.monto,
   }));
-  vcpDibujarVoucher(doc, { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios }, ctx);
+  if (boletos.length) await bolAsegurarCatalogo();
+  vcpDibujarVoucher(doc, { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios, boletos }, ctx);
   const nVoucher = doc.getNumberOfPages();
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
