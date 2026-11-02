@@ -9960,13 +9960,13 @@ async function riaConsultar(dias, forzar = false, completo = true, fecha = null)
   // «Hoy» se compara contra el mismo día de la semana pasada: contra «ayer» cada domingo
   // parecía un desplome (el domingo siempre convierte menos que el sábado).
   const haceSemana = iso => new Date(new Date(iso).getTime() - 7 * 86400000).toISOString();
-  const [general, semana, piloto, reactivacion, modelos, abFb] = await Promise.all([
+  const [general, semana, piloto, reactivacion, modelos, abDm] = await Promise.all([
     sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
     dias === 1 || fecha ? sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: haceSemana(rango.desde), p_hasta: haceSemana(rango.hasta) }) : null,
     completo ? sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_modelos_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
-    completo ? sb.rpc('panel_ab_privado_fb', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
+    completo ? sb.rpc('panel_ab_comentarios', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
   ]);
   if (general.error) throw general.error;
   if (semana) {
@@ -9977,8 +9977,8 @@ async function riaConsultar(dias, forzar = false, completo = true, fecha = null)
   if (completo && reactivacion.error) throw reactivacion.error;
   // La comparativa por modelo es aditiva: si falla, el resto del panel se pinta igual.
   if (completo && modelos.error) console.error('panel_modelos_ia', modelos.error);
-  if (completo && abFb.error) console.error('panel_ab_privado_fb', abFb.error);
-  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data, ab_fb: abFb.error ? null : abFb.data } : general.data;
+  if (completo && abDm.error) console.error('panel_ab_comentarios', abDm.error);
+  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data, ab_dm: abDm.error ? null : abDm.data } : general.data;
   RIA_CACHE.set(clave, { en: Date.now(), data, completo });
   return data;
 }
@@ -10149,12 +10149,15 @@ function riaComparacionSeguimiento(reactivacion) {
 }
 
 const RIA_BRAZOS = { deepseek: 'DeepSeek', haiku: 'Haiku 5.5', lite: 'Lite' };
-function riaAbFacebook(ab) {
+function riaAbComentarios(ab) {
   if (!ab) return '<div class="ria-vacio">No se pudo cargar la prueba A/B.</div>';
-  const vs = ab.variantes || [];
-  if (!vs.length) return '<div class="ria-vacio">Sin comentarios de Facebook desde que empezó la prueba (14-oct).</div>';
-  const nombre = { A: 'A · respuesta con precio', B: 'B · pregunta sin precio' };
-  return `<div class="ria-lista">${vs.map(v => `<div class="ria-fila"><span><b>${esc(nombre[v.variante] || v.variante)}</b><br>${fmt(riaNum(v.respondieron))} respondieron (${riaPct(v.respondieron, v.contactos)}%) · ${fmt(riaNum(v.leads))} leads (${riaPct(v.leads, v.contactos)}%)</span><b>${fmt(riaNum(v.contactos))}</b></div>`).join('')}</div>`;
+  const filas = ab.brazos || [];
+  if (!filas.length) return `<div class="ria-vacio">${ab.activo ? 'Sin comentarios en la prueba durante este período.' : 'La prueba todavía no está activa.'}</div>`;
+  const nombre = { control: 'Control · mensaje actual', micro_si: 'Micro-sí · «Respóndame SÍ»', numero: 'Número · «Cuántos viajarían»' };
+  const suma = (fs, c) => fs.reduce((t, f) => t + riaNum(f[c]), 0);
+  const linea = fs => `${riaPct(suma(fs, 'leidos'), suma(fs, 'contactos'))}% leyó · ${riaPct(suma(fs, 'respondieron'), suma(fs, 'contactos'))}% contestó · ${riaPct(suma(fs, 'telefonos'), suma(fs, 'contactos'))}% teléfono · ${riaPct(suma(fs, 'leads'), suma(fs, 'contactos'))}% lead`;
+  const redes = { instagram: 'IG', facebook: 'FB' };
+  return `<div class="ria-lista">${Object.keys(nombre).map(b => { const fs = filas.filter(f => f.variante === b); return fs.length ? `<div class="ria-fila"><span><b>${esc(nombre[b])}</b><br>${linea(fs)}${fs.map(f => `<br><small style="color:var(--muted)">${esc(redes[f.canal] || f.canal)}: ${fmt(riaNum(f.contactos))} · ${riaPct(f.respondieron, f.contactos)}% contestó</small>`).join('')}</span><b>${fmt(suma(fs, 'contactos'))}</b></div>` : ''; }).join('')}</div>`;
 }
 
 function riaModelos(m) {
@@ -10279,8 +10282,8 @@ function riaPintarPanel(data) {
   document.getElementById('ria-canales').innerHTML = canales.length ? `<div class="ria-lista">${canales.map(c => `<div class="ria-fila"><span><b>${esc(RIA_CANALES[c.canal] || c.canal)}</b><br>${fmt(riaNum(c.telefonos))} teléfonos · ${fmt(riaNum(c.leads_calificados))} leads (${riaPct(c.leads_calificados, c.conversaciones)}%)</span><b>${fmt(riaNum(c.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${riaNum(c.latencia_promedio_ms) ? (riaNum(c.latencia_promedio_ms) / 1000).toFixed(1) + ' s' : '—'}</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin actividad por canal en este período.</div>';
 
   document.getElementById('ria-modelos').innerHTML = riaModelos(data.modelos);
-  const abFb = document.getElementById('ria-ab-fb');
-  if (abFb) abFb.innerHTML = riaAbFacebook(data.ab_fb);
+  const abDm = document.getElementById('ria-ab-dm');
+  if (abDm) abDm.innerHTML = riaAbComentarios(data.ab_dm);
   const sinCache = Math.max(0, riaNum(op.tokens_entrada) - riaNum(op.tokens_cache));
   const costo = data.modelos?.brazos?.length ? data.modelos.brazos.reduce((s, b) => s + riaNum(b.costo_usd), 0)
     : sinCache * RIA_COSTO_ENTRADA + riaNum(op.tokens_cache) * RIA_COSTO_CACHE + riaNum(op.tokens_salida) * RIA_COSTO_SALIDA;
