@@ -1,0 +1,3 @@
+# Link de conexion de IG para marcas clientes (EF marketing-conectar, plan plataforma-marketing-crm).
+# Vive solo aca: deploy-crm.py no lo copia ni lo borra.
+/conectar/:t https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/marketing-conectar?t=:t 302
