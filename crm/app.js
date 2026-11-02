@@ -7,6 +7,7 @@ import { crearTareas } from './tareas.js';
 import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
 import { crearMarketing } from './marketing.js';
+import { crearCostosDigitales } from './costos-digitales.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -809,7 +810,7 @@ const NAV_OPCIONALES = [
   { sec: 'grp-inicio', label: 'Inicio', desc: 'Dashboard, ventas, ranking e informe diario' },
   { sec: 'grp-bandeja', label: 'Bandeja', desc: 'Meta DM (Instagram, Facebook y WhatsApp) y Correo' },
   { sec: 'pipeline', label: 'Pipeline', desc: 'Pestaña en Leads: tablero de leads por estado' },
-  { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente y prospectos de IA' },
+  { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente, prospectos y costos de IA' },
   { sec: 'grp-marketing', label: 'Marketing', desc: 'Redes y clientes de eventos' },
 ];
 const navExtraActivas = () => Array.isArray(MI_PREFERENCIAS.nav_extra) ? MI_PREFERENCIAS.nav_extra : (ROL === 'marketing' ? ['grp-marketing'] : []);
@@ -1693,7 +1694,7 @@ const IR_SECCIONES = [
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
-  'rendimiento-ia', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
+  'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
 ];
 function seccionInicialPermitida() {
@@ -3577,6 +3578,8 @@ let ADS_META = null;
 const adsMeta = () => ADS_META ||= crearAdsMeta({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('ads-root') });
 let MARKETING = null;
 const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root') });
+let COSTOS_DIGITALES = null;
+const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
 const pvCampanas = () => PV_CAMPANAS ||=crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
@@ -15636,11 +15639,37 @@ async function redesFbInvocar(body) {
   if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
   return data;
 }
+// Marcas clientes de Marketing › Contenido: con una elegida, Redes muestra solo su Instagram (Zernio).
+// Las cuentas de cada marca van en redesFbCuentas con clave `plat@marca`; sin marca es Lotus.
+let redesMarca = null, redesMarcas = null;
+const fbClave = plat => redesMarca ? `${plat}@${redesMarca}` : plat;
+async function redesCargarMarcas() {
+  if (!['admin', 'administrativo', 'marketing'].includes(ROL)) return;
+  if (!redesMarcas) {
+    const { data, error } = await sb.functions.invoke('marketing-zernio', { body: { accion: 'marcas' } });
+    if (error || !data?.ok) return console.error('marcas de Redes', error || data?.error);
+    redesMarcas = data.marcas.filter(m => !m.es_lotus && m.activa && (m.cuentas || []).some(c => c.plataforma === 'instagram' && c.activo));
+  }
+  const box = document.getElementById('redes-marcas');
+  box.style.display = redesMarcas.length ? '' : 'none';
+  box.innerHTML = `<button class="seg${redesMarca ? '' : ' on'}" data-marca="">Lotus 360</button>` +
+    redesMarcas.map(m => `<button class="seg${m.id === redesMarca ? ' on' : ''}" data-marca="${m.id}">${esc(m.nombre)}</button>`).join('');
+  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesMarca = +b.dataset.marca || null; redesElegirMarca(); });
+}
+function redesElegirMarca() {
+  document.querySelectorAll('#redes-marcas .seg').forEach(b => b.classList.toggle('on', (+b.dataset.marca || null) === redesMarca));
+  document.querySelectorAll('#redes-red-tabs .seg').forEach(b => {
+    b.style.display = redesMarca && b.dataset.red !== 'instagram' ? 'none' : '';
+    if (redesMarca) b.classList.toggle('on', b.dataset.red === 'instagram');
+  });
+  if (redesMarca) redesRed = 'instagram';
+  cargarRedActual();
+}
 function fbPintarCuentas(plat) {
-  const box = document.getElementById('redes-fb-cuentas'), cs = redesFbCuentas[plat] || [];
+  const k = fbClave(plat), box = document.getElementById('redes-fb-cuentas'), cs = redesFbCuentas[k] || [];
   box.style.display = cs.length > 1 ? '' : 'none';
-  box.innerHTML = cs.map(c => `<button class="seg${c.id === redesFbCuenta[plat] ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
-  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta[plat] = b.dataset.id; fbPintarCuentas(plat); loadRedesZernio(plat); });
+  box.innerHTML = cs.map(c => `<button class="seg${c.id === redesFbCuenta[k] ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
+  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta[k] = b.dataset.id; fbPintarCuentas(plat); loadRedesZernio(plat); });
 }
 // Facebook, Instagram y TikTok comparten panel. Con rol marketing (el resumen de la EF es solo oficina)
 // Instagram y TikTok caen a sus paneles de siempre, alimentados desde Supabase.
@@ -15825,18 +15854,20 @@ async function loadRedesZernio(plat) {
   document.getElementById('redes-fb-seccion').innerHTML = `<i class="fa-brands ${R.icono}"></i> ${R.seccion}`;
   document.getElementById('redes-fb-card-reac').style.display = plat === 'facebook' ? '' : 'none';
   avisos.innerHTML = fbAviso('fa-spinner fa-spin', `Cargando métricas de ${R.nombre} desde Zernio...`);
+  const marca = redesMarca, k = fbClave(plat), conMarca = marca ? { marca_id: marca } : {};
   try {
-    if (!redesFbCuentas[plat]) {
-      redesFbCuentas[plat] = (await redesFbInvocar({ accion: 'cuentas', plataforma: plat })).cuentas.filter(c => c.activo);
-      redesFbCuenta[plat] = redesFbCuentas[plat][0]?.id || null;
+    if (!redesFbCuentas[k]) {
+      redesFbCuentas[k] = (await redesFbInvocar({ accion: 'cuentas', plataforma: plat, ...conMarca })).cuentas.filter(c => c.activo);
+      redesFbCuenta[k] = redesFbCuentas[k][0]?.id || null;
     }
+    if (gen !== redesFbGen) return;
     fbPintarCuentas(plat);
-    if (!redesFbCuenta[plat]) { avisos.innerHTML = fbAviso('fa-circle-info', `No hay cuentas de ${R.nombre} conectadas en Zernio.`); return; }
+    if (!redesFbCuenta[k]) { avisos.innerHTML = fbAviso('fa-circle-info', `No hay cuentas de ${R.nombre} conectadas en Zernio.`); return; }
     const [d, h] = periodo(redesPeriodo), fin = addD(h, -1), hoy = new Date();
-    const desde = fbYmd(d), hasta = fbYmd(fin > hoy ? hoy : fin), clave = `${plat}|${redesFbCuenta[plat]}|${desde}|${hasta}`;
+    const desde = fbYmd(d), hasta = fbYmd(fin > hoy ? hoy : fin), clave = `${k}|${redesFbCuenta[k]}|${desde}|${hasta}`;
     let hit = redesFbCache.get(clave);
     if (!hit || Date.now() - hit.t > REDES_FB_CACHE_MS) {
-      hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', plataforma: plat, accountId: redesFbCuenta[plat], desde, hasta }) };
+      hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', plataforma: plat, accountId: redesFbCuenta[k], desde, hasta, ...conMarca }) };
       redesFbCache.set(clave, hit);
     }
     // Si la persona ya se fue de Redes, no se rearman los ~8 gráficos en otra pantalla
@@ -15850,7 +15881,8 @@ async function loadRedesZernio(plat) {
   } catch (e) {
     console.error(e);
     if (gen !== redesFbGen) return;
-    if (plat !== 'facebook') { redesPanelesVista(false); plat === 'tiktok' ? loadRedesTikTok() : loadRedes(); return; }
+    // Los paneles de respaldo (Supabase) son de Lotus: con una marca cliente no se cae a ellos.
+    if (plat !== 'facebook' && !marca) { redesPanelesVista(false); plat === 'tiktok' ? loadRedesTikTok() : loadRedes(); return; }
     avisos.innerHTML = fbAviso('fa-triangle-exclamation', `No se pudieron cargar las métricas de ${R.nombre}. Intenta de nuevo en un momento.`);
     errToast(`No se pudieron cargar las métricas de ${R.nombre}`);
   }
@@ -34390,6 +34422,7 @@ const NAV_ITEMS = [
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, calidad, errores y costos' },
+  { sec: 'costos-digitales', icon: 'fas fa-wallet', label: 'Costos digitales', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Suscripciones y consumo de IA, por mes' },
   { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
   { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Posadas que quieren el asistente' },
   { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Quienes escriben al bot para ofrecer algo' },
@@ -34789,9 +34822,10 @@ function cargarSeccion(sec) {
   if (sec === 'contactos-directos') loadContactosDirectos();
   if (sec === 'repartir') repPoblarAsesores();
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
-  if (sec === 'redes') cargarRedActual();
+  if (sec === 'redes') { redesCargarMarcas(); cargarRedActual(); }
   if (sec === 'ads') adsMeta().cargar();
   if (sec === 'contenido') marketing().cargar();
+  if (sec === 'costos-digitales') costosDigitales().cargar();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'bol-solicitudes') bolColaAlEntrar();

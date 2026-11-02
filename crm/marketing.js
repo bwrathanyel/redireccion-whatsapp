@@ -87,10 +87,39 @@ const CSS = `
 .mk-ed-pie .btn-sm{min-height:44px}
 .mk-ed-pie .mk-borrar{margin-right:auto}
 .mk-pub a{color:var(--accent-ink)}
+.mk-com{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:14px;align-items:start}
+.mk-cpubs{display:flex;flex-direction:column;gap:7px}
+.mk-cpub{display:flex;gap:10px;align-items:center;width:100%;min-height:64px;padding:8px;border:1px solid var(--line2);border-radius:12px;background:var(--panel);color:var(--txt);text-align:left;cursor:pointer}
+.mk-cpub.on{border-color:var(--accent-ink);background:var(--accent-soft)}
+.mk-cpub img,.mk-cpub .mk-sin{flex:0 0 auto;width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--bg2)}
+.mk-cpub span{min-width:0;display:flex;flex-direction:column;gap:3px;font-size:12.5px}
+.mk-cpub span b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:600}
+.mk-cpub small{color:var(--muted);font-size:11px}
+.mk-chilo{border:1px solid var(--line2);border-radius:14px;padding:14px;background:var(--panel);min-height:200px}
+.mk-chilo h3{font-size:14px;font-weight:800;margin:0 0 4px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.mk-chilo .mk-cab{margin-bottom:10px}
+.mk-chilo .mk-cab a{color:var(--accent-ink);font-size:12px}
+.mk-volver{display:none;min-height:44px;margin-bottom:9px}
+.mk-coms{display:flex;flex-direction:column;gap:10px}
+.mk-c{border-top:1px solid var(--line);padding-top:10px}
+.mk-c .mk-c{border-top:0;padding:8px 0 0 14px;border-left:2px solid var(--line2);margin-left:4px}
+.mk-c-cab{display:flex;flex-wrap:wrap;gap:4px 9px;align-items:baseline;font-size:12px}
+.mk-c-cab b{font-weight:800}
+.mk-c-cab small{color:var(--muted)}
+.mk-c-txt{font-size:13px;margin:3px 0 0;white-space:pre-line;overflow-wrap:anywhere}
+.mk-c.oculto>.mk-c-txt{opacity:.55}
+.mk-c-acc{display:flex;gap:7px;margin-top:5px}
+.mk-c-acc .btn-sm{min-height:36px}
+.mk-resp{border:1px solid var(--line2);border-radius:12px;padding:10px;margin-top:14px}
+.mk-resp textarea{width:100%;min-height:80px}
+.mk-resp .mk-ed-pie{margin-top:9px}
 @media (max-width:640px){
   .mk-cal{display:none}
   .mk-lista-dias{display:block}
   .mk-mes{min-width:0;flex:1}
+  .mk-com{grid-template-columns:1fr}
+  .mk-com.con-hilo .mk-cpubs,.mk-com:not(.con-hilo) .mk-chilo{display:none}
+  .mk-volver{display:inline-flex}
 }
 `;
 const COLORES = { accent: 'Lotus', blue: 'Azul', green: 'Verde', amber: 'Ámbar', purple: 'Morado', pink: 'Rosa' };
@@ -116,6 +145,7 @@ const ERRORES = {
   post_duplicado: 'Ya hay una publicación igual en las últimas 24 horas.',
   medio_no_soportado: 'Solo fotos JPG, PNG o WEBP y videos MP4 o MOV.',
   medio_pesado: 'Muy pesado: fotos hasta 8 MB, videos hasta 300 MB.',
+  parametros_invalidos: 'Faltan datos: escribí la respuesta.',
 };
 const ESTADOS = { scheduled: 'Programada', publishing: 'Publicando', published: 'Publicada', partial: 'Publicada a medias', failed: 'Falló', draft: 'Borrador', cancelled: 'Cancelada' };
 const DIAS_SEM = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
@@ -153,7 +183,15 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
         <div class="ria-sub">Publicaciones programadas de Lotus y de las marcas de clientes, y la conexión de sus cuentas.</div></div></div>
       <div class="seg-group mk-tabs" role="tablist">
         <button class="seg on" type="button" role="tab" aria-selected="true" data-mk="tab" data-tab="calendario">Calendario</button>
+        <button class="seg" type="button" role="tab" aria-selected="false" data-mk="tab" data-tab="comentarios">Comentarios</button>
         <button class="seg" type="button" role="tab" aria-selected="false" data-mk="tab" data-tab="marcas">Marcas</button>
+      </div>
+      <div id="mk-p-comentarios" hidden>
+        <div class="mk-filtro mk-barra" id="mk-cfiltro" aria-label="Marca"></div>
+        <div class="mk-com" id="mk-com">
+          <div class="mk-cpubs" id="mk-cpubs"><div class="mk-vacio">Elegí una marca.</div></div>
+          <div class="mk-chilo" id="mk-chilo"><div class="mk-vacio">Elegí una publicación.</div></div>
+        </div>
       </div>
       <div id="mk-p-calendario">
         <div class="mk-barra">
@@ -176,7 +214,10 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
         <div id="mk-cuerpo"><div class="mk-vacio">Cargando…</div></div>
       </div>`;
     raiz.addEventListener('click', clic);
-    raiz.addEventListener('submit', e => { if (e.target.id === 'mk-nueva') { e.preventDefault(); crear(e.target); } });
+    raiz.addEventListener('submit', e => {
+      if (e.target.id === 'mk-nueva') { e.preventDefault(); crear(e.target); }
+      if (e.target.id === 'mk-resp') { e.preventDefault(); responder(e.target); }
+    });
     fondo = document.createElement('div'); fondo.className = 'drawer-bg';
     cajon = document.createElement('aside');
     cajon.className = 'drawer mk-ed'; cajon.setAttribute('role', 'dialog'); cajon.setAttribute('aria-modal', 'true'); cajon.setAttribute('aria-label', 'Publicación');
@@ -394,7 +435,120 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
     pestana = t;
     raiz.querySelectorAll('[data-mk=tab]').forEach(b => { const on = b.dataset.tab === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
     $('#mk-p-calendario').hidden = t !== 'calendario';
+    $('#mk-p-comentarios').hidden = t !== 'comentarios';
     $('#mk-p-marcas').hidden = t !== 'marcas';
+    if (t === 'comentarios') pintarCFiltro();
+  }
+
+  // ---- Comentarios: publicaciones de una marca → hilo → responder / ocultar ----
+  // En Lotus es solo lectura: sus comentarios los contesta el bot de ventas.
+  const com = { marca: null, pubs: [], pub: null, hilo: null, objetivo: null, enviando: false, clave: null, n: 0 };
+  const conComentarios = () => marcas.filter(m => m.activa && cuentasPost(m).length);
+  const fechaCorta = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short' }) : '';
+
+  function pintarCFiltro() {
+    const lista = conComentarios();
+    if (!com.marca && lista.length) com.marca = (lista.find(m => !m.es_lotus) || lista[0]).id;
+    $('#mk-cfiltro').innerHTML = lista.length
+      ? lista.map(m => `<button class="mk-fchip${m.id === com.marca ? ' on' : ''}" type="button" data-mk="cmarca" data-marca="${m.id}" data-color="${colorDe(m.id)}" aria-pressed="${m.id === com.marca}">${esc(m.nombre)}</button>`).join('')
+      : '<div class="mk-est">Ninguna marca tiene cuentas conectadas todavía.</div>';
+    if (com.marca && !com.pubs.length && !com.hilo) cargarPubs();
+  }
+
+  async function cargarPubs() {
+    const n = ++com.n, m = marcaDe(com.marca);
+    com.pub = null; com.hilo = null; com.objetivo = null;
+    $('#mk-com').classList.remove('con-hilo');
+    $('#mk-cpubs').innerHTML = '<div class="mk-vacio">Cargando…</div>';
+    $('#mk-chilo').innerHTML = '<div class="mk-vacio">Elegí una publicación.</div>';
+    try {
+      const d = await invocar({ accion: 'comentarios', marca_id: m.id });
+      if (n !== com.n) return;
+      com.pubs = d.publicaciones || [];
+      pintarPubs();
+    } catch (e) { if (n === com.n) $('#mk-cpubs').innerHTML = `<div class="mk-vacio">${esc(e.message)}</div>`; }
+  }
+
+  function pintarPubs() {
+    $('#mk-cpubs').innerHTML = com.pubs.length ? com.pubs.map(p => `
+      <button class="mk-cpub${p.id === com.pub?.id ? ' on' : ''}" type="button" data-mk="cpub" data-pub="${esc(p.id)}">
+        ${p.portada ? `<img src="${esc(p.portada)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<i class="mk-sin"></i>'}
+        <span><b>${esc(p.texto || '(sin texto)')}</b><small>${p.comentarios} comentario${p.comentarios === 1 ? '' : 's'} · ${esc(PLATAFORMAS[p.plataforma] || p.plataforma)} · ${esc(fechaCorta(p.fecha))}</small></span>
+      </button>`).join('') : '<div class="mk-vacio">Sin publicaciones con comentarios.</div>';
+  }
+
+  async function abrirPub(id) {
+    const p = com.pubs.find(x => x.id === id);
+    if (!p) return;
+    const n = ++com.n;
+    com.pub = p; com.hilo = null; com.objetivo = null;
+    pintarPubs();
+    $('#mk-com').classList.add('con-hilo');
+    $('#mk-chilo').innerHTML = '<div class="mk-vacio">Cargando…</div>';
+    try {
+      const d = await invocar({ accion: 'hilo', marca_id: com.marca, cuenta_id: p.cuenta_id, post_id: p.id });
+      if (n !== com.n) return;
+      com.hilo = d.comentarios || [];
+      pintarHilo();
+    } catch (e) { if (n === com.n) $('#mk-chilo').innerHTML = `<div class="mk-vacio">${esc(e.message)}</div>`; }
+  }
+
+  function comentario(c, lotus) {
+    const acc = lotus ? '' : `<div class="mk-c-acc">
+      ${c.puede_responder && !c.propio ? `<button class="btn-sm" type="button" data-mk="cresp" data-c="${esc(c.id)}">Responder</button>` : ''}
+      ${c.puede_ocultar && !c.propio ? `<button class="btn-sm" type="button" data-mk="cocultar" data-c="${esc(c.id)}" data-ocultar="${!c.oculto}">${c.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
+    </div>`;
+    return `<div class="mk-c${c.oculto ? ' oculto' : ''}">
+      <div class="mk-c-cab"><b>${esc(c.autor || c.usuario || 'Alguien')}</b>${c.propio ? '<span class="mk-tag">Cuenta</span>' : ''}${c.oculto ? '<span class="mk-tag">Oculto</span>' : ''}<small>${esc(fechaCorta(c.fecha))}</small></div>
+      <p class="mk-c-txt">${esc(c.texto)}</p>${acc}
+      ${(c.respuestas || []).map(r => comentario(r, lotus)).join('')}
+    </div>`;
+  }
+
+  const buscarC = (lista, id) => { for (const c of lista || []) { if (c.id === id) return c; const r = buscarC(c.respuestas, id); if (r) return r; } return null; };
+
+  function pintarHilo() {
+    const p = com.pub, m = marcaDe(com.marca), lotus = !!m?.es_lotus, obj = com.objetivo && buscarC(com.hilo, com.objetivo);
+    $('#mk-chilo').innerHTML = `
+      <button class="btn-sm mk-volver" type="button" data-mk="cvolver">‹ Publicaciones</button>
+      <div class="mk-cab"><div><h3>${esc(p.texto || '(sin texto)')}</h3>${p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">Ver en ${esc(PLATAFORMAS[p.plataforma] || p.plataforma)}</a>` : ''}</div>
+        ${lotus ? '<span class="mk-tag bot">Lo atiende el bot</span>' : ''}</div>
+      <div class="mk-coms">${com.hilo.length ? com.hilo.map(c => comentario(c, lotus)).join('') : '<div class="mk-est">Sin comentarios visibles.</div>'}</div>
+      ${obj ? `<form class="mk-resp" id="mk-resp">
+        <label class="fl" for="mk-resp-txt">Respuesta a ${esc(obj.autor || 'este comentario')}</label>
+        <textarea class="ei" id="mk-resp-txt" maxlength="2200" required></textarea>
+        <div class="mk-ed-pie"><button class="btn-sm" type="button" data-mk="cresp-cancelar">Cancelar</button>
+          <button class="btn-sm lt-primario" type="submit"${com.enviando ? ' disabled' : ''}>Responder como @${esc(p.usuario)}</button></div>
+      </form>` : ''}`;
+    if (obj) $('#mk-resp-txt').focus();
+  }
+
+  async function responder(form) {
+    if (com.enviando) return;
+    const texto = form.querySelector('#mk-resp-txt').value.trim();
+    if (!texto) return;
+    com.enviando = true; form.querySelector('[type=submit]').disabled = true;
+    try {
+      await invocar({ accion: 'responder', marca_id: com.marca, cuenta_id: com.pub.cuenta_id, post_id: com.pub.id, comentario_id: com.objetivo, texto, clave: com.clave });
+      ok('Respuesta publicada');
+      com.objetivo = null;
+      await abrirPub(com.pub.id);
+    } catch (e) {
+      error(e.message);
+      form.querySelector('[type=submit]').disabled = false;
+    } finally { com.enviando = false; }
+  }
+
+  async function ocultarC(b) {
+    const ocultar = b.dataset.ocultar === 'true';
+    b.disabled = true;
+    try {
+      await invocar({ accion: 'ocultar', marca_id: com.marca, cuenta_id: com.pub.cuenta_id, post_id: com.pub.id, comentario_id: b.dataset.c, ocultar });
+      const c = buscarC(com.hilo, b.dataset.c);
+      if (c) c.oculto = ocultar;
+      ok(ocultar ? 'Comentario oculto' : 'Comentario visible otra vez');
+      pintarHilo();
+    } catch (e) { error(e.message); b.disabled = false; }
   }
 
   function pintarForm() {
@@ -519,6 +673,12 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
     if (acc === 'cerrar') cerrarEditor();
     if (acc === 'medio-quitar') { const [x] = ed.medios.splice(Number(b.dataset.i), 1); if (x?.local) URL.revokeObjectURL(x.local); pintarEditor(); }
     if (acc === 'post-borrar') borrarPost();
+    if (acc === 'cmarca') { com.marca = Number(b.dataset.marca); com.pubs = []; pintarCFiltro(); cargarPubs(); }
+    if (acc === 'cpub') abrirPub(b.dataset.pub);
+    if (acc === 'cvolver') { com.n++; com.pub = null; com.hilo = null; com.objetivo = null; $('#mk-com').classList.remove('con-hilo'); pintarPubs(); }
+    if (acc === 'cresp') { com.objetivo = b.dataset.c; com.clave = crypto.randomUUID(); pintarHilo(); }
+    if (acc === 'cresp-cancelar') { com.objetivo = null; pintarHilo(); }
+    if (acc === 'cocultar') ocultarC(b);
   }
 
   return { cargar };
