@@ -31482,9 +31482,9 @@ function vcPintarLead() {
 }
 // Qué pasa al generar. Decisión del dueño: lead sin PAGO REALIZADO (o sin lead) -> se cierra la venta.
 function vcPlan() {
-  const l = vcLead, pagado = vcNum('vc-monto-pagado');
+  const l = vcLead;
   if (vcSinReserva) return { modo: 'solo', manual: true };
-  if (!l || l.estado !== 'PAGO REALIZADO') return pagado > 0 ? { modo: 'cerrar', lead: l } : { modo: 'solo', motivo: 'sin_pago' };
+  if (!l || l.estado !== 'PAGO REALIZADO') return { modo: 'cerrar', lead: l };
   if (vcReservasError) return { modo: 'solo', motivo: 'error' };
   if (vcReservas === null) return { modo: 'cargando', lead: l };
   const v = document.getElementById('vc-reserva-sel')?.value || 'nueva';
@@ -31495,14 +31495,14 @@ function vcPintarPlan(p) {
   if (DR?.edicion('voucher')) { document.getElementById('vc-plan').textContent = 'Corrección del voucher existente. La reserva vinculada se conserva.'; return; }
   const pagado = vcNum('vc-monto-pagado'), nom = esc(p.lead?.nombre || val('vc-cliente-nombre').trim() || 'el cliente');
   const txt = {
-    cerrar: p.lead ? `<i class="fas fa-handshake"></i> Se <b>cierra la venta</b> de ${nom} por <b>${vcMoney(pagado)}</b> (pasa a PAGO REALIZADO: factura y comisión) y queda su ficha en Reservas con el voucher.`
+    cerrar: !(pagado > 0) ? `<i class="fas fa-hourglass-half"></i> ${p.lead ? `Se crea la reserva de ${nom}` : 'Cliente nuevo: se <b>crea en el CRM</b> con su reserva'} como <b>cobro pendiente</b> (pasa a EN ESPERA DE PAGO, sin facturar) y queda su ficha en Reservas con el voucher.`
+      : p.lead ? `<i class="fas fa-handshake"></i> Se <b>cierra la venta</b> de ${nom} por <b>${vcMoney(pagado)}</b> (pasa a PAGO REALIZADO: factura y comisión) y queda su ficha en Reservas con el voucher.`
       : `<i class="fas fa-user-plus"></i> Cliente nuevo: se <b>crea en el CRM</b>, se <b>cierra la venta</b> por <b>${vcMoney(pagado)}</b> y queda su ficha en Reservas con el voucher.`,
     nueva: `<i class="fas fa-plus"></i> Se crea una <b>reserva nueva</b> (otro viaje) de ${nom}${pagado > 0 ? ` y se factura <b>${vcMoney(pagado)}</b>` : ', sin facturar (no hay pago)'}.`,
     vincular: `<i class="fas fa-link"></i> Se actualiza la ficha <b>${esc(p.reserva?.codigo || '')}</b>: hospedaje, fechas y voucher adjunto. <b>No se factura de nuevo.</b>`,
     cargando: '<i class="fas fa-spinner fa-spin"></i> Cargando las reservas del cliente...',
     solo: p.manual ? '<i class="fas fa-file-pdf"></i> Solo se genera el PDF, sin tocar Reservas.'
-      : p.motivo === 'error' ? '<i class="fas fa-triangle-exclamation"></i> No se pudieron cargar las reservas del cliente: solo se genera el PDF.'
-      : '<i class="fas fa-file-pdf"></i> Sin monto pagado: solo se genera el PDF. Cargá lo pagado para cerrar la venta y crear la ficha.',
+      : '<i class="fas fa-triangle-exclamation"></i> No se pudieron cargar las reservas del cliente: solo se genera el PDF.',
   }[p.modo];
   const link = p.modo === 'solo' ? (p.manual ? ' <button class="vc-link" type="button" data-vc-con>Vincular con Reservas</button>' : '')
     : p.modo === 'cargando' ? '' : ' <button class="vc-link" type="button" data-vc-sin>Solo PDF, sin reserva</button>';
@@ -31762,7 +31762,7 @@ async function vcRevisarOperacion(fila, plan) {
   const fuerte = !similares.length && leads.find(c => c.fuerte);
   // Una sola hoja: encadenar otra confirmarSheet/pedirTexto la deja cerrada por el history.back de esta.
   const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Generar voucher',
-    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : leads.length ? `El cliente ya podría estar en el CRM (${leads.length === 1 ? '1 coincidencia' : leads.length + ' coincidencias'} por teléfono o nombre): elige su ficha para no duplicarlo.` : 'Elige expresamente cómo guardar este voucher.'}\nCrear venta factura una sola vez el abono${Number(fila.monto_pagado) > 0 ? ' de ' + vcMoney(fila.monto_pagado) : ' (hoy no hay abono cargado)'}.`,
+    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : leads.length ? `El cliente ya podría estar en el CRM (${leads.length === 1 ? '1 coincidencia' : leads.length + ' coincidencias'} por teléfono o nombre): elige su ficha para no duplicarlo.` : 'Elige expresamente cómo guardar este voucher.'}\n${Number(fila.monto_pagado) > 0 ? 'Crear venta factura una sola vez el abono de ' + vcMoney(fila.monto_pagado) + '.' : 'Sin abono cargado: queda en Reservas como cobro pendiente, sin facturar.'}`,
     campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: fuerte ? 'lead:' + fuerte.id : '', opciones },
       ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' || out.operacion?.startsWith('lead:') }] : [])],
   });
@@ -31780,7 +31780,6 @@ async function vcRevisarOperacion(fila, plan) {
     if (motivo.trim().length < 8) throw new Error('Explica el motivo con al menos 8 caracteres.');
   }
   const otroViaje = plan.lead && ['PAGO REALIZADO', 'VENTA COMPLETA'].includes(plan.lead.estado);
-  if (!(Number(fila.monto_pagado) > 0) && !otroViaje) throw new Error('Para crear una venta carga el abono o elige generar solo el PDF.');
   return { modo: otroViaje ? 'nueva' : 'cerrar', lead: plan.lead, revisadas: similares.map(r => r.id), motivo };
 }
 
@@ -31892,7 +31891,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     const avisos = [], st = { leadId: cierre.data.lead_id, reservaId: cierre.data.reserva_id, codigo: cierre.data.codigo };
     if (st.reservaId && !cierre.data.reutilizado) { const e = await vcAdjuntarPdf(st.reservaId, cierre.data.servicio_id, blob, nombreArchivo); if (e) avisos.push('El PDF quedó en el historial de vouchers, pero no se pudo adjuntar a la ficha: ' + e); }
     const resumen = avisos.length ? 'El PDF se descargó, pero revisá lo de abajo'
-      : { cerrar: `Venta cerrada por ${vcMoney(pagado)}`, nueva: `Reserva nueva${pagado > 0 ? ' facturada por ' + vcMoney(pagado) : ''}`, vincular: 'Ficha actualizada con el voucher', solo: 'Solo PDF, sin ficha en Reservas' }[plan.modo]
+      : { cerrar: pagado > 0 ? `Venta cerrada por ${vcMoney(pagado)}` : 'Reserva creada · cobro pendiente', nueva: `Reserva nueva${pagado > 0 ? ' facturada por ' + vcMoney(pagado) : ''}`, vincular: 'Ficha actualizada con el voucher', solo: 'Solo PDF, sin ficha en Reservas' }[plan.modo]
         + (st.codigo && plan.modo !== 'solo' ? ` · ${st.codigo}` : '');
     vcPintarHecho({ numero: registro.numero_factura, resumen, avisos, reservaId: st.reservaId, codigo: st.codigo, pdfPath });
     if (avisos.length) errToast(avisos[0]); else okToast(`Voucher N° ${registro.numero_factura} generado`);
