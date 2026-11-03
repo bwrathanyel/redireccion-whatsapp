@@ -30895,6 +30895,8 @@ function setupVoucher() {
   q.addEventListener('focus', () => { if (vcLeadsRes.length && q.value.trim().length >= 3) res.hidden = false; });
   document.getElementById('vc-destino').addEventListener('focus', vcCargarTarifario, { once: true });
   vcHotelSetup(form);
+  ['input', 'change', 'click'].forEach(t => form.addEventListener(t, vcProgramarBorrador));
+  window.addEventListener('pagehide', vcGuardarBorrador);
   const ent = document.getElementById('vc-fecha-entrada');
   ent.min = cbHoy();
   // Salida sugerida a una noche cuando falta o quedó antes de la entrada nueva.
@@ -31577,7 +31579,60 @@ function vcReset() {
   document.getElementById('vc-sugerencia').hidden = true;
   vcCerrarRes(); vcPintarLead(); vcSyncChips(); vcActualizarPreview();
 }
-window.vcLimpiar = () => { document.getElementById('vc-hecho').hidden = true; vcReset(); };
+window.vcLimpiar = () => { document.getElementById('vc-hecho').hidden = true; vcReset(); vcBorrarBorrador(); vcBorradorListo = true; };
+// Borrador local: recargar por una actualización del CRM no borra el voucher a medio llenar.
+const VC_BORRADOR_IDS = ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-fecha-entrada', 'vc-check-in', 'vc-fecha-salida', 'vc-check-out', 'vc-modalidad',
+  'vc-total-dias', 'vc-habitaciones', 'vc-adultos', 'vc-ninos', 'vc-infantes', 'vc-status', 'vc-total-general', 'vc-forma-pago', 'vc-referencia', 'vc-monto-pagado', 'vc-resta', 'vc-asesor'];
+let vcBorradorTimer = null, vcBorradorListo = false, vcBorradorLeido = false;
+const vcBorradorClave = () => 'vc_borrador_' + (MI_NOMBRE || '');
+const vcBorrarBorrador = () => { try { localStorage.removeItem(vcBorradorClave()); } catch { /* sin storage */ } };
+const vcProgramarBorrador = () => { clearTimeout(vcBorradorTimer); vcBorradorTimer = setTimeout(vcGuardarBorrador, 400); };
+function vcGuardarBorrador() {
+  clearTimeout(vcBorradorTimer);
+  if (!vcBorradorListo || DR?.edicion('voucher')) return;
+  const campos = Object.fromEntries(VC_BORRADOR_IDS.map(id => [id, document.getElementById(id)?.value || '']));
+  if (!['vc-cliente-nombre', 'vc-telefono', 'vc-destino'].some(id => campos[id].trim()) && !vcServicios.length && !vcLead) { vcBorrarBorrador(); return; }
+  const h = vcHotel.producto_id ? { producto_id: vcHotel.producto_id, nombre: vcHotel.nombre, plan: vcHotel.plan, hab: vcHotel.hab, hab_libre: vcHotel.hab_libre, hab_manual: vcHotel.hab_manual } : null;
+  try {
+    localStorage.setItem(vcBorradorClave(), JSON.stringify({ campos, servicios: vcServicios, lead: vcLead, sinReserva: vcSinReserva, hotel: h,
+      hospMonto: vcHospMonto, autoAplicado: vcAutoAplicado, diasManual: vcDiasManual, restaManual: vcRestaManual, planOtro: vcPlanOtro }));
+  } catch { /* sin storage */ }
+}
+async function vcRestaurarBorrador() {
+  if (vcBorradorLeido) return;
+  vcBorradorLeido = vcBorradorListo = true;
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(vcBorradorClave()) || 'null'); } catch { /* sin storage */ }
+  if (!b?.campos || DR?.edicion('voucher') || val('vc-cliente-nombre').trim() || vcServicios.length) return;
+  Object.entries(b.campos).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (!el || v === '' || el.disabled || (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === v))) return;
+    el.value = v;
+  });
+  vcServicios = Array.isArray(b.servicios) ? b.servicios : [];
+  vcServSuma = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
+  vcHospMonto = Number(b.hospMonto) || 0; vcAutoAplicado = Number(b.autoAplicado) || 0;
+  vcDiasManual = !!b.diasManual; vcRestaManual = !!b.restaManual; vcPlanOtro = !!b.planOtro;
+  vcPintarServicios(); vcSyncChips();
+  if (b.lead?.id) vcElegirLead(b.lead);
+  vcSinReserva = !!b.sinReserva;
+  vcActualizarPreview(); okToast('Recuperamos el voucher que estabas llenando');
+  if (!b.hotel?.producto_id) return;
+  const carga = ++vcHotel.carga;
+  Object.assign(vcHotel, { ...b.hotel, planes: [], _cargando: true, _tarifaError: false });
+  vcHotelPintar();
+  try {
+    await Promise.all([cbTraerTarifas(b.hotel.producto_id), cbTraerHabitaciones(b.hotel.producto_id)]);
+    if (vcHotel.carga !== carga || DR?.edicion('voucher')) return;
+    vcHotel.planes = cbTarOpciones(cbHotelFilas(vcHotel), 'plan');
+    vcHotel._cargando = false; vcHotelPintar(); vcHospRecalc();
+  } catch (error) {
+    console.error('vcRestaurarBorrador', error);
+    // Sin tarifas no se recalcula: el total guardado ya incluye el hospedaje.
+    if (vcHotel.carga === carga) { vcHotel._cargando = false; vcHotel._tarifaError = true; vcHotelPintar(); }
+  }
+  vcActualizarPreview();
+}
 async function loadVoucherSeccion() {
   const sel = document.getElementById('vc-asesor');
   const optHtml = (nombre, sel_) => `<option value="${esc(nombre)}" ${nombre === sel_ ? 'selected' : ''}>${esc(nombre)}</option>`;
@@ -31591,7 +31646,7 @@ async function loadVoucherSeccion() {
   }
   if (!val('vc-check-in')) document.getElementById('vc-check-in').value = '3:00 PM';
   if (!val('vc-check-out')) document.getElementById('vc-check-out').value = '12:00 PM';
-  vcActualizarPreview();
+  vcActualizarPreview(); vcRestaurarBorrador();
   vcOffset = 0;
   await cargarHistorialVouchers(false);
 }
@@ -31803,6 +31858,7 @@ async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre
   return falla;
 }
 function vcPintarHecho(h) {
+  vcBorrarBorrador(); vcBorradorListo = false;
   const box = document.getElementById('vc-hecho');
   box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
     ${h.avisos.map(a => `<small style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</small>`).join('')}
