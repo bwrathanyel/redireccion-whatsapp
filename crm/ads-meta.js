@@ -64,6 +64,33 @@ const CSS = `
 .am-post-datos{display:block;margin-top:5px;font-weight:600}
 .am-post-pagar{display:block;margin-top:5px;color:var(--accent-ink);font-weight:600}
 .am-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;margin:14px 0}
+.am-fila{display:flex;flex-wrap:wrap;gap:9px;align-items:flex-end;margin:9px 0}
+.am-fila>.fl{flex:1 1 110px}
+.am-chips{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0}
+.am-tag{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 4px 0 11px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);font-size:12px;font-weight:700}
+.am-tag select{min-height:24px;border:0;border-radius:999px;background:var(--panel);color:inherit;font-size:11px}
+.am-tag button{border:0;background:transparent;color:inherit;cursor:pointer;min-width:24px;min-height:24px;font-size:12px}
+.am-auto{position:relative;flex:1 1 220px}
+.am-auto .ei{width:100%}
+.am-sugs{position:absolute;z-index:5;left:0;right:0;top:100%;margin-top:4px;border:1px solid var(--line2);border-radius:10px;background:var(--panel);box-shadow:0 8px 24px rgb(0 0 0/.14);max-height:260px;overflow:auto}
+.am-sugs[hidden]{display:none}
+.am-sugs button{display:block;width:100%;text-align:left;padding:8px 11px;border:0;background:transparent;color:inherit;font-size:12.5px;cursor:pointer}
+.am-sugs button:hover,.am-sugs button:focus-visible{background:var(--bg2)}
+.am-sugs small{display:block;color:var(--muted);font-size:11px}
+.am-sugs .am-aviso{padding:8px 11px;margin:0}
+.am-check{display:flex;gap:7px;align-items:center;font-size:12.5px;margin:11px 0 0;cursor:pointer}
+.am-alc{font-size:13px;font-weight:700;margin:11px 0}
+.am-alc small{font-weight:400;color:var(--muted)}
+.am-ia{display:flex;flex-wrap:wrap;gap:9px;align-items:flex-start}
+.am-ia textarea{flex:1 1 260px;min-height:58px;resize:vertical}
+.am-vars{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin:11px 0}
+.am-vars:empty{display:none}
+.am-var{display:flex;flex-direction:column;gap:5px;border:1px solid var(--line2);border-radius:12px;padding:11px 14px;font-size:12px}
+.am-var.on{border-color:var(--accent-ink);background:var(--accent-soft)}
+.am-var b{font-size:13px;text-transform:capitalize}
+.am-var p{margin:0;color:var(--muted)}
+.am-var .btn-sm{align-self:flex-start;margin-top:auto}
+.am-pub-pie{margin:14px 0 0}
 @media (max-width:640px){
   .am-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
   .am-cuerpo{padding:9px 11px}
@@ -90,6 +117,11 @@ const ALIAS_CUENTAS = {
 };
 // Solo las de venta entran en el costo por lead/venta (tipo automático en SQL: meta_campana_tipo).
 const TIPOS = { venta: 'Venta', reclutamiento: 'Reclutamiento', tercero: 'De terceros' };
+const GENEROS = [['todos', 'Todos'], ['hombres', 'Hombres'], ['mujeres', 'Mujeres']];
+const POSICIONES = [['feed', 'Feed'], ['stories', 'Stories'], ['reels', 'Reels'], ['explorar', 'Explorar']];
+// Meta no entrega con menos de ~17 km alrededor de una ciudad; 80 es su máximo.
+const RADIOS = [0, 17, 25, 40, 80];
+const SECCIONES = { edad: 'edad', genero: 'género', ubicaciones: 'ubicaciones', intereses: 'intereses', audiencias: 'audiencias', ubicaciones_anuncio: 'dónde se ve' };
 const OBJETIVOS = {
   LINK_CLICKS: 'Clics al enlace', OUTCOME_TRAFFIC: 'Tráfico', OUTCOME_ENGAGEMENT: 'Interacción',
   POST_ENGAGEMENT: 'Interacción', MESSAGES: 'Mensajes', OUTCOME_LEADS: 'Clientes potenciales',
@@ -99,10 +131,12 @@ const OBJETIVOS = {
 export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', raiz }) {
   const admin = rol === 'admin';
   let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', tipoFiltro = '', marcaFiltro = '', datos = null, vista = 'arbol';
+  let pub = null, pubCtx = null, sugs = { geo: [], int: [] }, variantes = [], tBusca = null, nBusca = 0, tAlc = null, nAlc = 0;
   let posts = [], cobertura = null, postSel = null, igs = { cuenta: null, lista: [], propio: null }, igSel = '', pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const ent = n => Number(n || 0).toLocaleString('es-VE');
+  const compacto = n => Number(n || 0).toLocaleString('es-VE', { notation: 'compact', maximumFractionDigits: 1 });
   const div = (a, b) => (b > 0 ? a / b : null);
   const iso = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const haceDias = n => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
@@ -153,8 +187,9 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       if (e.target.id === 'am-ig') { igSel = e.target.value; abrirNuevo(); }
       if (e.target.id === 'am-tipo') { tipoFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
       if (e.target.id === 'am-marca') { marcaFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
+      cambioPublico(e);
     });
-    raiz.addEventListener('input', e => { if (e.target.id === 'am-busca') { busca = norm(e.target.value.trim()); if (vista === 'arbol' && datos) pintarArbol(); } });
+    raiz.addEventListener('input', e => { inputPublico(e); if (e.target.id === 'am-busca') { busca = norm(e.target.value.trim()); if (vista === 'arbol' && datos) pintarArbol(); } });
     raiz.addEventListener('keydown', e => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('am-card')) { e.preventDefault(); abrir(e.target.dataset.camp); }
     });
@@ -169,7 +204,9 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       if (e.target.id === 'am-tipo-camp') cambiarTipo(e.target);
       if (e.target.id === 'am-evento') cambiarEvento(e.target);
       if (e.target.id === 'am-marca-camp') cambiarMarca(e.target);
+      cambioPublico(e);
     });
+    cajon.addEventListener('input', inputPublico);
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && campSel && !document.querySelector('.sheet.open')) cerrar(); });
   }
 
@@ -207,6 +244,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     ? `<button class="btn-sm" type="button" data-am="presupuesto" ${dato(nivel, n, plataforma)} data-monto="${n.presupuesto.monto}" title="Presupuesto diario">${usd(n.presupuesto.monto)}/día</button>` : '');
   const btnEstado = (nivel, n, plataforma) => (editable(n)
     ? `<button class="btn-sm" type="button" data-am="estado" ${dato(nivel, n, plataforma)} title="${n.estado === 'active' ? 'Pausar' : 'Activar'}" aria-label="${n.estado === 'active' ? 'Pausar' : 'Activar'}"><i class="fas fa-${n.estado === 'active' ? 'pause' : 'play'}"></i></button>` : '');
+  const btnPublico = s => (editable(s) ? `<button class="btn-sm" type="button" data-am="publico" data-id="${esc(s.id)}" data-nombre="${esc(s.nombre)}"><i class="fas fa-users"></i> Editar público</button>` : '');
   const grupo = (...b) => (b.join('') ? `<span class="am-acc">${b.join('')}</span>` : '');
   const botones = (nivel, n, plataforma, conPresupuesto) => grupo(conPresupuesto ? btnPresupuesto(nivel, n, plataforma) : '', btnEstado(nivel, n, plataforma));
 
@@ -299,14 +337,14 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <small>${estado(a.estado)} ${usd(a.metricas.gasto)} · ${resultado(a.metricas)}</small></div>${botones('anuncio', a, camp.plataforma, false)}</div>`;
     const lista = camp.conjuntos.length > 1
       ? camp.conjuntos.map(s => `<div class="am-conj"><div class="am-conj-cab"><div>${esc(s.nombre)}<small>${estado(s.estado)} ${esc(s.destino || '')} · ${usd(s.metricas.gasto)}</small></div>
-          ${botones('conjunto', s, camp.plataforma, camp.nivel_presupuesto !== 'campaign')}</div>${s.anuncios.map(fila).join('')}</div>`).join('')
+          ${botones('conjunto', s, camp.plataforma, camp.nivel_presupuesto !== 'campaign')}${grupo(btnPublico(s))}</div>${s.anuncios.map(fila).join('')}</div>`).join('')
       : anuncios(camp).map(fila).join('');
     const n = anuncios(camp).length;
     cajon.querySelector('#am-det').innerHTML = `
       <h3 class="am-det-tit">${esc(camp.nombre)}</h3>
       <div class="am-det-sub">${estado(camp.estado)}${objetivo(camp.objetivo)}<span class="am-tipo">${TIPOS[tipoDe(camp)]}</span></div>
       ${p.enlace ? `<a class="am-det-foto" href="${esc(p.enlace)}" target="_blank" rel="noopener">${foto(p)}<span class="am-ver">Ver en Instagram ↗</span></a>` : `<div class="am-det-foto">${foto(p)}</div>`}
-      ${accionesCamp(camp)}${lineaPausa(camp)}${grupo(btnPausa(camp))}${tipo}
+      ${accionesCamp(camp)}${camp.conjuntos.length === 1 ? grupo(btnPublico(camp.conjuntos[0])) : ''}${lineaPausa(camp)}${grupo(btnPausa(camp))}${tipo}
       <div class="am-met">${met.map(x => `<div${x[2] ? ' class="crm"' : ''}><small>${x[0]}</small><b>${x[1]}</b></div>`).join('')}</div>
       <div class="am-det-h">${n} anuncio${n === 1 ? '' : 's'}</div>${lista || '<div class="am-aviso">Sin anuncios en este período.</div>'}`;
   }
@@ -452,10 +490,18 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <label class="fl">Botón<select class="ei" id="am-cta">${CTAS.map(c => `<option value="${c.v}">${c.t}</option>`).join('')}</select></label>
         <label class="fl">Diario (USD)<input class="ei" id="am-diario" type="number" min="1" max="${tope}" step="0.5" value="3"></label>
         <label class="fl">Días<input class="ei" id="am-dias-boost" type="number" min="1" max="30" value="7"></label>
-        <label class="fl">Países (ISO, coma)<input class="ei" id="am-paises" value="VE"></label>
       </div>
+      <div class="am-det-h">¿Qué buscás con este anuncio?</div>
+      <div class="am-ia"><textarea class="ei" id="am-que" rows="2" maxlength="600" aria-label="Qué buscás con este anuncio" placeholder="Ej.: que me escriban jóvenes de Mérida y Caracas para comprar entradas"></textarea>
+        <button class="btn-sm" type="button" data-am="sugerir"><i class="fas fa-wand-magic-sparkles"></i> Sugerir con IA</button></div>
+      <div class="am-vars" id="am-vars"></div>
+      <div class="am-det-h">Público</div>
+      <div id="am-pub"></div>
       <button class="btn-sm lt-primario" type="button" data-am="validar"><i class="fas fa-check"></i> Revisar con Meta</button>
       <div class="am-aviso">Primero Meta lo revisa sin crear nada. Al confirmar se crea <b>en pausa</b>: se activa desde la lista, con fecha de fin siempre.</div></div>`;
+    variantes = [];
+    abrirPublico(pubBase(), { modo: 'boost', audiencias: [], noEditable: {} });
+    invocar({ accion: 'audiencias', cuenta }).then(r => { if (pubCtx?.modo === 'boost' && r.audiencias?.length) { pubCtx.audiencias = r.audiencias; pintarPublico(); } }).catch(() => {});
   }
 
   function leerBoost() {
@@ -463,7 +509,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       accion: 'boost', cuenta, post: postSel, ig: igSel || undefined,
       nombre: $('#am-nombre').value.trim(), cta: $('#am-cta').value,
       diario: Number($('#am-diario').value), dias: Number($('#am-dias-boost').value),
-      paises: $('#am-paises').value.toUpperCase().split(/[\s,]+/).filter(Boolean),
+      publico: pub,
     };
   }
 
@@ -472,6 +518,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     const b = leerBoost();
     if (!b.post) return error('Elegí una publicación.');
     if (!b.nombre) return error('Ponele un nombre.');
+    if (!pub.ubicaciones.length) return error('Elegí al menos una ubicación.');
     ocupado = true;
     try {
       ok('Meta lo está revisando: tarda cerca de un minuto…');
@@ -480,7 +527,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       const comoIg = r.ig ? `Anuncia como @${igs.lista.find(c => c.id === r.ig)?.usuario || r.ig}.\n` : '';
       const si = await confirmar({
         titulo: 'Meta lo aceptó: ¿crear en pausa?',
-        detalle: `«${r.nombre}»\n${comoIg}${usd(r.diario)} por día × ${r.dias} días (máximo ${usd(r.total_max)}), hasta ${r.fin}.\nPaíses: ${r.paises.join(', ')}.\nQueda pausada: no gasta hasta que la actives.`,
+        detalle: `«${r.nombre}»\n${comoIg}${usd(r.diario)} por día × ${r.dias} días (máximo ${usd(r.total_max)}), hasta ${r.fin}.\nPúblico: ${r.publico ? textoPub(r.publico) : r.paises.join(', ')}.\nQueda pausada: no gasta hasta que la actives.`,
         textoOk: 'Crear en pausa',
       });
       if (!si) return;
@@ -492,7 +539,215 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     } catch (e) { error(e.message); } finally { ocupado = false; }
   }
 
+  // Editor de público: el mismo en «Promocionar» (boost) y en «Editar público» de un conjunto.
+  // En edición solo viajan las secciones tocadas (`cambios`): lo que el CRM no muestra queda igual en Meta.
+  const pubBase = () => ({ edad_min: 18, edad_max: 65, genero: 'todos', ubicaciones: [{ tipo: 'pais', codigo: 'VE', nombre: 'Venezuela' }], intereses: [], audiencias_incluir: [], audiencias_excluir: [], advantage: false, ubicaciones_anuncio: [] });
+  const nombreUbic = u => (u.tipo === 'pais' ? u.nombre || u.codigo : `${u.nombre}${u.tipo === 'ciudad' && u.region ? ` (${u.region})` : ''}`);
+  const textoPub = r => [
+    `${r.edad} años`, r.genero !== 'todos' ? r.genero : '', [...r.paises, ...r.regiones, ...r.ciudades].join(', '),
+    r.intereses.length ? r.intereses.slice(0, 5).join(', ') + (r.intereses.length > 5 ? '…' : '') : 'sin intereses',
+    r.advantage ? 'Advantage+' : '', Array.isArray(r.ubicaciones_anuncio) ? r.ubicaciones_anuncio.join('/') : '',
+  ].filter(Boolean).join(' · ');
+  const marcar = sec => pubCtx.cambios.add(sec);
+  const paisBase = () => pub.ubicaciones.find(u => u.pais)?.pais || pub.ubicaciones.find(u => u.tipo === 'pais')?.codigo || 'VE';
+
+  function abrirPublico(p, ctx) {
+    pub = p;
+    pub.ubicaciones.forEach(u => { if (u.tipo === 'pais' && !u.nombre) u.nombre = u.codigo; });
+    pubCtx = { cambios: new Set(), ...ctx };
+    pintarPublico();
+  }
+
+  function htmlPublico() {
+    const p = pub, ne = pubCtx.noEditable || {}, pos = p.ubicaciones_anuncio;
+    const radio = (u, i) => `<select data-radio="${i}" aria-label="Radio alrededor de ${esc(u.nombre)}">${RADIOS.map(r => `<option value="${r}"${(u.radio_km || 0) === r ? ' selected' : ''}>${r ? `+${r} km` : 'solo la ciudad'}</option>`).join('')}</select>`;
+    const quitar = (a, i, n) => `<button type="button" data-am="${a}" data-i="${i}" aria-label="Quitar ${esc(n)}">✕</button>`;
+    const ubic = p.ubicaciones.map((u, i) => `<span class="am-tag">${esc(nombreUbic(u))}${u.tipo === 'ciudad' ? radio(u, i) : ''}${quitar('ubic-x', i, nombreUbic(u))}</span>`).join('');
+    const ints = p.intereses.map((x, i) => `<span class="am-tag">${esc(x.nombre)}${quitar('int-x', i, x.nombre)}</span>`).join('');
+    const auds = pubCtx.audiencias.map(a => {
+      const v = p.audiencias_incluir.includes(a.id) ? 'in' : p.audiencias_excluir.includes(a.id) ? 'ex' : '';
+      return `<label class="fl">${esc(a.nombre)}${a.tamano ? ` · ${compacto(a.tamano)}` : ''}<select class="ei" data-aud="${esc(a.id)}"><option value="">No usar</option><option value="in"${v === 'in' ? ' selected' : ''}>Incluir</option><option value="ex"${v === 'ex' ? ' selected' : ''}>Excluir</option></select></label>`;
+    }).join('');
+    return `
+      <div class="am-fila">
+        <label class="fl">Edad desde<input class="ei" id="am-edad-min" type="number" min="18" max="65" value="${p.edad_min}"></label>
+        <label class="fl">Hasta<input class="ei" id="am-edad-max" type="number" min="18" max="65" value="${p.edad_max}"></label>
+        <div class="fl">Género<div class="seg-group">${GENEROS.map(([v, t]) => `<button class="seg${p.genero === v ? ' on' : ''}" type="button" data-am="genero" data-v="${v}">${t}</button>`).join('')}</div></div>
+      </div>
+      ${p.advantage ? '<div class="am-aviso">Con Advantage+ la edad es solo una sugerencia: va de 25 o menos hasta 65.</div>' : ''}
+      <div class="am-det-h">Ubicaciones</div>
+      ${ne.ubicaciones ? `<div class="am-aviso">Tiene ${ne.ubicaciones} ubicación${ne.ubicaciones > 1 ? 'es' : ''} marcada${ne.ubicaciones > 1 ? 's' : ''} en el mapa que acá no se ve${ne.ubicaciones > 1 ? 'n' : ''}. Si cambiás las ubicaciones, se reemplazan.</div>` : ''}
+      <div class="am-chips">${ubic || '<span class="am-aviso">Sin ubicaciones.</span>'}</div>
+      <div class="am-fila"><select class="ei" id="am-geo-tipo" aria-label="Tipo de ubicación"><option value="ciudad">Ciudad</option><option value="region">Estado</option><option value="pais">País</option></select>
+        <div class="am-auto"><input class="ei" id="am-geo-q" type="search" placeholder="Buscar ciudad, estado o país" autocomplete="off" aria-label="Buscar ubicación"><div class="am-sugs" id="am-geo-sugs" hidden></div></div></div>
+      <div class="am-det-h">Intereses</div>
+      ${ne.intereses ? '<div class="am-aviso">Tiene otros grupos de intereses o comportamientos en Ads Manager. Si cambiás los intereses, se reemplazan los de este grupo.</div>' : ''}
+      <div class="am-chips">${ints || '<span class="am-aviso">Sin intereses: Meta busca entre todos.</span>'}</div>
+      <div class="am-auto"><input class="ei" id="am-int-q" type="search" placeholder="Buscar interés (ej.: Travel, Parties, Beaches)" autocomplete="off" aria-label="Buscar interés"><div class="am-sugs" id="am-int-sugs" hidden></div></div>
+      ${auds ? `<div class="am-det-h">Audiencias guardadas</div><div class="am-form">${auds}</div>` : ''}
+      <div class="am-det-h">Dónde se ve</div>
+      ${pos === null ? '<div class="am-aviso">Tiene ubicaciones elegidas en Ads Manager que acá no se muestran: no se tocan.</div>'
+        : `<div class="am-chips">${POSICIONES.map(([v, t]) => `<button class="am-chip${pos.includes(v) ? ' on' : ''}" type="button" data-am="pos" data-v="${v}" aria-pressed="${pos.includes(v)}">${t}</button>`).join('')}</div>
+        <div class="am-aviso">${pos.length ? 'Solo en Instagram, en lo marcado.' : 'Nada marcado: automáticas (Meta elige; puede incluir Facebook).'}</div>`}
+      ${pubCtx.modo === 'boost' ? `<label class="am-check"><input type="checkbox" id="am-adv"${p.advantage ? ' checked' : ''}> Advantage+: que Meta amplíe el público si encuentra mejores resultados</label>` : ''}
+      <div class="am-alc" id="am-alc" aria-live="polite"></div>`;
+  }
+
+  function pintarPublico(foco) {
+    const el = document.getElementById('am-pub');
+    if (!el || !pub) return;
+    el.innerHTML = htmlPublico();
+    if (foco) document.getElementById(foco)?.focus();
+    refrescarAlcance();
+  }
+
+  function refrescarAlcance() {
+    clearTimeout(tAlc);
+    const el = () => document.getElementById('am-alc');
+    if (!el()) return;
+    if (!pub.ubicaciones.length) { el().innerHTML = '<small>Agregá una ubicación para estimar el alcance.</small>'; return; }
+    el().innerHTML = '<small>Calculando alcance…</small>';
+    const n = ++nAlc;
+    tAlc = setTimeout(async () => {
+      try {
+        const r = await invocar({ accion: 'alcance', cuenta, publico: pub });
+        if (n !== nAlc || !el()) return;
+        el().innerHTML = r.alcance.estimable ? `Alcance estimado: ${compacto(r.alcance.min)} – ${compacto(r.alcance.max)} personas` : '<small>Meta no pudo estimar el alcance de este público.</small>';
+      } catch (e) { if (n === nAlc && el()) el().innerHTML = `<small>${esc(e.message)}</small>`; }
+    }, 700);
+  }
+
+  // Autocompletar contra Meta (vía la EF): solo se agrega lo que Meta reconoce.
+  function buscarPub(tipo, q) {
+    clearTimeout(tBusca);
+    const caja = document.getElementById(tipo === 'geo' ? 'am-geo-sugs' : 'am-int-sugs');
+    if (q.length < 2) { caja.hidden = true; return; }
+    const n = ++nBusca;
+    tBusca = setTimeout(async () => {
+      try {
+        const geoTipo = document.getElementById('am-geo-tipo').value;
+        const r = tipo === 'geo'
+          ? await invocar({ accion: 'geo_buscar', q, tipo: geoTipo, pais: geoTipo === 'pais' ? undefined : paisBase() })
+          : await invocar({ accion: 'intereses_buscar', q });
+        if (n !== nBusca) return;
+        sugs[tipo] = (tipo === 'geo' ? r.resultados : r.intereses) || [];
+        caja.innerHTML = sugs[tipo].map((x, i) => `<button type="button" data-am="${tipo}-add" data-i="${i}">${esc(x.nombre)}<small>${esc([x.ruta, x.tamano ? `${compacto(x.tamano)} personas` : ''].filter(Boolean).join(' · '))}</small></button>`).join('')
+          || '<div class="am-aviso">Meta no reconoce nada con ese nombre.</div>';
+        caja.hidden = false;
+      } catch (e) {
+        if (n === nBusca) { caja.innerHTML = `<div class="am-aviso">${esc(e.message)}</div>`; caja.hidden = false; }
+      }
+    }, 350);
+  }
+
+  function agregarGeo(x) {
+    if (!x) return;
+    const u = x.tipo === 'pais' ? { tipo: 'pais', codigo: x.pais || x.key, nombre: x.nombre } : { tipo: x.tipo, key: x.key, nombre: x.nombre, pais: x.pais, ...(x.region ? { region: x.region } : {}) };
+    if (!pub.ubicaciones.some(y => (y.key || y.codigo) === (u.key || u.codigo))) pub.ubicaciones.push(u);
+    // Meta rechaza un país junto con una ciudad o estado de ese país: queda lo más fino.
+    if (u.tipo !== 'pais') pub.ubicaciones = pub.ubicaciones.filter(y => !(y.tipo === 'pais' && y.codigo === u.pais));
+    marcar('ubicaciones'); pintarPublico('am-geo-q');
+  }
+
+  function agregarInteres(x) {
+    if (!x) return;
+    if (!pub.intereses.some(y => y.id === x.id)) pub.intereses.push({ id: x.id, nombre: x.nombre });
+    marcar('intereses'); pintarPublico('am-int-q');
+  }
+
+  function inputPublico(e) {
+    if (e.target.id === 'am-geo-q') buscarPub('geo', e.target.value.trim());
+    if (e.target.id === 'am-int-q') buscarPub('int', e.target.value.trim());
+  }
+
+  function cambioPublico(e) {
+    const t = e.target;
+    if (!pub || !t.closest('#am-pub')) return;
+    if (t.id === 'am-edad-min' || t.id === 'am-edad-max') {
+      pub[t.id === 'am-edad-min' ? 'edad_min' : 'edad_max'] = Math.min(65, Math.max(18, Number(t.value) || 18));
+      marcar('edad'); return refrescarAlcance();
+    }
+    if (t.dataset.radio != null) {
+      const u = pub.ubicaciones[Number(t.dataset.radio)], r = Number(t.value);
+      if (r) u.radio_km = r; else delete u.radio_km;
+      marcar('ubicaciones'); return refrescarAlcance();
+    }
+    if (t.dataset.aud) {
+      const id = t.dataset.aud;
+      pub.audiencias_incluir = pub.audiencias_incluir.filter(x => x !== id).concat(t.value === 'in' ? [id] : []);
+      pub.audiencias_excluir = pub.audiencias_excluir.filter(x => x !== id).concat(t.value === 'ex' ? [id] : []);
+      marcar('audiencias'); return refrescarAlcance();
+    }
+    if (t.id === 'am-adv') {
+      pub.advantage = t.checked;
+      if (pub.advantage) { pub.edad_min = Math.min(pub.edad_min, 25); pub.edad_max = 65; }
+      pintarPublico();
+    }
+  }
+
+  async function sugerir() {
+    if (ocupado) return;
+    const que = $('#am-que').value.trim();
+    if (que.length < 3) return error('Contá qué buscás con el anuncio.');
+    const caja = $('#am-vars'), p = posts.find(x => x.id === postSel);
+    caja.innerHTML = '<div class="am-aviso">La IA arma 3 públicos y Meta calcula el alcance de cada uno: tarda cerca de medio minuto…</div>';
+    ocupado = true;
+    try {
+      const r = await invocar({ accion: 'sugerir_publico', cuenta, que_buscas: que, caption: p?.texto || '', cuenta_ig: igs.lista.find(c => c.id === igSel)?.usuario || '' });
+      variantes = r.variantes || [];
+      caja.innerHTML = variantes.map((v, i) => (v.error ? `<div class="am-var"><b>${esc(v.nombre)}</b><p>${esc(v.error)}</p></div>` : `<div class="am-var"><b>${esc(v.nombre)}</b>
+        <p>${esc(v.porque)}</p><span>${esc(textoPub(v.resumen))}</span>
+        <span>${v.alcance?.estimable ? `${compacto(v.alcance.min)} – ${compacto(v.alcance.max)} personas` : 'Alcance sin estimar'} · ${usd(v.diario)}/día × ${v.dias} días</span>
+        ${v.descartados?.length ? `<small class="am-aviso">Meta no reconoció: ${esc(v.descartados.join(', '))}</small>` : ''}
+        <button class="btn-sm" type="button" data-am="usar" data-i="${i}">Usar esta</button></div>`)).join('');
+    } catch (e) { caja.innerHTML = ''; error(e.message); } finally { ocupado = false; }
+  }
+
+  function usarVariante(i) {
+    const v = variantes[i];
+    if (!v?.publico) return;
+    abrirPublico(structuredClone(v.publico), { modo: 'boost', audiencias: pubCtx.audiencias, noEditable: {} });
+    $('#am-cta').value = v.cta; $('#am-diario').value = v.diario; $('#am-dias-boost').value = v.dias;
+    raiz.querySelectorAll('.am-var').forEach((c, k) => c.classList.toggle('on', k === i));
+    document.getElementById('am-pub').previousElementSibling.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  async function editarPublico(d) {
+    const det = cajon.querySelector('#am-det');
+    det.innerHTML = '<div class="am-vacio">Leyendo el público en Meta…</div>';
+    try {
+      const [r, a] = await Promise.all([
+        invocar({ accion: 'publico_leer', id: d.id }),
+        invocar({ accion: 'audiencias', cuenta }).catch(() => ({ audiencias: [] })),
+      ]);
+      det.innerHTML = `<h3 class="am-det-tit">Público del conjunto</h3><div class="am-det-sub">${esc(d.nombre)}</div>
+        <div id="am-pub"></div>
+        <span class="am-acc am-pub-pie"><button class="btn-sm lt-primario" type="button" data-am="publico-guardar"><i class="fas fa-check"></i> Guardar en Meta</button><button class="btn-sm" type="button" data-am="publico-volver">Volver</button></span>
+        <div class="am-aviso">Solo se cambia lo que toques. Si está activo, Meta puede volver a la fase de aprendizaje.${r.publico.advantage ? ' Advantage+ se cambia en Ads Manager.' : ''}</div>`;
+      abrirPublico(r.publico, { modo: 'editar', id: d.id, nombre: d.nombre, audiencias: a.audiencias || [], noEditable: r.no_editable || {} });
+    } catch (e) { det.innerHTML = `<div class="am-vacio">${esc(e.message)}</div>`; }
+  }
+
+  async function guardarPublico() {
+    if (ocupado) return;
+    const cambios = [...pubCtx.cambios];
+    if (!cambios.length) return error('No cambiaste nada.');
+    if (cambios.includes('ubicaciones') && !pub.ubicaciones.length) return error('Elegí al menos una ubicación.');
+    const si = await confirmar({
+      titulo: 'Cambiar el público en Meta', textoOk: 'Guardar',
+      detalle: `«${pubCtx.nombre}»\nCambia: ${cambios.map(c => SECCIONES[c]).join(', ')}.\nSi está activo, Meta puede volver a la fase de aprendizaje.`,
+    });
+    if (!si) return;
+    ocupado = true;
+    try {
+      await invocar({ accion: 'publico_editar', id: pubCtx.id, nombre: pubCtx.nombre, publico: pub, cambios });
+      ok('Público actualizado en Meta');
+      pintarDetalle();
+    } catch (e) { error(e.message); } finally { ocupado = false; }
+  }
+
   function clic(e) {
+    document.querySelectorAll('.am-sugs').forEach(s => { if (!s.parentElement.contains(e.target)) s.hidden = true; });
     const t = e.target.closest('[data-am],[data-dias],[data-camp],[data-post]');
     if (!t || t.tagName === 'A') return;
     if (t.dataset.dias) {
@@ -522,6 +777,21 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     if (a === 'recargar' || a === 'volver') { vista = 'arbol'; return cargarArbol(); }
     if (a === 'nuevo') return abrirNuevo();
     if (a === 'validar') return validarBoost();
+    if (a === 'genero') { pub.genero = t.dataset.v; marcar('genero'); return pintarPublico(); }
+    if (a === 'pos') {
+      const v = t.dataset.v, l = pub.ubicaciones_anuncio;
+      pub.ubicaciones_anuncio = l.includes(v) ? l.filter(x => x !== v) : [...l, v];
+      marcar('ubicaciones_anuncio'); return pintarPublico();
+    }
+    if (a === 'ubic-x') { pub.ubicaciones.splice(Number(t.dataset.i), 1); marcar('ubicaciones'); return pintarPublico(); }
+    if (a === 'int-x') { pub.intereses.splice(Number(t.dataset.i), 1); marcar('intereses'); return pintarPublico(); }
+    if (a === 'geo-add') return agregarGeo(sugs.geo[Number(t.dataset.i)]);
+    if (a === 'int-add') return agregarInteres(sugs.int[Number(t.dataset.i)]);
+    if (a === 'sugerir') return sugerir();
+    if (a === 'usar') return usarVariante(Number(t.dataset.i));
+    if (a === 'publico') return editarPublico(t.dataset);
+    if (a === 'publico-guardar') return guardarPublico();
+    if (a === 'publico-volver') return pintarDetalle();
     if (t.dataset.camp) abrir(t.dataset.camp);
   }
 
