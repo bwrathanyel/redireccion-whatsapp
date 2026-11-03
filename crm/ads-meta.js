@@ -132,6 +132,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
   const admin = rol === 'admin';
   let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', tipoFiltro = '', marcaFiltro = '', datos = null, vista = 'arbol';
   let pub = null, pubCtx = null, sugs = { geo: [], int: [] }, variantes = [], tBusca = null, nBusca = 0, tAlc = null, nAlc = 0;
+  const cacheBusca = new Map();
   let posts = [], cobertura = null, postSel = null, igs = { cuenta: null, lista: [], propio: null }, igSel = '', pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -184,6 +185,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     raiz.addEventListener('click', clic);
     raiz.addEventListener('change', e => {
       if (e.target.id === 'am-cuenta') { cuenta = e.target.value; cerrar(); cargarArbol(); }
+      if (e.target.id === 'am-pub-prev' && e.target.value) copiarPublico(e.target);
       if (e.target.id === 'am-ig') { igSel = e.target.value; abrirNuevo(); }
       if (e.target.id === 'am-tipo') { tipoFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
       if (e.target.id === 'am-marca') { marcaFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
@@ -496,6 +498,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <button class="btn-sm" type="button" data-am="sugerir"><i class="fas fa-wand-magic-sparkles"></i> Sugerir con IA</button></div>
       <div class="am-vars" id="am-vars"></div>
       <div class="am-det-h">Público</div>
+      ${selPrevios()}
       <div id="am-pub"></div>
       <button class="btn-sm lt-primario" type="button" data-am="validar"><i class="fas fa-check"></i> Revisar con Meta</button>
       <div class="am-aviso">Primero Meta lo revisa sin crear nada. Al confirmar se crea <b>en pausa</b>: se activa desde la lista, con fecha de fin siempre.</div></div>`;
@@ -622,22 +625,30 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     clearTimeout(tBusca);
     const caja = document.getElementById(tipo === 'geo' ? 'am-geo-sugs' : 'am-int-sugs');
     if (q.length < 2) { caja.hidden = true; return; }
-    const n = ++nBusca;
+    const n = ++nBusca, geoTipo = document.getElementById('am-geo-tipo').value;
+    const base = tipo === 'geo' ? `geo|${geoTipo}|${geoTipo === 'pais' ? '' : paisBase()}|` : 'int|', clave = base + norm(q);
+    const mostrar = (lista, buscando) => {
+      sugs[tipo] = lista;
+      caja.innerHTML = lista.map((x, i) => `<button type="button" data-am="${tipo}-add" data-i="${i}">${esc(x.nombre)}<small>${esc([x.ruta, x.tamano ? `${compacto(x.tamano)} personas` : ''].filter(Boolean).join(' · '))}</small></button>`).join('')
+        + (buscando ? '<div class="am-aviso">Buscando en Meta…</div>' : lista.length ? '' : '<div class="am-aviso">Meta no reconoce nada con ese nombre.</div>');
+      caja.hidden = false;
+    };
+    if (cacheBusca.has(clave)) return mostrar(cacheBusca.get(clave));
+    // Mientras Meta responde (~2 s), se filtra lo que ya trajo una búsqueda más corta.
+    const previa = [...cacheBusca.keys()].filter(k => k.startsWith(base) && clave.startsWith(k)).sort((a, b) => b.length - a.length)[0];
+    mostrar(previa ? cacheBusca.get(previa).filter(x => norm(x.nombre).includes(norm(q))) : [], true);
     tBusca = setTimeout(async () => {
       try {
-        const geoTipo = document.getElementById('am-geo-tipo').value;
         const r = tipo === 'geo'
           ? await invocar({ accion: 'geo_buscar', q, tipo: geoTipo, pais: geoTipo === 'pais' ? undefined : paisBase() })
           : await invocar({ accion: 'intereses_buscar', q });
-        if (n !== nBusca) return;
-        sugs[tipo] = (tipo === 'geo' ? r.resultados : r.intereses) || [];
-        caja.innerHTML = sugs[tipo].map((x, i) => `<button type="button" data-am="${tipo}-add" data-i="${i}">${esc(x.nombre)}<small>${esc([x.ruta, x.tamano ? `${compacto(x.tamano)} personas` : ''].filter(Boolean).join(' · '))}</small></button>`).join('')
-          || '<div class="am-aviso">Meta no reconoce nada con ese nombre.</div>';
-        caja.hidden = false;
+        const lista = (tipo === 'geo' ? r.resultados : r.intereses) || [];
+        cacheBusca.set(clave, lista);
+        if (n === nBusca) mostrar(lista);
       } catch (e) {
         if (n === nBusca) { caja.innerHTML = `<div class="am-aviso">${esc(e.message)}</div>`; caja.hidden = false; }
       }
-    }, 350);
+    }, 250);
   }
 
   function agregarGeo(x) {
@@ -710,6 +721,27 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     $('#am-cta').value = v.cta; $('#am-diario').value = v.diario; $('#am-dias-boost').value = v.dias;
     raiz.querySelectorAll('.am-var').forEach((c, k) => c.classList.toggle('on', k === i));
     document.getElementById('am-pub').previousElementSibling.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  // Meta no expone los «públicos guardados» de Ads Manager por la API de Zernio: se reusa el de un conjunto ya pagado.
+  function selPrevios() {
+    const conj = (datos?.campanas || []).flatMap(c => c.conjuntos.map(s => ({ id: s.id, txt: `${c.nombre}${c.conjuntos.length > 1 ? ` › ${s.nombre}` : ''}`, gasto: s.metricas?.gasto || 0 })))
+      .sort((a, b) => b.gasto - a.gasto).slice(0, 40);
+    if (!conj.length) return '';
+    return `<label class="fl">Copiar el público de una campaña anterior<select class="ei" id="am-pub-prev"><option value="">Elegir campaña…</option>${conj.map(s => `<option value="${esc(s.id)}">${esc(s.txt.slice(0, 90))} · ${usd(s.gasto)}</option>`).join('')}</select></label>`;
+  }
+
+  async function copiarPublico(sel) {
+    const id = sel.value;
+    sel.disabled = true;
+    try {
+      const r = await invocar({ accion: 'publico_leer', id });
+      if (sel.value !== id || pubCtx?.modo !== 'boost') return;
+      const p = { ...r.publico, ubicaciones_anuncio: r.publico.ubicaciones_anuncio || [] };
+      abrirPublico(p, { modo: 'boost', audiencias: pubCtx.audiencias, noEditable: {} });
+      const ne = r.no_editable || {};
+      ok(ne.ubicaciones ? `Público copiado. Tenía ${ne.ubicaciones} ubicación(es) marcada(s) en el mapa que no se copian: revisá Ubicaciones.` : 'Público copiado: podés ajustarlo.');
+    } catch (e) { error(e.message); } finally { sel.disabled = false; }
   }
 
   async function editarPublico(d) {
