@@ -31805,8 +31805,9 @@ function cargarImagenBase64(src) {
 let vcSolicitudPendiente = null, vcGenerando = false;
 async function vcRevisarOperacion(fila, plan) {
   // Sin cliente elegido: mismo match que Importar (teléfono/cédula/nombre) para no crear un lead duplicado.
-  const [{ data, error }, cands] = await Promise.all([sb.rpc('voucher_revisar_venta', { p_datos: fila }),
-    plan.lead ? [] : ivBuscarLeads({ cliente_nombre: fila.cliente_nombre, telefono: fila.telefono, documento: fila.documento_identidad }).catch(() => [])]);
+  const [{ data, error }, cands, previas] = await Promise.all([sb.rpc('voucher_revisar_venta', { p_datos: fila }),
+    plan.lead ? [] : ivBuscarLeads({ cliente_nombre: fila.cliente_nombre, telefono: fila.telefono, documento: fila.documento_identidad }).catch(() => []),
+    plan.lead ? sb.rpc('reservas_de_lead', { p_lead_id: plan.lead.id }) : null]);
   if (error || !data?.ok) throw new Error('No se pudieron revisar las ventas existentes. Intenta de nuevo.');
   const similares = data.reservas || [], leads = cands.slice(0, 5);
   const opciones = [...similares.map(r => ({
@@ -31814,7 +31815,9 @@ async function vcRevisarOperacion(fila, plan) {
   }))];
   if (plan.reserva && !similares.some(r => r.id === plan.reserva.id)) opciones.push({ v: String(plan.reserva.id), t: `${plan.reserva.codigo} · ${plan.lead.nombre} · Reserva seleccionada` });
   opciones.push(...leads.map(c => ({ v: 'lead:' + c.id, t: `Cliente existente: ${c.nombre || 'Sin nombre'} · ${c.telefono || 'sin teléfono'} · ${c.estado || '—'}${c.asesor ? ' · ' + c.asesor : ''} (${ivMotivos(c)})` })));
-  opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear un cliente nuevo con su venta' });
+  // «Otra venta» solo si el cliente ya compró o tiene una reserva activa; si no, es su primera venta.
+  const yaTieneVenta = similares.length || plan.reserva || ['PAGO REALIZADO', 'VENTA COMPLETA'].includes(plan.lead?.estado) || previas?.data?.reservas?.some(r => r.activo);
+  opciones.push({ v: 'nueva', t: !plan.lead ? 'Crear un cliente nuevo con su venta' : yaTieneVenta ? 'Crear otra venta para el cliente seleccionado' : 'Crear la venta para el cliente seleccionado' });
   opciones.push({ v: 'solo', t: 'Generar solo el PDF (no queda en Reservas)' });
   const fuerte = !similares.length && leads.find(c => c.fuerte);
   // Una sola hoja: encadenar otra confirmarSheet/pedirTexto la deja cerrada por el history.back de esta.
