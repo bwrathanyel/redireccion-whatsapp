@@ -31599,7 +31599,7 @@ function vcGuardarBorrador() {
   } catch { /* sin storage */ }
 }
 async function vcRestaurarBorrador() {
-  if (vcBorradorLeido) return;
+  if (vcBorradorLeido || !MI_NOMBRE) return;
   vcBorradorLeido = vcBorradorListo = true;
   let b = null;
   try { b = JSON.parse(localStorage.getItem(vcBorradorClave()) || 'null'); } catch { /* sin storage */ }
@@ -31858,7 +31858,7 @@ async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre
   return falla;
 }
 function vcPintarHecho(h) {
-  vcBorrarBorrador(); vcBorradorListo = false;
+  clearTimeout(vcBorradorTimer); vcBorrarBorrador();
   const box = document.getElementById('vc-hecho');
   box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
     ${h.avisos.map(a => `<small style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</small>`).join('')}
