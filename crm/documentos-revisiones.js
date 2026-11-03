@@ -47,10 +47,14 @@ export function crearDocumentosRevisiones(c) {
     if (error) throw new Error('No se pudo obtener el PDF guardado. Reintenta.');
     return data;
   }
+  // Cotización sin revisiones: su único archivo es el adjunto del chat, que solo leen los dos
+  // del chat (admin y quien la generó no podían descargarla); se rearma desde sus datos.
   async function pdfVigente(t, d) {
+    if (t === 'cotizacion' && !d.pdf_revision_path) return blob(t, d);
     const path = d.pdf_revision_path || d.pdf_path;
-    if (path) return archivo(t === 'voucher' || d.pdf_revision_path ? 'vouchers-pdf' : 'chat-interno-adjuntos', path);
-    return blob(t, d);
+    if (!path) return blob(t, d);
+    try { return await archivo(t === 'voucher' || d.pdf_revision_path ? 'vouchers-pdf' : 'chat-interno-adjuntos', path); }
+    catch (e) { if (t === 'cotizacion') return blob(t, d); throw e; }
   }
   function nombre(t, d) { return c.nombreArchivo ? c.nombreArchivo(t, d) : `${TITULOS[t]}-${d.numero_factura || d.numero || d.id}-r${d.revision || 1}.pdf`; }
   function puedeEditar(t, d) {
@@ -198,7 +202,11 @@ export function crearDocumentosRevisiones(c) {
     });
     cuerpo.querySelectorAll('[data-dr-revision]').forEach(b => b.onclick = async () => {
       b.disabled = true;
-      try { const r = h.revisiones.find(x => x.revision === Number(b.dataset.drRevision)); c.descargar(r.pdf_path ? await archivo(r.pdf_bucket, r.pdf_path) : await blob(t, r.datos), nombre(t, r.datos)); }
+      try {
+        const r = h.revisiones.find(x => x.revision === Number(b.dataset.drRevision));
+        const pdf = r.pdf_path ? await archivo(r.pdf_bucket, r.pdf_path).catch(e => { if (t === 'cotizacion') return blob(t, r.datos); throw e; }) : await blob(t, r.datos);
+        c.descargar(pdf, nombre(t, r.datos));
+      }
       catch (e) { c.error(mensaje(e)); } finally { b.disabled = false; }
     });
     c.abrir('dr-historial-sheet');

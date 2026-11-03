@@ -20740,7 +20740,10 @@ const docBotonVer = (texto = 'Ver') => docTactil() ? '<i class="fas fa-share-nod
 async function docEntregarUrl(url, nombre, mime = 'application/pdf') {
   const res = await fetch(url);
   if (!res.ok) throw new Error('sin_archivo');
-  const file = new File([await res.blob()], nombre, { type: mime });
+  return docEntregarBlob(await res.blob(), nombre, mime);
+}
+async function docEntregarBlob(blob, nombre, mime = 'application/pdf') {
+  const file = new File([blob], nombre, { type: mime || blob.type || 'application/octet-stream' });
   if (docTactil() && navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) {
       if (e.name === 'AbortError') return;
@@ -20748,6 +20751,7 @@ async function docEntregarUrl(url, nombre, mime = 'application/pdf') {
       if (e.name === 'NotAllowedError') { docToastCompartir(file); return; }
     }
   }
+  if (!/^(application\/pdf|image\/)/.test(file.type)) { descargarArchivo(file, nombre); return; }
   const u = URL.createObjectURL(file), w = window.open(u, '_blank');
   if (w) w.opener = null; else descargarArchivo(file, nombre);
   setTimeout(() => URL.revokeObjectURL(u), 60000);
@@ -29877,7 +29881,8 @@ function chatSetupLog() {
     const vel = t.closest('[data-vel]'); if (vel) { chatAudioVelocidad(); return; }
     const img = t.closest('[data-img]'); if (img) { openLightbox([img.dataset.img], 0); return; }
     const vid = t.closest('[data-video]'); if (vid) { reproducirVideo(vid); return; }
-    const doc = t.closest('[data-doc]'); if (doc) { window.open(doc.dataset.doc, '_blank'); return; }
+    const doc = t.closest('[data-doc]');
+    if (doc) { docEntregarUrl(doc.dataset.doc, doc.querySelector('.msg-doc-nombre')?.textContent || 'Documento', '').catch(() => errToast('No se pudo abrir el documento. Reintenta.')); return; }
     const adj = t.closest('[data-adjunto-path]'); if (adj) { abrirAdjuntoChat(adj.dataset.adjuntoPath); return; }
     const stk = t.closest('.cp-sticker'); if (stk) chatMenuMensaje(stk.closest('.chat-msg'));
   });
@@ -33712,7 +33717,7 @@ async function cbCargarHistorial(append) {
     </div>
     <div class="lt-card-meta">${ventas ? '<i class="fas fa-user-check"></i> Para el cliente' : c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
     <div class="lt-card-pie">
-      <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver PDF</button>
+      <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')">${docBotonVer('Ver PDF')}</button>
       ${DR?.acciones('cotizacion', c) || ''}
       ${!c.anulado_en && ventas ? (c.lead_id ? `<button class="btn-sm" type="button" onclick="cbReintentarLead('${c.id}', this)">Registrar en lead</button>` : '') : ''}
     </div>
@@ -33836,8 +33841,8 @@ window.cbVerPdf = async function cbVerPdf(id) {
   if (!c) return;
   try {
     await ensureVoucherLibs();
-    const blob = c.pdf_revision_path ? await DR.pdfVigente('cotizacion', c) : await cbPdfDe(c);
-    window.open(URL.createObjectURL(blob), '_blank');
+    const blob = DR ? await DR.pdfVigente('cotizacion', c) : await cbPdfDe(c);
+    await docEntregarBlob(blob, docNombrePorTipo('cotizacion', c));
   } catch (e) { console.error('cbVerPdf', e); errToast('No se pudo generar el PDF'); }
 };
 window.cbReenviar = async function cbReenviar(id, btn) {
