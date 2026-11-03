@@ -1782,6 +1782,13 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .confirmar-sheet-campos textarea.ei{min-height:84px;resize:vertical}
 .confirmar-sheet-campos .csc-check{display:flex;align-items:center;gap:10px;margin:12px 0 2px;font-size:14px;color:var(--txt);cursor:pointer}
 .confirmar-sheet-campos .csc-check input{width:20px;height:20px;accent-color:var(--accent)}
+.confirmar-sheet-campos .csc-opciones{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.confirmar-sheet-campos .csc-opcion{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1.5px solid var(--line2);border-radius:12px;font-size:14px;line-height:1.35;color:var(--txt);cursor:pointer;animation:csc-titila 1.1s ease-in-out infinite}
+.confirmar-sheet-campos .csc-opcion input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--accent)}
+.confirmar-sheet-campos .csc-opciones:has(input:checked) .csc-opcion{animation:none}
+.confirmar-sheet-campos .csc-opcion:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+@keyframes csc-titila{50%{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}}
+@media (prefers-reduced-motion:reduce){.confirmar-sheet-campos .csc-opcion{animation:none;border-color:rgba(var(--accent-rgb),.6)}}
 #vc-generar-btn{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;border:none;border-radius:12px;padding:15px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:10px;transition:filter .15s,transform .15s,box-shadow .15s;box-shadow:0 10px 24px rgba(var(--accent-rgb),.32)}
 #vc-generar-btn i{font-size:16px}
 #vc-generar-btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 14px 28px rgba(var(--accent-rgb),.42)}

@@ -31809,7 +31809,7 @@ async function vcRevisarOperacion(fila, plan) {
     plan.lead ? [] : ivBuscarLeads({ cliente_nombre: fila.cliente_nombre, telefono: fila.telefono, documento: fila.documento_identidad }).catch(() => [])]);
   if (error || !data?.ok) throw new Error('No se pudieron revisar las ventas existentes. Intenta de nuevo.');
   const similares = data.reservas || [], leads = cands.slice(0, 5);
-  const opciones = [{ v: '', t: 'Selecciona qué operación corresponde' }, ...similares.map(r => ({
+  const opciones = [...similares.map(r => ({
     v: String(r.id), t: `${r.codigo} · ${r.cliente} · ${r.fecha_viaje_inicio || 'sin fecha'} / ${r.fecha_viaje_fin || 'sin fecha'} · Total ${vcMoney(r.monto_total)} · Abono ${vcMoney(r.monto_pagado)}`,
   }))];
   if (plan.reserva && !similares.some(r => r.id === plan.reserva.id)) opciones.push({ v: String(plan.reserva.id), t: `${plan.reserva.codigo} · ${plan.lead.nombre} · Reserva seleccionada` });
@@ -31820,7 +31820,7 @@ async function vcRevisarOperacion(fila, plan) {
   // Una sola hoja: encadenar otra confirmarSheet/pedirTexto la deja cerrada por el history.back de esta.
   const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Generar voucher',
     detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : leads.length ? `El cliente ya podría estar en el CRM (${leads.length === 1 ? '1 coincidencia' : leads.length + ' coincidencias'} por teléfono o nombre): elige su ficha para no duplicarlo.` : 'Elige expresamente cómo guardar este voucher.'}\n${Number(fila.monto_pagado) > 0 ? 'Crear venta factura una sola vez el abono de ' + vcMoney(fila.monto_pagado) + '.' : 'Sin abono cargado: queda en Reservas como cobro pendiente, sin facturar.'}`,
-    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: fuerte ? 'lead:' + fuerte.id : '', opciones },
+    campos: [{ id: 'operacion', tipo: 'radio', label: 'Operación', requerido: true, valor: fuerte ? 'lead:' + fuerte.id : '', opciones },
       ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' || out.operacion?.startsWith('lead:') }] : [])],
   });
   if (!eleccion) return null;
@@ -37143,6 +37143,8 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
       if (c.tipo === 'check') return `<label class="csc-check"><input type="checkbox" id="${idc}"${c.valor ? ' checked' : ''}> ${esc(c.label)}</label>`;
       const lab = c.label ? `<label class="fl" for="${idc}">${esc(c.label)}${!c.requerido && !c.requeridoSi ? ' <span style="font-weight:400">(opcional)</span>' : ''}</label>` : '';
       if (c.tipo === 'select') return `${lab}<select class="ei" id="${idc}">${(c.opciones || []).map(o => `<option value="${esc(o.v)}"${String(o.v) === String(val) ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>`;
+      // Radio: opciones a la vista (titilan hasta elegir una), para elecciones que en un desplegable se pasaban por alto.
+      if (c.tipo === 'radio') return `${lab}<div class="csc-opciones" id="${idc}" role="radiogroup">${(c.opciones || []).map(o => `<label class="csc-opcion"><input type="radio" name="${idc}" value="${esc(o.v)}"${String(o.v) === String(val) ? ' checked' : ''}><span>${esc(o.t)}</span></label>`).join('')}</div>`;
       if (c.tipo === 'textarea') return `${lab}<textarea class="ei" id="${idc}" placeholder="${esc(c.placeholder || '')}">${esc(val)}</textarea>`;
       const extra = c.tipo === 'number' ? ` inputmode="decimal" step="${c.step ?? 'any'}"${c.min != null ? ` min="${c.min}"` : ''}${c.max != null ? ` max="${c.max}"` : ''}` : '';
       return `${lab}<input class="ei" id="${idc}" type="${c.tipo || 'text'}" value="${esc(val)}" placeholder="${esc(c.placeholder || '')}"${extra}>`;
@@ -37151,7 +37153,7 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
     err.textContent = ''; err.style.display = 'none';
     document.getElementById('confirmar-sheet-acciones').classList.toggle('sheet-acciones', !!confirmarSheetCampos);
     openSheet('confirmar-sheet');
-    if (confirmarSheetCampos) setTimeout(() => cont.querySelector('input:not([type=checkbox]),textarea,select')?.focus(), 60);
+    if (confirmarSheetCampos) setTimeout(() => cont.querySelector('input:not([type=checkbox]):not([type=radio]),textarea,select')?.focus(), 60);
   });
 }
 function resolverConfirmarSheet(valor) {
@@ -37161,7 +37163,7 @@ function resolverConfirmarSheet(valor) {
     let falta = null;
     campos.forEach((c, i) => {
       const el = document.getElementById(`csc-${i}`);
-      const v = c.tipo === 'check' ? !!el?.checked : (el?.value ?? '').trim();
+      const v = c.tipo === 'check' ? !!el?.checked : c.tipo === 'radio' ? (el?.querySelector('input:checked')?.value ?? '') : (el?.value ?? '').trim();
       const requerido = typeof c.requeridoSi === 'function' ? !!c.requeridoSi(out) : c.requerido;
       if (requerido && c.tipo !== 'check' && !v && !falta) falta = c;
       out[c.id ?? i] = v;
