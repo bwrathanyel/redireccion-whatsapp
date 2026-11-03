@@ -25,6 +25,7 @@ const CSS = `
 .mk-est{font-size:12px;color:var(--muted)}
 .mk-acc{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto}
 .mk-acc .btn-sm,.mk-form .btn-sm{min-height:44px}
+.mk-rmes{min-height:44px;max-width:170px}
 .mk-link{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--muted)}
 .mk-link input{width:100%;min-height:38px}
 .mk-form{border:1px solid var(--line2);border-radius:14px;padding:14px;margin:0 0 14px;background:var(--panel)}
@@ -160,15 +161,15 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
   const horaCaracas = iso => new Date(iso).toLocaleString('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
   const igActivo = m => (m.cuentas || []).some(c => c.plataforma === 'instagram' && c.activo);
 
-  async function invocar(body) {
-    const { data, error: e } = await sb.functions.invoke('marketing-zernio', { body });
+  async function invocar(body, fn = 'marketing-zernio') {
+    const { data, error: e } = await sb.functions.invoke(fn, { body });
     if (e) {
       let j = null;
       try { j = await e.context?.json?.(); } catch { /* sin cuerpo */ }
       const lista = Array.isArray(j?.errores) && j.errores.length ? '\n' + j.errores.join('\n') : '';
-      throw new Error((ERRORES[j?.error] || j?.error || e.message) + lista);
+      throw new Error((ERRORES[j?.error] || j?.detalle || j?.error || e.message) + lista);
     }
-    if (!data?.ok) throw new Error(ERRORES[data?.error] || data?.error || 'Error desconocido');
+    if (!data?.ok) throw new Error(ERRORES[data?.error] || data?.detalle || data?.error || 'Error desconocido');
     return data;
   }
 
@@ -595,7 +596,97 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
       ${cuentas(m)}
       ${link(m)}
       ${conectable ? `<div class="mk-acc"><button class="btn-sm" type="button" data-mk="conectar" data-marca="${m.id}">${links.has(m.id) ? 'Copiar otro link' : 'Link de conexión'}</button></div>` : ''}
+      ${oficina && igActivo(m) ? `<div class="mk-acc"><input class="ei mk-rmes" type="month" data-rmes="${m.id}" value="${mesAnterior()}" max="${hoyCct().slice(0, 7)}" aria-label="Mes del reporte de ${esc(m.nombre)}">
+        <button class="btn-sm" type="button" data-mk="reporte" data-marca="${m.id}">Reporte PDF</button></div>` : ''}
     </article>`;
+  }
+
+  // F6: reporte mensual por marca. Misma librería que los vouchers (jsPDF + autotable, en ese
+  // orden: el cargador de vouchers no baja autotable si ya encuentra window.jspdf).
+  let libPdf = null;
+  const script = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar el generador de PDF.')); document.head.appendChild(s); });
+  const cargarPdf = () => (window.jspdf?.jsPDF?.API?.autoTable ? Promise.resolve() : libPdf ||= (window.jspdf ? Promise.resolve() : script('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'))
+    .then(() => script('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js')).catch(e => { libPdf = null; throw e; }));
+  function mesAnterior() { const [a, m] = hoyCct().slice(0, 7).split('-').map(Number); return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`; }
+  // Fuente estándar del PDF (WinAnsi): fuera emojis y símbolos que saldrían como basura.
+  const plano = s => String(s || '').replace(/[^\x20-\x7E\u00A0-\u00FF\u2014]/g, '').replace(/\s+/g, ' ').trim();
+  const corto = (s, n) => (s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + '…' : s);
+  const RGB = { accent: [255, 145, 0], blue: [74, 158, 255], green: [16, 185, 129], amber: [245, 181, 68], purple: [160, 107, 255], pink: [255, 92, 138] };
+
+  async function reporte(boton) {
+    if (ocupado) return;
+    const m = marcas.find(x => String(x.id) === boton.dataset.marca), ig = (m?.cuentas || []).find(c => c.plataforma === 'instagram' && c.activo);
+    if (!m || !ig) return;
+    const ym = raiz.querySelector(`[data-rmes="${m.id}"]`)?.value || mesAnterior();
+    const [a, mm] = ym.split('-').map(Number);
+    const fin = `${ym}-${String(new Date(Date.UTC(a, mm, 0)).getUTCDate()).padStart(2, '0')}`;
+    const desde = `${ym}-01`, hasta = fin > hoyCct() ? hoyCct() : fin;
+    ocupado = true; boton.disabled = true; boton.textContent = 'Armando…';
+    try {
+      const [r, g] = await Promise.all([
+        invocar({ accion: 'resumen', marca_id: m.id, plataforma: 'instagram', accountId: ig.id, desde, hasta }, 'redes-facebook-zernio'),
+        invocar({ accion: 'gasto_marca', marca_id: m.id, desde, hasta }, 'ads-meta-zernio').catch(() => null),
+        cargarPdf(),
+      ]);
+      dibujarReporte(m, ig, ym, { desde, hasta, parcial: hasta < fin }, r, g ? g.marcas?.[0] || { gasto: 0 } : null);
+      ok('Reporte descargado');
+    } catch (e) { error(e.message); }
+    finally { ocupado = false; boton.disabled = false; boton.textContent = 'Reporte PDF'; }
+  }
+
+  function dibujarReporte(m, ig, ym, rango, r, gasto) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    const W = doc.internal.pageSize.getWidth(), M = 48, col = RGB[m.color] || RGB.accent;
+    const n = v => Number(v || 0).toLocaleString('es-VE');
+    const dia = f => (f ? new Date(f).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', timeZone: 'America/Caracas' }) : '');
+    doc.setFillColor(...col); doc.rect(0, 0, W, 8, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(30, 30, 30);
+    doc.text(plano(m.nombre), M, 62);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(110, 110, 110);
+    const mes = nombreMes(`${ym}-01`);
+    doc.text(`Reporte de Instagram · ${mes.charAt(0).toUpperCase() + mes.slice(1)} · @${plano(ig.usuario || ig.id)}`, M, 82);
+    if (rango.parcial) doc.text(`Mes en curso: datos hasta el ${dia(rango.hasta + 'T12:00:00Z')}.`, M, 98);
+
+    const seg = r.seguidores, tot = r.pagina?.totales || {}, pt = r.posts?.totales || {};
+    const crec = seg ? `${seg.crecimiento >= 0 ? '+' : ''}${n(seg.crecimiento)} en el mes` : '';
+    const kpis = [
+      ['Seguidores', seg ? n(seg.actual) : '—', crec],
+      ['Alcance', tot.reach != null ? n(tot.reach) : '—', 'cuentas únicas'],
+      ['Interacciones', n(tot.total_interactions ?? pt.interacciones), 'me gusta, comentarios, guardados'],
+      ['Publicaciones', n(pt.publicaciones), 'en el mes'],
+      ['Inversión en anuncios', gasto ? '$' + Number(gasto.gasto || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—', gasto?.conversaciones ? `${n(gasto.conversaciones)} chats iniciados` : ''],
+    ];
+    const ancho = (W - M * 2 - 12 * 2) / 3, alto = 70;
+    kpis.forEach(([t, v, s], i) => {
+      const x = M + (i % 3) * (ancho + 12), y = 122 + Math.floor(i / 3) * (alto + 12);
+      doc.setDrawColor(225, 225, 225); doc.setFillColor(250, 250, 250); doc.roundedRect(x, y, ancho, alto, 8, 8, 'FD');
+      doc.setFontSize(9); doc.setTextColor(110, 110, 110); doc.text(t.toUpperCase(), x + 12, y + 20);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(30, 30, 30); doc.text(v, x + 12, y + 44);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(130, 130, 130); if (s) doc.text(s, x + 12, y + 59);
+    });
+
+    const top = r.posts?.top || [];
+    let y = 122 + 2 * (alto + 12) + 20;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(30, 30, 30); doc.text('Publicaciones con más alcance', M, y);
+    if (top.length) {
+      doc.autoTable({
+        startY: y + 10, margin: { left: M, right: M },
+        head: [['Fecha', 'Publicación', 'Alcance', 'Interacciones']],
+        body: top.map(p => [dia(p.fecha), corto(plano(p.texto), 110) || '(sin texto)', n(p.alcance || p.impresiones || p.vistas), n(p.interacciones)]),
+        styles: { font: 'helvetica', fontSize: 9, cellPadding: 6, textColor: [40, 40, 40] },
+        headStyles: { fillColor: col, textColor: [255, 255, 255], fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 52 }, 2: { halign: 'right', cellWidth: 62 }, 3: { halign: 'right', cellWidth: 78 } },
+      });
+    } else {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(110, 110, 110); doc.text('Sin publicaciones en el mes.', M, y + 22);
+    }
+    const faltan = Object.keys(r.errores || {}).filter(k => ['pagina', 'seguidores', 'posts'].includes(k));
+    const pie = doc.internal.pageSize.getHeight() - 32;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150, 150, 150);
+    if (faltan.length) doc.text('Instagram no entregó parte de los datos de este mes; los recuadros con «—» quedaron sin dato.', M, pie - 14);
+    doc.text(`Destino y Eventos Lotus 360 · generado el ${new Date().toLocaleDateString('es-VE', { timeZone: 'America/Caracas' })}`, M, pie);
+    doc.save(`Reporte ${plano(m.nombre)} ${ym}.pdf`);
   }
 
   function pintar() {
@@ -664,6 +755,7 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
       raiz.querySelectorAll('.mk-color').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
     }
     if (acc === 'conectar') conectar(b);
+    if (acc === 'reporte') reporte(b);
     if (acc === 'tab') cambiarPestana(b.dataset.tab);
     if (acc === 'mes') { const d = diaUtc(mes); d.setUTCMonth(d.getUTCMonth() + Number(b.dataset.paso)); mes = d.toISOString().slice(0, 8) + '01'; $('#mk-cal').innerHTML = '<div class="mk-vacio">Cargando…</div>'; cargarPosts(); }
     if (acc === 'hoy') { mes = hoyCct().slice(0, 8) + '01'; cargarPosts(); }

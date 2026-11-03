@@ -27,6 +27,9 @@ const CSS = `
 .am-crm{font-size:11.5px;font-weight:700;color:var(--accent-ink)}
 .am-tipo{align-self:flex-start;display:inline-flex;font-size:10px;font-weight:800;padding:2px 9px;border-radius:999px;border:1px solid var(--line2);color:var(--muted)}
 .am-tipo-sel{margin:11px 0 0}
+.am-marca{color:var(--mk,var(--accent));border-color:color-mix(in srgb,var(--mk,var(--accent)) 45%,transparent);margin-left:6px}
+.am-marca[data-color=blue]{--mk:var(--blue)}.am-marca[data-color=green]{--mk:var(--green)}.am-marca[data-color=amber]{--mk:var(--amber)}
+.am-marca[data-color=purple]{--mk:var(--purple)}.am-marca[data-color=pink]{--mk:var(--pink)}
 .am-prog{display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--muted)}
 .am-pie{padding:0 14px 11px}
 .am-acc{display:inline-flex;flex-wrap:wrap;gap:4px}
@@ -95,7 +98,7 @@ const OBJETIVOS = {
 
 export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', raiz }) {
   const admin = rol === 'admin';
-  let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', tipoFiltro = '', datos = null, vista = 'arbol';
+  let cuentas = [], cuenta = '', tope = 20, dias = 30, conGasto = true, busca = '', tipoFiltro = '', marcaFiltro = '', datos = null, vista = 'arbol';
   let posts = [], cobertura = null, postSel = null, igs = { cuenta: null, lista: [], propio: null }, igSel = '', pedido = 0, ocupado = false, campSel = null, fondo = null, cajon = null, pausas = new Map();
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -109,6 +112,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
   const portada = camp => anuncios(camp).find(a => a.miniatura) || {};
   const tipoDe = camp => camp.tipo || 'venta';
   const esVenta = camp => tipoDe(camp) === 'venta';
+  const marcaDe = id => (datos?.marcas || []).find(m => m.id === id);
 
   async function invocar(body) {
     const { data, error: e } = await sb.functions.invoke('ads-meta-zernio', { body });
@@ -136,6 +140,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <div class="seg-group" id="am-dias">${[7, 30, 90].map(d => `<button class="seg${d === dias ? ' on' : ''}" type="button" data-dias="${d}">${d} días</button>`).join('')}</div>
         <button class="am-chip on" type="button" data-am="gasto" aria-pressed="true"><i class="fas fa-dollar-sign"></i> Solo con gasto</button>
         <select class="ei" id="am-tipo" aria-label="Tipo de campaña"><option value="">Todos los tipos</option>${Object.entries(TIPOS).map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>
+        <select class="ei" id="am-marca" aria-label="Marca" hidden></select>
         <input class="ei am-busca" id="am-busca" type="search" placeholder="Buscar campaña" aria-label="Buscar campaña">
         <button class="btn-sm" type="button" data-am="recargar" title="Recargar"><i class="fas fa-rotate"></i></button>
         <span class="am-sinc" id="am-sinc"></span>
@@ -147,6 +152,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       if (e.target.id === 'am-cuenta') { cuenta = e.target.value; cerrar(); cargarArbol(); }
       if (e.target.id === 'am-ig') { igSel = e.target.value; abrirNuevo(); }
       if (e.target.id === 'am-tipo') { tipoFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
+      if (e.target.id === 'am-marca') { marcaFiltro = e.target.value; if (vista === 'arbol' && datos) pintarArbol(); }
     });
     raiz.addEventListener('input', e => { if (e.target.id === 'am-busca') { busca = norm(e.target.value.trim()); if (vista === 'arbol' && datos) pintarArbol(); } });
     raiz.addEventListener('keydown', e => {
@@ -162,6 +168,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     cajon.addEventListener('change', e => {
       if (e.target.id === 'am-tipo-camp') cambiarTipo(e.target);
       if (e.target.id === 'am-evento') cambiarEvento(e.target);
+      if (e.target.id === 'am-marca-camp') cambiarMarca(e.target);
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && campSel && !document.querySelector('.sheet.open')) cerrar(); });
   }
@@ -220,20 +227,36 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     return camp.estado === 'active' ? `<button class="btn-sm" type="button" data-am="prog" ${dato('campana', camp, camp.plataforma)}><i class="fas fa-clock"></i> Pausar el…</button>` : '';
   }
 
+  // Lotus es lo normal: la etiqueta solo aparece en las campañas de clientes.
+  function chipMarca(camp) {
+    const m = marcaDe(camp.marca_id);
+    return m && !m.es_lotus ? `<span class="am-tipo am-marca" data-color="${esc(m.color || 'accent')}">${esc(m.nombre)}</span>` : '';
+  }
+
   function tarjeta(camp) {
     const crm = lineaCrm(camp.crm), pie = accionesCamp(camp);
     return `<article class="am-card" data-camp="${esc(camp.id)}" tabindex="0" role="button" aria-label="${esc(camp.nombre)}">
       <div class="am-foto">${foto(portada(camp))}${estado(camp.estado)}</div>
       <div class="am-cuerpo"><div class="am-tit">${esc(camp.nombre)}</div><div class="am-gasto">${usd(camp.metricas.gasto)}</div>
-        <div class="am-res">${resultado(camp.metricas)}</div>${crm ? `<div class="am-crm">${crm}</div>` : ''}${lineaPausa(camp)}${esVenta(camp) ? '' : `<span class="am-tipo">${TIPOS[tipoDe(camp)]}</span>`}</div>
+        <div class="am-res">${resultado(camp.metricas)}</div>${crm ? `<div class="am-crm">${crm}</div>` : ''}${lineaPausa(camp)}${esVenta(camp) ? '' : `<span class="am-tipo">${TIPOS[tipoDe(camp)]}</span>`}${chipMarca(camp)}</div>
       ${pie ? `<div class="am-pie">${pie}</div>` : ''}</article>`;
   }
 
   function visibles() {
-    return (datos?.campanas || []).filter(x => (!busca || norm(x.nombre).includes(busca)) && (!tipoFiltro || tipoDe(x) === tipoFiltro));
+    return (datos?.campanas || []).filter(x => (!busca || norm(x.nombre).includes(busca)) && (!tipoFiltro || tipoDe(x) === tipoFiltro) && (!marcaFiltro || String(x.marca_id) === marcaFiltro));
+  }
+
+  // Solo se ofrece si hay campañas de más de una marca en esta cuenta y rango.
+  function pintarMarcas() {
+    const sel = $('#am-marca'), ids = new Set((datos?.campanas || []).map(x => x.marca_id));
+    if (marcaFiltro && !ids.has(Number(marcaFiltro))) marcaFiltro = '';
+    sel.hidden = ids.size < 2 && !marcaFiltro;
+    sel.innerHTML = '<option value="">Todas las marcas</option>' + (datos?.marcas || []).filter(m => ids.has(m.id))
+      .map(m => `<option value="${m.id}"${String(m.id) === marcaFiltro ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('');
   }
 
   function pintarArbol() {
+    pintarMarcas();
     const todas = datos?.campanas || [], c = visibles();
     kpis(c);
     $('#am-sinc').textContent = datos?.sincronizado ? 'Meta sincronizado ' + new Date(datos.sincronizado).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) : '';
@@ -265,7 +288,11 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
           ${Object.entries(TIPOS).map(([k, t]) => `<option value="${k}"${camp.tipo_fijado && camp.tipo === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
         <div class="am-aviso">Solo las de venta cuentan en el costo por lead y por venta.</div>
         <label class="fl am-tipo-sel">Fecha del evento<input type="date" class="ei" id="am-evento" data-id="${esc(camp.id)}" data-nombre="${esc(camp.nombre)}" value="${esc(camp.fecha_evento || '')}"></label>
-        <div class="am-aviso">Si pasa esa fecha y la campaña sigue gastando, el agente pide en Telegram permiso para pausarla.</div>`
+        <div class="am-aviso">Si pasa esa fecha y la campaña sigue gastando, el agente pide en Telegram permiso para pausarla.</div>
+        ${(datos?.marcas || []).length > 1 ? `<label class="fl am-tipo-sel">Marca<select class="ei" id="am-marca-camp" data-id="${esc(camp.id)}" data-nombre="${esc(camp.nombre)}">
+          <option value="auto"${camp.marca_fijada ? '' : ' selected'}>Según la cuenta · ${esc(marcaDe(datos.marca_cuenta)?.nombre || 'Lotus')}</option>
+          ${datos.marcas.filter(m => m.activa || m.id === camp.marca_id).map(m => `<option value="${m.id}"${camp.marca_fijada && camp.marca_id === m.id ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('')}</select></label>
+        <div class="am-aviso">El gasto de esta campaña cuenta para esa marca en su reporte. El informe diario de Telegram es solo de Lotus.</div>` : ''}`
       : '';
     const fila = a => `<div class="am-anun">${a.miniatura ? `<img src="${esc(a.miniatura)}" alt="" loading="lazy">` : '<span class="am-sin"><i class="fas fa-bullhorn"></i></span>'}
       <div>${a.enlace ? `<a href="${esc(a.enlace)}" target="_blank" rel="noopener">${esc(a.nombre)}</a>` : esc(a.nombre)}
@@ -376,6 +403,15 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       ok(inp.value ? 'Fecha del evento guardada' : 'Fecha del evento borrada');
       cargarArbol();
     } catch (e) { error(e.message); inp.disabled = false; }
+  }
+
+  async function cambiarMarca(sel) {
+    sel.disabled = true;
+    try {
+      await invocar({ accion: 'marca', id: sel.dataset.id, marca_id: sel.value === 'auto' ? null : Number(sel.value), nombre: sel.dataset.nombre });
+      ok('Marca guardada');
+      cargarArbol();
+    } catch (e) { error(e.message); sel.disabled = false; }
   }
 
   async function cambiarPresupuesto(d) {
