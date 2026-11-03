@@ -412,6 +412,53 @@ body.menu-arrastrando .side-scrim{transition:none}
 .sheet.open{transform:translateY(0);box-shadow:0 -20px 50px rgba(0,0,0,.4)}
 .sheet-handle{width:40px;height:4px;background:var(--line2);border-radius:3px;margin:6px auto 16px}
 .sheet-title{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+/* Redes → Hotel por post */
+.po-badge:empty{display:none}
+.po-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:10.5px;font-weight:800}
+.po-barra{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:14px 0}
+.po-barra .seg-group{margin:0}
+.po-buscar{flex:1 1 220px;max-width:340px;padding:9px 12px;font-size:13px}
+.po-card .tt-row{align-items:flex-start}
+.po-thumb{width:62px;height:62px;flex:none;object-fit:cover}
+.po-thumb-vacia{display:grid;place-items:center;color:var(--muted2);background:var(--panel)}
+.po-texto{font-size:12.5px;line-height:1.4;color:var(--txt);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+.po-oferta{display:flex;gap:9px;align-items:center;margin-top:11px;padding:9px 11px;border-radius:10px;border:1px dashed var(--line2);color:var(--muted)}
+.po-oferta>i{font-size:14px;width:16px;text-align:center}
+.po-oferta div{display:flex;flex-direction:column;min-width:0}
+.po-oferta b{font-size:12.5px;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-oferta span{font-size:11px}
+.po-oferta.on{border-style:solid;border-color:rgba(var(--accent-rgb),.35);background:var(--accent-soft)}
+.po-oferta.on>i{color:var(--accent)}
+.po-ia{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:6px;font-size:10px;font-weight:600;background:var(--line2);color:var(--muted);vertical-align:1px}
+.po-oferta .po-razon{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85}
+.po-post{display:flex;gap:11px;align-items:flex-start;padding:9px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.po-post img{width:54px;height:54px;border-radius:8px;object-fit:cover;flex:none}
+.po-post p{margin:0;font-size:12px;line-height:1.4;color:var(--muted);display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
+.po-hoteles-nota{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);margin:11px 2px 7px}
+.po-hoteles-nota:empty{display:none}
+.po-hoteles{display:flex;flex-direction:column;gap:4px;max-height:38vh;overflow-y:auto;margin:0 -2px;padding:2px}
+.po-hoteles-vacio{padding:11px 2px}
+.po-hotel{display:flex;align-items:center;gap:11px;width:100%;min-height:52px;padding:7px 11px 7px 7px;border:1px solid transparent;border-radius:10px;background:none;color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:background .16s,border-color .16s}
+.po-hotel:hover{background:var(--panel)}
+.po-hotel.on{border-color:var(--accent);background:var(--accent-soft)}
+.po-hotel img,.po-hotel-sinfoto{width:40px;height:40px;border-radius:8px;object-fit:cover;flex:none}
+.po-hotel-sinfoto{display:grid;place-items:center;background:var(--panel);color:var(--muted2)}
+.po-hotel-txt{display:flex;flex-direction:column;min-width:0;flex:1}
+.po-hotel-txt b{font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-hotel-txt small{font-size:11px;color:var(--muted)}
+.po-hotel-check{color:var(--accent)}
+.po-promos{display:flex;flex-direction:column;gap:4px;margin-top:7px}
+.po-promo{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:border-color .16s,background .16s}
+.po-promo:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.po-promo input{margin-top:2px;accent-color:var(--accent)}
+.po-promo span{display:flex;flex-direction:column;min-width:0}
+.po-promo b{font-size:12.5px}
+.po-promo small{font-size:11px;color:var(--muted)}
+.po-acciones{display:flex;gap:9px;margin-top:14px}
+.po-acciones .dbtn{flex:1}
+.po-quitar{color:var(--danger)}
+.po-quitar[hidden]{display:none}
+#po-promos-wrap{margin-top:14px}
 /* Barra de acciones fija al pie de las hojas de formulario en móvil. Antes
    "Crear lead", "Guardar y facturar" y "Guardar" quedaban a 891-1287px en una
    pantalla de 844: había que scrollear dentro de la hoja para encontrarlos.
@@ -894,6 +941,55 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .conv-msg.lead{background:var(--panel-solid)}
 .conv-msg.ia{background:rgba(74,158,255,.1)}
 .conv-msg .conv-who{font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+/* Conversación con la IA estilo DM de Meta/WhatsApp/TikTok según canal (2026-10-30) */
+#conv-lead-sheet{display:flex;flex-direction:column;height:80vh;overflow:hidden;padding-left:0;padding-right:0;padding-bottom:var(--safe-b)}
+#conv-lead-sheet .sheet-handle{margin-bottom:10px;flex:none}
+.dm-head{flex:none;display:flex;align-items:center;gap:11px;padding:0 16px 12px;border-bottom:1px solid var(--line2)}
+.dm-avatar{width:40px;height:40px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:700;font-size:16px;color:#fff;background:#4a9eff}
+.dm-quien{min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.dm-quien b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-quien span{font-size:11.5px;color:var(--muted)}
+.dm-body{flex:1;min-height:0;overflow-y:auto;padding:14px 12px 10px;display:flex;flex-direction:column;--dm-yo:#4a9eff;--dm-yo-txt:#fff;--dm-el:rgba(127,127,127,.2);--dm-el-txt:var(--txt)}
+.dm-fila{display:flex;align-items:flex-end;gap:7px;margin-bottom:2px;max-width:100%}
+.dm-fila.fin,.dm-fila.solo{margin-bottom:10px}
+.dm-fila.yo{justify-content:flex-end}
+.dm-col{display:flex;flex-direction:column;gap:3px;max-width:78%;min-width:0}
+.dm-fila.yo .dm-col{align-items:flex-end}
+.dm-burbuja{padding:8px 13px;border-radius:20px;font-size:13.5px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--dm-el);color:var(--dm-el-txt)}
+.dm-fila.yo .dm-burbuja{background:var(--dm-yo);color:var(--dm-yo-txt)}
+.dm-fila.el.inicio .dm-burbuja{border-bottom-left-radius:5px}
+.dm-fila.el.medio .dm-burbuja{border-top-left-radius:5px;border-bottom-left-radius:5px}
+.dm-fila.el.fin .dm-burbuja{border-top-left-radius:5px}
+.dm-fila.yo.inicio .dm-burbuja{border-bottom-right-radius:5px}
+.dm-fila.yo.medio .dm-burbuja{border-top-right-radius:5px;border-bottom-right-radius:5px}
+.dm-fila.yo.fin .dm-burbuja{border-top-right-radius:5px}
+.dm-mini-av{width:26px;height:26px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
+.dm-mini-av:not(:empty){background:#4a9eff}
+.dm-fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:3px;width:min(260px,62vw)}
+.dm-fotos a{display:block;aspect-ratio:1;border-radius:12px;overflow:hidden;background:var(--dm-el)}
+.dm-fotos img{width:100%;height:100%;object-fit:cover;display:block}
+.dm-adjunto{font-style:italic;opacity:.85}
+.dm-voz{opacity:.7;font-size:11px}
+.dm-foot{flex:none;margin:6px 12px 10px;padding:10px 16px;border-radius:22px;border:1px solid var(--line2);color:var(--muted);font-size:12px;text-align:center}
+/* Instagram: degradado violeta-azul continuo entre burbujas propias */
+.dm-body.dm-ig{--dm-yo:linear-gradient(160deg,#b02cf2 0%,#7a3cff 50%,#3d6bff 100%)}
+.dm-body.dm-ig .dm-fila.yo .dm-burbuja{background-attachment:fixed}
+#conv-lead-sheet[data-red=ig] .dm-avatar,.dm-ig .dm-mini-av:not(:empty){background:linear-gradient(45deg,#f9a825,#e1306c 50%,#833ab4)}
+/* Messenger */
+.dm-body.dm-fb{--dm-yo:#0084ff}
+#conv-lead-sheet[data-red=fb] .dm-avatar,.dm-fb .dm-mini-av:not(:empty){background:linear-gradient(45deg,#00b2ff,#006aff)}
+/* TikTok */
+.dm-body.dm-tt{--dm-yo:#fe2c55}
+#conv-lead-sheet[data-red=tt] .dm-avatar,.dm-tt .dm-mini-av:not(:empty){background:linear-gradient(45deg,#25f4ee,#fe2c55)}
+/* WhatsApp: fondo propio, burbujas con esquina de cola y sin avatar */
+.dm-body.dm-wa{--dm-yo:#005c4b;--dm-el:#202c33;--dm-el-txt:#e9edef;background:#0b141a radial-gradient(rgba(255,255,255,.035) 1px,transparent 1px) 0 0/18px 18px}
+:root[data-theme="light"] .dm-body.dm-wa{--dm-yo:#d9fdd3;--dm-yo-txt:#111b21;--dm-el:#fff;--dm-el-txt:#111b21;background-color:#efeae2;background-image:radial-gradient(rgba(0,0,0,.04) 1px,transparent 1px)}
+.dm-wa .dm-mini-av{display:none}
+.dm-wa .dm-burbuja{border-radius:8px!important;padding:6px 10px;box-shadow:0 1px .5px rgba(0,0,0,.13)}
+.dm-wa .dm-fila.el.inicio .dm-burbuja,.dm-wa .dm-fila.el.solo .dm-burbuja{border-top-left-radius:0!important}
+.dm-wa .dm-fila.yo.inicio .dm-burbuja,.dm-wa .dm-fila.yo.solo .dm-burbuja{border-top-right-radius:0!important}
+.dm-wa .dm-fotos a{border-radius:6px}
+#conv-lead-sheet[data-red=wa] .dm-avatar{background:#25d366}
 .act-row{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .act-row:last-child{border-bottom:none}
 .act-row .act-txt{flex:1;font-size:12.5px}
@@ -1443,6 +1539,16 @@ input.ei[type=date],input.ei[type=datetime-local],input.ei[type=time]{color-sche
 .ef-comprob{margin:2px 0 7px}.ef-comprob .btn-sm{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .ef-comprob.leyendo .btn-sm{opacity:.55;pointer-events:none}
 .ef-comprob-st{display:none;font-size:12px;margin-top:6px;color:var(--muted)}.ef-comprob-st.show{display:block}.ef-comprob-st.malo{color:#ff8a8a}
+.rpa-resultados{display:flex;flex-direction:column;gap:4px;margin-top:6px}.rpa-resultados:empty{display:none}
+.rpa-resultados button{text-align:left;background:rgba(var(--ink-rgb),.04);border:1px solid var(--line);border-radius:9px;padding:8px 10px;color:var(--txt);cursor:pointer;font:inherit}
+.rpa-resultados button:hover,.rpa-resultados button:focus-visible{border-color:var(--accent,#7c5cff)}
+.rpa-pegar{display:flex;flex-direction:column;align-items:center;gap:6px;border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--muted);font-size:13px;cursor:text}
+.rpa-pegar:focus{outline:none;border-color:var(--accent,#7c5cff)}.rpa-pegar.leyendo{opacity:.6}
+.rpa-pegar img{max-width:100%;max-height:220px;border-radius:9px;border:1px solid var(--line)}
+.rpa-link{color:var(--accent,#7c5cff);text-decoration:underline;cursor:pointer}
+.lp-links{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.lp-link{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12.5px}
+.lp-link .lp-st{margin-left:auto;font-weight:700}
 .ef-abono.malo{background:rgba(239,68,68,.09);border-color:rgba(239,68,68,.3);color:#ffa5a5}
 .ef-serv{background:rgba(10,12,28,.55);border:1.5px solid var(--line2);border-radius:12px;padding:9px 11px 11px;margin-bottom:9px}
 .ef-serv-top{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:2px}
@@ -2280,6 +2386,66 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .pc-desbloq{margin-top:12px}
 .pe-check{display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer}
 .pe-check input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+/* Equipo → Personal: tarjeta clickeable + ficha completa + editor por secciones (gpf = ficha de persona) */
+.pc-click{cursor:pointer;display:flex;flex-direction:column}
+.pc-click:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pc-ico{position:relative}
+.pc-ico .pc-online{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border:2px solid var(--panel-solid);box-shadow:none}
+.pc-frl-mini{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-size:12px;color:var(--muted)}
+.pc-frl-mini b{color:var(--txt)}
+.pc-frl-mini b.pc-idle{color:var(--amber)}
+.pc-mas{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-top:auto;padding-top:11px;font-size:12px;font-weight:600;color:var(--muted);transition:color .16s}
+.pc-mas i{font-size:10px;transition:transform .16s}
+.pc-click:hover .pc-mas{color:var(--accent-ink)}
+.pc-click:hover .pc-mas i{transform:translateX(3px)}
+.gpf-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding-right:40px}
+.gpf-ava{width:56px;height:56px;border-radius:14px;font-size:22px}
+.gpf-ava .pc-online{width:14px;height:14px}
+.gpf-id{flex:1;min-width:0}
+.gpf-id .pc-rol{margin-top:2px}
+.gpf-cargo{font-size:12.5px;color:var(--txt);margin-top:4px}
+.gpf-estado{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}
+.gpf-volver{align-self:flex-start}
+.gpf-acciones{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.gpf-acciones .dbtn,.gpf-fila .dbtn{flex:1 1 140px;width:auto;margin-top:0;min-height:44px;padding:0 14px}
+.gpf-sec{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:11px}
+.gpf-sec-t{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.gpf-sec-t i{color:var(--accent-ink)}
+.gpf-sec-n{margin-left:auto;color:var(--muted2);letter-spacing:0}
+.gpf-sec > .fl:first-of-type{margin-top:0}
+.gpf-cifras{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:11px;padding-top:0;border-top:none}
+.gpf-cifras .pc-cifra-v{font-size:16px}
+.gpf-dato{display:flex;align-items:center;gap:9px;font-size:13px;padding:7px 0;border-bottom:1px solid var(--line);min-width:0}
+.gpf-dato:last-child{border-bottom:none}
+.gpf-dato i{width:16px;text-align:center;color:var(--muted)}
+.gpf-dato span{overflow-wrap:anywhere}
+.gpf-perms{display:flex;flex-wrap:wrap;gap:7px}
+.gpf-perm-chip{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:999px;border:1px solid var(--line2);color:var(--muted2)}
+.gpf-perm-chip.on{color:var(--accent-ink);border-color:rgba(var(--accent-rgb),.35);background:var(--accent-soft)}
+.gpf-vacio{color:var(--muted2);font-size:12.5px}
+.gpf-switch{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:44px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.gpf-switch:last-child{border-bottom:none}
+.gpf-switch-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.gpf-switch-txt b{font-size:13px;font-weight:700}
+.gpf-switch-txt small,.gpf-peligro-fila small{font-size:11.5px;color:var(--muted);line-height:1.4}
+.gpf-switch input{appearance:none;-webkit-appearance:none;position:relative;width:38px;height:22px;margin:0;border-radius:999px;background:var(--line2);flex-shrink:0;cursor:pointer;transition:background .16s}
+.gpf-switch input::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .16s}
+.gpf-switch input:checked{background:var(--accent)}
+.gpf-switch input:checked::after{transform:translateX(16px)}
+.gpf-switch input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.gpf-guardar{margin:0 0 11px}
+.gpf-fila{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.gpf-peligro{border-color:rgba(239,68,68,.3)}
+.gpf-peligro .gpf-sec-t,.gpf-peligro .gpf-sec-t i,.gpf-peligro .dbtn.peligro{color:var(--danger)}
+.gpf-peligro-fila{display:flex;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid var(--line)}
+.gpf-peligro-fila:last-child{border-bottom:none}
+.gpf-peligro-fila > div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.gpf-peligro-fila .dbtn{flex:0 0 auto;min-height:44px;padding:0 14px}
+.rol-administrativo #gpf-editar{display:none}
+@media (max-width:760px){
+  .gpf-peligro-fila{flex-direction:column;align-items:stretch}
+  .gpf-cifras .pc-cifra-v{font-size:15px}
+}
 .pn-cred{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;padding:9px 12px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;font-size:13px}
 .pn-cred span{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px}
 .pn-cred b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;user-select:all}
@@ -2327,6 +2493,9 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .pagos-col-sub{font-size:11.5px;color:var(--muted);margin:4px 0 11px}
 .pagos-col-cards{display:flex;flex-direction:column;gap:11px}
 .pagos-col-vacio{padding:22px 11px;border:1px dashed var(--line2);border-radius:12px;text-align:center;font-size:12px;color:var(--muted)}
+.pagos-canales{display:inline-flex;flex-wrap:wrap;margin-bottom:12px}
+.pagos-canales .seg{display:inline-flex;align-items:center;gap:6px;min-height:36px}
+.pagos-canal-n{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
 .pagos-espera{margin-top:14px;border:1px solid var(--line);border-radius:14px;padding:11px}
 .pagos-espera summary{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:800;color:var(--muted);min-height:28px}
 .pagos-espera[open] summary{margin-bottom:11px}
@@ -3647,6 +3816,12 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-serv-cab>b{font-variant-numeric:tabular-nums;color:var(--accent-ink)}
 .vc-serv-hint{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:-2px}
 .vc-serv-hint .vc-pill{font-size:9.5px}
+.vc-bol{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;border-top:1px dashed var(--line2);padding-top:8px}
+.vc-bol-tit{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.vc-bol-tit>span{flex:1}
+.vc-bol-fila{display:grid;grid-template-columns:.8fr 1fr 1fr 1.25fr .8fr .8fr auto;gap:8px;align-items:end}
+.vc-bol-fila.pax{grid-template-columns:2fr 1.2fr 1fr 1.4fr auto}
+.vc-bol-fila .vc-quitar{padding-bottom:10px}
 .vc-add{display:flex;flex-wrap:wrap;gap:6px}
 .vc-add button{background:transparent;border:1.5px dashed var(--line2);color:var(--muted);border-radius:999px;padding:6px 13px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;width:auto}
 .vc-add button:hover{color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
@@ -3730,7 +3905,7 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .vc-chip-res{background:var(--accent-soft);color:var(--accent-ink);border:0;border-radius:999px;padding:3px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;font-weight:700;cursor:pointer;width:auto}
 :is(.vc-res,.vc-lead,.vc-sugerencia,.vc-hecho)[hidden]{display:none}
 @media (max-width:1100px){.vc-wrap{grid-template-columns:minmax(0,1fr)}.vc-boleto-col{position:static;width:100%;max-width:420px;margin:0 auto}}
-@media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}.vc-planes{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-c.s3{grid-column:1/-1}.vc-add button{padding:9px 14px}.vc-ref{max-width:none}}
+@media (max-width:760px){.vc-form{padding-left:18px}.vc-fila{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-form .ei{font-size:16px;min-height:44px}.vc-buscar>i{top:22px}.vc-generar{width:100%}.vc-chips button{padding:8px 14px}.vc-planes{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-c.s3{grid-column:1/-1}.vc-add button{padding:9px 14px}.vc-ref{max-width:none}.vc-bol-fila,.vc-bol-fila.pax{grid-template-columns:repeat(2,minmax(0,1fr))}.vc-bol-fila .vc-quitar{justify-self:end}}
 /* Formularios de documentos: grupos plegables y controles alineados. */
 :is(#sec-voucher,#sec-cotizacion-boletos) .doc-seccion{min-width:0;border:0;border-top:1px solid var(--line);padding:0;margin:0}
 :is(#sec-voucher,#sec-cotizacion-boletos) .doc-seccion>summary{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 0;list-style:none;cursor:pointer;color:var(--txt);font-size:13px;font-weight:700}
@@ -3754,6 +3929,8 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 #sec-voucher .vc-grupo+.vc-grupo{margin-top:0;padding-top:0}
 #sec-voucher .vc-hospedaje-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 #sec-voucher .vc-estadia-grid{margin-top:10px}
+@media (min-width:761px){#sec-voucher .vc-estadia-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
+#sec-voucher .vc-hosp-precio{display:block;margin-top:8px;font-size:12px;line-height:1.5;color:var(--muted)}#sec-voucher .vc-hosp-precio b{color:var(--txt)}#sec-voucher .vc-hosp-precio[hidden]{display:none}
 #sec-voucher .vc-form .ei{min-height:44px}
 #sec-voucher .vc-buscar>i{top:22px}
 #sec-voucher .vc-plan{margin-top:12px;min-width:0}
@@ -3798,6 +3975,55 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
   #sec-cotizacion-boletos .cb-servicio-hotel .cb-item-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   #sec-cotizacion-boletos .cb-servicio-hotel .cb-item-grid>.field-fecha{grid-column:span 1}
 }
+/* Cotizaciones con personalidad (2026-10-29): emojis, contadores −/+, chips de plan, noches y desglose. */
+#sec-cotizacion-boletos .cb-emo{margin-right:7px;font-size:14px;line-height:1}
+#sec-cotizacion-boletos .cb-editor .cb-ap-caja .ei{padding-left:40px}
+#sec-cotizacion-boletos .cb-editor .ei{border-radius:12px;transition:border-color .16s,box-shadow .16s}
+#sec-cotizacion-boletos .cb-editor .ei:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#sec-cotizacion-boletos .cb-editor .cb-item{border-radius:14px;background:linear-gradient(160deg,rgba(var(--accent-rgb),.07),transparent 42%)}
+.cb-item-acc{display:flex;align-items:center;gap:7px}
+.cb-item-acc .cb-importe{padding:4px 11px;border-radius:999px;background:var(--accent-soft);color:var(--accent-txt);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cb-sec{display:flex;align-items:center;flex-wrap:wrap;gap:7px;padding-top:11px;border-top:1px dashed var(--line2);font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.cb-sec>.cb-emo{font-size:15px;margin-right:0}
+.cb-unidad-chip{margin-left:auto;display:inline-flex;align-items:center;gap:4px;padding:2px 2px 2px 11px;border-radius:999px;border:1px solid var(--line2);font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--txt)}
+.cb-link{border:0;background:none;color:var(--accent-txt);font:inherit;font-size:12px;font-weight:600;padding:7px 9px;border-radius:999px;cursor:pointer;transition:background .16s}
+.cb-link:hover{background:var(--accent-soft)}
+.cb-cuentas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.cb-cuenta .fl,.cb-noches .fl{margin-top:0}
+.cb-step{display:flex;align-items:center;gap:4px}
+.cb-step .ei{flex:1;min-width:28px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;padding-left:2px;padding-right:2px;-moz-appearance:textfield;appearance:textfield}
+.cb-step .ei::-webkit-inner-spin-button,.cb-step .ei::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.cb-step output.ei{display:flex;align-items:center;justify-content:center}
+.cb-step-b{flex:none;width:36px;height:36px;border-radius:999px;border:1px solid var(--line2);background:none;color:var(--txt);font-size:18px;line-height:1;cursor:pointer;touch-action:manipulation;transition:background .16s,border-color .16s,transform .16s}
+.cb-step-b:hover{border-color:var(--accent);background:var(--accent-soft)}
+.cb-step-b:active{transform:scale(.92)}
+.cb-step-b:focus-visible,.cb-chip:focus-visible,.cb-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cb-nota{display:block;margin-top:4px;font-size:11px;color:var(--green)}
+.cb-chips{display:flex;flex-wrap:wrap;gap:7px}
+.cb-chip{min-height:44px;padding:7px 14px;border-radius:999px;border:1px solid var(--line2);background:none;color:var(--txt);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .16s,border-color .16s,color .16s}
+.cb-chip:hover{border-color:var(--accent)}
+.cb-chip[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.cb-chip-otro{color:var(--muted);font-weight:500}
+.cb-fechas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;align-items:end}
+.cb-precios{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
+.cb-usd{position:relative}
+.cb-usd>span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700;pointer-events:none}
+#sec-cotizacion-boletos .cb-usd .ei{padding-left:25px;font-weight:700;font-variant-numeric:tabular-nums}
+.cb-desglose{display:flex;gap:9px;align-items:flex-start;padding:11px 14px;border-radius:12px;background:var(--accent-soft);font-size:12.5px;line-height:1.5;color:var(--txt);animation:cbApIn .25s ease-out}
+.cb-desglose:empty{display:none}
+.cb-desglose>.cb-emo{font-size:18px;margin:0}
+.cb-desglose b{display:block;margin-top:2px;font-size:18px;font-variant-numeric:tabular-nums}
+.cb-aviso{display:flex;gap:7px;align-items:flex-start;color:var(--txt)}
+@media(max-width:900px){
+  #sec-cotizacion-boletos .cb-item-cab .cb-item-acc .cb-importe{margin-right:auto}
+  #sec-cotizacion-boletos .cb-item-acc .cb-plegar{margin-right:0}
+  .cb-cuentas{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .cb-fechas{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cb-noches{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:11px}
+  .cb-noches .fl{margin:0}.cb-noches .cb-step{width:150px}
+  .cb-precios{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(prefers-reduced-motion:reduce){.cb-desglose,.cb-step-b{animation:none;transition:none}}
 @media(max-width:760px){
   #sec-voucher .vc-hospedaje-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   #sec-voucher .vc-hospedaje-grid>.vc-c:first-child{grid-column:1/-1}
@@ -3942,6 +4168,31 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
   }
 }
 .seg.tab-oculta{opacity:.45}
+/* Tarifario móvil compacto (2026-10-29): eran ~430px de menús antes de la primera
+   tarjeta. Pestañas de grupo más bajas, categorías en un renglón con scroll, y
+   BT Travel + admin + vista dentro del menú ⋯ del buscador (setupTarMas en app.js). */
+.tar-mas-btn,.tar-mas-pop{display:none}
+@media(max-width:760px){
+  #sec-tarifario .nav-tabs-sec{margin-bottom:8px;padding:3px}
+  #sec-tarifario .nav-tabs-sec .seg{min-height:36px;padding:0 12px;font-size:12.5px}
+  #sec-tarifario .tar-tabs-row{margin-bottom:8px}
+  #sec-tarifario #tar-tabs{margin-bottom:0}
+  #sec-tarifario #tar-tabs .seg{min-height:36px;padding:0 13px;font-size:13px}
+  #sec-tarifario .tar-buscador{position:relative;flex-wrap:nowrap;margin-bottom:8px}
+  #sec-tarifario .tar-buscador .tar-search{flex:1 1 auto;order:0}
+  #sec-tarifario .tar-search input{padding-right:78px}
+  #sec-tarifario .tar-buscador .tar-search .tcount{position:absolute;right:42px;top:50%;transform:translateY(-50%);flex:none;order:0;margin:0;font-size:11px;pointer-events:none}
+  #sec-tarifario .tcount-u{display:none}
+  .tar-mas-btn{display:grid;place-items:center;flex:0 0 44px;width:44px;height:44px;border-radius:11px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--muted);font-size:16px;cursor:pointer}
+  .tar-mas-btn[aria-expanded="true"]{border-color:var(--accent);color:var(--accent-ink)}
+  #tar-mas-pop.abierto{display:flex;flex-direction:column;gap:8px;position:absolute;top:calc(100% + 6px);right:0;z-index:40;min-width:230px;padding:8px;border-radius:12px;background:var(--panel-solid);border:1px solid var(--line2);box-shadow:0 12px 32px rgba(0,0,0,.35)}
+  #tar-mas-pop .tar-admin-actions{flex-direction:column;align-items:stretch;gap:2px;padding:0;background:none;border:0;box-shadow:none;backdrop-filter:none;animation:none}
+  #tar-mas-pop .tar-admin-btn{width:100%;height:40px;justify-content:flex-start;gap:10px;padding:0 10px;font-size:13px;color:var(--txt)}
+  #tar-mas-pop .tar-admin-btn i{width:18px;text-align:center}
+  #tar-mas-pop .tar-admin-btn:not(.tar-bt-pdf-btn)::after{content:attr(title)}
+  #tar-mas-pop .tar-admin-btn[hidden]{display:none}
+  #tar-mas-pop .view-switch{justify-content:space-between}
+}
 .tar-oculto-admin{position:relative;opacity:.55}
 .tar-oculto-badge{position:absolute;top:6px;right:6px;background:#ef4444;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;z-index:2;text-transform:uppercase;letter-spacing:.4px;pointer-events:none}
 /* Distinta de .tar-oculto-badge (ese es "lo saqué del catálogo"): esta es
@@ -4252,7 +4503,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-sec span{font-size:11px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted2)}
 /* Servicios (Fase 3D): una tarjeta por servicio; lo poco usado va en el menú ⋯ */
 .rv-add-barra .rv-add-pri{width:auto;margin:0;padding:0 18px;min-height:44px}
-.rv-add-barra .rv-add-subir{flex:1 1 220px;min-height:44px;justify-content:flex-start;border-style:dashed}
 .rv-add-barra .rv-add-voucher{min-height:44px}
 .rv-svc{position:relative;display:flex;flex-direction:column;gap:10px;margin-bottom:12px;padding:16px;border:1px solid var(--line2);border-radius:14px;background:var(--panel-solid)}
 .rv-svc.rv-anulado{opacity:.55}
@@ -4516,6 +4766,12 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .pv-card-foot{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);flex-wrap:wrap}
 .pv-card-foot .pv-btn{min-height:44px;flex:1 0 auto;padding:0 9px;white-space:nowrap}
 .pv-card-foot .pv-btn.wa{flex:0 0 44px;width:44px;height:44px;padding:0;font-size:17px}
+.pv-tools{display:inline-flex;gap:5px;margin-left:auto}
+.pv-viaje+.pv-tools{margin-left:0}
+.pv-tool{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:999px;border:1px solid var(--line2);background:rgba(255,255,255,.03);color:var(--muted);font-size:11.5px;cursor:pointer;transition:color .16s,border-color .16s,background .16s;position:relative}
+.pv-tool::after{content:"";position:absolute;inset:-8px -2px}
+.pv-tool:hover{color:var(--accent);border-color:var(--accent)}
+.pv-tool.del:hover{color:var(--danger);border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent)}
 .pv-card-foot .pv-btn:disabled{opacity:.45;cursor:default}
 .pv-card-foot .pv-btn:focus-visible,#pv-abono-sheet :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 #pv-abono-sheet{overflow-y:auto;max-height:85dvh}
@@ -5435,6 +5691,16 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .iv-tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
   padding:2px 7px;border-radius:999px;background:var(--panel);border:1px solid var(--line2);color:var(--muted2)}
 .iv-tag.empresa{display:block;width:max-content;max-width:100%;margin-top:7px;color:var(--blue);border-color:color-mix(in srgb,var(--blue) 35%,transparent)}
+.iv-sob{display:flex;flex-direction:column;gap:7px;margin-top:8px}
+.iv-card input[type=search]{width:100%;height:38px;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:0 11px;color:var(--txt);font-size:12.5px}
+.iv-sob-res{display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto}
+.iv-sob-r{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;min-height:40px;padding:6px 10px;text-align:left;
+  background:var(--bg2);border:1px solid var(--line2);border-radius:10px;color:var(--txt);font:inherit;font-size:12px;cursor:pointer}
+.iv-sob-r span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.iv-sob-r em{font-style:normal;font-weight:700;font-variant-numeric:tabular-nums}
+.iv-sob-r:hover{border-color:var(--accent)}
+.iv-sob-r.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.iv-sob-vacio{font-size:11.5px;color:var(--muted2)}
 .iv-copiar{align-self:flex-start;padding:2px 0;background:none;border:0;color:var(--accent);font:inherit;font-size:11px;font-weight:700;cursor:pointer}
 .iv-copiar:hover{text-decoration:underline}
 .iv-aviso{display:flex;gap:9px;padding:9px 11px;border-radius:10px;border-left:3px solid var(--amber);background:color-mix(in srgb,var(--amber) 10%,transparent);
@@ -5779,7 +6045,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
      varias líneas en vez de scrollear en horizontal sin señal de que hay más. */
   .dquick{display:grid;grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:4px;padding-bottom:2px}
   .dquick>*{min-width:0}
-  #leads-tabs,#fact-tabs,#tar-tabs,#mv-tabs,#gp-tabs,#cm-tabs,#prov-tabs,.lead-tabs{flex-wrap:wrap;overflow:visible;-webkit-mask-image:none;mask-image:none}
+  #leads-tabs,#fact-tabs,#mv-tabs,#gp-tabs,#cm-tabs,#prov-tabs,.lead-tabs{flex-wrap:wrap;overflow:visible;-webkit-mask-image:none;mask-image:none}
   .lead-tabs{gap:7px;flex-wrap:wrap;margin:14px 0}
   .lead-tabs::-webkit-scrollbar{display:none}
   .lead-tab-btn{flex:0 0 auto;min-height:var(--tap);padding:0 16px;border-radius:999px}
@@ -7601,6 +7867,23 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   .lyra-sug{min-height:40px;font-size:13px}
   .lyra-clip{width:44px}
 }
+/* Leads en móvil más denso (2026-10-29): filtros en la misma fila que el
+   indicador en vivo, sin la caja que envolvía la lista (doble padding) y
+   tarjetas más ajustadas. Los toques siguen en 44px vía área extendida. */
+@media(max-width:760px){
+  #sec-leads .leads-pipeline-head{margin-bottom:10px !important;min-height:var(--tap,44px)}
+  #sec-leads .leads-pipeline-head .mfs-trigger{margin:0 0 0 auto}
+  #sec-leads [data-leads-panel="pipeline"]>.card{padding:0;background:none;border:0;box-shadow:none}
+  #leads-cards.card-grid{gap:10px}
+  #leads-cards .lead-card{padding:11px 13px}
+  #leads-cards .lead-card .lc-head{margin-bottom:6px;min-height:0}
+  #leads-cards .lead-card .chip-estado{position:relative;min-height:32px;padding:0 12px}
+  #leads-cards .lead-card .chip-estado::after{content:'';position:absolute;inset:-6px 0}
+  #leads-cards .lead-card .lc-consulta{margin-top:7px}
+  #leads-cards .lead-card .lc-chips,#leads-cards .lead-card .lc-oferta{margin-top:5px}
+  #leads-cards .lead-card .lc-foot{padding-top:9px}
+  #leads-cards .lead-card .lc-fill{flex-basis:9px}
+}
 </style>
 </head>
 <body>
@@ -8151,13 +8434,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     </section>
 
     <section class="section" id="sec-leads">
-      <div class="seg-group chips-scroll" id="leads-tabs">
-        <button class="seg on" data-leads-tab="pipeline">Leads</button>
-        <!-- Boletería y Asignados en lote se quitaron (pedido del dueño 2026-10-16); Solicitudes vive en el modo Boletería. -->
-        <button class="seg" data-leads-tab="facturacion">En facturación <span class="lih-count" id="leads-fact-count">0</span></button>
-        <button class="seg nav-admin-only" data-leads-tab="colaboraciones">Colaboraciones</button>
-      </div>
-
+      <!-- Sub-pestañas En facturación / Colaboraciones quitadas (pedido del dueño 2026-10-29): ocupaban una fila entera en móvil. -->
       <div class="leads-tab-panel" data-leads-panel="pipeline">
         <div class="leads-pipeline-head" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
           <div class="live-indicator" id="leads-live-indicator">
@@ -8165,6 +8442,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
             <span class="live-status" id="leads-live-status"></span>
           </div>
           <button class="dbtn save" id="nl-abrir-btn" type="button" style="width:auto;flex:none;padding:8px 14px"><i class="fas fa-user-plus"></i> Nuevo lead</button>
+          <button class="mfs-trigger mfs-icon" id="leads-mfs-trigger" data-mfs="leads-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         </div>
         <div class="leads-inbox" id="leads-inbox">
           <div class="leads-inbox-head">
@@ -8174,7 +8452,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>
           <div class="leads-inbox-grid" id="inbox-grid"></div>
         </div>
-        <button class="mfs-trigger mfs-icon" id="leads-mfs-trigger" data-mfs="leads-tbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="tbar mfs" id="leads-tbar">
             <div class="lf-dd">
               <button class="lf-btn" id="leads-filtros-btn" type="button" aria-expanded="false" aria-controls="leads-filtros-pop"><i class="fas fa-sliders"></i> Filtros <b id="leads-filtros-n"></b> <i class="fas fa-chevron-down lf-flecha"></i></button>
@@ -8322,6 +8599,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-postventa">
       <div class="pv-toolbar">
         <div class="pv-search"><i class="fas fa-search"></i><input id="pv-search" type="search" placeholder="Buscar cliente, destino o localizador..."></div>
+        <button class="pv-refresh" id="pv-exportar" type="button" title="Exportar reservas (PDF o texto)" aria-label="Exportar reservas"><i class="fas fa-file-export"></i></button>
         <button class="pv-refresh" id="pv-refresh" type="button" title="Actualizar" aria-label="Actualizar postventa"><i class="fas fa-rotate"></i></button>
       </div>
       <!-- Filtros rápidos (reemplazan a los 6 KPI): se arman en JS con renderPvResumen -->
@@ -8494,6 +8772,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <button class="mfs-trigger mfs-icon" id="tar-mfs-trigger" data-mfs="tar-toolbar" type="button" aria-label="Filtros" title="Filtros"><i class="fas fa-sliders"></i> <span class="mfs-lbl">Filtros</span></button>
         <div class="view-switch" id="tar-view-switch"></div>
         <span class="tcount" id="tar-count"></span>
+        <button class="tar-mas-btn" id="tar-mas-btn" type="button" aria-label="Más opciones" title="Más opciones" aria-expanded="false" aria-controls="tar-mas-pop"><i class="fas fa-ellipsis"></i></button>
+        <div class="tar-mas-pop" id="tar-mas-pop"></div>
       </div>
       <div class="chips-bar" id="tar-chips"></div>
       <div class="tar-ia-box" id="tar-ia-box" hidden>
@@ -8620,6 +8900,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
             <button class="dm-filtro on" type="button" data-f="todos">Todos</button>
             <button class="dm-filtro" type="button" data-f="conv">En conversación</button>
             <button class="dm-filtro" type="button" data-f="lead">Lead creado</button>
+            <button class="dm-filtro" type="button" data-f="ia" id="dm-filtro-ia" hidden title="Chats que la IA atiende para cerrar la venta sola"><i class="fas fa-robot"></i> IA vende <span id="dm-n-ia"></span></button>
             <span class="dm-vivo" id="dm-vivo" title="Conectado en tiempo real"><span class="dm-vivo-punto"></span> En vivo</span>
           </div>
           <div class="msg-inbox dm-inbox" id="dm-inbox"></div>
@@ -9319,7 +9600,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <div class="card">
         <h2><i class="fas fa-money-check-dollar"></i> Pagos por verificar</h2>
         <div class="csub">El recorrido de cada pago: se verifica contra el banco, se confirma la reserva con el proveedor (localizador) y queda en Reservas y Cobros. Las tarjetas avanzan solas de columna.</div>
-        <div class="exp-fila"><div class="export-dd">
+        <div class="exp-fila"><button class="btn-sm" type="button" id="rpa-abrir"><i class="fas fa-plus"></i> Registrar pago de cliente</button><div class="export-dd nav-asesor-hide">
           <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'pagos')"><i class="fas fa-download"></i> Exportar</button>
           <div class="export-dd-menu" id="export-menu-pagos">
             <button onclick="exportarPDF('pagos','Pagos por verificar')"><i class="fas fa-file-pdf"></i> PDF</button>
@@ -9503,6 +9784,27 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <div class="sheet-acciones" style="display:flex;gap:10px;padding:0 6px">
         <button class="dbtn" id="monto-sheet-cancelar" type="button" style="flex:1">Cancelar</button>
         <button class="dbtn save" id="monto-sheet-confirmar" type="button" style="flex:1">Guardar</button>
+      </div>
+    </div>
+
+    <!-- Hotel/promo de una publicación (Redes → Hotel por post) -->
+    <div class="sheet po-sheet" id="po-sheet" role="dialog" aria-labelledby="po-sheet-titulo">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="po-sheet-titulo">Hotel de la publicación</div>
+      <div class="po-post" id="po-post"></div>
+      <label class="fl" for="po-hotel-buscar">Hotel</label>
+      <input class="ei" id="po-hotel-buscar" type="search" placeholder="Buscar por hotel o destino" autocomplete="off">
+      <div class="po-hoteles-nota" id="po-hoteles-nota"></div>
+      <div class="po-hoteles" id="po-hoteles" role="listbox" aria-label="Hoteles"></div>
+      <div id="po-promos-wrap" hidden>
+        <div class="fl">Promoción (opcional)</div>
+        <div class="po-promos" id="po-promos"></div>
+      </div>
+      <div class="edit-err" id="po-error"></div>
+      <div class="sheet-acciones po-acciones">
+        <button class="dbtn po-quitar" id="po-quitar" type="button">Quitar hotel</button>
+        <button class="dbtn" id="po-cancelar" type="button">Cancelar</button>
+        <button class="dbtn save" id="po-guardar" type="button">Guardar</button>
       </div>
     </div>
 
@@ -10085,8 +10387,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
               <label class="vc-c"><span>Entrada</span><input id="vc-fecha-entrada" class="ei" type="date"></label>
               <label class="vc-c"><span>Salida</span><input id="vc-fecha-salida" class="ei" type="date"></label>
               <label class="vc-c"><span>Adultos</span><input id="vc-adultos" class="ei" type="number" min="0" step="1" inputmode="numeric"></label>
-              <label class="vc-c"><span>Niños</span><input id="vc-ninos" class="ei" placeholder="N/A"></label>
+              <label class="vc-c"><span>Niños (3+ años)</span><input id="vc-ninos" class="ei" placeholder="N/A" inputmode="numeric"></label>
+              <label class="vc-c"><span>Infantes (0-2 años)</span><input id="vc-infantes" class="ei" type="number" min="0" max="20" step="1" inputmode="numeric" placeholder="0"></label>
             </div>
+            <small class="vc-hosp-precio" id="vc-hosp-precio" aria-live="polite" hidden></small>
             <details class="doc-detalle" id="vc-horarios-seccion">
               <summary>Horarios y localizador <small id="vc-horarios-resumen">Entrada 3:00 PM · salida 12:00 PM</small></summary>
               <div class="vc-fila">
@@ -10100,17 +10404,20 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
             </div>
           </details>
 
-          <details class="vc-grupo doc-seccion" id="vc-servicios-seccion">
-            <summary><span>Servicios adicionales</span><small id="vc-servicios-resumen">Opcional · excursiones, traslados y otros</small><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+          <details class="vc-grupo doc-seccion" id="vc-servicios-seccion" open>
+            <summary><span>Servicios adicionales</span><small id="vc-servicios-resumen">Opcional · excursiones, traslados, boletos y otros</small><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
             <div class="doc-contenido">
             <div class="vc-servs" id="vc-servicios"></div>
             <div class="vc-add" id="vc-add" aria-label="Anexar servicio del tarifario">
               <button type="button" data-vc-add="excursion"><i class="fas fa-umbrella-beach"></i> Excursión / full day</button>
               <button type="button" data-vc-add="traslado"><i class="fas fa-van-shuttle"></i> Traslado</button>
               <button type="button" data-vc-add="paquete"><i class="fas fa-suitcase"></i> Paquete</button>
+              <button type="button" data-vc-add="boleto"><i class="fas fa-plane"></i> Boleto aéreo</button>
+              <button type="button" data-vc-add="seguro"><i class="fas fa-shield-heart"></i> Seguro de viaje</button>
               <button type="button" data-vc-add="otro"><i class="fas fa-plus"></i> Otro servicio</button>
             </div>
             <datalist id="vc-dl-excursion"></datalist><datalist id="vc-dl-traslado"></datalist><datalist id="vc-dl-paquete"></datalist>
+            <datalist id="vc-dl-aerolinea"></datalist><datalist id="vc-dl-aeropuerto"></datalist>
             </div>
           </details>
 
@@ -10358,7 +10665,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-life-ring"></i> Seguimiento a conversaciones</h2><div class="ria-sub">Mensajes de seguimiento a quien dejó la conversación a medias: cuántos vuelven, cuántos se vuelven lead y qué habría pasado sin el mensaje.</div><div id="ria-reactivacion"></div></div>
       <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-microchip"></i> Comparativa por modelo</h2><div class="ria-sub">Cada contacto queda con un modelo fijo (DeepSeek, Haiku o Lite de respaldo). Turnos, velocidad y costo cuentan por el modelo que respondió; conversaciones y leads, por el modelo que atendió la mayor parte del chat.</div><div id="ria-modelos"></div></div>
-      <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-comment-dots"></i> Respuesta privada en Facebook (A/B)</h2><div class="ria-sub">Quien solo comenta recibe un único mensaje privado; si no contesta, Meta no deja escribirle de nuevo. Mitad recibe la respuesta con precio (A) y mitad una pregunta sin precio (B). Contactos nuevos que entraron por un post.</div><div id="ria-ab-fb"></div></div>
+      <div class="ria-card" style="margin-bottom:12px"><h2><i class="fas fa-comment-dots"></i> Mensaje a quien comenta (A/B)</h2><div class="ria-sub">Quien solo comenta recibe un único mensaje privado; si no contesta, Meta no deja escribirle de nuevo. Meta: que conteste más del 50%. Se necesitan al menos 170 contactos por brazo para declarar ganador, sin que baje el % de teléfono.</div><div id="ria-ab-dm"></div></div>
       <div class="ria-card" id="ria-card-errores" style="margin-bottom:12px"><h2><i class="fas fa-plug-circle-xmark"></i> Errores técnicos</h2><div class="ria-sub">Turnos en los que el modelo o el proveedor fallaron: qué vio el cliente, la causa probable y qué hacer.</div><div id="ria-errores"></div></div>
       <div class="ria-grid">
         <div class="ria-card"><h2><i class="fas fa-shield-heart"></i> Calidad de las respuestas</h2><div class="ria-sub">Separa lo que intentó el modelo de lo que realmente recibió el cliente.</div><div id="ria-calidad"></div></div>
@@ -10932,12 +11239,41 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </details>
     </section>
 
+    <!-- ANUNCIOS META (ads-meta.js + EF ads-meta-zernio) -->
+    <section class="section" id="sec-ads"><div id="ads-root"></div></section>
+    <!-- MARKETING › CONTENIDO (marketing.js + EF marketing-zernio) -->
+    <section class="section" id="sec-contenido"><div id="contenido-root"></div></section>
+    <!-- IA › COSTOS DIGITALES (costos-digitales.js + RPC costos_digitales) -->
+    <section class="section" id="sec-costos-digitales"><div id="costos-digitales-root"></div></section>
+
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">
+      <div class="seg-group" id="redes-marcas" style="display:none;margin:0 0 8px" aria-label="Marca"></div>
       <div class="seg-group" id="redes-red-tabs">
         <button class="seg on" data-red="instagram"><i class="fa-brands fa-instagram"></i> Instagram</button>
         <button class="seg" data-red="tiktok"><i class="fa-brands fa-tiktok"></i> TikTok</button>
         <button class="seg" data-red="facebook"><i class="fa-brands fa-facebook"></i> Facebook</button>
+        <button class="seg" data-red="ofertas"><i class="fas fa-tags"></i> Hotel por post <span class="po-badge" id="po-cuenta-sin"></span></button>
+      </div>
+      <div id="redes-ofertas-panel" hidden>
+        <div class="card" style="margin-top:14px">
+          <h2><i class="fas fa-tags"></i> Hotel de cada publicación</h2>
+          <div class="csub">Cuando alguien comenta, la IA usa el hotel y la promo que marques acá. Sin marcar, lo deduce del texto y, si el post no nombra el hotel, puede ofrecer otro del mismo destino.</div>
+          <div class="po-barra">
+            <div class="seg-group" id="po-red">
+              <button class="seg on" type="button" data-red="instagram"><i class="fa-brands fa-instagram"></i> Instagram</button>
+              <button class="seg" type="button" data-red="facebook"><i class="fa-brands fa-facebook"></i> Facebook</button>
+            </div>
+            <div class="seg-group" id="po-filtro">
+              <button class="seg on" type="button" data-f="sin">Sin hotel</button>
+              <button class="seg" type="button" data-f="con">Con hotel</button>
+              <button class="seg" type="button" data-f="todos">Todos</button>
+            </div>
+            <input class="ei po-buscar" id="po-buscar" type="search" placeholder="Buscar en el texto del post" aria-label="Buscar en el texto del post">
+          </div>
+          <div id="po-aviso"></div>
+          <div class="lt-grid" id="po-grid"></div>
+        </div>
       </div>
       <div class="seg-group" id="redes-periodo" style="margin-top:8px">
         <button class="seg" data-p="7d">7 días</button>
@@ -11719,6 +12055,63 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   </div>
 </div>
 
+<!-- Registrar pago de cliente (asesor/oficina, desde Pagos por verificar): queda en la cola de oficina -->
+<div class="sheet" id="rpa-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-receipt"></i> Registrar pago de cliente</div>
+  <div class="edit-box" style="margin-top:4px">
+    <label class="fl">Cliente</label>
+    <input id="rpa-buscar" class="ei" placeholder="Nombre o teléfono de tu cliente" autocomplete="off">
+    <div id="rpa-resultados" class="rpa-resultados"></div>
+    <div class="ef-cliente" id="rpa-cliente" hidden></div>
+
+    <label class="fl">Reserva</label>
+    <select id="rpa-reserva" class="ei" disabled><option value="">Elige primero el cliente</option></select>
+
+    <label class="fl">Captura del pago</label>
+    <div class="rpa-pegar" id="rpa-pegar" tabindex="0">
+      <i class="fas fa-paste"></i>
+      <span>Pega la captura (Ctrl+V) o <label for="rpa-archivo" class="rpa-link">elige un archivo</label></span>
+      <input type="file" id="rpa-archivo" accept="image/jpeg,image/png,image/webp" hidden>
+      <img id="rpa-preview" alt="Captura del pago" hidden>
+    </div>
+    <div class="ef-comprob-st" id="rpa-st"></div>
+
+    <div class="ef-fila">
+      <div style="flex:1">
+        <label class="fl">Método</label>
+        <select id="rpa-riel" class="ei">
+          <option value="">Elige uno...</option>
+          <option value="zelle">Zelle</option>
+          <option value="pago_movil">Pago Móvil</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="binance">Binance (USDT)</option>
+        </select>
+      </div>
+      <div style="flex:1" id="rpa-tasa-box" hidden>
+        <label class="fl">Tasa BCV</label>
+        <select id="rpa-tasa" class="ei"><option value="USD">Dólar</option><option value="EUR">Euro</option></select>
+      </div>
+    </div>
+    <div class="ef-fila">
+      <div style="flex:1">
+        <label class="fl" id="rpa-monto-l">Monto</label>
+        <input id="rpa-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div style="flex:1">
+        <label class="fl">Referencia</label>
+        <input id="rpa-referencia" class="ei" placeholder="Número de referencia" autocomplete="off">
+      </div>
+    </div>
+    <div class="csub" id="rpa-equiv"></div>
+    <div class="edit-err" id="rpa-err"></div>
+  </div>
+  <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="rpa-cancelar" type="button" style="flex:1">Cancelar</button>
+    <button class="dbtn save" id="rpa-enviar" type="button" style="flex:1"><i class="fas fa-paper-plane"></i> Enviar a verificar</button>
+  </div>
+</div>
+
 <!-- Configuración de visibilidad de Tarifario (solo admin) -->
 <div class="sheet" id="tar-admin-sheet">
   <div class="sheet-handle"></div>
@@ -11841,9 +12234,9 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 
 <div class="sheet" id="conv-lead-sheet">
   <div class="sheet-handle"></div>
-  <div class="sheet-title">Conversación con la IA</div>
-  <div class="csub" id="conv-lead-canal" style="margin-bottom:12px"></div>
-  <div id="conv-body"></div>
+  <div class="dm-head" id="conv-lead-canal"></div>
+  <div id="conv-body" class="dm-body"></div>
+  <div class="dm-foot"><i class="fas fa-lock"></i> Solo lectura · este chat lo gestiona la IA</div>
 </div>
 
 <div class="sheet" id="pegar-chat-sheet">

@@ -5,6 +5,9 @@ import { crearPropuestas } from './propuestas.js';
 import { crearBandejaWa } from './whatsapp-bandeja.js';
 import { crearTareas } from './tareas.js';
 import { crearCampanasWa } from './wa-campanas.js';
+import { crearAdsMeta } from './ads-meta.js';
+import { crearMarketing } from './marketing.js';
+import { crearCostosDigitales } from './costos-digitales.js';
 
 const SUPABASE_URL = 'https://demo.invalid';
 const FOTOS_BASE = 'prueba-fotos/';
@@ -94,13 +97,14 @@ const nf = (loc, o) => { const k = 'n' + loc + JSON.stringify(o || {}); let f = 
 const fmt = n => typeof (n ?? 0) === 'number' ? nf('es-VE').format(n ?? 0) : (n ?? 0).toLocaleString('es-VE');
 
 // Nombre legible y uniforme para todo documento que se descarga del CRM:
-// "Lotus 360 - Voucher 006364 - Juan Pérez - Los Roques - 2026-11-15.pdf".
+// "Lotus 360 - Voucher 006364 - Juan Perez - Los Roques - 2026-11-15.pdf".
 // La empresa va primero (así se agrupan en la carpeta), después qué es, de
-// quién y la fecha AAAA-MM-DD al final, que ordena sola. Se quitan solo los
-// caracteres que Windows no acepta; acentos y espacios se conservan.
+// quién y la fecha AAAA-MM-DD al final, que ordena sola. Se quitan los
+// caracteres que Windows no acepta y los acentos: al compartir el PDF por
+// WhatsApp desde Windows el nombre llegaba como «JOSÃ ISTURIZ».
 const DOC_EMPRESA = 'Lotus 360';
 const docParte = (v, max = 50) => {
-  const t = String(v ?? '').normalize('NFC').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
   const c = t.slice(0, max);
   return (c.includes(' ') ? c.slice(0, c.lastIndexOf(' ')) : c).replace(/[\s,.;:-]+$/, '');
@@ -274,6 +278,7 @@ function iconoCanalLead(canal) {
 const ESTADOS_CICLO = ESTADOS;
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
 const VENTA = ['PAGO REALIZADO', 'VENTA COMPLETA'];
+const LINK_PAGO_ESTADOS = ['COTIZACION ENVIADA', 'EN ESPERA DE PAGO', ...VENTA];
 // Próxima acción (leads.proxima_accion_*): los leads cerrados no cuentan como seguimiento.
 const ESTADOS_SIN_SEGUIMIENTO = [...VENTA, 'PERDIDO'];
 const FILTRO_SIN_SEGUIMIENTO = `(${ESTADOS_SIN_SEGUIMIENTO.map(e => `"${e}"`).join(',')})`;
@@ -293,7 +298,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], ads: ['Anuncios Meta', 'Gasto de Meta cruzado con leads y ventas del CRM'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
   tareas: ['Tareas', 'Tu día: lo asignado y tus recordatorios'],
   comisiones: ['Comisiones', 'Se calculan solas al pagarse la reserva · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -805,7 +810,7 @@ const NAV_OPCIONALES = [
   { sec: 'grp-inicio', label: 'Inicio', desc: 'Dashboard, ventas, ranking e informe diario' },
   { sec: 'grp-bandeja', label: 'Bandeja', desc: 'Meta DM (Instagram, Facebook y WhatsApp) y Correo' },
   { sec: 'pipeline', label: 'Pipeline', desc: 'Pestaña en Leads: tablero de leads por estado' },
-  { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente y prospectos de IA' },
+  { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente, prospectos y costos de IA' },
   { sec: 'grp-marketing', label: 'Marketing', desc: 'Redes y clientes de eventos' },
 ];
 const navExtraActivas = () => Array.isArray(MI_PREFERENCIAS.nav_extra) ? MI_PREFERENCIAS.nav_extra : (ROL === 'marketing' ? ['grp-marketing'] : []);
@@ -1690,7 +1695,7 @@ const IR_SECCIONES = [
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
-  'rendimiento-ia', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes',
+  'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
 ];
 function seccionInicialPermitida() {
@@ -2316,6 +2321,10 @@ function renderPersonalCards() {
   grid.querySelectorAll('[data-desbloquear]').forEach(b => { b.onclick = () => desbloquearFreelancerUI(b.dataset.desbloquear); });
   grid.querySelectorAll('[data-exentar]').forEach(b => { b.onclick = () => exceptuarHoy(b.dataset.exentar); });
   grid.querySelectorAll('[data-timeline]').forEach(b => { b.onclick = () => abrirTimelineAsesor(b.dataset.timeline, b.dataset.timelineNombre); });
+  grid.querySelectorAll('[data-ficha]').forEach(c => {
+    c.onclick = e => { if (!e.target.closest('button,a,input,select,summary')) abrirFichaPersona(c.dataset.ficha); };
+    c.onkeydown = e => { if (e.target === c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); abrirFichaPersona(c.dataset.ficha); } };
+  });
 }
 
 /* ---------- Timeline del día por asesor (admin, Gestión de Personal) ---------- */
@@ -2349,60 +2358,133 @@ async function cargarTimelineAsesor() {
 document.getElementById('timeline-fecha')?.addEventListener('change', cargarTimelineAsesor);
 document.getElementById('timeline-cerrar')?.addEventListener('click', () => closeSheet('timeline-asesor-sheet'));
 
-function cardPersonaHtml(u) {
-  const ico = iconoDePersona(u);
-  const chips = (u.es_freelancer ? '<span class="pc-chip">Freelance</span>' : '')
-    + (u.bloqueado ? '<span class="pc-chip pc-chip-rojo">Bloqueado</span>' : '');
-  const cargo = u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>';
-  const dias = (u.dias || []).map(diaPersonaHtml).join('');
-  const detalle = dias
-    ? '<details class="pc-dias"><summary><i class="fas fa-calendar-days"></i> Ver día por día (' + (u.dias || []).length + ')</summary>' + dias + '</details>'
-    : '<div class="pc-vacio">Todavía no se conectó desde que arrancó el contador.</div>';
-
-  // Asistencia de hoy: antes era una pestaña aparte. Acá vive donde importa,
-  // en la tarjeta de la persona.
+// Asistencia de hoy: antes era una pestaña aparte. Vive en la tarjeta y en la ficha.
+function asistPersonaHtml(u) {
   const asist = u.exento_hoy
     ? '<span class="pc-asist exento">Exento hoy</span>'
     : u.marco_hoy
       ? '<span class="pc-asist ok">Marcó hoy</span>'
       : '<span class="pc-asist no">No marcó hoy</span>';
   const strikes = u.strikes_mes ? '<span class="pc-asist strike">' + u.strikes_mes + ' strike' + (u.strikes_mes === 1 ? '' : 's') + ' este mes</span>' : '';
-  const exentarBtn = (!u.exento_hoy && !u.marco_hoy)
-    ? '<button class="btn-sm" data-exentar="' + u.usuario_id + '">Exceptuar hoy</button>' : '';
+  return asist + strikes;
+}
+const puedeExentar = u => !u.exento_hoy && !u.marco_hoy;
 
-  // Bloque freelance: activo vs idle. Solo tiene sentido para freelancers --
-  // son los únicos con latido de actividad y con bloqueo a los 15 min.
+// Bloque freelance: activo vs idle. Solo tiene sentido para freelancers --
+// son los únicos con latido de actividad y con bloqueo a los 15 min.
+function frlPersonaHtml(u) {
   const a = u.actividad || {};
-  const frlBloque = u.es_freelancer
-    ? '<div class="pc-frl">'
-      + '<div class="pc-frl-r"><span>Trabajo real hoy</span><b>' + fmtMinutos(a.activo_hoy || 0) + '</b></div>'
-      + '<div class="pc-frl-r"><span>Inactivo hoy</span><b class="pc-idle">' + fmtMinutos(a.idle_hoy || 0) + '</b></div>'
-      + '<div class="pc-frl-r"><span>Semana (real / inactivo)</span><b>' + fmtMinutos(a.activo_semana || 0) + ' / ' + fmtMinutos(a.idle_semana || 0) + '</b></div>'
-      + (u.strikes_freelancer ? '<div class="pc-frl-r"><span>Bloqueos por inactividad</span><b>' + u.strikes_freelancer + '</b></div>' : '')
-      + '</div>'
+  return '<div class="pc-frl">'
+    + '<div class="pc-frl-r"><span>Trabajo real hoy</span><b>' + fmtMinutos(a.activo_hoy || 0) + '</b></div>'
+    + '<div class="pc-frl-r"><span>Inactivo hoy</span><b class="pc-idle">' + fmtMinutos(a.idle_hoy || 0) + '</b></div>'
+    + '<div class="pc-frl-r"><span>Semana (real / inactivo)</span><b>' + fmtMinutos(a.activo_semana || 0) + ' / ' + fmtMinutos(a.idle_semana || 0) + '</b></div>'
+    + (u.strikes_freelancer ? '<div class="pc-frl-r"><span>Bloqueos por inactividad</span><b>' + u.strikes_freelancer + '</b></div>' : '')
+  + '</div>';
+}
+
+function avatarPersonaHtml(u, grande) {
+  const ico = iconoDePersona(u);
+  return '<div class="pc-ico' + (grande ? ' gpf-ava' : '') + '" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i>'
+    + (u.conectado_ahora ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + '</div>';
+}
+
+function cardPersonaHtml(u) {
+  const chips = (u.es_freelancer ? '<span class="pc-chip">Freelance</span>' : '')
+    + (u.bloqueado ? '<span class="pc-chip pc-chip-rojo">Bloqueado</span>' : '');
+  const cargo = u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>';
+  const exentarBtn = puedeExentar(u) ? '<button class="btn-sm" type="button" data-exentar="' + u.usuario_id + '">Exceptuar hoy</button>' : '';
+  const a = u.actividad || {};
+  const frl = u.es_freelancer
+    ? '<div class="pc-frl-mini"><span>Real hoy <b>' + fmtMinutos(a.activo_hoy || 0) + '</b></span><span>Inactivo <b class="pc-idle">' + fmtMinutos(a.idle_hoy || 0) + '</b></span></div>'
     : '';
   const desbloquear = (u.es_freelancer && u.bloqueado)
-    ? '<button class="dbtn save pc-desbloq" data-desbloquear="' + u.usuario_id + '"><i class="fas fa-unlock"></i> Desbloquear</button>' : '';
+    ? '<button class="dbtn save pc-desbloq" type="button" data-desbloquear="' + u.usuario_id + '"><i class="fas fa-unlock"></i> Desbloquear</button>' : '';
 
-  return '<div class="pc' + (u.bloqueado ? ' pc-bloq' : '') + '">'
+  return '<div class="pc pc-click' + (u.bloqueado ? ' pc-bloq' : '') + '" data-ficha="' + u.usuario_id + '" role="button" tabindex="0" aria-label="Ver ficha de ' + esc(u.nombre || 'Sin nombre') + '">'
     + '<div class="pc-top">'
-      + '<div class="pc-ico" style="background:' + ico.c + '1f;color:' + ico.c + '"><i class="fas ' + ico.i + '"></i></div>'
+      + avatarPersonaHtml(u)
       + '<div class="pc-id">'
-        + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + (u.conectado_ahora ? '<span class="pc-online" title="Conectado ahora"></span>' : '') + chips + '</div>'
+        + '<div class="pc-nombre">' + esc(u.nombre || 'Sin nombre') + chips + '</div>'
         + '<div class="pc-rol">' + (ROL_LABEL_GP[rolPersonal(u)] || esc(u.rol || '')) + (u.username ? ' · @' + esc(u.username) : '') + '</div>'
         + '<div class="pc-cargo">' + cargo + '</div>'
       + '</div>'
-      + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar"><i class="fas fa-pen"></i></button>'
-      + (u.rol === 'asesor' ? '<button class="pc-edit" type="button" data-timeline="' + u.usuario_id + '" data-timeline-nombre="' + esc(u.nombre || '') + '" title="Ver el día"><i class="fas fa-timeline"></i></button>' : '')
+      + '<button class="pc-edit" type="button" data-editar="' + u.usuario_id + '" title="Editar" aria-label="Editar a ' + esc(u.nombre || '') + '"><i class="fas fa-pen"></i></button>'
     + '</div>'
-    + '<div class="pc-asist-row">' + asist + strikes + exentarBtn + '</div>'
+    + '<div class="pc-asist-row">' + asistPersonaHtml(u) + exentarBtn + '</div>'
     + '<div class="pc-cifras" title="Tiempo con el CRM abierto y a la vista. No cuenta la pestaña en segundo plano ni la jornada que quedó sin cerrar.">'
     + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_hoy) + '</span><span class="pc-cifra-t">Presente hoy</span></div>'
     + '<div class="pc-cifra"><span class="pc-cifra-v">' + fmtMinutos(u.minutos_semana) + '</span><span class="pc-cifra-t">Esta semana</span></div></div>'
-    + frlBloque
+    + frl
     + desbloquear
-    + detalle
+    + '<div class="pc-mas"><span>' + ((u.dias || []).length ? 'Ficha y día por día' : 'Ver ficha') + '</span><i class="fas fa-chevron-right"></i></div>'
   + '</div>';
+}
+
+/* ---------- Ficha completa del miembro (click en la tarjeta) ---------- */
+function abrirFichaPersona(usuarioId, sinPush) {
+  const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
+  if (!u) return;
+  const id = u.usuario_id;
+  const admin = ROL === 'admin';
+  const estado = u.bloqueado ? '<span class="pc-asist no">Bloqueado</span>'
+    : u.conectado_ahora ? '<span class="pc-asist ok">Conectado ahora</span>' : '<span class="pc-asist">Desconectado</span>';
+  const permisos = [
+    [u.es_freelancer, 'fa-user-clock', 'Freelancer'],
+    [u.es_boleteria, 'fa-ticket', 'Boletería'],
+    [u.ve_voucher, 'fa-file-invoice', 'Vouchers'],
+    [u.ve_informe_diario, 'fa-file-lines', 'Informe diario'],
+  ].map(([on, i, t]) => '<span class="gpf-perm-chip' + (on ? ' on' : '') + '"><i class="fas ' + (on ? i : 'fa-minus') + '"></i> ' + t + '</span>').join('');
+  const contacto = [
+    ['fa-at', u.username ? '@' + u.username : ''],
+    ['fa-envelope', u.correo],
+    ['fa-phone', u.whatsapp],
+  ].filter(c => c[1]).map(([i, t]) => '<div class="gpf-dato"><i class="fas ' + i + '"></i><span>' + esc(t) + '</span></div>').join('');
+  const nDias = Number(document.getElementById((personalSoloFreelancers ? 'frl' : 'gp') + '-personal-dias')?.value) || 7;
+  const totalPeriodo = (u.dias || []).reduce((s, d) => s + (d.minutos || 0), 0);
+  const dias = (u.dias || []).map(diaPersonaHtml).join('');
+  const acciones = (admin ? '<button class="dbtn save" type="button" id="gpf-editar"><i class="fas fa-pen"></i> Editar</button>' : '')
+    + (u.rol === 'asesor' ? '<button class="dbtn gh" type="button" id="gpf-timeline"><i class="fas fa-timeline"></i> Ver el día</button>' : '')
+    + (puedeExentar(u) ? '<button class="dbtn gh" type="button" id="gpf-exentar"><i class="fas fa-calendar-check"></i> Exceptuar hoy</button>' : '')
+    + (u.es_freelancer && u.bloqueado ? '<button class="dbtn gh" type="button" id="gpf-desbloq"><i class="fas fa-unlock"></i> Desbloquear</button>' : '');
+
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="gpf-head">
+      ${avatarPersonaHtml(u, true)}
+      <div class="gpf-id">
+        <div class="dn">${esc(u.nombre || 'Sin nombre')}</div>
+        <div class="pc-rol">${ROL_LABEL_GP[rolPersonal(u)] || esc(u.rol || '')}</div>
+        <div class="gpf-cargo">${u.cargo ? esc(u.cargo) : '<span class="pc-cargo-vacio">Sin cargo asignado</span>'}</div>
+        <div class="gpf-estado">${estado}</div>
+      </div>
+    </div>
+    ${acciones ? '<div class="gpf-acciones">' + acciones + '</div>' : ''}
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-calendar-day"></i> Hoy</div>
+      <div class="pc-asist-row">${asistPersonaHtml(u)}</div>
+      <div class="pc-cifras gpf-cifras" title="Tiempo con el CRM abierto y a la vista. No cuenta la pestaña en segundo plano ni la jornada que quedó sin cerrar.">
+        <div class="pc-cifra"><span class="pc-cifra-v">${fmtMinutos(u.minutos_hoy)}</span><span class="pc-cifra-t">Presente hoy</span></div>
+        <div class="pc-cifra"><span class="pc-cifra-v">${fmtMinutos(u.minutos_semana)}</span><span class="pc-cifra-t">Esta semana</span></div>
+        <div class="pc-cifra"><span class="pc-cifra-v">${fmtMinutos(totalPeriodo)}</span><span class="pc-cifra-t">Últimos ${nDias} días</span></div>
+      </div>
+      ${u.es_freelancer ? frlPersonaHtml(u) : ''}
+    </section>
+    ${contacto ? '<section class="gpf-sec"><div class="gpf-sec-t"><i class="fas fa-address-card"></i> Contacto</div>' + contacto + '</section>' : ''}
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-key"></i> Accesos</div>
+      <div class="gpf-perms">${permisos}</div>
+    </section>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-calendar-days"></i> Día por día${dias ? ' <span class="gpf-sec-n">' + (u.dias || []).length + '</span>' : ''}</div>
+      ${dias || '<div class="gpf-vacio">Todavía no se conectó desde que arrancó el contador.</div>'}
+    </section>`;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('open');
+  if (!sinPush) navPush({ type: 'drawer' });
+  const on = (sel, fn) => { const b = document.getElementById(sel); if (b) b.onclick = fn; };
+  on('gpf-editar', () => abrirEditorPersona(id, true));
+  on('gpf-timeline', () => { window.closeDrawer(); abrirTimelineAsesor(id, u.nombre); });
+  on('gpf-exentar', () => { window.closeDrawer(); exceptuarHoy(id); });
+  on('gpf-desbloq', () => { window.closeDrawer(); desbloquearFreelancerUI(id); });
 }
 
 function diaPersonaHtml(d) {
@@ -2422,67 +2504,116 @@ function diaPersonaHtml(d) {
 }
 
 /* ---------- Alta / edición / baja ---------- */
-function abrirEditorPersona(usuarioId) {
+function abrirEditorPersona(usuarioId, desdeFicha) {
   const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
   if (!u) return;
+  const esAsesor = u.rol === 'asesor' || u.asesor_id;
+  // Género: lo agrega la migración 20261027180000 (dsh). Sin la columna en
+  // personal_resumen no se muestra, así guardar no choca con una RPC que no existe.
+  const conGenero = esAsesor && 'genero' in u;
+  const permiso = (id, on, titulo, detalle) => `
+      <label class="gpf-switch"><span class="gpf-switch-txt"><b>${titulo}</b><small>${detalle}</small></span>
+        <input type="checkbox" role="switch" id="${id}"${on ? ' checked' : ''}></label>`;
   document.getElementById('drawerContent').innerHTML = `
-    <div class="dhead"><div><div class="dn">${esc(u.nombre)}</div><div class="dm">@${esc(u.username || '')}</div></div></div>
-    <div class="edit-box" style="margin-top:16px">
-      <div class="eb-title"><i class="fas fa-id-card"></i> Datos</div>
-      <label class="fl">Nombre</label>
+    <div class="gpf-head">
+      ${desdeFicha ? '<button class="pc-edit gpf-volver" type="button" id="gpf-volver" title="Volver a la ficha" aria-label="Volver a la ficha"><i class="fas fa-arrow-left"></i></button>' : ''}
+      ${avatarPersonaHtml(u, true)}
+      <div class="gpf-id">
+        <div class="dn">${esc(u.nombre || 'Sin nombre')}</div>
+        <div class="pc-rol">Editar${u.username ? ' · @' + esc(u.username) : ''}</div>
+        ${u.bloqueado ? '<div class="gpf-estado"><span class="pc-asist no">Bloqueado</span></div>' : ''}
+      </div>
+    </div>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-id-card"></i> Perfil</div>
+      <label class="fl" for="pe-nombre">Nombre</label>
       <input id="pe-nombre" class="ei" type="text" value="${esc(u.nombre || '')}">
-      <label class="fl">Usuario (con el que inicia sesión)</label>
-      <input id="pe-username" class="ei" type="text" autocapitalize="off" autocorrect="off" value="${esc(u.username || '')}">
-      <label class="fl">Correo</label>
-      <input id="pe-correo" class="ei" type="email" autocapitalize="off" autocorrect="off" placeholder="nombre@ejemplo.com" value="${esc(u.correo || '')}">
-      <label class="fl">Cargo</label>
+      <label class="fl" for="pe-cargo">Cargo</label>
       <input id="pe-cargo" class="ei" type="text" placeholder="Ej: Ejecutivo de Boletería · Gerente Administrativo" value="${esc(u.cargo || '')}">
-      <label class="fl">Rol</label>
+      <label class="fl" for="pe-username">Usuario (con el que inicia sesión)</label>
+      <input id="pe-username" class="ei" type="text" autocapitalize="off" autocorrect="off" value="${esc(u.username || '')}">
+      <label class="fl" for="pe-correo">Correo</label>
+      <input id="pe-correo" class="ei" type="email" autocapitalize="off" autocorrect="off" placeholder="nombre@ejemplo.com" value="${esc(u.correo || '')}">
+    </section>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-user-tag"></i> Rol${esAsesor ? ' y contacto' : ''}</div>
+      <label class="fl" for="pe-rol">Rol</label>
       <select id="pe-rol" class="ei">
         ${['asesor', 'asesor_boleteria', 'admin', 'marketing', 'boleteria', 'administrativo'].map(r => `<option value="${r}"${rolPersonal(u) === r ? ' selected' : ''}>${VISTA_ROL_LABEL[r] || ROL_LABEL_GP[r] || r}</option>`).join('')}
       </select>
-      ${(u.rol === 'asesor' || u.asesor_id) ? `
-      <label class="fl">Teléfono</label>
+      ${esAsesor ? `
+      <label class="fl" for="pe-whatsapp">Teléfono</label>
       <input id="pe-whatsapp" class="ei" type="tel" placeholder="Ej: +58 412 1234567" value="${esc(u.whatsapp || '')}">
-      <label class="fl">Grupo de Telegram</label>
-      <input id="pe-telegram" class="ei" type="text" placeholder="ID del grupo o chat" value="${esc(u.telegram_chat_id || '')}">
-      <label class="fl">Género</label>
+      <label class="fl" for="pe-telegram">Grupo de Telegram</label>
+      <input id="pe-telegram" class="ei" type="text" placeholder="ID del grupo o chat" value="${esc(u.telegram_chat_id || '')}">` : ''}
+      ${conGenero ? `
+      <label class="fl" for="pe-genero">Género</label>
       <select id="pe-genero" class="ei">
         <option value=""${u.genero ? '' : ' selected'}>Sin definir</option>
         <option value="femenino"${u.genero === 'femenino' ? ' selected' : ''}>Femenino — «la asesora»</option>
         <option value="masculino"${u.genero === 'masculino' ? ' selected' : ''}>Masculino — «el asesor»</option>
       </select>
       <div class="form-hint">Así la IA le habla de esta persona al cliente: «la asesora Ambar» o «el asesor Luis». Si queda sin definir, la IA evita el artículo y no lo adivina por el nombre.</div>` : ''}
-      <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pe-freelancer"${u.es_freelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-boleteria"${u.es_boleteria ? ' checked' : ''}> Es agente de boletería (atiende la cola de solicitudes de vuelos)</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-voucher"${u.ve_voucher ? ' checked' : ''}> Ve vouchers</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-informe"${u.ve_informe_diario ? ' checked' : ''}> Ve informe diario</label>
-      <label class="pe-check" style="margin-top:10px"><input type="checkbox" id="pe-bloqueado"${u.bloqueado ? ' checked' : ''}> Bloqueado (sin acceso, sin darlo de baja)</label>
-      <div class="edit-err" id="pe-err"></div>
-      <button class="dbtn save" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar</button>
-      <label class="fl" style="margin-top:14px">Nueva contraseña (opcional)</label>
-      <div class="ei-clave"><input id="pe-password" class="ei" type="password" minlength="12" placeholder="Mínimo 12 caracteres"></div>
-      <button class="dbtn save" id="pe-guardar-clave" type="button"><i class="fas fa-check"></i> Guardar contraseña</button>
+    </section>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-key"></i> Permisos</div>
+      ${permiso('pe-freelancer', u.es_freelancer, 'Freelancer', 'Se bloquea a los 15 min sin actividad.')}
+      ${permiso('pe-boleteria', u.es_boleteria, 'Agente de boletería', 'Atiende la cola de solicitudes de vuelos. Para un asesor, elegí el rol «Asesor + Boletería».')}
+      ${permiso('pe-voucher', u.ve_voucher, 'Ve vouchers', 'Accede a la sección de vouchers.')}
+      ${permiso('pe-informe', u.ve_informe_diario, 'Ve informe diario', 'Recibe y consulta el informe del día.')}
+    </section>
+    <input type="checkbox" id="pe-bloqueado" hidden${u.bloqueado ? ' checked' : ''}>
+    <div class="edit-err" id="pe-err"></div>
+    <button class="dbtn save gpf-guardar" id="pe-guardar" type="button"><i class="fas fa-check"></i> Guardar cambios</button>
+    <section class="gpf-sec">
+      <div class="gpf-sec-t"><i class="fas fa-lock"></i> Contraseña</div>
+      <label class="fl" for="pe-password">Nueva contraseña</label>
+      <div class="ei-clave"><input id="pe-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres"></div>
       <div class="form-hint">Queda activa de inmediato, sin pedirle cambiarla al entrar.</div>
-      <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Restablecer acceso</button>
-      <div class="form-hint">Genera una contraseña temporal para pasársela una sola vez; la persona la cambia al entrar.</div>
-      <button class="dbtn gh" id="pe-baja" type="button" style="color:#ef4444"><i class="fas fa-user-slash"></i> Dar de baja</button>
-      <div style="font-size:11px;color:var(--muted2);margin-top:10px;line-height:1.5">Dar de baja le quita el acceso al instante y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</div>
-    </div>`;
+      <div class="gpf-fila">
+        <button class="dbtn gh" id="pe-guardar-clave" type="button"><i class="fas fa-check"></i> Guardar contraseña</button>
+        <button class="dbtn gh" id="pe-restablecer" type="button"><i class="fas fa-key"></i> Clave temporal</button>
+      </div>
+      <div class="form-hint">«Clave temporal» genera una contraseña para pasársela una sola vez; la persona la cambia al entrar.</div>
+    </section>
+    <section class="gpf-sec gpf-peligro">
+      <div class="gpf-sec-t"><i class="fas fa-triangle-exclamation"></i> Zona sensible</div>
+      <div class="gpf-peligro-fila">
+        <div><b>${u.bloqueado ? 'Acceso bloqueado' : 'Bloquear acceso'}</b><small>${u.bloqueado ? 'No puede entrar al CRM. Su cuenta sigue activa.' : 'Le quita la entrada sin darlo de baja.'}</small></div>
+        <button class="dbtn peligro" id="pe-bloquear" type="button"><i class="fas fa-${u.bloqueado ? 'lock-open' : 'lock'}"></i> ${u.bloqueado ? 'Desbloquear' : 'Bloquear'}</button>
+      </div>
+      <div class="gpf-peligro-fila">
+        <div><b>Dar de baja</b><small>Le quita el acceso y lo saca de las listas, pero <b>no borra su historial</b> de asistencia, leads ni comisiones. Se puede reactivar.</small></div>
+        <button class="dbtn peligro" id="pe-baja" type="button"><i class="fas fa-user-slash"></i> Dar de baja</button>
+      </div>
+    </section>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
-  navPush({ type: 'drawer' });
+  if (!desdeFicha) navPush({ type: 'drawer' });
   document.getElementById('pe-guardar').onclick = () => guardarPersona(usuarioId);
   document.getElementById('pe-guardar-clave').onclick = () => guardarClavePersona(usuarioId);
   document.getElementById('pe-restablecer').onclick = () => restablecerAcceso(usuarioId);
   document.getElementById('pe-baja').onclick = () => bajaPersonal(usuarioId, false);
+  document.getElementById('pe-bloquear').onclick = async () => {
+    const bloquear = !u.bloqueado;
+    if (!(await confirmarSheet({
+      titulo: bloquear ? `¿Bloquear el acceso de ${u.nombre}?` : `¿Desbloquear a ${u.nombre}?`,
+      detalle: (bloquear ? 'No va a poder entrar al CRM hasta que lo desbloquees.' : 'Vuelve a poder entrar al CRM.') + ' También se guardan los cambios de este formulario.',
+      textoOk: bloquear ? 'Bloquear' : 'Desbloquear', destructivo: bloquear,
+    }))) return;
+    document.getElementById('pe-bloqueado').checked = bloquear;
+    await guardarPersona(usuarioId);
+    const cb = document.getElementById('pe-bloqueado');
+    if (cb) cb.checked = !!u.bloqueado;
+  };
+  document.getElementById('gpf-volver')?.addEventListener('click', () => abrirFichaPersona(usuarioId, true));
   montarOjo(document.getElementById('pe-password'));
 }
 
 async function restablecerAcceso(usuarioId) {
   const u = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
   const password = val('pe-password');
-  if (password && password.length < 12) { document.getElementById('pe-err').textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+  if (password && password.length < 8) { document.getElementById('pe-err').textContent = 'La contraseña debe tener al menos 8 caracteres.'; return; }
   if (!u || !(await confirmarSheet({ titulo: `¿Restablecer el acceso de ${u.nombre}?`, detalle: password ? 'La contraseña elegida por el administrador quedará activa de inmediato.' : 'Vas a recibir una contraseña temporal para pasársela una sola vez. La persona deberá cambiarla al entrar.', textoOk: 'Restablecer' }))) return;
   const { data, error } = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId, password: password || undefined } });
   if (error || !data?.ok) { errToast('No se pudo restablecer el acceso.'); return; }
@@ -2503,7 +2634,7 @@ async function guardarClavePersona(usuarioId) {
   const err = document.getElementById('pe-err');
   const password = val('pe-password');
   err.textContent = '';
-  if (!password || password.length < 12) { err.textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+  if (!password || password.length < 8) { err.textContent = 'La contraseña debe tener al menos 8 caracteres.'; return; }
   if (!u || !(await confirmarSheet({ titulo: `¿Guardar la contraseña de ${u.nombre}?`, detalle: 'Queda activa de inmediato. No se le pide cambiarla al entrar y no se toca su pregunta de seguridad.', textoOk: 'Guardar contraseña' }))) return;
   const btn = document.getElementById('pe-guardar-clave');
   btn.disabled = true;
@@ -2556,7 +2687,7 @@ async function guardarPersona(usuarioId) {
   const clave = val('pe-password');
   let toast = 'Datos actualizados';
   if (clave) {
-    if (clave.length < 12) { btn.disabled = false; err.textContent = 'La contraseña debe tener al menos 12 caracteres.'; return; }
+    if (clave.length < 8) { btn.disabled = false; err.textContent = 'La contraseña debe tener al menos 8 caracteres.'; return; }
     const r = await sb.functions.invoke('restablecer-acceso', { body: { usuario_id: usuarioId, password: clave, modo: 'fijar' } });
     if (r.error || !r.data?.ok) { btn.disabled = false; err.textContent = ERR_PERSONAL[r.data?.error] || 'Se guardaron los datos pero no la contraseña.'; return; }
     toast = 'Datos y contraseña actualizados';
@@ -2849,9 +2980,9 @@ document.getElementById('setupForm').addEventListener('submit', async e => {
   const btn = document.getElementById('setupBtn'), errEl = document.getElementById('setupErr');
   const p1 = val('setupPwd'), p2 = val('setupPwd2'), pregunta = val('setupPregunta').trim(), respuesta = val('setupRespuesta').trim();
   errEl.textContent = '';
-  if (p1.length < 12) { errEl.textContent = 'La contraseña debe tener al menos 12 caracteres'; return; }
+  if (p1.length < 8) { errEl.textContent = 'La contraseña debe tener al menos 8 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
-  if (pregunta.length < 8 || respuesta.length < 8 || /^\d+$/.test(respuesta)) { errEl.textContent = 'Usa una pregunta y respuesta de al menos 8 caracteres; la respuesta no puede ser sólo números'; return; }
+  if (pregunta.length < 5 || respuesta.length < 3) { errEl.textContent = 'Escribe una pregunta (5+ caracteres) y una respuesta (3+ caracteres)'; return; }
   btn.disabled = true; btn.innerHTML = 'Guardando... <i class="fas fa-spinner fa-spin"></i>';
   const { error: e1 } = await sb.auth.updateUser({ password: p1 });
   const { error: e2 } = e1 ? { error: null } : await sb.rpc('set_pregunta_seguridad', { p_pregunta: pregunta, p_respuesta: respuesta });
@@ -2921,7 +3052,7 @@ async function enviarRecuperacion(e) {
   const codigo = val('forgotCodigo').trim(), p1 = val('forgotPwd'), p2 = val('forgotPwd2');
   if (!/^\d{6}$/.test(codigo)) { errEl.textContent = 'El código tiene 6 dígitos'; return; }
   // bcrypt corta a 72 bytes: con tildes/ñ el límite en caracteres queda más bajo
-  if (p1.length < 12 || bytesUtf8(p1) > 72) { errEl.textContent = 'La contraseña debe tener entre 12 y 72 caracteres (menos si lleva tildes o ñ)'; return; }
+  if (p1.length < 8 || bytesUtf8(p1) > 72) { errEl.textContent = 'La contraseña debe tener entre 8 y 72 caracteres (menos si lleva tildes o ñ)'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
   ocupado(true, 'Guardando...');
   const { data, error } = await sb.functions.invoke('recuperar-acceso', { body: { accion: 'confirmar', username, codigo, password: p1 } });
@@ -2929,7 +3060,7 @@ async function enviarRecuperacion(e) {
   if (error || !data?.ok) {
     const cod = await errorDeFuncion(error);
     errEl.textContent = cod === 'codigo_invalido' ? 'Código incorrecto o vencido. Revisa el correo o pide otro código.'
-      : cod === 'password_invalido' ? 'La contraseña debe tener entre 12 y 72 caracteres'
+      : cod === 'password_invalido' ? 'La contraseña debe tener entre 8 y 72 caracteres'
       : 'No se pudo guardar la contraseña. Pide otro código y prueba con una contraseña distinta.';
     return;
   }
@@ -2972,9 +3103,9 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
   const btn = document.getElementById('claimFormBtn'), errEl = document.getElementById('claimFormErr');
   const p1 = val('claimPwd'), p2 = val('claimPwd2'), pregunta = val('claimPregunta').trim(), respuesta = val('claimRespuesta').trim();
   errEl.textContent = '';
-  if (p1.length < 12) { errEl.textContent = 'La contraseña debe tener al menos 12 caracteres'; return; }
+  if (p1.length < 8) { errEl.textContent = 'La contraseña debe tener al menos 8 caracteres'; return; }
   if (p1 !== p2) { errEl.textContent = 'Las contraseñas no coinciden'; return; }
-  if (pregunta.length < 8 || respuesta.length < 8 || /^\d+$/.test(respuesta)) { errEl.textContent = 'Usa una pregunta y respuesta de al menos 8 caracteres; la respuesta no puede ser sólo números'; return; }
+  if (pregunta.length < 5 || respuesta.length < 3) { errEl.textContent = 'Escribe una pregunta (5+ caracteres) y una respuesta (3+ caracteres)'; return; }
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
   try {
     const r = await fetch(CLAIM_FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: claimUsername, password: p1, pregunta, respuesta }) });
@@ -3408,6 +3539,7 @@ function setupPostventa() {
     if (b) { PV_RAPIDO = PV_RAPIDO === b.dataset.rapido ? '' : b.dataset.rapido; renderPostventa(); }
   });
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
+  document.getElementById('pv-exportar')?.addEventListener('click', pvExportarVarias);
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
   });
@@ -3443,7 +3575,13 @@ const PV_WA_PRESETS = [0, 15, 30, 60, 90];
 let PV_RT_TIMER = null;
 let PV_WA_DIAS = 30, PV_WA_FILTRO = 'todos', PV_WA_BUSCAR = '', PV_WA_DATA = null;
 let PV_CAMPANAS = null;
-const pvCampanas = () => PV_CAMPANAS ||= crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
+let ADS_META = null;
+const adsMeta = () => ADS_META ||= crearAdsMeta({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('ads-root') });
+let MARKETING = null;
+const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root') });
+let COSTOS_DIGITALES = null;
+const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
+const pvCampanas = () => PV_CAMPANAS ||=crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
   const body = document.getElementById('pv-wa-body');
@@ -3603,8 +3741,7 @@ const PV_RAPIDOS = {
   vencidos: ['seguimientos vencidos', 'fa-clock', 'var(--danger)', c => c.etapa !== 'CERRADO' && !!c.proximo_seguimiento_at && new Date(c.proximo_seguimiento_at).getTime() < Date.now()],
   sin_seg: ['sin seguimiento', 'fa-bell-slash', 'var(--muted)', c => c.etapa !== 'CERRADO' && !c.proximo_seguimiento_at],
   saldo: ['con saldo', 'fa-coins', 'var(--accent)', c => Number(c.saldo_pendiente) > 0],
-  pasajeros: ['sin pasajeros', 'fa-users', 'var(--purple)', c => (c.falta_resumen || []).some(f => f.codigo === 'pasajeros')],
-  documentos: ['faltan documentos', 'fa-folder-open', 'var(--blue)', c => (c.falta_resumen || []).some(f => f.codigo === 'documentos' || f.codigo === 'voucher')],
+  documentos: ['falta voucher', 'fa-folder-open', 'var(--blue)', c => (c.falta_resumen || []).some(f => f.codigo === 'voucher')],
   volvio: ['ya viajaron', 'fa-house-chimney', 'var(--muted)', c => pvViaje(c).bucket === 'volvio'],
   incidencia: ['con incidencia', 'fa-triangle-exclamation', 'var(--danger)', c => !!c.incidencia_abierta],
 };
@@ -3691,12 +3828,241 @@ function pvWire(grid, lista, antes = () => {}) {
   grid.querySelectorAll('[data-pv-wa]').forEach(b => b.onclick = () => window.open(`https://wa.me/${b.dataset.pvWa}`, '_blank', 'noopener'));
   grid.querySelectorAll('[data-pv-abono]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); pvAbrirAbonoReserva(lista.find(c => c.id === Number(b.dataset.pvAbono)), b); });
   grid.querySelectorAll('[data-pv-servicio]').forEach(b => b.onclick = () => { if (b.disabled) return; antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvServicio)), 'nuevo-servicio'); });
+  grid.querySelectorAll('[data-pv-eliminar]').forEach(b => b.onclick = () => { if (!b.disabled) pvEliminarReserva(lista.find(c => c.id === Number(b.dataset.pvEliminar)), b); });
+  grid.querySelectorAll('[data-pv-exportar]').forEach(b => b.onclick = () => pvExportarUna(lista.find(c => c.id === Number(b.dataset.pvExportar))));
+}
+/* ---------- Exportar reservas (PDF o texto) ----------
+   Cada usuario exporta lo que ya ve: postventa_bandeja, reserva_detalle y reserva_abonos_lista
+   aplican sus permisos en el servidor. Nunca salen costos ni proveedor: el archivo puede
+   terminar en manos del cliente. */
+const PVX_FORMATOS = [{ v: 'pdf', t: 'PDF' }, { v: 'txt', t: 'Texto (.txt)' }];
+const pvxFormatoPref = () => { try { return localStorage.getItem('pvx-formato') || 'pdf'; } catch { return 'pdf'; } };
+const pvxFecha = iso => iso ? fmtFechaSolo(String(iso).slice(0, 10)) : '';
+const pvxViaje = (a, b) => !a ? 'Sin fecha' : b && String(b).slice(0, 10) !== String(a).slice(0, 10) ? `${pvxFecha(a)} – ${pvxFecha(b)}` : pvxFecha(a);
+const pvxUsd = n => '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
+const pvxPax = s => [s.pax_adultos ? `${s.pax_adultos} ${s.pax_adultos == 1 ? 'adulto' : 'adultos'}` : '', s.pax_ninos ? `${s.pax_ninos} ${s.pax_ninos == 1 ? 'niño' : 'niños'}` : ''].filter(Boolean).join(', ');
+const pvxDoc = p => [p.tipo_documento, p.numero_documento].filter(Boolean).join(' ');
+const pvxNombre = p => [p.nombre, p.apellido].filter(Boolean).join(' ') + (p.titular ? ' (titular)' : '');
+const pvxDestino = x => x.r?.destino || x.c.destino || x.c.servicio || 'Sin destino';
+async function pvxDetalle(c) {
+  const [d, a] = await Promise.all([
+    sb.rpc('reserva_detalle', { p_reserva_id: c.id }),
+    ['admin', 'asesor', 'administrativo'].includes(ROL) ? sb.rpc('reserva_abonos_lista', { p_reserva_id: c.id }) : null,
+  ]);
+  const det = !d.error && d.data?.ok ? d.data : null;
+  if (!det) console.error('reserva_detalle', c.id, d.error || d.data);
+  return { c, r: det?.reserva || null, ok: !!det,
+    servicios: (det?.servicios || []).filter(s => !s.anulado_en),
+    pasajeros: det?.pasajeros || [],
+    abonos: (a && !a.error && a.data?.ok ? a.data.abonos || [] : []).filter(x => !x.anulado_en) };
+}
+// 6 a la vez: con ~100 reservas son ~200 RPC y no conviene dispararlas todas juntas.
+async function pvxDetalles(casos) {
+  const out = new Array(casos.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(6, casos.length) }, async () => {
+    while (i < casos.length) { const k = i++; out[k] = await pvxDetalle(casos[k]); }
+  }));
+  return out;
+}
+function pvxTexto(items, { titulo, filtros, detalle }) {
+  const L = [titulo.toUpperCase(), `Destino y Eventos Lotus 360 · generado ${new Date().toLocaleString('es-VE')}${MI_NOMBRE ? ` por ${MI_NOMBRE}` : ''}`];
+  if (filtros) L.push(filtros);
+  if (items.length > 1) {
+    const sum = k => items.reduce((s, x) => s + Number(x.c[k] || 0), 0);
+    L.push(`${items.length} reservas · Total ${pvxUsd(sum('monto_total'))} · Pagado ${pvxUsd(sum('monto_pagado'))} · Saldo ${pvxUsd(sum('saldo_pendiente'))}`);
+  }
+  const raya = '='.repeat(60);
+  items.forEach(x => {
+    const c = x.c;
+    L.push('', raya, `${c.codigo || 'Sin código'} · ${c.nombre || 'Sin nombre'}`, raya);
+    [['Teléfono', c.telefono], ['Asesor', c.asesor], ['Destino', pvxDestino(x)], ['Viaje', pvxViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin)],
+      ['Etapa', (PV_ETAPAS[c.etapa] || [c.etapa])[0]], ['Localizador', c.localizador_reserva],
+      ['Total', pvxUsd(c.monto_total)], ['Pagado', pvxUsd(c.monto_pagado)], ['Saldo', pvxUsd(c.saldo_pendiente)]]
+      .filter(([, v]) => v).forEach(([k, v]) => L.push(`${(k + ':').padEnd(13)}${v}`));
+    if (!detalle) return;
+    if (!x.ok) { L.push('', '(No se pudo cargar el detalle de esta reserva)'); return; }
+    L.push('', 'SERVICIOS');
+    if (!x.servicios.length) L.push('  Sin servicios cargados');
+    x.servicios.forEach(s => L.push(`  - ${(RV_TIPOS[s.tipo] || [s.tipo])[0]}${s.descripcion ? `: ${s.descripcion}` : ''}`,
+      '    ' + [s.destino, s.fecha_inicio ? pvxViaje(s.fecha_inicio, s.fecha_fin) : '', s.hora ? String(s.hora).slice(0, 5) : '', pvxPax(s),
+        s.localizador ? `Loc. ${s.localizador}` : '', s.estado, s.precio_usd_centavos != null ? pvxUsd(s.precio_usd_centavos / 100) : ''].filter(Boolean).join(' · ')));
+    L.push('', 'PASAJEROS');
+    if (!x.pasajeros.length) L.push('  Sin pasajeros cargados');
+    x.pasajeros.forEach(p => L.push(`  - ${pvxNombre(p)}` + [pvxDoc(p), p.fecha_nacimiento ? `nac. ${pvxFecha(p.fecha_nacimiento)}` : '', p.nacionalidad, p.telefono, p.email].filter(Boolean).map(v => ` · ${v}`).join('')));
+    if (x.abonos.length) {
+      L.push('', 'ABONOS');
+      x.abonos.forEach(a => L.push(`  - ${pvxFecha(a.fecha)} · ${pvxUsd(a.monto_usd)}` + [a.metodo, a.referencia ? `ref. ${a.referencia}` : ''].filter(Boolean).map(v => ` · ${v}`).join('')));
+    }
+  });
+  return L.join('\n') + '\n';
+}
+async function pvxPdf(items, { titulo, filtros, detalle }) {
+  await ensureVoucherLibs();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  let F = 'helvetica', st = s => (s === 'normal' ? 'normal' : 'bold');
+  try {
+    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    F = 'Poppins'; st = s => s;
+  } catch (_e) { /* sin Poppins sale en Helvetica */ }
+  const C = { navy: [15, 23, 42], naranja: [234, 118, 22], gris: [100, 116, 139], claro: [148, 163, 184], linea: [226, 232, 240], suave: [248, 250, 252] };
+  const T = s => pdfSinEmojis(s);
+  const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
+  const X0 = 40, X1 = 572, ALTO = 792, PIE = 50;
+  const tabla = (y, head, body, extra = {}) => {
+    doc.autoTable({ startY: y, head: head ? [head] : undefined, body, margin: { left: X0, right: 612 - X1, bottom: PIE }, theme: 'grid',
+      styles: { font: F, fontStyle: st('normal'), fontSize: 8, cellPadding: 4, textColor: C.navy, lineColor: C.linea, lineWidth: 0.5, overflow: 'linebreak' },
+      headStyles: { font: F, fontStyle: st('semibold'), fillColor: C.navy, textColor: 255 },
+      footStyles: { font: F, fontStyle: st('semibold'), fillColor: C.suave, textColor: C.navy },
+      alternateRowStyles: { fillColor: C.suave }, ...extra });
+    return doc.lastAutoTable.finalY;
+  };
+  const lugar = (y, falta) => { if (y + falta <= ALTO - PIE) return y; doc.addPage(); return 50; };
+  const subtitulo = (y, t) => { y = lugar(y + 16, 40); font('semibold', 10, C.naranja); doc.text(T(t), X0, y); return y + 6; };
+  font('medium', 7.5, C.naranja); doc.text('DESTINO Y EVENTOS LOTUS 360', X0, 44, { charSpace: 1.2 });
+  font('bold', 17, C.navy); doc.text(T(titulo), X0, 66);
+  font('normal', 8.5, C.gris);
+  const sub = doc.splitTextToSize(T([filtros, `Generado ${new Date().toLocaleString('es-VE')}${MI_NOMBRE ? ` por ${MI_NOMBRE}` : ''}`].filter(Boolean).join(' · ')), X1 - X0);
+  doc.text(sub, X0, 82);
+  let y = 82 + sub.length * 11;
+  doc.setDrawColor(...C.linea); doc.setLineWidth(1); doc.line(X0, y, X1, y);
+  y += 12;
+  if (items.length > 1) {
+    const sum = k => items.reduce((s, x) => s + Number(x.c[k] || 0), 0);
+    y = tabla(y, ['Código', 'Cliente', 'Destino', 'Viaje', 'Etapa', 'Asesor', 'Total', 'Pagado', 'Saldo'],
+      items.map(x => [x.c.codigo || '', x.c.nombre || '', pvxDestino(x), pvxViaje(x.c.fecha_viaje_inicio, x.c.fecha_viaje_fin), (PV_ETAPAS[x.c.etapa] || [x.c.etapa])[0], x.c.asesor || '',
+        pvxUsd(x.c.monto_total), pvxUsd(x.c.monto_pagado), pvxUsd(x.c.saldo_pendiente)].map(T)),
+      { foot: [[`${items.length} reservas`, '', '', '', '', '', pvxUsd(sum('monto_total')), pvxUsd(sum('monto_pagado')), pvxUsd(sum('saldo_pendiente'))]],
+        styles: { font: F, fontStyle: st('normal'), fontSize: 7.5, cellPadding: 3.5, textColor: C.navy, lineColor: C.linea, lineWidth: 0.5 },
+        columnStyles: { 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } } });
+  }
+  if (detalle) items.forEach((x, n) => {
+    const c = x.c;
+    if (items.length > 1) { doc.addPage(); y = 50; } else if (n) y = lugar(y, 120);
+    font('bold', 13, C.navy); doc.text(T(`${c.codigo || 'Sin código'} · ${c.nombre || 'Sin nombre'}`), X0, y + 4);
+    y = tabla(y + 14, null, [
+      ['Teléfono', c.telefono || '—', 'Asesor', c.asesor || '—'],
+      ['Destino', pvxDestino(x), 'Etapa', (PV_ETAPAS[c.etapa] || [c.etapa])[0] || '—'],
+      ['Viaje', pvxViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin), 'Localizador', c.localizador_reserva || '—'],
+      ['Total', pvxUsd(c.monto_total), 'Pagado / Saldo', `${pvxUsd(c.monto_pagado)} / ${pvxUsd(c.saldo_pendiente)}`],
+    ].map(f => f.map(T)), { columnStyles: { 0: { fontStyle: st('semibold'), textColor: C.gris, cellWidth: 70 }, 2: { fontStyle: st('semibold'), textColor: C.gris, cellWidth: 80 } }, alternateRowStyles: {} });
+    if (!x.ok) { y = subtitulo(y, 'No se pudo cargar el detalle de esta reserva'); return; }
+    y = subtitulo(y, 'Servicios');
+    y = x.servicios.length ? tabla(y, ['Tipo', 'Descripción', 'Fechas', 'Pax', 'Localizador', 'Estado', 'Precio'],
+      x.servicios.map(s => [(RV_TIPOS[s.tipo] || [s.tipo])[0], [s.descripcion, s.destino].filter(Boolean).join(' · '), s.fecha_inicio ? pvxViaje(s.fecha_inicio, s.fecha_fin) + (s.hora ? ` ${String(s.hora).slice(0, 5)}` : '') : '',
+        pvxPax(s), s.localizador || '', s.estado || '', s.precio_usd_centavos != null ? pvxUsd(s.precio_usd_centavos / 100) : ''].map(T)),
+      { columnStyles: { 6: { halign: 'right' } } }) : (font('normal', 8.5, C.gris), doc.text('Sin servicios cargados', X0, y + 10), y + 14);
+    y = subtitulo(y, 'Pasajeros');
+    y = x.pasajeros.length ? tabla(y, ['Nombre', 'Documento', 'Nacimiento', 'Nacionalidad', 'Contacto'],
+      x.pasajeros.map(p => [pvxNombre(p), pvxDoc(p), pvxFecha(p.fecha_nacimiento), p.nacionalidad || '', [p.telefono, p.email].filter(Boolean).join(' · ')].map(T)))
+      : (font('normal', 8.5, C.gris), doc.text('Sin pasajeros cargados', X0, y + 10), y + 14);
+    if (x.abonos.length) {
+      y = subtitulo(y, 'Abonos');
+      y = tabla(y, ['Fecha', 'Método', 'Referencia', 'Monto'], x.abonos.map(a => [pvxFecha(a.fecha), a.metodo || '', a.referencia || '', pvxUsd(a.monto_usd)].map(T)), { columnStyles: { 3: { halign: 'right' } } });
+    }
+    y += 18;
+  });
+  const total = doc.getNumberOfPages();
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p);
+    font('normal', 7.5, C.claro);
+    doc.text(T(`Lotus 360 · ${titulo}`), X0, ALTO - 24);
+    doc.text(`Página ${p} de ${total}`, X1, ALTO - 24, { align: 'right' });
+  }
+  return doc.output('blob');
+}
+async function pvxGenerar(casos, { formato, detalle, titulo, filtros = '', archivo }) {
+  try { localStorage.setItem('pvx-formato', formato); } catch {}
+  if (casos.length > 1) okToast(`Preparando ${casos.length} reservas…`);
+  try {
+    const items = detalle ? await pvxDetalles(casos) : casos.map(c => ({ c, ok: true, servicios: [], pasajeros: [], abonos: [] }));
+    const fallidas = items.filter(x => !x.ok).length;
+    if (formato === 'txt') descargarArchivo(new Blob(['﻿' + pvxTexto(items, { titulo, filtros, detalle })], { type: 'text/plain;charset=utf-8' }), archivo + '.txt');
+    else await pdfEntregar(await pvxPdf(items, { titulo, filtros, detalle }), archivo + '.pdf');
+    if (fallidas) errToast(`${fallidas} ${fallidas === 1 ? 'reserva salió' : 'reservas salieron'} sin detalle (no se pudo cargar)`);
+    else okToast(casos.length > 1 ? `${casos.length} reservas exportadas` : 'Reserva exportada');
+  } catch (e) {
+    console.error('exportar reservas', e);
+    errToast(formato === 'pdf' ? 'No se pudo generar el PDF' : 'No se pudo exportar');
+  }
+}
+async function pvExportarUna(c) {
+  if (!c) return;
+  const r = await confirmarSheet({ titulo: `Exportar ${c.codigo || 'reserva'}`, detalle: `${c.nombre || 'Cliente'}: datos, servicios, pasajeros y abonos. Sin costos de proveedor.`, textoOk: 'Exportar',
+    campos: [{ id: 'formato', label: 'Formato', tipo: 'select', valor: pvxFormatoPref(), requerido: true, opciones: PVX_FORMATOS }] });
+  if (!r) return;
+  pvxGenerar([c], { formato: r.formato, detalle: true, titulo: `Reserva ${c.codigo || ''}`.trim(), archivo: `Reserva-${pdfSlug(c.codigo || c.nombre)}` });
+}
+async function pvExportarVarias() {
+  if (!POSTVENTA.length) { errToast('No hay reservas para exportar'); return; }
+  const grupos = [...new Set(POSTVENTA.map(pvGrupoDe))].sort((a, b) => a === 'Sin destino' ? 1 : b === 'Sin destino' ? -1 : a.localeCompare(b, 'es'));
+  const busqueda = document.getElementById('pv-search')?.value.trim() || '';
+  const r = await confirmarSheet({
+    titulo: 'Exportar reservas',
+    detalle: `${ROL === 'asesor' ? 'Salen tus reservas' : 'Salen las reservas que ves'} en esta sección, sin costos de proveedor. Las fechas filtran por fecha de viaje; vacías = sin límite.${busqueda ? `\nSe respeta la búsqueda «${busqueda}».` : ''}`,
+    textoOk: 'Exportar',
+    campos: [
+      { id: 'destino', label: 'Destino', tipo: 'select', valor: PV_GRUPO, opciones: [{ v: '', t: 'Todos los destinos' }, ...grupos.map(g => ({ v: g, t: g }))] },
+      { id: 'etapa', label: 'Etapa', tipo: 'select', valor: PV_ETAPA, opciones: [{ v: '', t: 'Todas las etapas' }, ...Object.entries(PV_ETAPAS).map(([k, [t]]) => ({ v: k, t }))] },
+      { id: 'desde', label: 'Viaje desde', tipo: 'date' },
+      { id: 'hasta', label: 'Viaje hasta', tipo: 'date' },
+      { id: 'formato', label: 'Formato', tipo: 'select', valor: pvxFormatoPref(), requerido: true, opciones: PVX_FORMATOS },
+      { id: 'detalle', label: 'Incluir servicios, pasajeros y abonos de cada reserva', tipo: 'check', valor: true },
+    ],
+  });
+  if (!r) return;
+  let { desde, hasta } = r;
+  if (desde && hasta && desde > hasta) [desde, hasta] = [hasta, desde];
+  // Solapamiento con el viaje: entra si el viaje toca el rango; sin fecha de viaje no entra cuando hay rango.
+  const casos = POSTVENTA.filter(c => {
+    if (r.destino && pvGrupoDe(c) !== r.destino) return false;
+    if (r.etapa && c.etapa !== r.etapa) return false;
+    if (!desde && !hasta) return true;
+    const ini = String(c.fecha_viaje_inicio || '').slice(0, 10), fin = String(c.fecha_viaje_fin || '').slice(0, 10) || ini;
+    return !!ini && (!desde || fin >= desde) && (!hasta || ini <= hasta);
+  }).sort((a, b) => String(a.fecha_viaje_inicio || '9999').localeCompare(String(b.fecha_viaje_inicio || '9999')) || a.id - b.id);
+  if (!casos.length) { errToast('Ninguna reserva coincide con esos filtros'); return; }
+  const rango = desde || hasta ? `Viaje: ${desde ? pvxFecha(desde) : '…'} – ${hasta ? pvxFecha(hasta) : '…'}` : '';
+  const filtros = [r.destino && `Destino: ${r.destino}`, r.etapa && `Etapa: ${PV_ETAPAS[r.etapa][0]}`, rango, busqueda && `Búsqueda: ${busqueda}`].filter(Boolean).join(' · ');
+  const archivo = ['Reservas', r.destino && pdfSlug(r.destino), desde, hasta, !desde && !hasta && hoy()].filter(Boolean).join('-');
+  pvxGenerar(casos, { formato: r.formato, detalle: r.detalle, titulo: r.destino ? `Reservas · ${r.destino}` : 'Reservas', filtros, archivo });
+}
+// Borrado real (RPC eliminar_reserva): factura, abonos y comisión se borran con la reserva; el servidor solo rechaza
+// si ya hay comisión pagada al asesor o pagos a proveedor. p_solo_revisar trae qué se va a borrar para el aviso.
+async function pvEliminarReserva(c, btn) {
+  if (!c || !esOficina()) return;
+  btn.disabled = true;
+  const { data: rev, error: errRev } = await sb.rpc('eliminar_reserva', { p_reserva_id: c.id, p_solo_revisar: true });
+  btn.disabled = false;
+  if (errRev || !rev?.ok) { errToast('No se puede eliminar: ' + rvErr(errRev, rev)); return; }
+  const extra = [
+    ...(rev.facturas || []).map(f => `la factura ${f.numero ? '#' + f.numero : 'sin número'} (${rvMonto(Number(f.monto) * 100, f.moneda)})`),
+    rev.abonos ? `${rev.abonos} abono${rev.abonos > 1 ? 's' : ''} (${rvMonto(Number(rev.abonos_usd) * 100, 'USD')})` : '',
+    rev.comisiones ? (rev.comisiones > 1 ? `${rev.comisiones} comisiones del asesor` : 'la comisión del asesor') : '',
+  ].filter(Boolean);
+  const detalle = `${c.nombre || 'Cliente'}: se borran sus servicios, pasajeros y documentos`
+    + (extra.length ? `, y también ${extra.join(', ')}.${rev.facturas?.length ? ' El N° de factura queda sin usar.' : ''}` : '.')
+    + (rev.pagos ? ` Los pagos del cliente quedan en su ficha, sin reserva.` : '') + ' No se puede deshacer.';
+  const motivo = await pedirTexto({ titulo: `Eliminar reserva ${c.codigo || ''}`.trim(), detalle, label: 'Motivo (opcional)', tipo: 'textarea', textoOk: 'Eliminar', destructivo: true });
+  if (motivo === null) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('eliminar_reserva', { p_reserva_id: c.id, p_motivo: motivo || null, p_firma: rev.firma });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo eliminar: ' + rvErr(error, data)); return; }
+  okToast(data.codigo ? `Reserva ${data.codigo} eliminada` : 'Reserva eliminada');
+  btn.closest('.pv-card')?.remove();
+  POSTVENTA = POSTVENTA.filter(x => x.id !== c.id);
+  if (currentSec === 'postventa') loadPostventa(true);
+  if (currentSec === 'reservas-empresas') loadReservasEmpresas();
+  if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
 }
 // Chips de «Falta» de la tarjeta: una por motivo (las repetidas se cuentan) y una última si no hay seguimiento.
 function pvFaltaChips(c, vencido) {
-  const m = new Map(), etq = { pasajeros: 'Pasajeros', voucher: 'Voucher hotel', documentos: 'Documentos de pasajeros', cuotas: 'Cuotas vencidas' };
+  const m = new Map(), etq = { voucher: 'Voucher hotel', cuotas: 'Cuotas vencidas' };
   // Cada chip lleva `cod`/`sid` (código del faltante y servicio) para que al tocarlo abra la pestaña que lo resuelve (rvIr).
-  c.falta_resumen.forEach(f => {
+  // Pasajeros y documentos ya no son faltantes (20261102235000); se filtran por si llega una respuesta vieja.
+  c.falta_resumen.filter(f => f.codigo !== 'pasajeros' && f.codigo !== 'documentos').forEach(f => {
     const t = f.codigo === 'saldo' ? `Saldo ${money(c.saldo_pendiente)}` : f.codigo === 'servicio' ? (f.texto || 'Servicio por confirmar').replace(/ \d{2}\/\d{2}/, '') : etq[f.codigo] || f.texto;
     const x = m.get(t);
     if (x) x.n++; else m.set(t, { n: 1, cod: f.codigo, sid: f.servicio_id || '' });
@@ -3753,7 +4119,7 @@ function pvCardHtml(c, extra = '') {
         : '<div class="pv-falta ok"><i class="fas fa-check" aria-hidden="true"></i> Todo en orden</div>')
         + (c.proximo_seguimiento_at ? `<div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>Seguimiento: ${tiempoSeguimiento(c.proximo_seguimiento_at)}</span></div>` : '');
     return `<article class="pv-card" data-id="${c.id}">
-      <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}${viajeHtml}</div>
+      <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}${viajeHtml}<span class="pv-tools"><button class="pv-tool" data-pv-exportar="${c.id}" type="button" aria-label="Exportar reserva ${esc(c.codigo || '')}" title="Exportar (PDF o texto)"><i class="fas fa-file-arrow-down" aria-hidden="true"></i></button>${esOficina() ? `<button class="pv-tool del" data-pv-eliminar="${c.id}" type="button" aria-label="Eliminar reserva ${esc(c.codigo || '')}" title="Eliminar reserva"><i class="fas fa-trash-can" aria-hidden="true"></i></button>` : ''}</span></div>
       <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}${falta === null ? '' : ` · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}`}</div>${extra}
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
@@ -3869,6 +4235,73 @@ async function pvMensajeCliente(c, plantilla, btn) {
   } finally { btn.disabled = false; }
 }
 
+// Plan de abonos web de la reserva: cuotas con el estado que deriva plan_estado. Las acciones son de oficina y el
+// servidor las revalida (tope de fecha, mora vigente, pago por verificar).
+const PV_PLAN_ESTADO = { al_dia: 'Al día', por_vencer: 'Cuota por vencer', atrasado: 'Atrasado', en_mora: 'En mora', completado: 'Completado', cancelado: 'Cancelado', credito: 'Crédito a favor' };
+const PV_PLAN_CUOTA = { pagada: 'Pagada', proxima: 'Próxima', pendiente: 'Pendiente', vencida: 'Vencida' };
+const PV_PLAN_ERR = {
+  plan_no_disponible: 'Ese plan ya no existe', plan_cerrado: 'El plan ya está cerrado', cuota_no_disponible: 'Esa cuota no existe', cuota_pagada: 'Esa cuota ya está pagada',
+  fecha_invalida: 'La nueva fecha debe ser futura y posterior a la actual', fecha_despues_de_siguiente: 'Esa fecha pasa la de la cuota siguiente: extiende primero esa', fecha_fuera_de_tope: 'La fecha pasa del tope de 20 días antes del viaje', viaje_sin_fecha: 'La reserva no tiene fecha de viaje',
+  plan_no_en_mora: 'El plan ya no está en mora', mora_ya_no_aplica: 'El cliente ya no está en mora: pagó o le extendieron la cuota', pago_en_verificacion: 'Hay un pago por verificar: resuélvelo primero',
+  motivo_requerido: 'Hace falta el motivo', sin_abonos: 'No hay abonos para convertir en crédito',
+};
+const pvPlanUsd = n => '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
+async function pvPlanPintar(c) {
+  const box = document.getElementById('pv-e-plan'); if (!box) return;
+  const { data, error } = await sb.rpc('plan_de_reserva', { p_reserva_id: c.id });
+  if (box !== document.getElementById('pv-e-plan')) return;
+  const p = data?.plan;
+  if (error || !p?.ok) { box.innerHTML = ''; return; }
+  const abierto = ['al_dia', 'por_vencer', 'atrasado', 'en_mora'].includes(p.estado);
+  const fila = q => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line2);font-size:13px">
+      <b style="min-width:62px">Cuota ${q.n}</b><span style="flex:1;min-width:120px">${fmtFechaSolo(q.vence_el)}${q.extendida ? ' · extendida' : ''} · ${pvPlanUsd(q.monto_usd)}</span>
+      <span style="color:${q.estado === 'vencida' ? 'var(--danger)' : 'var(--muted)'}">${PV_PLAN_CUOTA[q.estado] || esc(q.estado)}</span>
+      ${abierto && esOficina() && q.estado !== 'pagada' ? `<button class="rs-q" type="button" data-pv-plan="extender" data-n="${q.n}" data-vence="${esc(q.vence_el)}">Extender</button>` : ''}
+    </div>`;
+  box.innerHTML = `<div class="rs-sec">Plan de abonos <span>${PV_PLAN_ESTADO[p.estado] || esc(p.estado)} · pagado ${pvPlanUsd(p.pagado_usd)} de ${pvPlanUsd(p.total_usd)}</span></div>
+    ${p.estado === 'en_mora' ? '<div class="rv-check"><i class="fas fa-triangle-exclamation"></i> Pasó la gracia sin pagar. Nada se canceló todavía: extiende la cuota o confirma la cancelación.</div>' : ''}
+    ${(p.cuotas || []).map(fila).join('')}
+    ${esOficina() && (abierto || p.estado === 'completado') ? `<div class="rs-quick">
+      ${p.estado === 'en_mora' ? '<button class="rs-q" type="button" data-pv-plan="cancelar">Confirmar cancelación por mora</button>' : ''}
+      <button class="rs-q" type="button" data-pv-plan="credito">Crédito a favor (factor externo)</button></div>` : ''}`;
+  box.onclick = e => { const b = e.target.closest('[data-pv-plan]'); if (b) pvPlanAccion(c, p, b); };
+  // guardar_postventa reactiva la reserva: con el plan cancelado o en crédito se perdería el cierre.
+  if (['cancelado', 'credito'].includes(p.estado)) {
+    ['pv-e-guardar', 'pv-e-pago'].forEach(id => { const b = document.getElementById(id); if (b) { b.disabled = true; b.title = 'La reserva se cerró desde su plan de abonos'; } });
+  }
+}
+async function pvPlanAccion(c, p, btn) {
+  const accion = btn.dataset.pvPlan;
+  let rpc, args, listo;
+  // Lo abonado pudo cambiar desde que se abrió la ficha, y el diálogo pide confirmar ese monto.
+  if (accion !== 'extender') {
+    const { data } = await sb.rpc('plan_de_reserva', { p_reserva_id: c.id });
+    if (data?.plan?.ok) p = data.plan;
+  }
+  if (accion === 'extender') {
+    const tope = p.viaje_inicio ? new Date(new Date(p.viaje_inicio + 'T12:00:00').getTime() - 20 * 86400000).toISOString().slice(0, 10) : null;
+    const fecha = await pedirTexto({ titulo: `Extender la cuota ${btn.dataset.n}`, detalle: `Hoy vence el ${fmtFechaSolo(btn.dataset.vence)}.${tope ? ` Tope: ${fmtFechaSolo(tope)} (20 días antes del viaje).` : ''} El cliente vuelve a recibir los recordatorios con la fecha nueva.`, label: 'Nueva fecha', tipo: 'date', valor: btn.dataset.vence, requerido: true, textoOk: 'Extender' });
+    if (!fecha) return;
+    rpc = 'plan_extender_cuota'; args = { p_plan_id: p.plan_id, p_n: Number(btn.dataset.n), p_fecha: fecha }; listo = 'Cuota extendida';
+  } else if (accion === 'cancelar') {
+    const si = await confirmarSheet({ titulo: 'Confirmar cancelación por mora', detalle: `Se cierra la reserva ${c.codigo || ''} y sus servicios quedan cancelados. El cliente pierde ${pvPlanUsd(p.pagado_usd)} abonados, según las condiciones del plan. Avisa antes al hotel y al cliente: no se le manda nada automático. No se puede deshacer desde aquí.`, textoOk: 'Cancelar la reserva', destructivo: true });
+    if (!si) return;
+    rpc = 'plan_cancelar_por_mora'; args = { p_plan_id: p.plan_id }; listo = 'Reserva cancelada por mora';
+  } else {
+    const motivo = await pedirTexto({ titulo: 'Crédito a favor por factor externo', detalle: `${c.fecha_viaje_fin && c.fecha_viaje_fin < hoyCaracas() ? 'Ojo: la fecha del viaje ya pasó. ' : ''}Solo si no viajó por algo ajeno al cliente y a la agencia. Se crea un crédito de ${pvPlanUsd(p.pagado_usd)} que vence en 6 meses, y la reserva se cierra con sus servicios cancelados. No se puede deshacer desde aquí.`, label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Crear crédito', destructivo: true });
+    if (!motivo) return;
+    rpc = 'plan_marcar_credito'; args = { p_plan_id: p.plan_id, p_motivo: motivo }; listo = null;
+  }
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.rpc(rpc, args);
+    if (error || !data?.ok) { console.error(rpc, error || data); errToast(PV_PLAN_ERR[data?.error] || 'No se pudo completar la acción'); return; }
+    okToast(listo || `Crédito de ${pvPlanUsd(data.monto_usd)} creado y reserva cerrada`);
+    await pvPlanPintar(c);
+    if (accion !== 'extender') { await Promise.all([loadPostventa(), loadStats()]); renderAll(); }
+  } finally { btn.disabled = false; }
+}
+
 function abrirPostventa(c, accionInicial = null) {
   if (!c) return; PV_ACTUAL = c;
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
@@ -3877,22 +4310,29 @@ function abrirPostventa(c, accionInicial = null) {
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
     <div data-rv-panel="resumen"><div class="rs-wrap">
-      <div data-rv-check></div>
+      <div data-rv-check></div><div id="pv-e-otras"></div>
       <div class="rs-sec">Dinero <span id="pv-e-modo">Se calcula solo desde servicios y abonos</span></div>
       <div class="rs-stats" id="pv-e-balance"><div class="rs-stat"><span class="rs-lbl">Total</span><b id="pv-d-total">—</b></div><div class="rs-stat"><span class="rs-lbl">Pagado</span><b id="pv-d-pagado">—</b></div><div class="rs-stat" id="pv-d-saldo-box"><span class="rs-lbl">Saldo</span><b id="pv-d-saldo">—</b></div></div>
       <div id="pv-e-total-row" ${c.con_servicios ? 'hidden' : ''}><label class="fl" for="pv-e-total">Monto total (USD)</label><input class="ei" id="pv-e-total" type="number" min="0" step="0.01" value="${Number(c.monto_total || 0)}">
         <div class="csub">Esta reserva no tiene servicios cargados: el total se escribe a mano. Al agregar el primer servicio pasa a calcularse solo.</div></div>
       <input id="pv-e-pagado" type="hidden" value="${Number(c.monto_pagado || 0)}">
       <div id="pv-e-comision"></div>
+      <div id="pv-e-plan"></div>
       <div class="rs-sec">Viaje <span>Fechas, destino y etapa</span></div>
       <div class="rs-grid2">
         <div><label class="rs-lbl" for="pv-e-inicio">Inicio</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}"></div>
         <div><label class="rs-lbl" for="pv-e-fin">Fin</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}"></div>
-        <div><span class="rs-lbl">Destino</span><div class="rs-ro">${esc(c.destino || c.servicio || 'Sin definir')}</div></div>
+        <div><label class="rs-lbl" for="pv-e-destino">Destino</label><input class="ei" id="pv-e-destino" maxlength="200" value="${esc(c.destino || '')}" placeholder="${esc(c.servicio || 'Sin definir')}"></div>
         <div><span class="rs-lbl">Etapa</span><div class="rs-ro rs-ro-etapa"><span id="pv-e-etapa-txt">${esc((PV_ETAPAS[c.etapa] || [c.etapa])[0])}</span><button class="rs-q" id="pv-e-etapa-cambiar" type="button" aria-expanded="false">Cambiar</button></div></div>
       </div>
       <select class="ei" id="pv-e-etapa" aria-label="Etapa" hidden>${opt(PV_ETAPAS, c.etapa)}</select>
       <div class="csub">La etapa se actualiza sola según pagos, servicios y fechas; «Cambiar» la fija a mano.</div>
+      <div id="pv-e-habs"></div>
+      <div class="rs-sec">Cliente <span>Titular de la reserva (cambia también en su lead)</span></div>
+      <div class="rs-grid2">
+        <div><label class="rs-lbl" for="pv-e-nombre">Nombre</label><input class="ei" id="pv-e-nombre" maxlength="160" value="${esc(c.nombre || '')}"></div>
+        <div><label class="rs-lbl" for="pv-e-telefono">Teléfono</label><input class="ei" id="pv-e-telefono" type="tel" maxlength="40" value="${esc(c.telefono || '')}"></div>
+      </div>
       <div class="rs-sec">Checklist <span>Las marcas «Auto» las pone el sistema</span></div>
       <div class="pv-doc-grid rs-chk-box">${Object.entries(PV_DOCS).map(([k, t]) => pvChkFila(k, t, docs)).join('')}</div>
       <div class="rs-sec">Mensajes al cliente <span>WhatsApp con plantilla aprobada; antes de enviar se ve el texto</span></div>
@@ -3933,7 +4373,12 @@ function abrirPostventa(c, accionInicial = null) {
     const go = e.target.closest('[data-rv-go]'); if (go) return rvIr(go.dataset.rvGo, go.dataset.id);
     const sg = e.target.closest('[data-pv-seg]'); if (sg) pvSeguimientoRapido(sg.dataset.pvSeg);
     const mj = e.target.closest('[data-pv-msj]'); if (mj) pvMensajeCliente(c, mj.dataset.pvMsj, mj);
+    const ot = e.target.closest('[data-pv-otra]'); if (ot) abrirReservaDeLead(Number(ot.dataset.pvOtra), ot.dataset.cod, ot);
   };
+  pvOtrasPintar(c);
+  pvPlanPintar(c);
+  PV_HAB_SEL = new Map();
+  resumen.addEventListener('change', e => { const h = e.target.closest('[data-pv-hab]'); if (h) PV_HAB_SEL.set(Number(h.dataset.pvHab), h.value); });
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
   document.getElementById('pv-e-pago')?.addEventListener('click', () => {
     document.getElementById('pv-e-pagado').value = document.getElementById('pv-e-total').value;
@@ -3973,6 +4418,66 @@ async function pvGuardarEmpresa() {
   PV_EMPRESA_PREVIA = { id, ref };
   return null;
 }
+// Nombre, teléfono y destino viven en el lead: actualizar_lead ignora los vacíos (no borra).
+async function pvGuardarCliente() {
+  const c = PV_ACTUAL, cambio = {};
+  [['nombre', 'p_nombre'], ['telefono', 'p_telefono'], ['destino', 'p_destino']].forEach(([k, p]) => {
+    const v = val('pv-e-' + k).trim(); if (v && v !== (c[k] || '')) cambio[p] = v;
+  });
+  if (!Object.keys(cambio).length) return null;
+  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: c.lead_id, ...cambio });
+  return error || !data?.ok ? (error?.message || data?.error || 'error desconocido') : null;
+}
+// Otras ventas del mismo cliente (reservas activas del lead), para que cada ficha avise de la otra.
+async function pvOtrasPintar(c) {
+  const box = document.getElementById('pv-e-otras'); if (!box || !c.lead_id) return;
+  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: c.lead_id });
+  if (error || !data?.ok || box !== document.getElementById('pv-e-otras')) return;
+  const otras = (data.reservas || []).filter(r => r.activo && r.id !== c.id);
+  box.innerHTML = otras.length ? `<div class="rv-check"><i class="fas fa-suitcase-rolling"></i> ${otras.length > 1 ? `Este cliente tiene ${otras.length} ventas más` : 'Este cliente tiene otra venta'}:
+    ${otras.map(r => `<button class="rs-q" type="button" data-pv-otra="${r.id}" data-cod="${esc(r.codigo || '')}">${esc(r.codigo || '#' + r.id)}${r.fecha_viaje_inicio ? ' · ' + pvFecha(r.fecha_viaje_inicio) : ''} · ${money(Number(r.monto_total || 0))}</button>`).join(' ')}</div>` : '';
+}
+// Habitación de cada hospedaje en el Resumen, con las del tarifario del hotel. Sin tocarla queda la del
+// servicio o, si no tenía, la primera del tarifario (la misma que toma solo el formulario de reserva).
+let PV_HAB_SEL = new Map(), PV_HOTELES = null;
+const PV_HAB_VACIAS = ['hotel', 'posada', 'turistico', 'turistica', 'de', 'del', 'la', 'el', 'los', 'las', 'y'];
+const pvHabTokens = s => cbTarNorm(s).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter(w => w.length > 1 && !PV_HAB_VACIAS.includes(w));
+// Los hospedajes importados de vouchers traen el hotel como texto: se busca el producto cuyo nombre contiene
+// al del servicio o viceversa; si dos empatan, no se adivina.
+async function pvHotelProducto(d) {
+  if (/^\d{1,18}$/.test(String(d.producto_id ?? ''))) return Number(d.producto_id);
+  const h = pvHabTokens(d.hotel); if (!h.length) return null;
+  PV_HOTELES ||= sb.from('productos').select('id,nombre').in('tipo', ['hotel', 'paquete']).eq('activo', true).limit(2000)
+    .then(r => { if (r.error) { PV_HOTELES = null; return []; } return r.data || []; });
+  const sub = (a, b) => a.every(w => b.includes(w));
+  const c = (await PV_HOTELES).map(p => ({ id: Number(p.id), t: pvHabTokens(p.nombre) })).filter(p => p.t.length && (sub(p.t, h) || sub(h, p.t)))
+    .map(p => ({ id: p.id, n: p.t.filter(w => h.includes(w)).length })).sort((a, b) => b.n - a.n);
+  return c.length && (c.length === 1 || c[0].n > c[1].n) ? c[0].id : null;
+}
+async function pvHabPintar() {
+  const box = document.getElementById('pv-e-habs'), id = RV_RESERVA_ID;
+  if (!box || !PV_ACTUAL) return;
+  const hosp = (RV_DET?.servicios || []).filter(s => s.tipo === 'hospedaje' && !s.anulado_en && s.detalle?.hotel);
+  const filas = (await Promise.all(hosp.map(async s => {
+    const d = s.detalle, prod = await pvHotelProducto(d).catch(() => null);
+    const tar = prod ? await cbTraerTarifas(prod).catch(() => []) : [], delPlan = d.plan ? cbTarDelPlan(tar, d.plan) : tar;
+    const ops = cbTarOpciones(delPlan.length ? delPlan : tar, 'habitacion');
+    return ops.length ? { s, d, ops: [...new Set([d.habitacion, ...ops].filter(Boolean))], actual: PV_HAB_SEL.get(s.id) ?? (d.habitacion || ops[0]) } : null;
+  }))).filter(Boolean);
+  if (id !== RV_RESERVA_ID || box !== document.getElementById('pv-e-habs')) return;
+  box.innerHTML = filas.length ? `<div class="rs-grid2">${filas.map(({ s, d, ops, actual }) => `<div><label class="rs-lbl" for="pv-e-hab-${s.id}">Habitación${filas.length > 1 ? ' · ' + esc(d.hotel) : ''}</label>
+    <select class="ei" id="pv-e-hab-${s.id}" data-pv-hab="${s.id}" title="${esc(d.hotel)}">${ops.map(o => `<option value="${esc(o)}"${o === actual ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`).join('')}</div>
+    <div class="csub">Habitaciones del tarifario${filas.length > 1 ? '' : ' de ' + esc(filas[0].d.hotel)}; si no la cambiás, queda la marcada.</div>` : '';
+}
+async function pvGuardarHabitaciones() {
+  for (const sel of document.querySelectorAll('#pv-e-habs [data-pv-hab]')) {
+    const s = (RV_DET?.servicios || []).find(x => x.id === Number(sel.dataset.pvHab));
+    if (!s || !sel.value || sel.value === (s.detalle?.habitacion || '')) continue;
+    const { data, error } = await sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: s.id, p_datos: { detalle: { ...s.detalle, habitacion: sel.value } } });
+    if (error || !data?.ok) return rvErr(error, data);
+  }
+  return null;
+}
 async function guardarPostventa(marcarPagado) {
   if (!PV_ACTUAL) return;
   const btn = document.getElementById(marcarPagado ? 'pv-e-pago' : 'pv-e-guardar');
@@ -3999,8 +4504,12 @@ async function guardarPostventa(marcarPagado) {
   });
   if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = previo; err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
   const errEmpresa = await pvGuardarEmpresa();
+  const errCliente = await pvGuardarCliente();
+  const errHab = await pvGuardarHabitaciones();
   btn.disabled = false; btn.innerHTML = previo;
   if (errEmpresa) { err.textContent = 'La postventa se guardó, pero no la empresa: ' + errEmpresa; return; }
+  if (errCliente) { err.textContent = 'La postventa se guardó, pero no los datos del cliente: ' + errCliente; return; }
+  if (errHab) { err.textContent = 'La postventa se guardó, pero no la habitación: ' + errHab; return; }
   window.closeDrawer();
   // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
   // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
@@ -4026,7 +4535,7 @@ const RV_DETALLE = {
   traslado_terrestre: [['origen', 'Origen'], ['destino', 'Destino'], ['vehiculo', 'Vehículo']],
   traslado_maritimo: [['embarcadero', 'Embarcadero'], ['embarcacion', 'Embarcación'], ['ida_vuelta', 'Ida y vuelta', 'bool']],
   full_day: [['excursion', 'Excursión'], ['punto_encuentro', 'Punto de encuentro'], ['incluye', 'Incluye']],
-  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'calc'], ['check_in', 'Check-in'], ['check_out', 'Check-out'], ['voucher', 'N° de voucher']],
+  hospedaje: [['hotel', 'Hotel'], ['habitacion', 'Habitación'], ['plan', 'Plan'], ['noches', 'Noches', 'calc'], ['voucher', 'N° de voucher']],
   seguro: [['aseguradora', 'Aseguradora'], ['cobertura', 'Cobertura'], ['poliza', 'Póliza']],
   otro: [['nota', 'Nota']],
 };
@@ -4066,6 +4575,10 @@ const RV_ERR = {
   lead_fuera_de_postventa: 'El cliente todavía no está EN ESPERA DE PAGO ni PAGO REALIZADO: su asesor tiene que moverlo antes de crear la reserva',
   lead_no_coincide: 'La solicitud es de otro cliente', reserva_no_disponible: 'Esa reserva ya no está abierta', solicitud_cerrada: 'La solicitud ya está cerrada',
   solicitud_no_existe: 'La solicitud ya no existe', falta_lead: 'Elegí el cliente', lead_no_disponible: 'Ese cliente no existe o fue eliminado',
+  tiene_factura: 'Tiene factura registrada: no se puede eliminar', tiene_abonos: 'Tiene abonos vigentes: anúlalos primero',
+  tiene_comision: 'Tiene una comisión cargada: recházala o elimínala primero', tiene_pagos_proveedor: 'Ya tiene pagos a proveedor registrados',
+  comision_pagada: 'La comisión de esta reserva ya se le pagó al asesor: no se puede eliminar',
+  reserva_cambio: 'La reserva cambió (factura, abono o comisión nueva) mientras confirmabas: vuelve a intentarlo',
 };
 const rvErr = (error, data) => RV_ERR[data?.error] || RV_ERR[error?.message] || data?.error || error?.message || 'error desconocido';
 const rvMonto = (cent, mon) => (Number(cent || 0) / 100).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (mon || 'USD');
@@ -4183,7 +4696,7 @@ function rvRender() {
   const n = { servicios: servicios.filter(s => !s.anulado_en).length, pasajeros: pasajeros.length, documentos: documentos.length };
   document.querySelectorAll('#drawerContent [data-rv-n]').forEach(x => x.textContent = n[x.dataset.rvN] || '');
   rvResumenTotal(reserva || {});
-  rvChecklist();
+  rvChecklist(); pvHabPintar();
   rvRenderServicios(true); rvRenderPasajeros(true); rvRenderDocumentos(true);
 }
 // suave = recarga de fondo (rvCargar): no pisar un formulario abierto ni un archivo ya elegido.
@@ -4196,6 +4709,12 @@ async function rvChecklist() {
   if (id !== RV_RESERVA_ID) return;
   if (error || !data?.ok) { box.innerHTML = ''; if (error) console.error('reserva_checklist', error); return; }
   const f = data.faltantes || [];
+  // El chip «Sin voucher» de cada hospedaje sigue lo que dice el servidor (también cuenta el PDF del voucher vinculado).
+  if (RV_DET) {
+    const sin = new Set(f.filter(x => x.codigo === 'voucher').map(x => x.servicio_id)), antes = RV_DET.sin_voucher;
+    RV_DET.sin_voucher = sin;
+    if (!antes || antes.size !== sin.size || [...sin].some(x => !antes.has(x))) rvRenderServicios(true);
+  }
   if (data.completa) { box.innerHTML = '<div class="rv-check ok"><i class="fas fa-circle-check"></i> Reserva completa: nada pendiente</div>'; return; }
   const orden = Object.keys(RV_PASOS), ord = x => { const i = orden.indexOf(x.codigo); return i < 0 ? 99 : i; };
   const lista = [...f].sort((a, b) => ord(a) - ord(b)), primero = RV_PASOS[lista[0].codigo];
@@ -4227,15 +4746,20 @@ function rvTrasCambio() {
   if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
   if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
 }
+// Lote 3 (2026-10-31): cuántas veces se usa cada botón de Reservas, para decidir qué UI sobra (tabla uso_botones).
+const RV_SIN_MEDIR = new Set(['menu', 'cancelar', 'elegir-archivo', 'tramo-mas', 'tramo-menos']);
+function registrarUsoBoton(boton, reservaId) {
+  if (reservaId) sb.rpc('registrar_uso_boton', { p_reserva_id: reservaId, p_boton: boton }).then(() => {}, () => {});
+}
 function rvAccion(accion, id, btn) {
   const n = id ? Number(id) : null;
   if (accion !== 'menu') rvMenuCerrar(false, false);
+  if (!RV_SIN_MEDIR.has(accion)) registrarUsoBoton('rv:' + accion, RV_RESERVA_ID);
   switch (accion) {
     case 'menu': return rvMenuAbrir(btn);
-    case 'subir-archivo': return rvSubirArchivo();
     case 'nuevo-servicio': return rvForm({ tipo: 'servicio', id: null });
     case 'voucher': return rvGenerarVoucher(n, btn);
-    case 'voucher-paquete': return rvGenerarVoucherPaquete(btn);
+    case 'voucher-reserva': return rvGenerarVoucherReserva(btn);
     case 'editar-servicio': case 'emitir': return rvEditarServicio(n);
     case 'costo': return rvForm({ tipo: 'costo', id: n });
     case 'nuevo-pasajero': return rvForm({ tipo: 'pasajero', id: null });
@@ -4295,12 +4819,10 @@ function rvRenderServicios(suave) {
 }
 function rvBarraServicios(ss) {
   if (!rvPuedeEditar()) return '';
-  const vivos = ss.filter(s => !s.anulado_en);
-  // Con un boleto vivo y rol de boletería el botón abre los Tickets del boleto, donde la IA lee el archivo.
-  const ia = rvAgente() && vivos.some(s => s.tipo === 'boleto_aereo');
+  // Lote 3: sin «Subir ticket o voucher» (los archivos se suben en Documentos; boletería, desde Tickets del boleto).
+  const vivos = ss.filter(s => !s.anulado_en && s.estado !== 'cancelado');
   return `<div class="rv-add-barra"><button class="dbtn save rv-add rv-add-pri" type="button" data-rv-accion="nuevo-servicio" aria-label="Agregar servicio"><i class="fas fa-plus"></i> Servicio</button>
-    <button class="dbtn gh rv-add rv-add-subir" type="button" data-rv-accion="subir-archivo"><i class="fas fa-file-arrow-up"></i> ${ia ? 'Subir ticket o voucher y que la IA lo lea' : 'Subir ticket o voucher'}</button>
-    ${vivos.length ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-paquete"><i class="fas fa-suitcase-rolling"></i> Voucher del paquete</button>' : ''}</div>`;
+    ${vivos.length ? '<button class="dbtn gh rv-add rv-add-voucher" type="button" data-rv-accion="voucher-reserva"><i class="fas fa-suitcase-rolling"></i> Voucher de la reserva</button>' : ''}</div>`;
 }
 // Desglose del gerente (2026-10-16): Hotel · Traslado · Boletería, cada uno con su proveedor y su neto.
 function rvSeccionesHtml(ss, vista) {
@@ -4328,8 +4850,27 @@ async function rvGenerarVoucher(servicioId, btn) {
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
-  const hosp = servs.find(s => s.tipo === 'hospedaje');
-  const total = Number(r.monto_total ?? c.monto_total ?? 0), pagado = Number(r.monto_pagado ?? c.monto_pagado ?? 0);
+  // M2: el voucher de un servicio lleva solo ese servicio, su precio y lo pagado a él (antes, toda la reserva).
+  const hosp = s0.tipo === 'hospedaje' ? s0 : null;
+  // El voucher de un hotel lleva su check-in y check-out, no las fechas de todo el viaje.
+  const fv = rvVoucherFechasViaje(hosp ? null : c, hosp ? {} : r, hosp);
+  if (s0.precio_usd_centavos == null) return errToast('Cargá el precio del servicio antes de generar su voucher.');
+  const total = Number(s0.precio_usd_centavos) / 100;
+  const previo = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Voucher...'; }
+  const soltar = () => { if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; } };
+  let pagado = 0;
+  try {
+    const { data: lista, error } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: c.id });
+    if (error) throw error;
+    const vig = (lista?.abonos || []).filter(a => !a.anulado_en), suma = xs => xs.reduce((n, a) => n + Number(a.monto_usd || 0), 0);
+    // Los abonos sin servicio (los anteriores a servicio_id) y lo cobrado sin fila de abono van al único
+    // servicio, o al primer hospedaje (regla del dueño: los abonos son del hospedaje).
+    const hosps = servs.filter(s => s.tipo === 'hospedaje').sort((a, b) => a.id - b.id);
+    const absorbe = (servs.length === 1 ? servs[0] : hosps[0])?.id === s0.id;
+    const sinFila = absorbe ? Math.max(0, Number(lista?.monto_pagado ?? r.monto_pagado ?? 0) - suma(vig)) : 0;
+    pagado = Math.min(total, Math.round((suma(vig.filter(a => Number(a.servicio_id) === s0.id || (absorbe && !a.servicio_id))) + sinFila) * 100) / 100);
+  } catch (e) { soltar(); return errToast('No pude leer los abonos: ' + (e?.message || e)); }
   const fecha = s => s ? pvFecha(s) : '';
   const v = {
     codigo_reserva: c.codigo || r.codigo || '', created_at: new Date().toISOString(),
@@ -4337,15 +4878,15 @@ async function rvGenerarVoucher(servicioId, btn) {
     documento_identidad: titular ? [RV_TIPO_DOC[titular.tipo_documento] || '', titular.numero_documento].filter(Boolean).join(' ') : '',
     telefono: (titular?.telefono) || c.telefono || '', asesor_nombre: c.asesor || '',
     destino_hospedaje: hosp ? (hosp.detalle?.hotel || hosp.descripcion || '') : (r.destino || c.destino || ''),
-    fecha_entrada: fecha(hosp?.fecha_inicio), fecha_salida: fecha(hosp?.fecha_fin),
-    check_in: hosp?.detalle?.check_in || '', check_out: hosp?.detalle?.check_out || '',
+    fecha_entrada: fecha(fv.entrada), fecha_salida: fecha(fv.salida),
+    etiqueta_entrada: fv.etqEntrada, etiqueta_salida: fv.etqSalida, check_in: '', check_out: '',
     modalidad: hosp?.detalle?.plan || '', habitaciones: hosp?.detalle?.habitacion || '',
     total_dias: hosp?.detalle?.noches ? `${hosp.detalle.noches} noches` : '',
-    adultos: r.pax_adultos || servs.reduce((n, s) => Math.max(n, Number(s.pax_adultos || 0)), 0) || null,
-    ninos: String(r.pax_ninos || servs.reduce((n, s) => Math.max(n, Number(s.pax_ninos || 0)), 0) || ''),
+    adultos: s0.pax_adultos || r.pax_adultos || null,
+    ninos: String(s0.pax_ninos || r.pax_ninos || ''),
     status_reserva: 'CONFIRMADO', total_general: total, monto_pagado: pagado, resta: Math.round((total - pagado) * 100) / 100,
     forma_pago: '', referencia_pago: '',
-    servicios: servs.map(s => {
+    servicios: [s0].map(s => {
       const tks = (det.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).map(b => b.numero_ticket);
       const vuelos = s.tipo === 'boleto_aereo' ? (det.tramos || []).filter(t => t.servicio_id === s.id)
         .map(t => `${t.origen_iata || ''} a ${t.destino_iata || ''} ${rvFechaHoraTramo(t.sale_en)}${t.numero_vuelo ? ' · vuelo ' + t.numero_vuelo : ''}`.trim()).join('\n') : '';
@@ -4355,81 +4896,46 @@ async function rvGenerarVoucher(servicioId, btn) {
         monto: s.precio_usd_centavos != null ? Number(s.precio_usd_centavos) / 100 : null };
     }),
   };
-  const previo = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Voucher...'; }
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
-    const nombre = docNombre([`Voucher ${v.codigo_reserva || c.id}`, v.cliente_nombre, v.destino_hospedaje, docFecha(hosp?.fecha_inicio)]);
-    const falla = await vcAdjuntarPdf(c.id, servicioId, blob, nombre);
-    vcDescargar(blob, nombre);
+    const nombre = docNombre([`Voucher ${v.codigo_reserva || c.id}`, v.cliente_nombre, v.destino_hospedaje, docFecha(s0.fecha_inicio)]);
+    const falla = await vcAdjuntarVoucherReemplazando(c.id, servicioId, blob, nombre);
+    vcDescargarConHora(blob, nombre);
     if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la ficha: ${falla}`);
-    else if (servs.some(s => s.tipo === 'boleto_aereo' && !(det.boletos || []).some(b => b.servicio_id === s.id && b.numero_ticket))) errToast('Voucher generado y adjunto, pero el boleto todavía no tiene e-tickets cargados (botón Tickets).');
+    else if (s0.tipo === 'boleto_aereo' && !(det.boletos || []).some(b => b.servicio_id === s0.id && b.numero_ticket)) errToast('Voucher generado y adjunto, pero el boleto todavía no tiene e-tickets cargados (botón Tickets).');
     else okToast('Voucher generado, descargado y adjunto a la reserva');
   } catch (e) {
     errToast('No se pudo generar el voucher: ' + (e?.message || e));
   } finally {
-    if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
+    soltar();
   }
 }
+const rvVoucherFechasViaje = (c, r, hosp) => {
+  const ini = c?.fecha_viaje_inicio || r.fecha_viaje_inicio, fin = c?.fecha_viaje_fin || r.fecha_viaje_fin;
+  return ini || fin ? { entrada: ini, salida: fin, etqEntrada: 'FECHA DE IDA', etqSalida: 'FECHA DE REGRESO' }
+    : { entrada: hosp?.fecha_inicio, salida: hosp?.fecha_fin, etqEntrada: 'CHECK-IN', etqSalida: 'CHECK-OUT' };
+};
 const rvVoucherFechaIso = iso => { const [y, m, d] = String(iso || '').split('-'); return d ? `${d}/${m}/${y}` : ''; };
 const rvVoucherRango = s => {
   const ini = rvVoucherFechaIso(s.fecha_inicio), fin = rvVoucherFechaIso(s.fecha_fin);
   const fechas = !ini ? '' : fin && s.fecha_fin !== s.fecha_inicio ? `${ini} al ${fin}` : ini;
   return [fechas, s.hora ? String(s.hora).slice(0, 5) : ''].filter(Boolean).join(' ');
 };
-// Voucher de todo el paquete (hotel + vuelos + traslados...). Si falta cédula, teléfono o
-// forma de pago, la misma hoja de confirmación los pide antes de armar el PDF.
-async function rvGenerarVoucherPaquete(btn) {
+// Datos del voucher del paquete con la reserva abierta (RV_DET). `datos`: cliente, documento, teléfono,
+// forma de pago y referencia. También lo usa el abono para reimprimir el voucher de una reserva sin voucher propio.
+function rvArmarVoucherPaquete(datos) {
   const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
-  if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
-  const titular = pax.find(p => p.titular) || pax[0] || null;
-  const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
-  const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
-  const documento = titular?.numero_documento || prev.documento || '';
-  const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
-  // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
-  let ultimo = null;
-  if (!prev.formaPago && !r.forma_pago) {
-    try {
-      const { data: lista } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
-      ultimo = (lista?.abonos || []).filter(a => !a.anulado_en)
-        .sort((a, b) => Number(b.id) - Number(a.id))[0] || null;
-    } catch (e) { console.error('voucher: abonos', e); }
-  }
-  const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
-  const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
-  const faltan = [];
-  if (!cliente || /^sin nombre$/i.test(cliente)) faltan.push('nombre');
-  if (!documento) faltan.push('cédula');
-  if (!telefono) faltan.push('teléfono');
-  if (!formaPago) faltan.push('forma de pago');
-  let datos = { cliente, documento, telefono, formaPago, referencia };
-  if (faltan.length) {
-    const f = await confirmarSheet({
-      titulo: 'Datos del voucher del paquete',
-      detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
-      textoOk: 'Generar voucher',
-      campos: [
-        { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
-        { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
-        { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
-        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elegí una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
-        { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
-      ],
-    });
-    if (!f) return;
-    datos = f;
-    RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
-  }
   const doc = String(datos.documento || '').trim();
   const documentoFinal = /^[\d.\s]+$/.test(doc) ? rvDocMostrar(doc, 'cedula') : doc.toUpperCase();
   const inicios = servs.map(s => s.fecha_inicio).filter(Boolean).sort();
   const fines = servs.map(s => s.fecha_fin || s.fecha_inicio).filter(Boolean).sort();
-  const entrada = inicios[0] || r.fecha_viaje_inicio, salida = fines[fines.length - 1] || r.fecha_viaje_fin;
   const hosp = servs.find(s => s.tipo === 'hospedaje') || null;
+  // Fechas del voucher = Inicio/Fin del viaje (Resumen) como ida/regreso; sin ellas, check-in/out del hospedaje.
+  const fv = rvVoucherFechasViaje(c, r, hosp);
+  const entrada = fv.entrada || inicios[0], salida = fv.salida || fines[fines.length - 1];
   const destinos = [...new Set(servs.map(s => s.destino).filter(Boolean))];
   const destinoBase = r.destino || c?.destino || destinos[0] || '';
   const hotel = hosp ? String(hosp.detalle?.hotel || hosp.descripcion || '').trim() : '';
@@ -4450,7 +4956,7 @@ async function rvGenerarVoucherPaquete(btn) {
     asesor_nombre: c?.asesor || r.asesor || '',
     destino_hospedaje: destino,
     fecha_entrada: rvVoucherFechaIso(entrada), fecha_salida: rvVoucherFechaIso(salida),
-    check_in: '', check_out: '',
+    etiqueta_entrada: fv.etqEntrada, etiqueta_salida: fv.etqSalida, check_in: '', check_out: '',
     modalidad: hosp?.detalle?.plan || 'Paquete turístico', habitaciones: hosp?.detalle?.habitacion || '',
     total_dias: noches ? `${noches} noches` : dias > 0 ? `${dias} noches` : '',
     adultos, ninos,
@@ -4475,19 +4981,102 @@ async function rvGenerarVoucherPaquete(btn) {
     }),
     pasajeros: pax.map(p => ({ nombre: [p.nombre, p.apellido].filter(Boolean).join(' '), documento: p.numero_documento ? [RV_TIPO_DOC[p.tipo_documento] || '', p.numero_documento].filter(Boolean).join(' ') : '' })),
   };
+  return { v, entrada };
+}
+// Pedido del dueño 30-oct: con abonos, el voucher de la reserva muestra cada abono (el de otro servicio
+// rotulado con su servicio, reserva_abonos.servicio_id) y el resumen de la reserva completa.
+function rvVoucherConAbonos(v, servs, abonos, formaPago = '') {
+  const cent = x => Math.round(Number(x || 0) * 100);
+  const resto = abonos;
+  const servDe = a => servs.find(s => Number(s.id) === Number(a.servicio_id));
+  const totalHosp = servs.reduce((t, s) => t + (Number(s.precio_usd_centavos) || 0), 0) || cent(v.total_general);
+  const cobrado = resto.reduce((t, a) => t + cent(a.monto_usd), 0);
+  // M4: nunca pagado > total; si pasa, hay un abono mal asignado a un servicio.
+  if (cobrado > totalHosp) errToast('Los abonos suman más que el total de la reserva: revisá los abonos.');
+  const pagado = Math.min(cobrado, totalHosp);
+  const dia = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+  const bs = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  Object.assign(v, {
+    // Sin tabla de pasajeros (la cédula ya va en Datos del cliente): así el resumen y los abonos caben en la página 1.
+    pasajeros: [],
+    total_general: totalHosp / 100, monto_pagado: pagado / 100, resta: Math.max(0, totalHosp - pagado) / 100,
+    abonos_detalle: resto.map(a => ({
+      fecha: dia(a.fecha), referencia: a.referencia || '', monto: Number(a.monto_usd || 0),
+      metodo: /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? (formaPago || 'Abono') : a.metodo,
+      servicio: /^inicial/i.test(a.nota || '') ? 'Inicial reserva' : servDe(a) && servDe(a).tipo !== 'hospedaje' ? ({ boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', traslado_maritimo: 'Traslado', full_day: 'Full day', seguro: 'Seguro' }[servDe(a).tipo] || 'Otro servicio') : '',
+    })),
+  });
+}
+// Voucher de la reserva (lote 3: une el del paquete y el de abonos): todos los servicios (hotel + vuelos +
+// traslados...) y, si hay abonos, cada abono. Si falta cédula, teléfono o forma de pago, la misma hoja
+// de confirmación los pide antes de armar el PDF.
+async function rvGenerarVoucherReserva(btn) {
+  const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
+  const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
+  if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
+  const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
+  const titular = pax.find(p => p.titular) || pax[0] || null;
+  const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
+  const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
+  // La cédula sale del pasajero: el titular, y si no tiene, el primero que la tenga.
+  const documento = titular?.numero_documento || pax.find(p => p.numero_documento)?.numero_documento || prev.documento || '';
+  const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
+  // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
+  // Sin acceso a los abonos (boletería) o si falla la lectura, sale el voucher sin la tabla de abonos.
+  let ultimo = null, abonos = [];
+  if (rvVista() !== 'boleteria') {
+    try {
+      const { data: lista, error } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
+      if (error) throw error;
+      abonos = (lista?.abonos || []).filter(a => !a.anulado_en).sort((a, b) => Number(a.id) - Number(b.id));
+      ultimo = abonos[abonos.length - 1] || null;
+    } catch (e) {
+      console.error('voucher: abonos', e);
+    }
+  }
+  const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
+  const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
+  const faltan = [];
+  if (!cliente || /^sin nombre$/i.test(cliente)) faltan.push('nombre');
+  if (!documento) faltan.push('cédula');
+  if (!telefono) faltan.push('teléfono');
+  if (!formaPago) faltan.push('forma de pago');
+  let datos = { cliente, documento, telefono, formaPago, referencia };
+  if (faltan.length) {
+    const f = await confirmarSheet({
+      titulo: 'Datos del voucher de la reserva',
+      detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
+      textoOk: 'Generar voucher',
+      campos: [
+        { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
+        { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
+        { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
+        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elegí una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
+        { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
+      ],
+    });
+    if (!f) return;
+    datos = f;
+    RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
+  }
+  const { v, entrada } = rvArmarVoucherPaquete(datos), codigo = v.codigo_reserva, destino = v.destino_hospedaje;
+  if (abonos.length) rvVoucherConAbonos(v, servs, abonos, datos.formaPago);
+  const que = 'Voucher de la reserva', base = `Voucher ${codigo || RV_RESERVA_ID}`;
   const previo = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
   try {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
-    const nombre = docNombre([`Voucher ${codigo || RV_RESERVA_ID}`, v.cliente_nombre, destino, docFecha(entrada)]);
+    const nombre = docNombre([base, v.cliente_nombre, destino, docFecha(entrada)]);
+    // También deja sin efecto los «Voucher abonos» del hotel de antes de unir los dos botones.
+    const deAbonos = d => String(d.nombre || '').startsWith(`Voucher abonos ${codigo || RV_RESERVA_ID} - `);
     let falla = null;
-    try { falla = await vcAdjuntarPdf(RV_RESERVA_ID, null, blob, nombre); } catch (e) { falla = e?.message || 'error de red'; }
-    vcDescargar(blob, nombre);
-    if (falla) errToast(`Voucher generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
-    else { okToast('Voucher del paquete generado, descargado y adjunto' + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
+    try { falla = await vcAdjuntarVoucherReemplazando(RV_RESERVA_ID, null, blob, nombre, deAbonos); } catch (e) { falla = e?.message || 'error de red'; }
+    vcDescargarConHora(blob, nombre);
+    if (falla) errToast(`${que} generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
+    else { okToast(`${que} generado, descargado y adjunto` + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
   } catch (e) {
-    errToast('No se pudo generar el voucher del paquete: ' + (e?.message || e));
+    errToast(`No se pudo generar el ${que.toLowerCase()}: ` + (e?.message || e));
   } finally {
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
   }
@@ -4538,7 +5127,9 @@ function rvServicioSub(s) {
   return [fechas, pax, loc];
 }
 // Misma regla que reserva_faltantes: un hospedaje confirmado necesita un voucher suyo o de la reserva en general.
-const rvTieneVoucher = s => (RV_DET?.documentos || []).some(d => d.tipo === 'voucher' && (d.servicio_id === s.id || d.servicio_id == null));
+// Con el checklist ya cargado (rvChecklist) manda el servidor, que también acepta el PDF del voucher de Lotus vinculado.
+const rvTieneVoucher = s => RV_DET?.sin_voucher ? !RV_DET.sin_voucher.has(s.id)
+  : s.detalle?.voucher != null || (RV_DET?.documentos || []).some(d => d.tipo === 'voucher' && (d.servicio_id === s.id || d.servicio_id == null));
 const rvChip = (txt, cls = '', ico = '') => `<span class="rv-chip${cls ? ' ' + cls : ''}">${ico ? `<i class="fas ${ico}"></i>` : ''}${esc(txt)}</span>`;
 function rvChipsServicio(s) {
   const c = [], apto = RV_APTOS[s.id];
@@ -4547,7 +5138,8 @@ function rvChipsServicio(s) {
   if (apto) c.push(rvChip(apto.apartamento + (apto.proveedor ? ' · ' + apto.proveedor : ''), '', 'fa-building'));
   if (rvVeCostos() && s.proveedor) c.push(rvChip('Proveedor: ' + s.proveedor));
   if (s.tipo === 'hospedaje' && ['confirmado', 'emitido'].includes(s.estado) && !rvTieneVoucher(s)) c.push(rvChip('Sin voucher', 'warn'));
-  if (s.tipo === 'boleto_aereo') {
+  // Tramos, tickets y emisión son de Boletería: el asesor no los ve como pendientes.
+  if (s.tipo === 'boleto_aereo' && rvAgente()) {
     const tramos = (RV_DET.tramos || []).filter(t => t.servicio_id === s.id).length;
     const pax = (RV_DET.pasajeros || []).length || Number(s.pax_adultos || 0) + Number(s.pax_ninos || 0);
     const tks = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).length;
@@ -4579,7 +5171,7 @@ function rvServicioHtml(s, vista) {
   const menu = anulado ? [] : rvMenuItems(s, editable);
   const btn = (acc, txt) => `<button class="btn-sm" type="button" data-rv-accion="${acc}" data-id="${s.id}">${txt}</button>`;
   const acciones = anulado ? '' : `<div class="rv-svc-acc">${editable ? btn('editar-servicio', 'Editar') : ''}${vista === 'boleteria' ? btn('emitir', 'Localizador, estado y TL') + btn('subir-boleto', 'Subir boleto') : ''}${btn('voucher', 'Voucher')}${menu.length ? `<button class="btn-sm rv-svc-mas-btn" type="button" data-rv-accion="menu" aria-haspopup="menu" aria-expanded="false" aria-label="Más acciones: ${esc(titulo)}"><i class="fas fa-ellipsis"></i></button>` : ''}</div>${menu.length ? `<div class="rv-menu" role="menu" hidden>${menu.join('')}</div>` : ''}`;
-  const boleto = s.tipo === 'boleto_aereo' && !anulado ? `<details class="rv-svc-mas"${vista === 'boleteria' ? ' open' : ''}><summary>Tramos, tickets e historial</summary>${rvBoletoHtml(s)}</details>` : '';
+  const boleto = s.tipo === 'boleto_aereo' && !anulado && rvAgente() ? `<details class="rv-svc-mas"${vista === 'boleteria' ? ' open' : ''}><summary>Tramos, tickets e historial</summary>${rvBoletoHtml(s)}</details>` : '';
   const chips = anulado ? '' : rvChipsServicio(s);
   return `<article class="rv-svc${anulado ? ' rv-anulado' : ''}">
     <div class="rv-svc-top"><div class="rv-svc-ic"><i class="fas ${t[1]}"></i></div>
@@ -4622,14 +5214,6 @@ function rvMenuAbrir(btn) {
 }
 // «Subir ticket o voucher»: con un boleto vivo y rol de boletería abre sus Tickets (ahí la IA lee el ticket);
 // si no, lleva a Documentos con el tipo y el servicio ya elegidos.
-function rvSubirArchivo() {
-  const vivos = (RV_DET?.servicios || []).filter(s => !s.anulado_en), boletos = vivos.filter(s => s.tipo === 'boleto_aereo');
-  if (rvAgente() && boletos.length) return rvForm({ tipo: 'tickets', id: (boletos.find(b => !rvTicketsDocs(b).length) || boletos[0]).id });
-  const hotel = vivos.find(s => s.tipo === 'hospedaje' && ['confirmado', 'emitido'].includes(s.estado) && !rvTieneVoucher(s)) || vivos.find(s => s.tipo === 'hospedaje');
-  if (hotel) return rvDocAbrir('voucher', hotel.id);
-  if (boletos.length) return rvDocAbrir('boleto', boletos[0].id);
-  rvDocAbrir(rvDocTipoSugerido());
-}
 function rvEditarServicio(n) {
   const s = (RV_DET?.servicios || []).find(x => x.id === n);
   if (s?.tipo === 'boleto_aereo' && !bolCatalogo) return bolAsegurarCatalogo().then(() => rvForm({ tipo: 'servicio', id: n }));
@@ -4680,7 +5264,7 @@ function rvFormServicio(p) {
     <div id="rv-s-apto"></div>
     <div class="rv-3"><div id="rv-s-hora-box"><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
     <div class="rv-2"><div><label class="fl">Localizador <span style="font-weight:400">(opcional)</span></label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
-    ${s?.tipo === 'boleto_aereo' ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
+    ${s?.tipo === 'boleto_aereo' && rvAgente() ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
     <div id="rv-s-detalle"></div>
     <div class="eb-title" style="margin-top:14px"><i class="fas fa-tag"></i> Precio al cliente</div>
     <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
@@ -4689,8 +5273,12 @@ function rvFormServicio(p) {
   desc.dataset.manual = desc.value ? '1' : '';
   desc.addEventListener('input', () => { desc.dataset.manual = desc.value ? '1' : ''; });
   rvDetalleCampos(s?.detalle || {});
+  // Boleto nuevo cargado por el asesor: llega emitido (la emisión la hace Boletería antes de pasarlo).
+  const est = document.getElementById('rv-s-estado');
+  est.addEventListener('change', () => { est.dataset.manual = '1'; });
   document.getElementById('rv-s-tipo').onchange = () => {
     if (desc.dataset.manual !== '1') desc.value = '';
+    if (!s && !rvAgente() && est.dataset.manual !== '1') est.value = val('rv-s-tipo') === 'boleto_aereo' ? 'emitido' : 'cotizado';
     rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible();
   };
   ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = () => { rvAptoCampo(); rvNochesCampo(); }; });
@@ -4999,7 +5587,7 @@ async function rvGuardarServicio(btn) {
       if (!String(datos.detalle.aerolinea || '').trim()) { err.textContent = 'Falta la aerolínea del boleto.'; return; }
       if (!String(datos.detalle.ruta || datos.descripcion || '').trim()) { err.textContent = 'Falta la ruta del boleto (ej.: Valencia - Porlamar - Valencia).'; return; }
       if (!String(datos.descripcion || '').trim()) datos.descripcion = String(datos.detalle.ruta).trim();
-      if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_inicio) { err.textContent = 'Falta la fecha de ida.'; return; }
+      if (!tramosPrevios.length && !datos.fecha_inicio) { err.textContent = 'Falta la fecha de ida.'; return; }
       if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_fin) { err.textContent = 'Para ida y vuelta cargá la fecha de vuelta.'; return; }
     }
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
@@ -5274,7 +5862,7 @@ function rvTicketsDocsHtml(s) {
           : leyendo ? '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Leyendo el ticket…</div>'
           : `<div class="csub">${ia ? 'No detecté pasajeros en este ticket' : 'Sin lectura: probá Releer'}</div>`}
         ${det ? `<div class="rv-tk-det">${esc(det)}</div>` : ''}
-        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
+        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}">${docBotonVer()}</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
       </div>
     </div>`;
   }).join('');
@@ -5654,6 +6242,7 @@ async function rvLeerDocumento(p, archivo, aplicar) {
   poner('nombre', d.nombre); poner('apellido', d.apellido); poner('nacionalidad', d.nacionalidad);
   if (RV_TIPO_DOC[d.tipo_documento]) p.querySelector('#rv-p-tipodoc').value = d.tipo_documento;
   poner('numdoc', d.numero_documento); aplicar();
+  registrarUsoHerramienta(null, 'leer_documento', RV_RESERVA_ID);
   if (d.nacionalidad) p.querySelector('details.rs-mas')?.setAttribute('open', '');
   const vence = d.vencimiento && new Date(d.vencimiento) < new Date(Date.now() + 180 * 864e5) ? ` Ojo: vence el ${d.vencimiento}.` : '';
   msg.textContent = `Datos leídos del documento${d.confianza < 0.6 ? ' (foto poco clara)' : ''}: revisalos y guardá.${vence}`;
@@ -5760,7 +6349,7 @@ function rvRenderDocumentos(suave) {
     return `<div class="rv-doc"><div class="rv-doc-file">${esc(rvDocExt(d))}</div>
       <div class="rv-doc-main"><div class="rv-doc-n" title="${esc(d.nombre)}">${esc(d.nombre)}</div><div class="rv-doc-sub">${esc(detalle)}</div></div>
       <span class="rv-chip${d.tipo === 'comprobante' ? ' ok' : ''}">${esc(RV_DOC_TIPOS[d.tipo] || d.tipo)}</span>
-      <div class="rv-doc-acc"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}"><i class="fas fa-eye"></i> Ver</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}" title="Descargar con nombre legible" aria-label="Descargar ${esc(d.nombre)}"><i class="fas fa-download"></i></button>${vista !== 'boleteria' && rvPuedeEditar() ? `<button class="rv-doc-x" type="button" data-rv-accion="anular-documento" data-id="${d.id}" title="Quitar" aria-label="Quitar ${esc(d.nombre)}"><i class="fas fa-trash"></i></button>` : ''}</div></div>`;
+      <div class="rv-doc-acc"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}">${docBotonVer()}</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}" title="Descargar con nombre legible" aria-label="Descargar ${esc(d.nombre)}"><i class="fas fa-download"></i></button>${vista !== 'boleteria' && rvPuedeEditar() ? `<button class="rv-doc-x" type="button" data-rv-accion="anular-documento" data-id="${d.id}" title="Quitar" aria-label="Quitar ${esc(d.nombre)}"><i class="fas fa-trash"></i></button>` : ''}</div></div>`;
   }).join('') : '<div class="pv-empty">Sin documentos cargados</div>';
   const tipoSug = rvDocTipoSugerido();
   const caja = puedeSubir ? `<div class="rv-subir" data-rv-drop>
@@ -5807,12 +6396,15 @@ async function rvSubirDocumento(btn) {
 }
 async function rvDescargar(id, btn) {
   btn.disabled = true;
-  const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: id } });
-  btn.disabled = false;
-  if (error || !data?.ok) { const m = await msgErrorFn(error, data); errToast('No se pudo abrir: ' + (RV_ERR[m] || m)); return; }
-  // La URL firmada dura 120 s; si el navegador bloquea la ventana, queda el link a mano.
-  const w = window.open(data.url, '_blank');
-  if (w) w.opener = null; else linkToast(`<a href="${esc(data.url)}" target="_blank" rel="noopener">Abrir ${esc(data.nombre || 'documento')}</a>`);
+  try {
+    const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: id } });
+    if (error || !data?.ok) { const m = await msgErrorFn(error, data); errToast('No se pudo abrir: ' + (RV_ERR[m] || m)); return; }
+    const d = (RV_DET?.documentos || []).find(x => x.id === id) || { nombre: data.nombre, mime: data.mime };
+    await docEntregarUrl(data.url, rvDocNombreArchivo(d), d.mime || data.mime || 'application/pdf');
+  } catch (e) {
+    console.error('rvDescargar', e);
+    errToast('No se pudo abrir el documento');
+  } finally { btn.disabled = false; }
 }
 // Nombre legible para un documento de la reserva: si ya viene con el estándar
 // nuevo se respeta; si no, se arma con el tipo, el nombre original útil, el
@@ -6091,6 +6683,20 @@ async function loadMisVentasVentas() {
   renderMisVentasKPIs();
   renderMisVentasCards();
 }
+// D6: el abono de «Mis ventas» va por la reserva (pestaña Abonos), no por registrar_abono_venta.
+// Con varias reservas con saldo, abre el lead para elegir cuál.
+async function mvAbrirAbono(fila, btn) {
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: fila.cliente });
+  btn.disabled = false;
+  const reservas = (data || []).filter(x => x.lead_id === fila.lead_id);
+  const conSaldo = reservas.filter(x => Number(x.saldo_pendiente) > 0);
+  const c = conSaldo.length === 1 ? conSaldo[0] : reservas.length === 1 ? reservas[0] : null;
+  if (c) return abrirPostventa(c, 'abonos');
+  if (error || !reservas.length) return errToast(error ? 'No se pudo abrir la reserva' : 'Esta venta no tiene una reserva activa: creala desde el lead.');
+  okToast(`Tiene ${reservas.length} reservas: elegí en cuál cargar el abono.`);
+  abrirLeadDesdeMisVentas(fila.lead_id);
+}
 function renderMisVentasKPIs() {
   const thisMonth = new Date().toISOString().slice(0, 7);
   const delMes = MV_DATA.filter(r => (r.fecha_cierre || '').slice(0, 7) === thisMonth);
@@ -6139,7 +6745,7 @@ function renderMisVentasCards() {
   box.querySelectorAll('[data-mv-abono]').forEach(btn => btn.addEventListener('click', e => {
     e.stopPropagation();
     const fila = MV_DATA.find(r => r.lead_id === Number(btn.dataset.mvAbono));
-    if (fila) window.abrirRegistrarAbonoVentaUI(fila.lead_id, fila.saldo);
+    if (fila) mvAbrirAbono(fila, btn);
   }));
   box.querySelectorAll('[data-mv-completar]').forEach(btn => btn.addEventListener('click', async e => {
     e.stopPropagation();
@@ -7309,8 +7915,9 @@ function leadCardHtml(l) {
     `<span>${textoTelefonoLead(l)}</span>`,
     ROL !== 'asesor' && l.asesor ? `<span>${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</span>` : '',
   ].filter(Boolean).join('<span class="ec-dot">·</span>');
-  const chipsFichas = fichas ? [pc.etiquetas['Fecha estimada'] || pc.etiquetas.Fechas, pc.etiquetas.Presupuesto && 'Presupuesto ' + pc.etiquetas.Presupuesto]
-    .filter(Boolean).map(t => `<span class="lc-chip">${esc(t)}</span>`).join('') : '';
+  const fechaViaje = pc.etiquetas['Fecha estimada'] || pc.etiquetas.Fechas || l.fecha_estimada;
+  const chipsFichas = [fechaViaje && `<i class="fas fa-calendar-days"></i>${esc(fechaViaje)}`, fichas && pc.etiquetas.Presupuesto && esc('Presupuesto ' + pc.etiquetas.Presupuesto)]
+    .filter(Boolean).map(t => `<span class="lc-chip">${t}</span>`).join('');
   return `<div class="entity-card lead-card ${sinAtenderDatos ? 'tiene-sin-atender' : ''}" data-lead-id="${l.id}" style="position:relative;border-left:4px solid ${estadoColor}">
     <input type="checkbox" class="lead-check solo-admin-borrar" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''} style="position:absolute;top:10px;right:10px;width:18px;height:18px">
     <div class="lc-head">
@@ -7334,7 +7941,7 @@ function leadCardHtml(l) {
     <div class="ec-context">${contexto}</div>
     ${pc.resumen ? `<div class="lc-consulta${fichas ? ' larga' : ''}" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
     ${pc.avisos.length || chipsFichas ? `<div class="lc-chips">${pc.avisos.map(a => `<span class="lc-chip aviso"><i class="fas fa-triangle-exclamation"></i>${esc(a)}</span>`).join('')}${chipsFichas}</div>` : ''}
-    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>Última oferta: ${esc(pc.oferta)}</span></div>` : ''}
+    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-hotel"></i><span>IA recomendó: ${esc(pc.oferta)}</span></div>` : ''}
     <div class="lc-fill"></div>
     <div class="lc-foot">
       ${cta ? `<button type="button" class="lc-cta" data-accion="${cta.key}"><i class="fas ${cta.icono}"></i>${cta.texto}</button>` : '<span class="lc-cta-vacio"></span>'}
@@ -7676,6 +8283,18 @@ function actualizarBadgeLeads(pendientes) {
 // historial que antes vivían en pestañas que nadie abría. Cada campo se guarda
 // solo (autoguardarLead). Los inputs conservan sus ids: FIELD_IDS_LEAD,
 // valorLeadParaCampo y aplicarActualizacionLeadAbierto siguen igual.
+// Costo por lead solo de anuncios de venta (lead_origen_anuncio lo deja en null para reclutamiento/terceros).
+async function pintarOrigenAnuncio(leadId) {
+  const { data: o, error } = await sb.rpc('lead_origen_anuncio', { p_lead: leadId });
+  const chip = document.getElementById('d-origen-ad');
+  if (error || !o || !chip || currentLead?.id !== leadId) return;
+  const nombre = o.anuncio || o.campana || '';
+  const texto = nombre ? `Vino del anuncio «${nombre.slice(0, 60)}»` : o.ref ? `Vino del enlace «${o.ref}»` : 'Vino de un anuncio de Meta';
+  const costo = o.costo_por_lead != null ? ` · ~$${Number(o.costo_por_lead).toFixed(2)} por lead` : '';
+  chip.innerHTML = `<i class="fas fa-bullhorn"></i>${esc(texto + costo)}`;
+  if (o.anuncio && o.anuncio.length > 60) chip.title = o.anuncio;
+}
+
 function openDrawer(l, opciones = {}) {
   currentLead = l;
   camposSuciosLead = new Set(); conflictoLeadPendiente = false; CONFLICTO_IDS_LEAD = new Set();
@@ -7698,10 +8317,12 @@ function openDrawer(l, opciones = {}) {
   const lectura = (etiqueta, id, extra = '') => `<div class="dl-fila"><dt>${etiqueta}</dt><dd><span data-lect="${id}"></span>${extra}</dd></div>`;
   const dis = soloLectura ? 'disabled' : '';
   const badges = `${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}`;
+  if (l.meta_ad_id || l.meta_ref) queueMicrotask(() => pintarOrigenAnuncio(l.id));
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead dhead-lead" style="--est:${estColor}"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn"><span id="d-nombre">${esc(nombreLead(l))}</span>${badgePrioridadIA(l)}${badgeSeguidorIG(l)}</div>
       <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}${l.destino ? `<span class="dm-chip"><i class="fas fa-location-dot"></i>${esc(l.destino)}</span>` : ''}<span class="dm-chip"><i class="fas fa-clock"></i>${esc(tiempoRelativo(l.fecha_creacion))}</span></div>
+      ${l.meta_ad_id || l.meta_ref ? '<div class="dm"><span class="dm-chip" id="d-origen-ad"><i class="fas fa-bullhorn"></i>Vino de un anuncio de Meta</span></div>' : ''}
       ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div></div>
 
     <div class="dacc">
@@ -7776,6 +8397,18 @@ function openDrawer(l, opciones = {}) {
           <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
           <div class="edit-err" id="res-err"></div>
           <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true) : ''}
+        ${(vende || esOficina()) && LINK_PAGO_ESTADOS.includes(l.estado) ? seccion('link-pago', 'fa-link', 'Link de pago', `
+          <div class="csub" style="margin-bottom:8px">El cliente abre el link, elige cómo pagar (Zelle, Pago Móvil o Binance) y sube su comprobante. Vence en 24 horas; oficina lo verifica.</div>
+          <label class="fl">Reserva</label>
+          <select id="lp-reserva" class="ei" disabled><option value="">Cargando reservas…</option></select>
+          <div class="ef-fila">
+            <div style="flex:1"><label class="fl">Monto (USD)</label><input id="lp-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00"></div>
+            <div style="flex:1"><label class="fl">Si paga en Bs, tasa BCV</label><select id="lp-tasa" class="ei"><option value="USD">Dólar</option><option value="EUR">Euro</option></select></div>
+          </div>
+          <div class="edit-err" id="lp-err"></div>
+          <button class="dbtn save" id="lp-emitir" type="button" style="width:100%;margin-top:6px"><i class="fas fa-link"></i> Generar link</button>
+          <div id="lp-resultado" style="display:none;margin-top:10px"></div>
+          <div class="lp-links" id="lp-links"></div>`, false) : ''}
         <section class="dbloque" id="conv-bloque" hidden>
           <div class="dbloque-h"><span><i class="fas fa-robot"></i> Chat con la IA</span><button type="button" class="dbloque-btn" id="conv-ver">Ver todo</button></div>
           <div id="conv-preview" class="conv-preview"></div>
@@ -7855,6 +8488,11 @@ function openDrawer(l, opciones = {}) {
   if (document.getElementById('res-lista')) {
     document.getElementById('res-nueva').onclick = () => crearReservaLead(l);
     cargarReservasLead(l);
+  }
+  if (document.getElementById('lp-emitir')) {
+    document.getElementById('lp-emitir').onclick = () => emitirLinkPago(l);
+    if (!document.getElementById('res-lista')) lpCargarReservas(l);
+    cargarLinksPagoLead(l);
   }
   cargarConversacionLead(l);
   document.getElementById('drawer').classList.add('open');
@@ -7940,6 +8578,7 @@ async function cargarReservasLead(l) {
   const box = document.getElementById('res-lista'); if (!box) return;
   const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
   if (!box.isConnected) return;
+  lpPintarReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo));
   if (error || !data?.ok) { console.error('reservas_de_lead', error || data); box.innerHTML = '<div class="csub">No se pudieron cargar las reservas</div>'; return; }
   const rs = data.reservas || [];
   box.innerHTML = rs.length ? rs.map(r => {
@@ -8096,6 +8735,16 @@ function aplicarChatPegado(l, res) {
   closeSheet('pegar-chat-sheet');
   pintarLecturaDatos();
   okToast(n ? `Ficha actualizada (${n})` : 'No se aplicó nada');
+  if (n) registrarUsoHerramienta(l.id, 'pegar_chat');
+}
+
+// Solo para medir adopción: un fallo acá no se le muestra al asesor. Desde una
+// reserva no hay lead a mano y se saca del caso de postventa.
+async function registrarUsoHerramienta(leadId, herramienta, reservaId) {
+  try {
+    if (!leadId && reservaId) leadId = (await sb.from('postventa_casos').select('lead_id').eq('id', reservaId).maybeSingle()).data?.lead_id;
+    if (leadId) await sb.rpc('registrar_uso_herramienta', { p_lead_id: leadId, p_herramienta: herramienta });
+  } catch {}
 }
 
 /* ---------- Respuesta sugerida (EF sugerir-respuesta): texto listo para
@@ -8115,6 +8764,7 @@ async function abrirTextoIA(l) {
   txt.disabled = false;
   if (error || !data?.ok) { txt.value = ''; err.textContent = data?.error === 'lead_no_encontrado' ? 'No tenés acceso a ese lead.' : 'No se pudo armar la respuesta. Probá de nuevo en un momento.'; return; }
   txt.value = data.mensaje || '';
+  registrarUsoHerramienta(l.id, 'texto_ia');
 }
 
 /* ---------- Conversación/Actividad del registro de lead (Fase 3, tabs
@@ -8422,10 +9072,46 @@ async function cargarConversacionLead(l) {
   if (!CONV_HIST.length) return;
   const quien = m => m.rol === 'ia' ? 'Lotus IA' : 'Cliente';
   if (preview) preview.innerHTML = CONV_HIST.slice(-3).map(m => `<div class="conv-mini ${m.rol === 'ia' ? 'ia' : 'lead'}"><b>${quien(m)}:</b> ${esc(m.texto)}</div>`).join('');
-  CONV_CACHE = CONV_HIST.map(m => `<div class="conv-msg ${m.rol === 'ia' ? 'ia' : 'lead'}"><div class="conv-who">${quien(m)}</div>${esc(m.texto)}</div>`).join('');
-  if (box) box.innerHTML = CONV_CACHE;
+  const red = dmRed(l.canal);
+  CONV_CACHE = dmBurbujasHtml(CONV_HIST, l);
+  if (box) { box.innerHTML = CONV_CACHE; box.className = `dm-body dm-${red.k}`; requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; }); }
+  const sheet = document.getElementById('conv-lead-sheet');
+  if (sheet) sheet.dataset.red = red.k;
   const canal = document.getElementById('conv-lead-canal');
-  if (canal) canal.textContent = `Gestionada por la IA en ${l.canal || 'el canal'} (ManyChat), solo lectura · ${CONV_HIST.length} mensajes`;
+  if (canal) canal.innerHTML = `<div class="dm-avatar">${esc(dmInicial(l))}</div><div class="dm-quien"><b>${esc(l.nombre || 'Cliente')}</b><span><i class="${red.icono}"></i> ${red.nombre} · atendido por Lotus IA · ${CONV_HIST.length} mensajes</span></div>`;
+}
+// El historial se pinta como el DM de la red por donde llegó el cliente
+// (Instagram, Messenger, WhatsApp, TikTok); lo demás cae a un chat neutro.
+const DM_REDES = {
+  ig: { nombre: 'Instagram', icono: 'fab fa-instagram' },
+  fb: { nombre: 'Messenger', icono: 'fab fa-facebook-messenger' },
+  wa: { nombre: 'WhatsApp', icono: 'fab fa-whatsapp' },
+  tt: { nombre: 'TikTok', icono: 'fab fa-tiktok' },
+  web: { nombre: 'Chat', icono: 'fas fa-comments' }
+};
+function dmRed(canal) {
+  const c = String(canal || '').toLowerCase();
+  const k = c.includes('insta') ? 'ig' : (c.includes('face') || c.includes('messenger')) ? 'fb' : c.includes('whats') ? 'wa' : c.includes('tiktok') ? 'tt' : 'web';
+  return { k, ...DM_REDES[k] };
+}
+const dmInicial = l => (String(l.nombre || '').trim()[0] || '?').toUpperCase();
+function dmTextoHtml(m) {
+  const adj = String(m.texto).match(/^\[el cliente envi[oó] ([^\]]*?)(?:\s*--[^\]]*)?\]\s*(?:\(ref:[^)]*\))?\s*/i);
+  if (!adj) return `${m.voz ? '<i class="fas fa-microphone dm-voz"></i> ' : ''}${esc(m.texto)}`;
+  const que = adj[1].toLowerCase(), resto = m.texto.slice(adj[0].length);
+  const icono = que.includes('video') ? 'fa-video' : (que.includes('audio') || que.includes('voz')) ? 'fa-microphone' : 'fa-image';
+  return `<span class="dm-adjunto"><i class="fas ${icono}"></i> Envió ${esc(adj[1])}</span>${resto ? `<br>${esc(resto)}` : ''}`;
+}
+function dmBurbujasHtml(hist, l) {
+  return hist.map((m, i) => {
+    const lado = m.rol === 'ia' ? 'yo' : 'el';
+    const ladoDe = j => hist[j] ? (hist[j].rol === 'ia' ? 'yo' : 'el') : null;
+    const pos = ladoDe(i - 1) === lado ? (ladoDe(i + 1) === lado ? 'medio' : 'fin') : (ladoDe(i + 1) === lado ? 'inicio' : 'solo');
+    const fotos = (Array.isArray(m.fotos) ? m.fotos : []).filter(u => typeof u === 'string' && /^https:\/\//.test(u));
+    const fotosHtml = fotos.length ? `<div class="dm-fotos">${fotos.slice(0, 6).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(u.replace('/_d/1280/', '/_d/256/'))}" alt=""></a>`).join('')}</div>` : '';
+    const avatar = lado === 'el' ? `<div class="dm-mini-av">${pos === 'fin' || pos === 'solo' ? esc(dmInicial(l)) : ''}</div>` : '';
+    return `<div class="dm-fila ${lado} ${pos}">${avatar}<div class="dm-col">${fotosHtml}<div class="dm-burbuja">${dmTextoHtml(m)}</div></div></div>`;
+  }).join('');
 }
 async function cargarActividadLead(l) {
   const box = document.getElementById('act-body');
@@ -9297,13 +9983,13 @@ async function riaConsultar(dias, forzar = false, completo = true, fecha = null)
   // «Hoy» se compara contra el mismo día de la semana pasada: contra «ayer» cada domingo
   // parecía un desplome (el domingo siempre convierte menos que el sábado).
   const haceSemana = iso => new Date(new Date(iso).getTime() - 7 * 86400000).toISOString();
-  const [general, semana, piloto, reactivacion, modelos, abFb] = await Promise.all([
+  const [general, semana, piloto, reactivacion, modelos, abDm] = await Promise.all([
     sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }),
     dias === 1 || fecha ? sb.rpc('panel_rendimiento_ia', { p_cliente_slug: 'lotus', p_desde: haceSemana(rango.desde), p_hasta: haceSemana(rango.hasta) }) : null,
     completo ? sb.rpc('panel_piloto_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_reactivacion_ia', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
     completo ? sb.rpc('panel_modelos_ia', { p_cliente_slug: 'lotus', p_desde: rango.desde, p_hasta: rango.hasta }) : null,
-    completo ? sb.rpc('panel_ab_privado_fb', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
+    completo ? sb.rpc('panel_ab_comentarios', { p_desde: rango.desde, p_hasta: rango.hasta }) : null,
   ]);
   if (general.error) throw general.error;
   if (semana) {
@@ -9314,8 +10000,8 @@ async function riaConsultar(dias, forzar = false, completo = true, fecha = null)
   if (completo && reactivacion.error) throw reactivacion.error;
   // La comparativa por modelo es aditiva: si falla, el resto del panel se pinta igual.
   if (completo && modelos.error) console.error('panel_modelos_ia', modelos.error);
-  if (completo && abFb.error) console.error('panel_ab_privado_fb', abFb.error);
-  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data, ab_fb: abFb.error ? null : abFb.data } : general.data;
+  if (completo && abDm.error) console.error('panel_ab_comentarios', abDm.error);
+  const data = completo ? { ...general.data, piloto: piloto.data, reactivacion: reactivacion.data, modelos: modelos.error ? null : modelos.data, ab_dm: abDm.error ? null : abDm.data } : general.data;
   RIA_CACHE.set(clave, { en: Date.now(), data, completo });
   return data;
 }
@@ -9486,12 +10172,15 @@ function riaComparacionSeguimiento(reactivacion) {
 }
 
 const RIA_BRAZOS = { deepseek: 'DeepSeek', haiku: 'Haiku 5.5', lite: 'Lite' };
-function riaAbFacebook(ab) {
+function riaAbComentarios(ab) {
   if (!ab) return '<div class="ria-vacio">No se pudo cargar la prueba A/B.</div>';
-  const vs = ab.variantes || [];
-  if (!vs.length) return '<div class="ria-vacio">Sin comentarios de Facebook desde que empezó la prueba (14-oct).</div>';
-  const nombre = { A: 'A · respuesta con precio', B: 'B · pregunta sin precio' };
-  return `<div class="ria-lista">${vs.map(v => `<div class="ria-fila"><span><b>${esc(nombre[v.variante] || v.variante)}</b><br>${fmt(riaNum(v.respondieron))} respondieron (${riaPct(v.respondieron, v.contactos)}%) · ${fmt(riaNum(v.leads))} leads (${riaPct(v.leads, v.contactos)}%)</span><b>${fmt(riaNum(v.contactos))}</b></div>`).join('')}</div>`;
+  const filas = ab.brazos || [];
+  if (!filas.length) return `<div class="ria-vacio">${ab.activo ? 'Sin comentarios en la prueba durante este período.' : 'La prueba todavía no está activa.'}</div>`;
+  const nombre = { control: 'Control · mensaje actual', micro_si: 'Micro-sí · «Respóndame SÍ»', numero: 'Número · «Cuántos viajarían»' };
+  const suma = (fs, c) => fs.reduce((t, f) => t + riaNum(f[c]), 0);
+  const linea = fs => `${riaPct(suma(fs, 'leidos'), suma(fs, 'contactos'))}% leyó · ${riaPct(suma(fs, 'respondieron'), suma(fs, 'contactos'))}% contestó · ${riaPct(suma(fs, 'telefonos'), suma(fs, 'contactos'))}% teléfono · ${riaPct(suma(fs, 'leads'), suma(fs, 'contactos'))}% lead`;
+  const redes = { instagram: 'IG', facebook: 'FB' };
+  return `<div class="ria-lista">${Object.keys(nombre).map(b => { const fs = filas.filter(f => f.variante === b); return fs.length ? `<div class="ria-fila"><span><b>${esc(nombre[b])}</b><br>${linea(fs)}${fs.map(f => `<br><small style="color:var(--muted)">${esc(redes[f.canal] || f.canal)}: ${fmt(riaNum(f.contactos))} · ${riaPct(f.respondieron, f.contactos)}% contestó</small>`).join('')}</span><b>${fmt(suma(fs, 'contactos'))}</b></div>` : ''; }).join('')}</div>`;
 }
 
 function riaModelos(m) {
@@ -9616,8 +10305,8 @@ function riaPintarPanel(data) {
   document.getElementById('ria-canales').innerHTML = canales.length ? `<div class="ria-lista">${canales.map(c => `<div class="ria-fila"><span><b>${esc(RIA_CANALES[c.canal] || c.canal)}</b><br>${fmt(riaNum(c.telefonos))} teléfonos · ${fmt(riaNum(c.leads_calificados))} leads (${riaPct(c.leads_calificados, c.conversaciones)}%)</span><b>${fmt(riaNum(c.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${riaNum(c.latencia_promedio_ms) ? (riaNum(c.latencia_promedio_ms) / 1000).toFixed(1) + ' s' : '—'}</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin actividad por canal en este período.</div>';
 
   document.getElementById('ria-modelos').innerHTML = riaModelos(data.modelos);
-  const abFb = document.getElementById('ria-ab-fb');
-  if (abFb) abFb.innerHTML = riaAbFacebook(data.ab_fb);
+  const abDm = document.getElementById('ria-ab-dm');
+  if (abDm) abDm.innerHTML = riaAbComentarios(data.ab_dm);
   const sinCache = Math.max(0, riaNum(op.tokens_entrada) - riaNum(op.tokens_cache));
   const costo = data.modelos?.brazos?.length ? data.modelos.brazos.reduce((s, b) => s + riaNum(b.costo_usd), 0)
     : sinCache * RIA_COSTO_ENTRADA + riaNum(op.tokens_cache) * RIA_COSTO_CACHE + riaNum(op.tokens_salida) * RIA_COSTO_SALIDA;
@@ -10904,6 +11593,8 @@ const EF_ERRORES = {
   falta_metodo_pago: 'Falta el método de pago',
   falta_monto_pagado: 'Falta el monto que pagó',
   pagado_mayor_que_total: 'El monto pagado es mayor que el total de la venta',
+  posible_duplicado: 'Ese pago (mismo monto y referencia) ya se cargó en las últimas 48 horas. Revisá la reserva antes de repetirlo',
+  solicitud_con_otros_datos: 'Ese envío ya se registró con otros datos. Recargá y revisá la reserva',
   lead_no_disponible: 'Este lead ya no está disponible',
   otro_no_combina: 'No se puede combinar "Otro" con otro tipo de venta',
 };
@@ -11699,6 +12390,9 @@ const PAGO_ESTADO_LABEL = {
 const MSG_VERIFICAR_PAGO_WEB = {
   ...MSG_VERIFICAR_PAGO,
   no_es_pago_web: 'Este pago no es de una compra hecha en la web.',
+  no_es_pago_de_reserva: 'Este pago no está atado a una reserva.',
+  falta_reserva: 'Elige en la tarjeta la reserva a la que se abona el pago.',
+  supera_saldo: 'El pago supera el saldo pendiente de la reserva.',
   pago_no_declarado: 'El cliente aún no declaró este pago. Recarga la lista.',
   reserva_liberada: 'El cupo de esta reserva ya se liberó por vencimiento. Habla con el cliente y rehaz la reserva a mano antes de cobrar.',
   reserva_no_disponible: 'La reserva ya no está disponible (cerrada o eliminada). Revísala antes de aprobar.',
@@ -11726,6 +12420,9 @@ function pagoWebMontoBanco(p) {
   return `${pre} ${pagoWebDec(p.monto_centavos)}`;
 }
 const PAGO_WEB_MONO = 'font-family:ui-monospace,SFMono-Regular,Menlo,monospace';
+// pagos_web_cola trae también los pagos del asesor atados a reserva (link y captura): se verifican con verificar_pago_reserva.
+const PAGO_ORIGEN = { web: ['globe', 'Compra web'], asesor: ['link', 'Link de pago'], asesor_captura: ['user-pen', 'Cargado'] };
+const pagoEsWeb = p => !p.origen || p.origen === 'web';
 // Cargos de la compra (gestión web, IGTF): resumen los trae mezclados con el hotel ("Hotel + Cargo… + IGTF…").
 const esCargoWeb = t => /^(cargo por gesti|igtf)/i.test(String(t).trim());
 const refNormal = r => String(r || '').replace(/\s+/g, '').toLowerCase();
@@ -11739,14 +12436,16 @@ function pagoWebRefRepetida(p) {
 function pagoWebCard(p) {
   const centavosUsd = p.moneda === 'VES' ? p.monto_usd_centavos : (p.monto_usd_centavos ?? p.monto_centavos);
   const total = p.total_usd == null ? null : Number(p.total_usd);
-  const descuadre = total != null && centavosUsd != null && Math.abs(Number(centavosUsd) / 100 - total) > 0.01;
+  // Un pago de plan de abonos es solo una parte del total: no se compara contra él.
+  const planTxt = p.plan_id == null ? '' : p.plan_que === 'saldo' ? 'Saldo completo' : `Cuota ${p.plan_cuota_n} de ${p.plan_cuotas_total}`;
+  const descuadre = !planTxt && total != null && centavosUsd != null && Math.abs(Number(centavosUsd) / 100 - total) > 0.01;
   const pend = p.estado === 'pendiente_verificacion';
   const partes = String(p.resumen || '').split(' + ').map(t => t.trim()).filter(Boolean);
   const servicios = partes.filter(t => !esCargoWeb(t));
   const cargos = partes.filter(esCargoWeb);
   const repetida = pagoWebRefRepetida(p);
-  const slaTxt = pend
-    ? `Verificar antes de ${fmtFechaHoraCaracas(p.verificar_antes_de)}${p.sla_vencido ? ' · plazo vencido' : ''}`
+  const slaTxt = pend && !p.verificar_antes_de ? ''
+    : pend ? `Verificar antes de ${fmtFechaHoraCaracas(p.verificar_antes_de)}${p.sla_vencido ? ' · plazo vencido' : ''}`
     : p.estado === 'emitido' || p.estado === 'vencido' ? `Plazo de pago: ${fmtFechaHoraCaracas(p.expira_en)}` : '';
   const sub = [
     PAGO_RIEL_LABEL[p.riel] || p.riel,
@@ -11758,9 +12457,10 @@ function pagoWebCard(p) {
   if (pend) {
     acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-aprobar="${p.id}"><i class="fas fa-check"></i> Verificar y confirmar</button>`);
     acciones.push(`<button type="button" class="inbox-btn nopuedo" data-pagoweb-rechazar="${p.id}"><i class="fas fa-xmark"></i> Rechazar</button>`);
-  } else if (p.estado === 'vencido' || p.estado === 'emitido') {
+  } else if ((p.estado === 'vencido' || p.estado === 'emitido') && pagoEsWeb(p)) {
     acciones.push(`<button type="button" class="inbox-btn avisar" data-pagoweb-tarde="${p.id}"><i class="fas fa-check"></i> Ya pagó: confirmar</button>`);
   }
+  if (p.estado === 'vencido' || p.estado === 'emitido') acciones.push(`<button type="button" class="inbox-btn pagos-sec" data-pagoweb-descartar="${p.id}"><i class="fas fa-trash-can"></i> Descartar</button>`);
   const etapa = pagoEtapa(p);
   const tot = Number(p.servicios_total || 0), conLoc = Number(p.servicios_con_localizador || 0);
   if (etapa === 'reserva' && p.reserva_id) acciones.push(`<button type="button" class="inbox-btn atender" data-pagoweb-reserva="${p.id}"><i class="fas fa-ticket"></i> Cargar localizador${tot - conLoc === 1 ? '' : 'es'}</button>`);
@@ -11777,6 +12477,7 @@ function pagoWebCard(p) {
       ${p.disponibilidad === 'sin_cupo' ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-ban"></i> El hotel cerró cupo (stop sale) después de la reserva${pend ? ' · el cliente ya declaró el pago: reubícalo o devuélvele el dinero' : ' · aún no paga: contáctalo para cambiar fechas u hotel'}</div>` : ''}
       <div style="margin-top:10px;${PAGO_WEB_MONO};font-size:22px;font-weight:800;line-height:1.2;color:var(--txt)">${esc(pagoWebMontoBanco(p))}</div>
       <div class="ec-row" style="margin-top:2px">${esc(sub)}</div>
+      ${planTxt ? `<div class="ec-row" style="font-weight:700"><i class="fas fa-calendar-check"></i> Plan de abonos · ${esc(planTxt)}</div>` : ''}
       ${total != null ? `<div class="ec-row" ${descuadre ? 'style="color:var(--danger);font-weight:700"' : ''}><i class="fas fa-${descuadre ? 'triangle-exclamation' : 'scale-balanced'}"></i> Total de la reserva: $${esc(pagoWebDec(total * 100))}${descuadre ? ' · el monto no coincide' : ''}</div>` : ''}
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
         <span style="font-size:12px;color:var(--muted)">Ref.</span>
@@ -11784,10 +12485,11 @@ function pagoWebCard(p) {
         ${p.referencia_declarada ? `<button type="button" class="pagos-copiar" data-pagoweb-copiar="${p.id}" aria-label="Copiar referencia" title="Copiar referencia"><i class="fas fa-copy"></i></button>` : ''}
       </div>
       ${repetida ? `<div class="ec-row" style="color:var(--danger);font-weight:700"><i class="fas fa-triangle-exclamation"></i> Referencia repetida (${esc(repetida.codigo || repetida.lead_nombre || 'otro pago')})</div>` : ''}
-      <div class="ec-row"><i class="fas fa-globe"></i> Compra web ${esc(p.codigo || '')}${servicios.length ? ' · ' + esc(servicios.join(' + ')) : ''}</div>
+      <div class="ec-row"><i class="fas fa-${PAGO_ORIGEN[p.origen || 'web'][0]}"></i> ${esc(PAGO_ORIGEN[p.origen || 'web'][1])}${p.origen === 'asesor_captura' && p.emitido_por ? ' por ' + esc(p.emitido_por) : ''} ${esc(p.codigo || '')}${servicios.length ? ' · ' + esc(servicios.join(' + ')) : ''}</div>
       ${cargos.length ? `<div class="ec-row" style="margin-top:2px;padding-left:20px">Incluye ${esc(cargos.join(' y '))}</div>` : ''}
       <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.lead_telefono ? ' · ' + esc(p.lead_telefono) : ''}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> ${p.declarado_en ? 'Declarado ' + esc(tiempoRelativo(p.declarado_en)) : 'Sin declarar'}</div>
+      ${pend && pagoSinReserva(p) ? `<label class="fl" style="margin-top:8px">Reserva a la que se abona</label><select class="ei" data-pagores="${p.id}" data-lead="${p.lead_id}" disabled><option value="">Cargando reservas…</option></select>` : ''}
       <div data-pagoweb-prev="${p.id}" style="display:none;margin-top:10px"></div>
       ${acciones.length ? `<div class="inbox-actions">${acciones.join('')}</div>` : ''}
     </div>`;
@@ -11819,6 +12521,7 @@ async function loadPagos(silencioso = false) {
   const empty = document.getElementById('pagos-empty');
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
+  if (!esOficina()) return loadPagosAsesor(silencioso);
   // No repintar debajo de un comprobante abierto: se cerraría mientras lo miran.
   if (silencioso && [...lista.querySelectorAll('[data-pagoweb-prev]')].some(e => e.style.display !== 'none')) return;
   const carga = ++PAGOS_CARGA;
@@ -11853,14 +12556,28 @@ async function loadPagos(silencioso = false) {
   const idsWeb = new Set([...idsPendientes, ...web.map(w => w.id)]);
   PAGOS_CACHE = [...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))].filter(p => pagoEtapa(p));
   pintarAvisoPagos((rLista.data.pagos || []).length);
-  const de = k => PAGOS_CACHE.filter(p => pagoEtapa(p) === k);
+  empty.classList.toggle('show', !PAGOS_CACHE.length);
+  if (!PAGOS_CACHE.length) { lista.innerHTML = ''; return; }
+  pintarTableroPagos(lista, silencioso);
+}
+
+// Compras de la web vs links/capturas que mandan los asesores. Las filas de listar_pagos
+// no traen origen y nunca son web (pagos_web_cola ya trae todas las de origen web).
+const pagoCanal = p => p._web && pagoEsWeb(p) ? 'web' : 'asesor';
+const PAGOS_CANALES = [['todos', 'Todos'], ['web', 'Compras web'], ['asesor', 'Links de asesores']];
+let PAGOS_CANAL = localStorage.getItem('pagos_canal') || 'todos';
+function pintarTableroPagos(lista, silencioso) {
+  if (!PAGOS_CANALES.some(([k]) => k === PAGOS_CANAL)) PAGOS_CANAL = 'todos';
+  const delCanal = PAGOS_CANAL === 'todos' ? PAGOS_CACHE : PAGOS_CACHE.filter(p => pagoCanal(p) === PAGOS_CANAL);
+  const porVerificar = k => PAGOS_CACHE.filter(p => pagoEtapa(p) === 'verificar' && (k === 'todos' || pagoCanal(p) === k)).length;
+  const de = k => delCanal.filter(p => pagoEtapa(p) === k);
   // Las confirmadas se acumulan para siempre: solo las más recientes (la cola ya viene de la más nueva a la más vieja).
   const cols = { verificar: de('verificar'), reserva: de('reserva'), confirmada: de('confirmada').slice(0, PAGOS_CONFIRMADAS_MAX) };
   const espera = de('espera');
-  empty.classList.toggle('show', !PAGOS_CACHE.length);
-  if (!PAGOS_CACHE.length) { lista.innerHTML = ''; return; }
   const card = p => p._web ? pagoWebCard(p) : pagoAsesorCard(p);
-  lista.innerHTML = `<div class="pagos-tablero">${PAGOS_ETAPAS.map(e => `
+  lista.innerHTML = `<div class="seg-group pagos-canales" role="tablist">${PAGOS_CANALES.map(([k, t]) => { const n = porVerificar(k); return `
+    <button class="seg${k === PAGOS_CANAL ? ' on' : ''}" type="button" role="tab" aria-selected="${k === PAGOS_CANAL}" data-pagos-canal="${k}"><i class="fas fa-${k === 'web' ? 'globe' : k === 'asesor' ? 'link' : 'layer-group'}"></i> ${t}${n ? ` <span class="pagos-canal-n" title="${n} por verificar">${n}</span>` : ''}</button>`; }).join('')}</div>
+    <div class="pagos-tablero">${PAGOS_ETAPAS.map(e => `
     <section class="pagos-col" data-etapa="${e.k}" style="--etapa:${e.color}">
       <header class="pagos-col-head"><span class="pagos-col-punto"></span><h3>${esc(e.t)}</h3><span class="pagos-col-n">${cols[e.k].length}</span></header>
       <div class="pagos-col-sub">${esc(e.s)}</div>
@@ -11868,7 +12585,36 @@ async function loadPagos(silencioso = false) {
     </section>`).join('')}</div>
     ${espera.length ? `<details class="pagos-espera"><summary><i class="fas fa-hourglass-half"></i> Esperando que el cliente pague <span class="pagos-col-n">${espera.length}</span></summary>
       <div class="leads-inbox-grid">${espera.map(card).join('')}</div></details>` : ''}`;
+  lista.querySelectorAll('[data-pagos-canal]').forEach(b => b.onclick = () => {
+    PAGOS_CANAL = b.dataset.pagosCanal;
+    localStorage.setItem('pagos_canal', PAGOS_CANAL);
+    pintarTableroPagos(lista, true);
+  });
   if (!silencioso) entradaLista(lista);
+  pagoResCargar(lista);
+}
+
+// Link o captura emitidos sin reserva: oficina elige la reserva del cliente al verificar.
+// La elección sobrevive al refresco silencioso del tablero.
+const PAGO_RES_ELEGIDA = {};
+const pagoSinReserva = p => !pagoEsWeb(p) && !p.reserva_id;
+async function pagoResCargar(lista) {
+  const sels = [...lista.querySelectorAll('[data-pagores]')];
+  const porLead = {};
+  for (const sel of sels) (porLead[sel.dataset.lead] ||= []).push(sel);
+  await Promise.all(Object.entries(porLead).map(async ([lead, ss]) => {
+    const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: Number(lead) });
+    const rs = error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo);
+    for (const sel of ss) {
+      if (!sel.isConnected) continue;
+      sel.innerHTML = rs === null ? '<option value="">No se pudieron cargar las reservas</option>'
+        : !rs.length ? '<option value="">El cliente no tiene reservas: créala en su ficha</option>'
+        : '<option value="">Elige la reserva…</option>' + rs.map(resOpcion).join('');
+      sel.disabled = !rs?.length;
+      if (PAGO_RES_ELEGIDA[sel.dataset.pagores]) sel.value = PAGO_RES_ELEGIDA[sel.dataset.pagores];
+      sel.onchange = () => { PAGO_RES_ELEGIDA[sel.dataset.pagores] = sel.value; };
+    }
+  }));
 }
 
 function pagoAsesorCard(p) {
@@ -11936,7 +12682,10 @@ async function verificarPagoWebAccion(id, modo, btn) {
   const p = PAGOS_CACHE.find(x => x.id === id && x._web);
   if (!p) return;
   const aprobar = modo !== 'rechazar';
-  const cod = p.codigo || 'la reserva';
+  const resSel = pagoSinReserva(p) ? document.querySelector(`[data-pagores="${id}"]`) : null;
+  const resElegida = Number(resSel?.value) || null;
+  if (aprobar && pagoSinReserva(p) && !resElegida) { errToast(MSG_VERIFICAR_PAGO_WEB.falta_reserva); return; }
+  const cod = p.codigo || (resElegida ? resSel.selectedOptions[0].textContent.split(' · ')[0] : 'la reserva');
   let motivo = null;
   if (aprobar) {
     const aviso = modo === 'tarde'
@@ -11955,7 +12704,9 @@ ${cotejar}${repetida ? `
 
 Ojo: la misma referencia aparece en ${repetida.codigo || repetida.lead_nombre || 'otro pago'}.` : ''}
 
-Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PAGO REALIZADO y el cliente recibe por correo su localizador.`,
+${pagoEsWeb(p)
+  ? 'Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PAGO REALIZADO y el cliente recibe por correo su localizador.'
+  : 'Al confirmar se registra el abono en la reserva y, si es la reserva principal, el lead pasa a PAGO REALIZADO.'}`,
       textoOk: 'Verificar y confirmar',
     }))) return;
   } else {
@@ -11966,7 +12717,8 @@ Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PA
   const params = { p_pago_id: id, p_aprobar: aprobar };
   if (motivo) params.p_motivo = motivo.trim();
   if (modo === 'tarde') params.p_sin_declaracion = true;
-  const { data, error } = await sb.rpc('verificar_pago_web', params);
+  if (aprobar && resElegida) params.p_reserva_id = resElegida;
+  const { data, error } = await sb.rpc(pagoEsWeb(p) ? 'verificar_pago_web' : 'verificar_pago_reserva', params);
   if (error || !data?.ok) {
     if (btn) btn.disabled = false;
     errToast(MSG_VERIFICAR_PAGO_WEB[data?.error] || error?.message || data?.error || 'No se pudo procesar el pago');
@@ -11974,6 +12726,7 @@ Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PA
     return;
   }
   if (!aprobar) okToast('Pago rechazado');
+  else if (!pagoEsWeb(p)) okToast(`Pago verificado y abonado a ${data.codigo}${Number(data.saldo_pendiente) > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
   else okToast(data.correo_encolado
     ? `Reserva ${data.codigo} confirmada. El correo con el localizador sale en unos minutos.`
     : `Reserva ${data.codigo} confirmada. El cliente no dejó correo: envíale el código por WhatsApp.`);
@@ -11983,10 +12736,309 @@ Al confirmar se registra el abono, se confirman los servicios, el lead pasa a PA
   if (currentSec === 'balance') loadBalance();
 }
 
+/* ---------- Pagos del asesor: su lista, el alta con captura y el link del drawer ---------- */
+const RPA_ERR = {
+  reserva_no_disponible: 'La reserva ya no está activa.', riel_invalido: 'Elige el método de pago.',
+  falta_referencia: 'Escribe la referencia del pago.', comprobante_path_invalido: 'No se pudo guardar la captura. Vuelve a pegarla.',
+  monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
+  tasa_no_disponible: 'No hay tasa BCV cargada hoy. Avísale a oficina.', referencia_duplicada: 'Esa referencia ya está registrada para este cliente.',
+  falta_cliente: 'Elige el cliente.',
+};
+const PAGO_MIO_COLOR = { emitido: 'var(--muted)', pendiente_verificacion: 'var(--amber)', verificado: 'var(--green)', rechazado: 'var(--danger)', vencido: 'var(--muted)' };
+const lpUrl = token => `https://destinoyeventoslotus360.com/pagar/${token}`;
+const resOpcion = r => `<option value="${r.id}" data-saldo="${Math.max(Number(r.monto_total || 0) - Number(r.monto_pagado || 0) - Number(r.en_links || 0), 0).toFixed(2)}">${esc(r.codigo)} · ${money(Number(r.monto_pagado || 0))} de ${money(Number(r.monto_total || 0))}</option>`;
+const pagoMioMonto = p => p.riel ? pagoWebMontoBanco(p) : `$ ${pagoWebDec(p.monto_usd_centavos)}`;
+
+function pagoMioCard(p) {
+  const link = p.origen === 'asesor';
+  return `
+    <div class="entity-card inbox-card" data-pago="${p.id}">
+      <div class="ec-top"><div class="ec-nombre">${esc(p.cliente || 'Sin nombre')}</div>
+        <span class="badge-st" style="color:${PAGO_MIO_COLOR[p.estado] || 'var(--muted)'}">${esc(link && p.estado === 'emitido' ? 'Esperando al cliente' : PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>
+      <div style="margin-top:8px;${PAGO_WEB_MONO};font-size:20px;font-weight:800;color:var(--txt)">${esc(pagoMioMonto(p))}</div>
+      <div class="ec-row">${esc(p.riel ? PAGO_RIEL_LABEL[p.riel] || p.riel : 'El cliente elige el método')}${p.referencia_declarada ? ' · Ref. ' + esc(p.referencia_declarada) : ''}</div>
+      <div class="ec-row"><i class="fas fa-${link ? 'link' : 'user-pen'}"></i> ${link ? 'Link de pago' : 'Cargado por ti'} · ${esc(p.codigo || 'Sin reserva todavía')}</div>
+      ${p.estado === 'rechazado' && p.motivo_rechazo ? `<div class="ec-row" style="color:var(--danger)"><i class="fas fa-circle-xmark"></i> ${esc(p.motivo_rechazo)}</div>` : ''}
+      <div class="ec-row"><i class="fas fa-clock"></i> ${esc(tiempoRelativo(p.declarado_en || p.created_at))}${p.estado === 'emitido' ? ' · vence ' + esc(fmtFechaHoraCaracas(p.expira_en)) : ''}</div>
+      <div class="inbox-actions">
+        ${p.comprobante_path ? `<button type="button" class="inbox-btn pagos-sec" data-pago-comprobante="${p.id}"><i class="fas fa-receipt"></i> Ver comprobante</button>` : ''}
+        ${p.token ? `<button type="button" class="inbox-btn" data-lp-copiar="${esc(p.token)}"><i class="fas fa-copy"></i> Copiar link</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function loadPagosAsesor(silencioso) {
+  const loading = document.getElementById('pagos-loading'), empty = document.getElementById('pagos-empty'), lista = document.getElementById('pagos-lista');
+  const carga = ++PAGOS_CARGA;
+  if (!silencioso) { loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = ''; }
+  const { data, error } = await sb.rpc('mis_pagos_asesor', { p_limite: 100 });
+  if (carga !== PAGOS_CARGA) return;
+  loading.classList.remove('show');
+  if (error) { errToast(error.message || 'No se pudieron cargar tus pagos'); return; }
+  PAGOS_CACHE = (Array.isArray(data) ? data : []).map(p => ({ ...p, id: p.pago_id, lead_nombre: p.cliente }));
+  empty.classList.toggle('show', !PAGOS_CACHE.length);
+  lista.innerHTML = PAGOS_CACHE.length ? `<div class="leads-inbox-grid">${PAGOS_CACHE.map(pagoMioCard).join('')}</div>` : '';
+  if (!silencioso) entradaLista(lista);
+}
+
+async function copiarLinkPago(token) {
+  try { await navigator.clipboard.writeText(lpUrl(token)); okToast('Link copiado'); }
+  catch { errToast('El navegador no dejó copiar'); }
+}
+
+let RPA = null, RPA_BUSQ = 0, RPA_TASAS = null;
+const rpaEl = id => document.getElementById(id);
+const rpaErr = t => { rpaEl('rpa-err').textContent = t || ''; };
+function rpaEstado(texto, malo) {
+  const st = rpaEl('rpa-st');
+  st.textContent = texto || '';
+  st.className = 'ef-comprob-st' + (texto ? ' show' : '') + (malo ? ' malo' : '');
+}
+function rpaPreview(file) {
+  const img = rpaEl('rpa-preview');
+  if (img.src) URL.revokeObjectURL(img.src);
+  if (!file) { img.hidden = true; img.removeAttribute('src'); return; }
+  img.src = URL.createObjectURL(file); img.hidden = false;
+}
+function rpaReservas(rs) {
+  const sel = rpaEl('rpa-reserva');
+  sel.disabled = true;
+  if (!RPA?.lead) sel.innerHTML = '<option value="">Elige primero el cliente</option>';
+  else { sel.disabled = false; sel.innerHTML = (rs || []).map(resOpcion).join('') + SIN_RESERVA_OPT; }
+}
+function rpaRielCambio() {
+  const riel = val('rpa-riel'), bs = riel === 'pago_movil' || riel === 'transferencia';
+  rpaEl('rpa-tasa-box').hidden = !bs;
+  rpaEl('rpa-monto-l').textContent = bs ? 'Monto en Bs' : riel === 'binance' ? 'Monto en USDT' : 'Monto en USD';
+  rpaEquiv();
+}
+async function rpaEquiv() {
+  const box = rpaEl('rpa-equiv'), riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto'));
+  box.textContent = '';
+  if (!(riel === 'pago_movil' || riel === 'transferencia') || !(monto > 0)) return;
+  // Las tasas se actualizan durante el día: la caché dura 10 minutos.
+  if (!RPA_TASAS || Date.now() - RPA_TASAS._en > 600000) {
+    const { data } = await sb.from('tasas_cambio').select('moneda,tasa');
+    if (data?.length || !RPA_TASAS) RPA_TASAS = { ...Object.fromEntries((data || []).map(t => [t.moneda, Number(t.tasa)])), _en: Date.now() };
+  }
+  const tasa = RPA_TASAS[val('rpa-tasa')];
+  box.textContent = tasa ? `≈ ${money(monto / tasa)} a tasa BCV ${val('rpa-tasa') === 'EUR' ? 'euro' : 'dólar'} de hoy (${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : 'No hay tasa BCV cargada hoy.';
+}
+function rpaAbrir() {
+  RPA = { lead: null, file: null, ocr: null, sol: crypto.randomUUID(), leads: [] };
+  ['rpa-buscar', 'rpa-monto', 'rpa-referencia', 'rpa-riel'].forEach(id => { rpaEl(id).value = ''; });
+  rpaEl('rpa-resultados').innerHTML = '';
+  rpaEl('rpa-cliente').hidden = true;
+  rpaEl('rpa-buscar').hidden = false;
+  rpaReservas(null); rpaPreview(null); rpaEstado(''); rpaErr(''); rpaRielCambio();
+  openSheet('rpa-sheet');
+  setTimeout(() => rpaEl('rpa-buscar').focus(), 60);
+}
+async function rpaBuscar() {
+  const box = rpaEl('rpa-resultados'), q = val('rpa-buscar').trim().replace(/[%,()*\\]/g, '');
+  const busq = ++RPA_BUSQ;
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  let consulta = sb.from('leads').select('id,nombre,telefono,asesor').is('eliminado_at', null)
+    .or(`nombre.ilike.%${q}%,telefono.ilike.%${q}%`).order('updated_at', { ascending: false }).limit(8);
+  if (ROL === 'asesor') consulta = consulta.eq('asesor', MI_NOMBRE);
+  const { data, error } = await consulta;
+  if (busq !== RPA_BUSQ || !RPA) return;
+  if (error) { box.innerHTML = '<div class="csub">No se pudo buscar</div>'; return; }
+  RPA.leads = data || [];
+  box.innerHTML = RPA.leads.length
+    ? RPA.leads.map(l => `<button type="button" data-rpa-lead="${l.id}">${esc(l.nombre || 'Sin nombre')}<span class="csub"> · ${esc(l.telefono || '')}${ROL === 'asesor' ? '' : ' · ' + esc(l.asesor || 'Sin asesor')}</span></button>`).join('')
+    : `<div class="csub">Sin resultados${ROL === 'asesor' ? ' entre tus clientes' : ''}</div>`;
+}
+async function rpaElegir(l) {
+  RPA.lead = l;
+  rpaEl('rpa-resultados').innerHTML = '';
+  rpaEl('rpa-buscar').hidden = true;
+  const cli = rpaEl('rpa-cliente');
+  cli.hidden = false;
+  cli.innerHTML = `<b>${esc(l.nombre || 'Sin nombre')}</b> ${esc(l.telefono || '')} <button type="button" class="rpa-link" id="rpa-cambiar" style="background:none;border:0;font:inherit">Cambiar</button>`;
+  rpaEl('rpa-cambiar').onclick = () => { RPA.lead = null; cli.hidden = true; rpaEl('rpa-buscar').hidden = false; rpaEl('rpa-buscar').focus(); rpaReservas(null); };
+  const sel = rpaEl('rpa-reserva');
+  sel.disabled = true; sel.innerHTML = '<option value="">Cargando reservas…</option>';
+  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
+  if (RPA?.lead !== l) return;
+  rpaReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo));
+}
+async function rpaCaptura(file) {
+  if (!file || !RPA) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { rpaEstado('Usa una captura JPG, PNG o WebP.', true); return; }
+  if (file.size > 5242880) { rpaEstado('La imagen pesa más de 5 MB.', true); return; }
+  Object.assign(RPA, { file, ocr: null, sol: crypto.randomUUID() });
+  rpaPreview(file);
+  const caja = rpaEl('rpa-pegar');
+  caja.classList.add('leyendo'); rpaEstado('Leyendo comprobante…');
+  try {
+    const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } });
+    if (RPA?.file !== file) return;
+    if (error || !data?.ok) {
+      const m = error ? await msgErrorFn(error, data) : (data?.error || 'extraccion_fallida');
+      rpaEstado(m === 'no_es_comprobante' ? 'Esa imagen no parece un comprobante. Revísala.' : `No pude leerla: ${EF_COMP_ERRORES[m] || m}. Llena los datos a mano.`, true);
+      return;
+    }
+    const d = data.datos || {}, met = String(d.metodo || '').toLowerCase();
+    RPA.ocr = d;
+    const riel = /zelle/.test(met) ? 'zelle' : /m[oó]vil/.test(met) ? 'pago_movil' : /transfer/.test(met) ? 'transferencia' : /binance|usdt/.test(met) ? 'binance' : '';
+    if (riel) rpaEl('rpa-riel').value = riel;
+    if (d.referencia) rpaEl('rpa-referencia').value = d.referencia;
+    if (d.monto != null) rpaEl('rpa-monto').value = Number(d.monto).toFixed(2);
+    rpaRielCambio();
+    rpaEstado(`Leído${d.confianza < 0.6 ? ' (lectura dudosa)' : ''}. Revisa que coincida con la captura antes de enviar.`);
+  } catch (e) {
+    console.error('leer-comprobante', e);
+    rpaEstado('No pude leer la captura. Llena los datos a mano.', true);
+  } finally {
+    caja.classList.remove('leyendo');
+    rpaEl('rpa-archivo').value = '';
+  }
+}
+async function rpaEnviar() {
+  const btn = rpaEl('rpa-enviar');
+  const reserva = Number(val('rpa-reserva')) || null, riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto')), ref = val('rpa-referencia').trim();
+  if (!RPA?.lead) return rpaErr('Elige el cliente.');
+  if (!RPA.file) return rpaErr('Pega la captura del pago.');
+  if (!riel) return rpaErr(RPA_ERR.riel_invalido);
+  if (!(monto > 0)) return rpaErr(RPA_ERR.monto_invalido);
+  if (!ref) return rpaErr(RPA_ERR.falta_referencia);
+  rpaErr('');
+  btn.disabled = true;
+  const antes = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando...';
+  try {
+    // La policy del bucket solo deja subir bajo asesor/<uid>/; el nombre es por intento, así reintentar no duplica.
+    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[RPA.file.type];
+    const path = `asesor/${MI_USUARIO_ID}/${RPA.sol}.${ext}`;
+    const up = await sb.storage.from('comprobantes-pago').upload(path, RPA.file, { contentType: RPA.file.type, upsert: false });
+    if (up.error && !/exist|duplicate/i.test(up.error.message || '')) throw new Error('No se pudo subir la captura: ' + up.error.message);
+    const { data, error } = await sb.rpc('registrar_pago_asesor', {
+      p_reserva_id: reserva, p_monto: monto, p_riel: riel, p_tasa_tipo: val('rpa-tasa'),
+      p_referencia: ref, p_comprobante_path: path, p_comprobante_datos: RPA.ocr, p_lead_id: RPA.lead.id,
+    });
+    if (error || !data?.ok) { rpaErr(data?.error === 'supera_saldo' ? errSaldo(data) : RPA_ERR[data?.error] || error?.message || data?.error || 'No se pudo registrar el pago.'); return; }
+    closeSheet('rpa-sheet');
+    okToast(`Pago enviado a verificar (${money(data.monto_usd)})`);
+    loadPagos();
+  } catch (e) {
+    rpaErr(e.message || 'No se pudo registrar el pago.');
+  } finally {
+    btn.disabled = false; btn.innerHTML = antes;
+  }
+}
+function setupRegistrarPagoAsesor() {
+  rpaEl('rpa-abrir')?.addEventListener('click', rpaAbrir);
+  let t = 0;
+  rpaEl('rpa-buscar')?.addEventListener('input', () => { clearTimeout(t); t = setTimeout(rpaBuscar, 250); });
+  rpaEl('rpa-resultados')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rpa-lead]');
+    const l = b && RPA?.leads.find(x => x.id === Number(b.dataset.rpaLead));
+    if (l) rpaElegir(l);
+  });
+  rpaEl('rpa-archivo')?.addEventListener('change', e => rpaCaptura(e.target.files?.[0]));
+  rpaEl('rpa-riel')?.addEventListener('change', rpaRielCambio);
+  rpaEl('rpa-tasa')?.addEventListener('change', rpaEquiv);
+  rpaEl('rpa-monto')?.addEventListener('input', rpaEquiv);
+  rpaEl('rpa-cancelar')?.addEventListener('click', () => closeSheet('rpa-sheet'));
+  rpaEl('rpa-enviar')?.addEventListener('click', rpaEnviar);
+  // Ctrl+V con la hoja abierta: solo se intercepta si hay una imagen, así pegar texto en Referencia sigue igual.
+  document.addEventListener('paste', e => {
+    if (sheetAbierta !== 'rpa-sheet') return;
+    const item = [...(e.clipboardData?.items || [])].find(i => i.kind === 'file' && i.type.startsWith('image/'));
+    if (!item) return;
+    e.preventDefault();
+    rpaCaptura(item.getAsFile());
+  });
+}
+
+const LP_ERR = {
+  reserva_no_disponible: 'La reserva ya no está activa.', monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
+  falta_cliente: 'Abre la ficha del cliente de nuevo.',
+};
+const errSaldo = d => `El monto supera el saldo de la reserva (${money(Number(d?.saldo_pendiente || 0))}${Number(d?.en_links) > 0 ? `; ${money(Number(d.en_links))} ya están en links sin pagar` : ''}).`;
+let LP_SESION = crypto.randomUUID();
+// Sin reserva todavía: oficina la elige al verificar el pago.
+const SIN_RESERVA_OPT = '<option value="">Sin reserva todavía</option>';
+function lpPintarReservas(rs) {
+  const sel = document.getElementById('lp-reserva');
+  if (!sel) return;
+  sel.disabled = false;
+  sel.innerHTML = (rs || []).map(resOpcion).join('') + SIN_RESERVA_OPT;
+  const saldo = () => { const s = sel.selectedOptions[0]?.dataset.saldo; if (Number(s) > 0) document.getElementById('lp-monto').value = s; };
+  sel.onchange = saldo; saldo();
+  if (rs === null) document.getElementById('lp-err').textContent = 'No se pudieron cargar las reservas; puedes emitir sin reserva.';
+}
+async function lpCargarReservas(l) {
+  // El saldo precargado descuenta los links vivos (mismo criterio que emitir_link_pago); si no se
+  // pueden leer, queda el saldo bruto y el servidor igual rechaza el exceso.
+  const [{ data, error }, links] = await Promise.all([sb.rpc('reservas_de_lead', { p_lead_id: l.id }),
+    sb.from('pagos').select('reserva_id,monto_usd_centavos').eq('lead_id', l.id).not('reserva_id', 'is', null)
+      .or(`estado.eq.pendiente_verificacion,and(estado.eq.emitido,expira_en.gt.${new Date().toISOString()})`)]);
+  const enLinks = {};
+  (links.data || []).forEach(p => { enLinks[p.reserva_id] = (enLinks[p.reserva_id] || 0) + Number(p.monto_usd_centavos || 0) / 100; });
+  lpPintarReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo).map(r => ({ ...r, en_links: enLinks[r.id] || 0 })));
+}
+async function cargarLinksPagoLead(l) {
+  const box = document.getElementById('lp-links');
+  if (!box) return;
+  const { data, error } = await sb.rpc('mis_pagos_asesor', { p_lead_id: l.id, p_limite: 10 });
+  if (!box.isConnected) return;
+  if (error) { box.innerHTML = '<div class="csub">No se pudieron cargar los links anteriores</div>'; return; }
+  const ps = (Array.isArray(data) ? data : []).filter(p => p.origen === 'asesor');
+  box.innerHTML = ps.map(p => `
+    <div class="lp-link"><i class="fas fa-link"></i> <span>${esc(pagoMioMonto(p))} · ${esc(p.codigo || 'Sin reserva')}${p.riel ? ' · ' + esc(PAGO_RIEL_LABEL[p.riel] || p.riel) : ''}</span>
+      ${p.token ? `<button type="button" class="pagos-copiar" data-lp-copiar="${esc(p.token)}" aria-label="Copiar link" title="Copiar link"><i class="fas fa-copy"></i></button>` : ''}
+      <span class="lp-st" style="color:${PAGO_MIO_COLOR[p.estado] || 'var(--muted)'}">${esc(p.estado === 'emitido' ? 'Sin pagar' : PAGO_ESTADO_LABEL[p.estado] || p.estado)}</span></div>`).join('');
+  box.querySelectorAll('[data-lp-copiar]').forEach(b => b.onclick = () => copiarLinkPago(b.dataset.lpCopiar));
+}
+async function emitirLinkPago(l) {
+  const btn = document.getElementById('lp-emitir'), err = document.getElementById('lp-err'), out = document.getElementById('lp-resultado');
+  const reserva = Number(val('lp-reserva')) || null, monto = parseFloat(val('lp-monto'));
+  err.textContent = '';
+  if (!(monto > 0)) { err.textContent = LP_ERR.monto_invalido; return; }
+  btn.disabled = true;
+  const antes = btn.innerHTML;
+  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Generando...';
+  // Reintento del mismo envío (respuesta perdida): misma clave, el servidor devuelve el link ya emitido.
+  const clave = `lp:${l.id}:${reserva || 0}:${Math.round(monto * 100)}:${val('lp-tasa')}:${LP_SESION}`;
+  const { data, error } = await sb.rpc('emitir_link_pago', { p_reserva_id: reserva, p_monto_usd: monto, p_tasa_tipo: val('lp-tasa'), p_lead_id: l.id, p_idempotency_key: clave });
+  btn.disabled = false; btn.innerHTML = antes;
+  // La clave solo se conserva si la respuesta se perdió; si el servidor contestó, el próximo intento es otro envío.
+  if (data) LP_SESION = crypto.randomUUID();
+  if (error || !data?.ok) { err.textContent = data?.error === 'supera_saldo' ? errSaldo(data) : LP_ERR[data?.error] || error?.message || data?.error || 'No se pudo generar el link.'; return; }
+  const url = lpUrl(data.token), wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+  out.style.display = 'block';
+  out.innerHTML = `
+    <div class="csub" style="margin-bottom:6px"><i class="fas fa-circle-check" style="color:var(--green)"></i> Link listo. Vence el ${esc(fmtFechaHoraCaracas(data.expira_en))}.</div>
+    <div style="display:flex;gap:8px">
+      <input class="ei" type="text" readonly value="${esc(url)}" style="flex:1">
+      <button type="button" class="dbtn" id="lp-copiar" aria-label="Copiar link"><i class="fas fa-copy"></i></button>
+      ${wa ? `<a class="dbtn" href="https://wa.me/${wa}?text=${encodeURIComponent(`Aquí puedes hacer tu pago: ${url}`)}" target="_blank" rel="noopener" aria-label="Enviar por WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
+    </div>`;
+  document.getElementById('lp-copiar').onclick = () => copiarLinkPago(data.token);
+  cargarLinksPagoLead(l);
+}
+
+async function descartarPago(id, btn) {
+  const p = PAGOS_CACHE.find(x => x.id === id);
+  const web = p && pagoEsWeb(p) && p.reserva_id;
+  if (!confirm(`¿Descartar este pago${p?.lead_nombre ? ' de ' + p.lead_nombre : ''}? El link deja de funcionar${web ? ' y se libera el cupo de la reserva web' : ''}.`)) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('descartar_pago', { p_pago_id: id });
+  btn.disabled = false;
+  if (error || !data?.ok) return errToast(data?.error === 'estado_invalido' ? 'Ese pago ya fue declarado o verificado' : error?.message || data?.error || 'No se pudo descartar');
+  okToast('Pago descartado');
+  loadPagos(true);
+}
+
 function setupPagos() {
   const lista = document.getElementById('pagos-lista');
   if (!lista) return;
+  setupRegistrarPagoAsesor();
   lista.addEventListener('click', e => {
+    const lp = e.target.closest('[data-lp-copiar]');
+    if (lp) return copiarLinkPago(lp.dataset.lpCopiar);
     const ver = e.target.closest('[data-pago-comprobante]');
     if (ver) return abrirComprobantePago(Number(ver.dataset.pagoComprobante));
     const apr = e.target.closest('[data-pago-aprobar]');
@@ -12004,6 +13056,8 @@ function setupPagos() {
     }
     const wTarde = e.target.closest('[data-pagoweb-tarde]');
     if (wTarde) return verificarPagoWebAccion(Number(wTarde.dataset.pagowebTarde), 'tarde', wTarde);
+    const wDes = e.target.closest('[data-pagoweb-descartar]');
+    if (wDes) return descartarPago(Number(wDes.dataset.pagowebDescartar), wDes);
     // El localizador se carga por servicio en la ficha de la reserva; al volver a Pagos la tarjeta avanza sola.
     const wRes = e.target.closest('[data-pagoweb-reserva]');
     if (wRes) {
@@ -14489,9 +15543,10 @@ function setupRedes() {
   document.getElementById('redes-chat-send').onclick = enviarChatRedes;
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatRedes(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  setupOfertasPosts();
   addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
 }
-function cargarRedActual() { loadRedesZernio(redesRed); }
+function cargarRedActual() { redesRed === 'ofertas' ? cargarOfertasPosts() : loadRedesZernio(redesRed); }
 // Con todo en 0 Chart.js dibuja un eje 0,0–1,0 sin sentido: se cambia por un aviso.
 function chartVacio(id, hayDatos, msg) {
   const cv = document.getElementById(id); if (!cv) return;
@@ -14585,18 +15640,212 @@ async function redesFbInvocar(body) {
   if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
   return data;
 }
-function fbPintarCuentas(plat) {
-  const box = document.getElementById('redes-fb-cuentas'), cs = redesFbCuentas[plat] || [];
-  box.style.display = cs.length > 1 ? '' : 'none';
-  box.innerHTML = cs.map(c => `<button class="seg${c.id === redesFbCuenta[plat] ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
-  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta[plat] = b.dataset.id; fbPintarCuentas(plat); loadRedesZernio(plat); });
+// Marcas clientes de Marketing › Contenido: con una elegida, Redes muestra solo su Instagram (Zernio).
+// Las cuentas de cada marca van en redesFbCuentas con clave `plat@marca`; sin marca es Lotus.
+let redesMarca = null, redesMarcas = null;
+const fbClave = plat => redesMarca ? `${plat}@${redesMarca}` : plat;
+async function redesCargarMarcas() {
+  if (!['admin', 'administrativo', 'marketing'].includes(ROL)) return;
+  if (!redesMarcas) {
+    const { data, error } = await sb.functions.invoke('marketing-zernio', { body: { accion: 'marcas' } });
+    if (error || !data?.ok) return console.error('marcas de Redes', error || data?.error);
+    redesMarcas = data.marcas.filter(m => !m.es_lotus && m.activa && (m.cuentas || []).some(c => c.plataforma === 'instagram' && c.activo));
+  }
+  const box = document.getElementById('redes-marcas');
+  box.style.display = redesMarcas.length ? '' : 'none';
+  box.innerHTML = `<button class="seg${redesMarca ? '' : ' on'}" data-marca="">Lotus 360</button>` +
+    redesMarcas.map(m => `<button class="seg${m.id === redesMarca ? ' on' : ''}" data-marca="${m.id}">${esc(m.nombre)}</button>`).join('');
+  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesMarca = +b.dataset.marca || null; redesElegirMarca(); });
 }
-// Facebook, Instagram y TikTok comparten panel. Con rol marketing (la EF es solo admin)
+function redesElegirMarca() {
+  document.querySelectorAll('#redes-marcas .seg').forEach(b => b.classList.toggle('on', (+b.dataset.marca || null) === redesMarca));
+  document.querySelectorAll('#redes-red-tabs .seg').forEach(b => {
+    b.style.display = redesMarca && b.dataset.red !== 'instagram' ? 'none' : '';
+    if (redesMarca) b.classList.toggle('on', b.dataset.red === 'instagram');
+  });
+  if (redesMarca) redesRed = 'instagram';
+  cargarRedActual();
+}
+function fbPintarCuentas(plat) {
+  const k = fbClave(plat), box = document.getElementById('redes-fb-cuentas'), cs = redesFbCuentas[k] || [];
+  box.style.display = cs.length > 1 ? '' : 'none';
+  box.innerHTML = cs.map(c => `<button class="seg${c.id === redesFbCuenta[k] ? ' on' : ''}" data-id="${esc(c.id)}">${esc(c.nombre)}</button>`).join('');
+  box.querySelectorAll('.seg').forEach(b => b.onclick = () => { redesFbCuenta[k] = b.dataset.id; fbPintarCuentas(plat); loadRedesZernio(plat); });
+}
+// Facebook, Instagram y TikTok comparten panel. Con rol marketing (el resumen de la EF es solo oficina)
 // Instagram y TikTok caen a sus paneles de siempre, alimentados desde Supabase.
 function redesPanelesVista(zernio) {
-  document.getElementById('redes-ig-panel').style.display = !zernio && redesRed === 'instagram' ? '' : 'none';
-  document.getElementById('redes-tiktok-panel').style.display = !zernio && redesRed === 'tiktok' ? '' : 'none';
-  document.getElementById('redes-fb-panel').style.display = zernio ? '' : 'none';
+  const ofertas = redesRed === 'ofertas';
+  document.getElementById('redes-ig-panel').style.display = !ofertas && !zernio && redesRed === 'instagram' ? '' : 'none';
+  document.getElementById('redes-tiktok-panel').style.display = !ofertas && !zernio && redesRed === 'tiktok' ? '' : 'none';
+  document.getElementById('redes-fb-panel').style.display = !ofertas && zernio ? '' : 'none';
+  document.getElementById('redes-ofertas-panel').hidden = !ofertas;
+  document.getElementById('redes-periodo').style.display = ofertas ? 'none' : '';
+}
+
+/* ---------- Oferta de cada publicación: hotel/promo que la IA usa al contestar ---------- */
+// Se guarda en publicacion_oferta; zernio-comentarios-webhook lo pone primero en
+// el contexto del cerebro, así un post que no nombra el hotel no empata entre
+// todos los del destino.
+const PO = { red: 'instagram', filtro: 'sin', q: '', posts: [], ofertas: {}, hoteles: null, puntos: new Map(), promos: new Map(), gen: 0, sel: null };
+const poNorm = rvSinTildes;
+const poTiene = o => !!o?.producto_id;
+const PO_UNIDAD = { persona: 'por persona', habitacion: 'por habitación', total: 'total' };
+const poPrecio = p => p?.monto ? `${p.moneda === 'USD' ? '$' : p.moneda + ' '}${fmt(p.monto)} ${PO_UNIDAD[p.unidad] || ''}${p.noches ? ` · ${p.noches + 1}D/${p.noches}N` : ''}${p.ocupacion ? ` · ${p.ocupacion}` : ''}` : '';
+const poSegOn = (grupo, b) => document.querySelectorAll(`#${grupo} .seg`).forEach(x => x.classList.toggle('on', x === b));
+function setupOfertasPosts() {
+  document.querySelectorAll('#po-red .seg').forEach(b => b.onclick = () => { poSegOn('po-red', b); PO.red = b.dataset.red; cargarOfertasPosts(); });
+  document.querySelectorAll('#po-filtro .seg').forEach(b => b.onclick = () => { poSegOn('po-filtro', b); PO.filtro = b.dataset.f; pintarOfertasPosts(); });
+  document.getElementById('po-buscar').oninput = e => { PO.q = poNorm(e.target.value.trim()); pintarOfertasPosts(); };
+  document.getElementById('po-grid').onclick = e => { const b = e.target.closest('[data-po-post]'); if (b) abrirOfertaPost(b.dataset.poPost); };
+  document.getElementById('po-hotel-buscar').oninput = pintarHotelesOferta;
+  document.getElementById('po-hoteles').onclick = e => { const b = e.target.closest('[data-po-hotel]'); if (b) elegirHotelOferta(+b.dataset.poHotel); };
+  document.getElementById('po-promos').onchange = e => { if (e.target.name === 'po-promo' && PO.sel) PO.sel.promocion_id = e.target.value ? +e.target.value : null; };
+  document.getElementById('po-cancelar').onclick = () => closeSheet('po-sheet');
+  document.getElementById('po-guardar').onclick = () => guardarOfertaPost(false);
+  document.getElementById('po-quitar').onclick = () => guardarOfertaPost(true);
+}
+async function cargarHotelesOferta() {
+  if (PO.hoteles) return;
+  const { data, error } = await sb.from('productos')
+    .select('id,nombre,destino,tipo,producto_fotos(storage_path,orden,activo,es_principal)')
+    .eq('activo', true).eq('cliente_id', 1).neq('tipo', 'info').eq('producto_fotos.es_principal', true).order('destino').order('nombre');
+  if (error) throw error;
+  PO.hoteles = data.map(p => {
+    const f = (p.producto_fotos || []).find(x => x.activo !== false);
+    return { id: p.id, nombre: p.nombre, destino: p.destino || 'Sin destino', tipo: p.tipo, foto: f ? fotoMini(f.storage_path, 256) : null, n: poNorm(`${p.nombre} ${p.destino || ''}`) };
+  });
+}
+async function cargarOfertasPosts() {
+  const gen = ++PO.gen, aviso = document.getElementById('po-aviso');
+  aviso.innerHTML = fbAviso('fa-spinner fa-spin', 'Cargando publicaciones con comentarios...');
+  document.getElementById('po-grid').innerHTML = '';
+  try {
+    if (!redesFbCuentas[PO.red]) {
+      redesFbCuentas[PO.red] = (await redesFbInvocar({ accion: 'cuentas', plataforma: PO.red })).cuentas.filter(c => c.activo);
+      redesFbCuenta[PO.red] = redesFbCuentas[PO.red][0]?.id || null;
+    }
+    const cuenta = redesFbCuenta[PO.red];
+    if (!cuenta) { if (gen === PO.gen) aviso.innerHTML = fbAviso('fa-circle-info', `No hay cuentas de ${FB_RED[PO.red].nombre} conectadas en Zernio.`); return; }
+    const [{ publicaciones }] = await Promise.all([redesFbInvocar({ accion: 'publicaciones', plataforma: PO.red, accountId: cuenta }), cargarHotelesOferta()]);
+    const { data, error } = await sb.rpc('ofertas_publicaciones', { p_post_ids: publicaciones.map(p => p.id) });
+    if (error) throw error;
+    if (gen !== PO.gen) return;
+    PO.posts = publicaciones; PO.ofertas = data || {};
+    aviso.innerHTML = '';
+    pintarOfertasPosts();
+  } catch (e) {
+    console.error('ofertas de publicaciones', e);
+    if (gen === PO.gen) aviso.innerHTML = fbAviso('fa-triangle-exclamation', 'No se pudieron cargar las publicaciones. Intenta de nuevo en un momento.');
+  }
+}
+function pintarOfertasPosts() {
+  const sinMarcar = PO.posts.filter(p => !poTiene(PO.ofertas[p.id])).length;
+  document.getElementById('po-cuenta-sin').textContent = sinMarcar ? String(sinMarcar) : '';
+  const lista = PO.posts.filter(p => (PO.filtro === 'todos' || (PO.filtro === 'sin') === !poTiene(PO.ofertas[p.id])) && (!PO.q || poNorm(p.texto).includes(PO.q)));
+  const vacio = !PO.posts.length ? 'Sin publicaciones con comentarios recientes' : PO.filtro === 'sin' && !sinMarcar ? 'Todas las publicaciones tienen su hotel marcado' : 'Nada coincide con el filtro';
+  document.getElementById('po-grid').innerHTML = lista.length ? lista.map(tarjetaOfertaPost).join('') : `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${vacio}</div>`;
+}
+// origen 'ia': sugerencia de analizar-publicaciones; el bot ya la usa. Guardar desde la hoja la pasa a manual.
+function poResumenOferta(o) {
+  const ia = o?.origen === 'ia';
+  const tag = ia ? ` <span class="po-ia">IA · ${esc(o.confianza || 'baja')}</span>` : '';
+  const razon = ia && o.razon ? `<span class="po-razon" title="${esc(o.razon)}">${esc(o.razon)}</span>` : '';
+  if (poTiene(o)) return `<div class="po-oferta on"><i class="fas fa-${ia ? 'wand-magic-sparkles' : 'hotel'}"></i><div><b>${esc(o.producto)}${tag}</b><span>${esc([o.destino, o.promocion, poPrecio(o.precio_leido)].filter(Boolean).join(' · '))}</span>${razon}</div></div>`;
+  if (ia) return `<div class="po-oferta"><i class="fas fa-wand-magic-sparkles"></i><div><b>La IA no identificó el hotel${tag}</b>${razon}</div></div>`;
+  return '<div class="po-oferta"><i class="fas fa-circle-question"></i><div><b>Sin hotel marcado</b><span>La IA lo deduce del texto y puede equivocarse</span></div></div>';
+}
+function tarjetaOfertaPost(p, i) {
+  const o = PO.ofertas[p.id], mini = fbHttps(p.portada), url = fbHttps(p.url);
+  const meta = [p.fecha ? fmtFechaSolo(p.fecha.slice(0, 10)) : '', p.comentarios ? `${fmt(p.comentarios)} comentarios` : ''].filter(Boolean).join(' · ');
+  return `<article class="lt-card po-card" style="--i:${Math.min(i, 20)}">
+    <div class="tt-row">
+      ${mini ? `<img class="tt-thumb po-thumb" src="${esc(mini)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<div class="tt-thumb po-thumb po-thumb-vacia"><i class="fas fa-image"></i></div>'}
+      <div class="po-texto" title="${esc(p.texto)}">${esc(p.texto || 'Sin texto')}</div>
+    </div>
+    ${poResumenOferta(o)}
+    <div class="lt-card-pie">
+      <span class="csub" style="margin:0 auto 0 0">${esc(meta)}</span>
+      ${url ? `<a class="btn-sm" href="${esc(url)}" target="_blank" rel="noopener" aria-label="Ver publicación" title="Ver publicación"><i class="fa-brands ${FB_RED[PO.red].icono}"></i></a>` : ''}
+      <button class="btn-sm lt-primario" type="button" data-po-post="${esc(p.id)}">${poTiene(o) ? 'Cambiar' : 'Elegir hotel'}</button>
+    </div>
+  </article>`;
+}
+function abrirOfertaPost(id) {
+  const p = PO.posts.find(x => x.id === id);
+  if (!p || !PO.hoteles) return;
+  const o = PO.ofertas[id], t = poNorm(p.texto);
+  PO.sel = { post: p, producto_id: o?.producto_id ?? null, promocion_id: o?.promocion_id ?? null };
+  // Sugeridos: hotel nombrado en el texto primero, después los del destino del post.
+  PO.puntos = new Map(PO.hoteles.map(h => {
+    const destino = poNorm(h.destino).split(',')[0].trim(), nombre = poNorm(h.nombre).replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return [h.id, (nombre.length >= 5 && t.includes(nombre) ? 2 : 0) + (destino.length >= 4 && t.includes(destino) ? 1 : 0)];
+  }).filter(([, n]) => n));
+  const mini = fbHttps(p.portada);
+  document.getElementById('po-post').innerHTML = `${mini ? `<img src="${esc(mini)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<p>${esc(p.texto || 'Sin texto')}</p>`;
+  document.getElementById('po-hotel-buscar').value = '';
+  document.getElementById('po-error').textContent = '';
+  document.getElementById('po-quitar').hidden = !poTiene(o);
+  pintarHotelesOferta();
+  pintarPromosOferta();
+  openSheet('po-sheet');
+}
+function pintarHotelesOferta() {
+  const q = poNorm(document.getElementById('po-hotel-buscar').value.trim()), sel = PO.sel?.producto_id;
+  let hs = PO.hoteles.filter(h => q ? q.split(/\s+/).every(w => h.n.includes(w)) : PO.puntos.has(h.id) || h.id === sel);
+  hs = hs.sort((a, b) => (b.id === sel) - (a.id === sel) || (PO.puntos.get(b.id) || 0) - (PO.puntos.get(a.id) || 0));
+  document.getElementById('po-hoteles-nota').textContent = q
+    ? `${hs.length} ${hs.length === 1 ? 'resultado' : 'resultados'}${hs.length > 60 ? ', se muestran 60' : ''}`
+    : hs.length ? 'Sugeridos por el texto del post' : '';
+  document.getElementById('po-hoteles').innerHTML = hs.length ? hs.slice(0, 60).map(h => `
+    <button type="button" class="po-hotel${h.id === sel ? ' on' : ''}" role="option" aria-selected="${h.id === sel}" data-po-hotel="${h.id}">
+      ${h.foto ? `<img src="${esc(h.foto)}" alt="" loading="lazy">` : '<span class="po-hotel-sinfoto"><i class="fas fa-hotel"></i></span>'}
+      <span class="po-hotel-txt"><b>${esc(h.nombre)}</b><small>${esc(h.destino)}${h.tipo !== 'hotel' ? ` · ${esc(h.tipo)}` : ''}</small></span>
+      ${h.id === sel ? '<i class="fas fa-check po-hotel-check"></i>' : ''}
+    </button>`).join('')
+    : `<div class="csub po-hoteles-vacio">${q ? 'Ningún hotel coincide.' : 'El texto no nombra un destino del tarifario: busca el hotel arriba.'}</div>`;
+}
+function elegirHotelOferta(id) {
+  if (!PO.sel || PO.sel.producto_id === id) return;
+  PO.sel.producto_id = id;
+  PO.sel.promocion_id = null;
+  pintarHotelesOferta();
+  pintarPromosOferta();
+}
+async function pintarPromosOferta() {
+  const wrap = document.getElementById('po-promos-wrap'), box = document.getElementById('po-promos'), id = PO.sel?.producto_id;
+  wrap.hidden = !id;
+  if (!id) return;
+  box.innerHTML = '<div class="csub">Cargando promociones...</div>';
+  const { data, error } = await sb.from('promociones').select('id,titulo,precio_texto,fecha_venta_fin,ia_estado').eq('producto_id', id).order('id', { ascending: false });
+  if (PO.sel?.producto_id !== id) return;
+  if (error) { box.innerHTML = '<div class="csub">No se pudieron cargar las promociones.</div>'; return; }
+  const h = hoy(), vivas = (data || []).filter(p => (!p.fecha_venta_fin || p.fecha_venta_fin >= h) && p.ia_estado !== 'quitar');
+  vivas.forEach(p => PO.promos.set(p.id, p.titulo));
+  if (PO.sel.promocion_id && !vivas.some(p => p.id === PO.sel.promocion_id)) PO.sel.promocion_id = null;
+  const op = (v, titulo, sub) => `<label class="po-promo"><input type="radio" name="po-promo" value="${v}"${String(PO.sel.promocion_id ?? '') === String(v) ? ' checked' : ''}><span><b>${esc(titulo)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></label>`;
+  box.innerHTML = op('', 'Sin promoción específica', vivas.length ? 'La IA ofrece la tarifa que calce con el post' : 'Este hotel no tiene promociones vigentes')
+    + vivas.map(p => op(p.id, p.titulo || `Promoción ${p.id}`, p.precio_texto)).join('');
+}
+async function guardarOfertaPost(quitar) {
+  const s = PO.sel, err = document.getElementById('po-error');
+  if (!s) return;
+  if (!quitar && !s.producto_id) { err.textContent = 'Elige un hotel de la lista.'; return; }
+  const btn = document.getElementById(quitar ? 'po-quitar' : 'po-guardar');
+  btn.disabled = true;
+  const { error } = await sb.rpc('asignar_oferta_publicacion', {
+    p_post_id: s.post.id, p_canal: PO.red, p_producto_id: quitar ? null : s.producto_id, p_promocion_id: quitar ? null : s.promocion_id,
+  });
+  btn.disabled = false;
+  if (error) { console.error('asignar oferta', error); err.textContent = 'No se pudo guardar. Intenta de nuevo.'; return; }
+  if (quitar) delete PO.ofertas[s.post.id];
+  else {
+    const h = PO.hoteles.find(x => x.id === s.producto_id);
+    PO.ofertas[s.post.id] = { origen: 'manual', producto_id: h.id, producto: h.nombre, destino: h.destino, promocion_id: s.promocion_id, promocion: s.promocion_id ? PO.promos.get(s.promocion_id) || null : null };
+  }
+  closeSheet('po-sheet');
+  okToast(quitar ? 'Hotel quitado de la publicación' : 'Hotel guardado: la IA ya lo usa en los próximos comentarios');
+  pintarOfertasPosts();
 }
 const loadRedesFacebook = () => loadRedesZernio('facebook');
 async function loadRedesZernio(plat) {
@@ -14606,18 +15855,20 @@ async function loadRedesZernio(plat) {
   document.getElementById('redes-fb-seccion').innerHTML = `<i class="fa-brands ${R.icono}"></i> ${R.seccion}`;
   document.getElementById('redes-fb-card-reac').style.display = plat === 'facebook' ? '' : 'none';
   avisos.innerHTML = fbAviso('fa-spinner fa-spin', `Cargando métricas de ${R.nombre} desde Zernio...`);
+  const marca = redesMarca, k = fbClave(plat), conMarca = marca ? { marca_id: marca } : {};
   try {
-    if (!redesFbCuentas[plat]) {
-      redesFbCuentas[plat] = (await redesFbInvocar({ accion: 'cuentas', plataforma: plat })).cuentas.filter(c => c.activo);
-      redesFbCuenta[plat] = redesFbCuentas[plat][0]?.id || null;
+    if (!redesFbCuentas[k]) {
+      redesFbCuentas[k] = (await redesFbInvocar({ accion: 'cuentas', plataforma: plat, ...conMarca })).cuentas.filter(c => c.activo);
+      redesFbCuenta[k] = redesFbCuentas[k][0]?.id || null;
     }
+    if (gen !== redesFbGen) return;
     fbPintarCuentas(plat);
-    if (!redesFbCuenta[plat]) { avisos.innerHTML = fbAviso('fa-circle-info', `No hay cuentas de ${R.nombre} conectadas en Zernio.`); return; }
+    if (!redesFbCuenta[k]) { avisos.innerHTML = fbAviso('fa-circle-info', `No hay cuentas de ${R.nombre} conectadas en Zernio.`); return; }
     const [d, h] = periodo(redesPeriodo), fin = addD(h, -1), hoy = new Date();
-    const desde = fbYmd(d), hasta = fbYmd(fin > hoy ? hoy : fin), clave = `${plat}|${redesFbCuenta[plat]}|${desde}|${hasta}`;
+    const desde = fbYmd(d), hasta = fbYmd(fin > hoy ? hoy : fin), clave = `${k}|${redesFbCuenta[k]}|${desde}|${hasta}`;
     let hit = redesFbCache.get(clave);
     if (!hit || Date.now() - hit.t > REDES_FB_CACHE_MS) {
-      hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', plataforma: plat, accountId: redesFbCuenta[plat], desde, hasta }) };
+      hit = { t: Date.now(), data: await redesFbInvocar({ accion: 'resumen', plataforma: plat, accountId: redesFbCuenta[k], desde, hasta, ...conMarca }) };
       redesFbCache.set(clave, hit);
     }
     // Si la persona ya se fue de Redes, no se rearman los ~8 gráficos en otra pantalla
@@ -14631,7 +15882,8 @@ async function loadRedesZernio(plat) {
   } catch (e) {
     console.error(e);
     if (gen !== redesFbGen) return;
-    if (plat !== 'facebook') { redesPanelesVista(false); plat === 'tiktok' ? loadRedesTikTok() : loadRedes(); return; }
+    // Los paneles de respaldo (Supabase) son de Lotus: con una marca cliente no se cae a ellos.
+    if (plat !== 'facebook' && !marca) { redesPanelesVista(false); plat === 'tiktok' ? loadRedesTikTok() : loadRedes(); return; }
     avisos.innerHTML = fbAviso('fa-triangle-exclamation', `No se pudieron cargar las métricas de ${R.nombre}. Intenta de nuevo en un momento.`);
     errToast(`No se pudieron cargar las métricas de ${R.nombre}`);
   }
@@ -19480,6 +20732,32 @@ async function pdfEntregar(blob, nombre) {
   }
   cbDescargar(blob, nombre);
 }
+// Documento ya guardado en Storage: se entrega el archivo con nombre legible, nunca la URL
+// firmada (compartida desde el navegador, a WhatsApp llegaba el link largo de Supabase).
+const docTactil = () => matchMedia('(pointer: coarse)').matches;
+const docBotonVer = (texto = 'Ver') => docTactil() ? '<i class="fas fa-share-nodes"></i> Compartir' : `<i class="fas fa-eye"></i> ${texto}`;
+async function docEntregarUrl(url, nombre, mime = 'application/pdf') {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('sin_archivo');
+  const file = new File([await res.blob()], nombre, { type: mime });
+  if (docTactil() && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) {
+      if (e.name === 'AbortError') return;
+      // iOS pierde el gesto del usuario durante el fetch: un toque más comparte el archivo ya cargado.
+      if (e.name === 'NotAllowedError') { docToastCompartir(file); return; }
+    }
+  }
+  const u = URL.createObjectURL(file), w = window.open(u, '_blank');
+  if (w) w.opener = null; else descargarArchivo(file, nombre);
+  setTimeout(() => URL.revokeObjectURL(u), 60000);
+}
+function docToastCompartir(file) {
+  const t = document.createElement('div'); t.className = 'toast';
+  t.innerHTML = `<i class="fas fa-share-nodes"></i> <div><button class="btn-sm lt-primario" type="button">Compartir ${esc(file.name)}</button></div>`;
+  t.querySelector('button').onclick = () => { navigator.share({ files: [file], title: file.name }).catch(() => {}); t.remove(); };
+  document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 15000);
+}
 async function exportarVentaPdf(id) {
   const f = FACT_VENTAS_CACHE.find(x => x.id === id);
   if (!f) return;
@@ -19996,9 +21274,6 @@ async function confirmarMontoSheet() {
   if (MONTO_SHEET_ACCION.tipo === 'comision') {
     if (valor > 100) { err.textContent = 'El porcentaje no puede superar 100.'; btn.disabled = false; btn.innerHTML = previo; return; }
     resultado = await sb.rpc('editar_comision_manual', { p_comision_id: MONTO_SHEET_ACCION.id, p_porcentaje: valor });
-  } else if (MONTO_SHEET_ACCION.tipo === 'venta') {
-    if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo.'; btn.disabled = false; btn.innerHTML = previo; return; }
-    resultado = await sb.rpc('registrar_abono_venta', { p_lead_id: MONTO_SHEET_ACCION.id, p_monto: valor });
   } else {
     if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo pendiente.'; btn.disabled = false; btn.innerHTML = previo; return; }
     resultado = await sb.rpc('registrar_abono_proveedor', { p_cxp_id: MONTO_SHEET_ACCION.id, p_monto: valor });
@@ -20009,19 +21284,9 @@ async function confirmarMontoSheet() {
   closeSheet('monto-sheet');
   okToast(MONTO_SHEET_ACCION.tipo === 'comision' ? `Comisión actualizada a ${valor}%` : `Abono de ${money(valor)} registrado`);
   if (MONTO_SHEET_ACCION.tipo === 'comision') { loadComisionesAdmin(); }
-  else if (MONTO_SHEET_ACCION.tipo === 'venta') { loadMisVentasVentas(); }
   else { await loadCuentasPorPagar(); }
   MONTO_SHEET_ACCION = null;
 }
-window.abrirRegistrarAbonoVentaUI = (leadId, saldoPendiente) => {
-  MONTO_SHEET_ACCION = { tipo: 'venta', id: leadId, saldoPendiente };
-  document.getElementById('monto-sheet-title').textContent = 'Registrar abono de esta venta';
-  document.getElementById('monto-sheet-label').textContent = `Monto abonado (saldo: ${money(saldoPendiente)})`;
-  const input = document.getElementById('monto-sheet-input');
-  input.min = 0; input.max = saldoPendiente; input.step = 0.01; input.value = '';
-  document.getElementById('monto-sheet-error').textContent = '';
-  openSheet('monto-sheet'); input.focus();
-};
 window.editarPorcentajeComision = async (asesorId) => {
   const a = FACT_ASESORES_CACHE.find(x => x.id === asesorId);
   if (!a) return;
@@ -22112,7 +23377,11 @@ async function ivLeerArchivos(files) {
       const { data, error } = await sb.functions.invoke('voucher-a-venta', {
         body: { accion: 'leer', pdf_base64: fila.pdf_b64, nombre_archivo: file.name },
       });
-      if (error || !data?.ok) { fila.estado = 'error'; fila.resultado = data?.detalle || data?.error || error?.message || 'no se pudo leer'; ivRender(); continue; }
+      if (error || !data?.ok) {
+        // Con status ≠ 2xx supabase-js deja el cuerpo en error.context: ahí viene el motivo real (detalle).
+        const cuerpo = data || await error?.context?.json?.().catch(() => null);
+        fila.estado = 'error'; fila.resultado = cuerpo?.detalle || cuerpo?.error || error?.message || 'no se pudo leer'; ivRender(); continue;
+      }
       fila.datos = data.datos;
       fila.estado = data.datos.necesita_revision ? 'revisar' : 'ok';
       fila.candidatos = await ivBuscarLeads(data.datos);
@@ -22159,7 +23428,20 @@ function ivElegirLeadInicial(fila) {
 function ivAplicarEmpresa(f, empresa) {
   f.empresa_id = empresa;
   const c = (f.candidatos || []).find(x => x.id === f.lead_id);
-  if (empresa && c && !f.vincular && !f.crear_lead && (c.motivos || []).every(m => m === 'telefono')) { f.lead_id = null; f.crear_lead = true; }
+  if (empresa && c && !f.vincular && !f.modoSob && !f.crear_lead && (c.motivos || []).every(m => m === 'telefono')) { f.lead_id = null; f.crear_lead = true; }
+}
+
+// «Sobrescribir»: sin búsqueda se ofrecen las reservas parecidas que ya encontró ivReservasSimilares.
+const ivSobSimilares = f => (f.similares || []).map(r => ({ id: r.id, codigo: r.codigo, cliente: r.cliente, monto_total: r.monto_total, lead_id: r.lead_id }));
+async function ivBuscarReservas(q) {
+  const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: q });
+  if (error) { console.error('postventa_bandeja', error); return []; }
+  return (data || []).slice(0, 8).map(r => ({ id: r.id, codigo: r.codigo, cliente: r.nombre, monto_total: r.monto_total, lead_id: r.lead_id, destino: r.destino, inicio: r.fecha_viaje_inicio }));
+}
+function ivSobResHtml(f) {
+  const lista = f.sobRes || ivSobSimilares(f);
+  if (!lista.length) return `<div class="iv-sob-vacio">${(f.sobQ || '').trim().length < 2 ? 'Escribí al menos 2 letras.' : 'Sin reservas con ese dato.'}</div>`;
+  return lista.map(r => `<button type="button" class="iv-sob-r${f.sobrescribir?.id === r.id ? ' on' : ''}" data-rid="${r.id}" aria-pressed="${f.sobrescribir?.id === r.id}"><b>${esc(r.codigo || '#' + r.id)}</b><span>${esc(r.cliente || 'Sin nombre')}${r.destino ? ' · ' + esc(r.destino) : ''}${r.inicio ? ' · ' + esc(pvFecha(r.inicio)) : ''}</span><em>${ivMoney(r.monto_total)}</em></button>`).join('');
 }
 
 function ivMoney(n) { return n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -22204,26 +23486,32 @@ function ivRender() {
     if (f.estado === 'error' && !d.numero_voucher) return `<article class="iv-card" data-e="error"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio">No se pudo leer</div>${archivo}</div><span class="iv-estado">Error</span></div>${ivAviso(f.resultado && f.resultado !== 'no se pudo leer' ? ivTexto(f.resultado) : 'Probá con otro PDF o cargá la venta a mano.', 'error')}</article>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
     const sims = f.similares || [];
-    const opciones = [`<option value="" ${f.crear_lead && !f.vincular ? 'selected' : ''}>➕ Crear lead nuevo</option>`].concat(
+    const opciones = [`<option value="" ${f.crear_lead && !f.vincular && !f.modoSob ? 'selected' : ''}>➕ Crear lead nuevo</option>`,
+      `<option value="s" ${f.modoSob ? 'selected' : ''}>✏️ ${f.sobrescribir ? `Sobrescribir ${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)} · ${esc(f.sobrescribir.cliente || '')}` : 'Sobrescribir una reserva existente…'}</option>`].concat(
       sims.map(r => `<option value="r:${r.id}" ${f.vincular === r.id ? 'selected' : ''}>🔗 Ya está en el CRM: ${esc(r.codigo || '#' + r.id)} · ${esc(r.cliente)} · ${ivMoney(r.monto_total)} (no duplica)</option>`),
-      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`)
+      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && !f.modoSob && !f.nueva && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`
+        + `<option value="n:${c.id}" ${f.nueva && f.lead_id === c.id ? 'selected' : ''}>🧳 Nueva venta de #${c.id} ${esc(c.nombre)} (reserva aparte)</option>`)
     ).join('');
-    const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular;
+    const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular && !f.modoSob;
     const empresa = f.empresa_id && IV_EMPRESAS.find(e => e.id === f.empresa_id);
     const sinMonto = empresa && !(Number(d.total_cobrado) > 0);
     const abierta = ivAbierta(f);
-    const posible = !f.vincular && sims.find(r => !r.fuerte);
+    const posible = !f.vincular && !f.modoSob && sims.find(r => !r.fuerte);
     const mismatch = cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
     const otras = abierta && f.empresa_id ? abiertas.filter(x => x !== f && x.empresa_id !== f.empresa_id).length : 0;
     const num = d.numero_voucher != null && d.numero_voucher !== '' ? esc(String(d.numero_voucher)) : '';
     const avisos = [
       abierta && debil && ivAviso('Coincide solo el nombre: revisá que sea el mismo cliente o elegí ➕ Crear lead nuevo.'),
       abierta && posible && ivAviso(`Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.`),
+      abierta && f.modoSob && ivAviso(f.sobrescribir
+        ? `Se reemplazan los servicios, el total, las fechas y el hotel de <b>${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)}</b>, y el nombre, teléfono y destino del cliente. Los abonos y una factura que ya exista no se tocan.`
+        : 'Buscá y elegí la reserva que este voucher va a sobrescribir.'),
+      abierta && f.nueva && ivAviso(`Se crea una reserva aparte para <b>${esc(cand?.nombre || '#' + f.lead_id)}</b>, con su propia factura por lo cobrado. Sus otras reservas no se tocan y cada ficha muestra la otra venta.`),
       abierta && mismatch && ivAviso(`El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}`),
       f.resultado && f.estado !== 'hecho' && ivAviso(ivTexto(f.resultado), ['error', 'duplicado'].includes(f.estado) ? 'error' : ''),
       d.nota_revision && !f.resultado && ivAviso(ivTexto(d.nota_revision)),
     ].filter(Boolean).join('');
-    const icono = f.vincular ? 'link' : f.crear_lead ? 'user-plus' : 'user-check';
+    const icono = f.modoSob ? 'pen-to-square' : f.vincular ? 'link' : f.crear_lead ? 'user-plus' : 'user-check';
     return `<article class="iv-card" data-e="${f.estado}" data-fid="${f.id}"${abierta ? ` data-sel="${f.sel ? 1 : 0}"` : ''}>
       <div class="iv-card-cab">
         ${abierta ? `<label class="iv-check" title="Incluir en la importación"><input type="checkbox" class="iv-sel" aria-label="Importar voucher ${num || esc(f.nombre)}" ${f.sel ? 'checked' : ''}></label>` : ''}
@@ -22237,10 +23525,10 @@ function ivRender() {
       </div>
       ${abierta || conEmpresa ? `<div class="iv-destino">
         ${conEmpresa ? `<div class="iv-sec"><h4><i class="fas fa-building" aria-hidden="true"></i> Empresa</h4>${abierta ? `<select class="iv-empresa" aria-label="Empresa del voucher ${num}"><option value="">Particular</option>${IV_EMPRESAS.map(e => `<option value="${e.id}" ${f.empresa_id === e.id ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>` : esc(empresa?.nombre || 'Particular')}</div>${otras ? `<button type="button" class="iv-copiar">Usar en ${otras === 1 ? 'la otra tarjeta' : `las otras ${otras}`}</button>` : ''}` : ''}
-        ${abierta ? `<div class="iv-sec"><h4><i class="fas fa-${icono}" aria-hidden="true"></i> Se carga en</h4><select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select></div>` : ''}
+        ${abierta ? `<div class="iv-sec"><h4><i class="fas fa-${icono}" aria-hidden="true"></i> Se carga en</h4><select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select>${f.modoSob ? `<div class="iv-sob"><input type="search" class="iv-sob-q" aria-label="Buscar la reserva a sobrescribir" placeholder="Código, cliente o teléfono" value="${esc(f.sobQ || '')}"><div class="iv-sob-res">${ivSobResHtml(f)}</div></div>` : ''}</div>` : ''}
       </div>` : ''}
       ${avisos}
-      ${f.estado === 'hecho' ? `<div class="iv-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><b>${f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</b><span>${esc(f.resultado || '')}</span></div></div>` : ''}
+      ${f.estado === 'hecho' ? `<div class="iv-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><b>${f.sobrescrita ? 'Reserva sobrescrita' + (f.resultado_monto ? ' · facturado ' + ivMoney(f.resultado_monto) : '') : f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</b><span>${esc(f.resultado || '')}</span></div></div>` : ''}
     </article>`;
   }).join('');
   const nSel = abiertas.filter(f => f.sel).length;
@@ -22252,9 +23540,28 @@ function ivRender() {
     card.querySelector('.iv-sel')?.addEventListener('change', e => { f.sel = e.target.checked; ivRender(); });
     card.querySelector('.iv-lead')?.addEventListener('change', e => {
       const v = e.target.value, sim = v.startsWith('r:') ? (f.similares || []).find(r => r.id === +v.slice(2)) : null;
+      f.modoSob = v === 's'; f.nueva = v.startsWith('n:');
+      if (f.nueva) { f.sobrescribir = null; f.vincular = null; f.crear_lead = false; f.lead_id = +v.slice(2); ivRender(); return; }
+      if (f.modoSob) { f.vincular = null; f.crear_lead = false; f.lead_id = f.sobrescribir?.lead_id ?? null; ivRender(); document.querySelector(`.iv-card[data-fid="${f.id}"] .iv-sob-q`)?.focus(); return; }
+      f.sobrescribir = null;
       f.vincular = sim ? sim.id : null;
       f.lead_id = sim ? sim.lead_id : (v ? +v : null);
       f.crear_lead = !v; ivRender();
+    });
+    const sobQ = card.querySelector('.iv-sob-q');
+    sobQ?.addEventListener('input', () => {
+      f.sobQ = sobQ.value; clearTimeout(f.sobT);
+      f.sobT = setTimeout(async () => {
+        const q = f.sobQ.trim(), lista = q.length < 2 ? null : await ivBuscarReservas(q);
+        if (f.sobQ.trim() !== q) return;
+        f.sobRes = lista;
+        const res = document.querySelector(`.iv-card[data-fid="${f.id}"] .iv-sob-res`); if (res) res.innerHTML = ivSobResHtml(f);
+      }, 300);
+    });
+    card.querySelector('.iv-sob-res')?.addEventListener('click', e => {
+      const b = e.target.closest('[data-rid]'); if (!b) return;
+      const r = (f.sobRes || ivSobSimilares(f)).find(x => x.id === +b.dataset.rid); if (!r) return;
+      f.sobrescribir = r; f.lead_id = r.lead_id; ivRender();
     });
     card.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
     card.querySelector('.iv-empresa')?.addEventListener('change', e => { ivAplicarEmpresa(f, Number(e.target.value) || null); ivRender(); });
@@ -22270,10 +23577,21 @@ function ivRender() {
 async function ivImportar() {
   const pend = IV_FILAS.filter(f => f.sel && ivAbierta(f));
   if (!pend.length) { errToast('No hay filas para importar'); return; }
+  const sinElegir = pend.find(f => f.modoSob && !f.sobrescribir);
+  if (sinElegir) { errToast(`Elegí la reserva a sobrescribir del voucher ${sinElegir.datos.numero_voucher || sinElegir.nombre}`); return; }
+  const sobs = pend.filter(f => f.modoSob);
+  if (sobs.length && !await confirmarSheet({
+    titulo: sobs.length === 1 ? `Sobrescribir ${sobs[0].sobrescribir.codigo || 'la reserva'}` : `Sobrescribir ${sobs.length} reservas`,
+    detalle: sobs.map(f => `${f.sobrescribir.codigo || '#' + f.sobrescribir.id} (${f.sobrescribir.cliente || 'sin nombre'}) ← voucher ${f.datos.numero_voucher || f.nombre}`).join('\n')
+      + '\n\nSe reemplazan servicios, total, fechas, hotel y los datos del cliente. Los abonos y una factura existente no se tocan.',
+    textoOk: 'Sobrescribir',
+  })) return;
   const btn = document.getElementById('iv-importar-btn');
   IV_IMPORTANDO = true; btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Importando…';
   const filas = pend.map(f => ({
     datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead, vincular_reserva_id: f.vincular || null,
+    sobrescribir_reserva_id: f.modoSob ? f.sobrescribir?.id || null : null,
+    nueva_reserva: !!f.nueva && !f.crear_lead && !f.modoSob && !!f.lead_id,
     reasignar: f.reasignar, empresa_id: f.empresa_id || null, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
   }));
   const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
@@ -22283,7 +23601,7 @@ async function ivImportar() {
   (data.resultados || []).forEach(r => { porNum[r.numero_voucher] = r; });
   pend.forEach(f => {
     const r = porNum[f.datos.numero_voucher]; if (!r) return;
-    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : '') + (r.nota ? ' · ' + r.nota : ''); f.resultado_monto = r.monto_facturado; f.sin_factura = !r.factura_id && !!r.empresa_id; f.sel = false; }
+    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : '') + (r.nota ? ' · ' + r.nota : ''); f.resultado_monto = r.monto_facturado; f.sin_factura = !r.factura_id && !!r.empresa_id; f.sobrescrita = !!r.sobrescrita; f.sel = false; }
     else if (r.estado === 'ya_facturado') { f.estado = 'duplicado'; f.resultado = r.nota || 'El lead ya tenía factura'; f.sel = false; }
     else if (r.estado === 'duplicado') { f.estado = 'duplicado'; f.resultado = 'Voucher ya importado antes'; f.sel = false; }
     else { f.estado = 'error'; f.resultado = r.error || 'error'; }
@@ -22322,6 +23640,26 @@ const TAR_SEL_PRODUCTOS = '*, tarifa_destacada_id, tarifas(*, tarifario_bloques(
 // Filtrar ANTES del límite del embed: sin esto 1000 históricas pueden dejar
 // fuera todas las tarifas actuales de un hotel (Venetur, Aria, Morrocoy).
 const tarConsultaProductos = q => q.eq('tarifas.vigente', true);
+// Móvil: BT Travel, las acciones de admin y el selector de vista viven en el menú ⋯
+// del buscador, y el contador dentro de la caja. Se reubican al cruzar el ancho de
+// móvil (no al abrir el menú), así escritorio queda igual que siempre.
+function setupTarMas() {
+  const btn = document.getElementById('tar-mas-btn'), pop = document.getElementById('tar-mas-pop');
+  if (!btn || !pop) return;
+  const fila = document.querySelector('#sec-tarifario .tar-tabs-row'), acc = fila.querySelector('.tar-admin-actions');
+  const filtros = document.getElementById('tar-mfs-trigger'), vs = document.getElementById('tar-view-switch');
+  const cnt = document.getElementById('tar-count'), caja = document.querySelector('#sec-tarifario .tar-search');
+  const abrir = si => { pop.classList.toggle('abierto', si); btn.setAttribute('aria-expanded', si); };
+  const ubicar = () => {
+    if (esMovil()) { pop.append(acc, vs); caja.append(cnt); }
+    else { abrir(false); fila.append(acc); filtros.after(vs); vs.after(cnt); }
+  };
+  MENU_MQ.addEventListener('change', ubicar); ubicar();
+  btn.onclick = e => { e.stopPropagation(); abrir(!pop.classList.contains('abierto')); };
+  pop.addEventListener('click', e => { if (e.target.closest('button')) abrir(false); });
+  document.addEventListener('click', e => { if (!pop.contains(e.target)) abrir(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') abrir(false); });
+}
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -22332,9 +23670,11 @@ function setupTarifarioTabs() {
   document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); tarTab = b.dataset.tab;
+    const g = esMovil() && b.parentNode; if (g) g.scrollLeft = b.offsetLeft - (g.clientWidth - b.offsetWidth) / 2;
     actualizarVisibilidadFiltrosTarifario();
     loadTarifario();
   });
+  setupTarMas();
   actualizarVisibilidadFiltrosTarifario();
   let deb; const debRender = () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); };
   document.getElementById('tar-search').addEventListener('input', debRender);
@@ -22703,7 +24043,7 @@ function renderTarifarioIA() {
        || (p.productos?.nombre || '').toLowerCase().includes(q)
        || (p.destino || '').toLowerCase().includes(q)));
 
-  document.getElementById('tar-count').textContent = `${fmt(promos.length)} promociones`;
+  document.getElementById('tar-count').innerHTML = `${fmt(promos.length)}<span class="tcount-u"> promociones</span>`;
   document.getElementById('tar-empty').classList.toggle('show', promos.length === 0);
   document.getElementById('tar-chips').innerHTML = '';
 
@@ -24027,7 +25367,7 @@ function renderTarifario() {
       : promosHotSales(filtered);
   }
 
-  document.getElementById('tar-count').textContent = `${fmt(filtered.length)} ítems`;
+  document.getElementById('tar-count').innerHTML = `${fmt(filtered.length)}<span class="tcount-u"> ítems</span>`;
   tarChips();
   // En Paquetes la grilla siempre tiene el bloque de Paquetes Lotus arriba.
   document.getElementById('tar-empty').classList.toggle('show', filtered.length === 0 && tarTab !== 'paquete');
@@ -27477,6 +28817,10 @@ function dmElegirCanal(canal) {
   if (canal === dmCanal || !DM_CANALES[canal]) return;
   dmCanal = canal; dmPendientes[canal].clear();
   try { localStorage.setItem('dm-canal', canal); } catch {}
+  if (dmFiltro === 'ia' && canal !== 'whatsapp') {
+    dmFiltro = 'todos';
+    document.querySelectorAll('#dm-filtros .dm-filtro').forEach(x => x.classList.toggle('on', x.dataset.f === 'todos'));
+  }
   // El chat abierto es de otro canal: se cierra para que el tema nuevo no lo pinte.
   dmLimpiarChat();
   dmPintarCanales();
@@ -27490,18 +28834,29 @@ function dmPintarCanales() {
     el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n);
   }
   document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && esOficina());
+  document.getElementById('dm-filtro-ia').hidden = !(dmCanal === 'whatsapp' && esOficina());
   document.getElementById('dm-buscar').placeholder = dmCanal === 'whatsapp' ? 'Buscar nombre o teléfono' : dmCanal === 'instagram' ? 'Buscar @usuario, nombre o teléfono' : 'Buscar perfil, nombre o teléfono';
 }
 async function dmContar() {
   await Promise.all(Object.keys(DM_CANALES).map(async c => {
     const { count } = await sb.from('manychat_ia_sesiones').select('external_id', { count: 'exact', head: true }).ilike('campos->>canal', '%' + c);
     document.getElementById('dm-n-' + c).textContent = count ? count.toLocaleString('es-VE') : '';
-  }));
+  }), dmCargarIaIds());
+}
+// Chats del brazo ia_cierra (la IA vende sola). La RPC solo responde a oficina.
+let dmIaIds = new Set();
+async function dmCargarIaIds() {
+  if (!esOficina()) return;
+  const { data, error } = await sb.rpc('dm_ia_vende_ids');
+  if (error) { console.error('dm_ia_vende_ids', error); return; }
+  dmIaIds = new Set(data || []);
+  document.getElementById('dm-n-ia').textContent = dmIaIds.size ? dmIaIds.size.toLocaleString('es-VE') : '';
 }
 function dmQuery() {
   let q = sb.from('manychat_ia_sesiones').select(DM_COLS).ilike('campos->>canal', '%' + dmCanal).order('updated_at', { ascending: false }).limit(DM_PAGINA + 1);
   if (dmFiltro === 'conv') q = q.eq('lead_creado', false);
   if (dmFiltro === 'lead') q = q.eq('lead_creado', true);
+  if (dmFiltro === 'ia') q = q.in('external_id', dmIaIds.size ? [...dmIaIds] : ['__ninguno__']);
   const t = dmBusqueda().replace(/[,()*%"\\]/g, ' ').trim();
   if (t) {
     const cond = ['nombre_ig', 'campos->>nombre', 'campos->>telefono'].map(c => `${c}.ilike."*${t}*"`);
@@ -27515,6 +28870,7 @@ function dmQuery() {
 async function dmCargar(mas) {
   const gen = ++dmGen, cont = document.getElementById('dm-inbox');
   if (!mas) cont.innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  if (dmFiltro === 'ia' && !mas) { await dmCargarIaIds(); if (gen !== dmGen) return; }
   let q = dmQuery();
   if (mas && dmSesiones.length) q = q.lt('updated_at', dmSesiones[dmSesiones.length - 1].updated_at);
   const { data, error } = await q;
@@ -27720,6 +29076,7 @@ function dmDesuscribir() {
 function dmPasaFiltro(s) {
   if (dmFiltro === 'conv' && s.lead_creado) return false;
   if (dmFiltro === 'lead' && !s.lead_creado) return false;
+  if (dmFiltro === 'ia' && !dmIaIds.has(s.external_id)) return false;
   const t = dmBusqueda().toLowerCase();
   if (!t) return true;
   const dig = t.replace(/\D/g, '');
@@ -29373,10 +30730,30 @@ function abonosModulo() {
     logo: () => cargarImagenBase64('logolotus-integrado.png'),
     pdfVoucher: async d => new Blob([await construirVoucherPdf(d)], { type: 'application/pdf' }),
     descargar: vcDescargar,
+    entregarUrl: docEntregarUrl,
     nombreArchivo: docNombrePorTipo,
+    confirmar: confirmarSheet,
+    // app.js es módulo: sin esto abonos.js no ve estas funciones (leer_comprobante no se medía).
+    usoBoton: registrarUsoBoton, usoHerramienta: registrarUsoHerramienta,
+    // Reemplaza al voucher de reserva previo (mismo nombre base): reintentar no suma otro PDF vigente.
+    adjuntarVoucher: async (reservaId, pdf, nombre) => { const falla = await vcAdjuntarVoucherReemplazando(reservaId, null, pdf, nombre); if (falla) throw new Error(falla); },
+    errorFn: async (error, data) => { const m = await msgErrorFn(error, data); return RV_ERR[m] || m; },
+    // Reserva sin voucher propio: el voucher se rearma con la reserva abierta en el drawer (RV_DET),
+    // con el pagado/saldo que devolvió el abono. Sin la reserva cargada o sin servicios, no hay voucher.
+    voucherReserva: ({ reservaId, pagado, saldo, metodo, referencia }) => {
+      const det = RV_DET, r = det?.reserva || {}, c = PV_ACTUAL || {};
+      if (Number(RV_RESERVA_ID) !== Number(reservaId) || !det) throw new Error('la ficha de la reserva no está cargada: abrila y tocá Reintentar documentos');
+      if (!(det.servicios || []).some(s => !s.anulado_en && s.estado !== 'cancelado')) return null;
+      const pax = (det.pasajeros || []).filter(p => !p.anulado_en), t = pax.find(p => p.titular) || pax[0] || null;
+      const { v } = rvArmarVoucherPaquete({
+        cliente: [t?.nombre, t?.apellido].filter(Boolean).join(' ').trim() || c.nombre || r.cliente || '',
+        documento: t?.numero_documento || '', telefono: t?.telefono || c.telefono || r.telefono || '',
+        formaPago: r.forma_pago || RV_METODO_A_VOUCHER[metodo] || metodo || '', referencia: r.referencia_pago || referencia || '' });
+      return { ...v, numero_factura: '', total_general: Math.round((Number(pagado) + Number(saldo)) * 100) / 100, monto_pagado: Number(pagado), resta: Number(saldo) };
+    },
     prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
       const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: reservaId, servicio_id: servicioId, tipo: 'voucher', nombre, mime: 'application/pdf', tamano: pdf.size } });
-      if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el PDF de la reserva. La revisión vigente sigue igual.');
+      if (firma.error || !firma.data?.ok) { const m = await msgErrorFn(firma.error, firma.data); throw new Error(`No se pudo preparar el PDF de la reserva (${RV_ERR[m] || m}). La revisión vigente sigue igual.`); }
       const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, pdf, { contentType: 'application/pdf' });
       if (up.error) throw new Error('No se pudo subir el PDF a la reserva. Reintenta para guardar la revisión.');
       return { path: firma.data.path, nombre };
@@ -29430,11 +30807,11 @@ async function drAbrirEditor(tipo, d) {
     activateSection('voucher'); vcReset();
     const campos = { 'vc-cliente-nombre': 'cliente_nombre', 'vc-documento': 'documento_identidad', 'vc-telefono': 'telefono', 'vc-destino': 'destino_hospedaje',
       'vc-fecha-entrada': 'fecha_entrada', 'vc-check-in': 'check_in', 'vc-fecha-salida': 'fecha_salida', 'vc-check-out': 'check_out', 'vc-modalidad': 'modalidad',
-      'vc-total-dias': 'total_dias', 'vc-habitaciones': 'habitaciones', 'vc-adultos': 'adultos', 'vc-ninos': 'ninos', 'vc-status': 'status_reserva',
+      'vc-total-dias': 'total_dias', 'vc-habitaciones': 'habitaciones', 'vc-adultos': 'adultos', 'vc-ninos': 'ninos', 'vc-infantes': 'infantes', 'vc-status': 'status_reserva',
       'vc-total-general': 'total_general', 'vc-forma-pago': 'forma_pago', 'vc-referencia': 'referencia_pago', 'vc-monto-pagado': 'monto_pagado', 'vc-resta': 'resta' };
     Object.entries(campos).forEach(([id, k]) => { document.getElementById(id).value = d[k] ?? ''; });
     document.getElementById('vc-fecha-entrada').min = '';
-    vcServicios = structuredClone(d.servicios || []); vcServSuma = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
+    vcServicios = structuredClone(d.servicios || []); vcServSuma = vcAutoAplicado = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
     vcDiasManual = vcRestaManual = true; vcPlanOtro = true; vcPintarServicios(); vcSyncChips(); vcActualizarPreview();
   } else if (tipo === 'cotizacion') {
     activateSection('cotizacion-boletos'); await cbCargarSeccion(); cbResetForm();
@@ -29466,6 +30843,7 @@ function setupVoucher() {
     const id = e.target.id;
     if (id === 'vc-lead-q') { clearTimeout(vcLeadTimer); vcLeadTimer = setTimeout(vcBuscarLeadsQ, 250); return; }
     if (e.target.dataset.sk) { vcServInput(e.target); return; }
+    if (e.target.dataset.st || e.target.dataset.sp) { vcBolInput(e.target); return; }
     if (id === 'vc-plan-selector') {
       const p = e.target.value;
       if (p === '__otra') { vcElegirPlan(''); return; }
@@ -29480,10 +30858,13 @@ function setupVoucher() {
     if (id === 'vc-total-general' || id === 'vc-monto-pagado') vcRestaManual = false;
     if (id === 'vc-forma-pago') vcSyncChips();
     if ((id === 'vc-telefono' || id === 'vc-cliente-nombre') && !vcLead) vcProgramarSugerencia();
+    if (['vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos', 'vc-infantes'].includes(id)) vcHospRecalc();
     vcActualizarPreview();
   });
   form.addEventListener('change', e => {
     if (e.target.dataset.sk === 'nombre') { const c = e.target.closest('[data-si]'), s = vcServicios[Number(c.dataset.si)]; if (s && c.dataset.key !== vcServKey(s)) vcPintarServicios(); }
+    // «Caracas» o «Porlamar» -> código IATA, si el catálogo lo resuelve sin ambigüedad.
+    if (e.target.dataset.st === 'origen' || e.target.dataset.st === 'destino') { const c = rvIataDe(e.target.value); if (c && c !== e.target.value) { e.target.value = c; vcBolInput(e.target); } }
     if (e.target.id !== 'vc-lead-q') vcActualizarPreview();
   });
   form.addEventListener('click', e => {
@@ -29494,6 +30875,7 @@ function setupVoucher() {
     else if ('plan' in d) vcElegirPlan(d.plan);
     else if (d.vcAdd) vcAgregarServicio(d.vcAdd);
     else if ('vcSquitar' in d) { vcServicios.splice(Number(d.vcSquitar), 1); vcPintarServicios(); vcAjustarTotal(); vcActualizarPreview(); }
+    else if ('vcTadd' in d || 'vcTquitar' in d || 'vcPadd' in d || 'vcPquitar' in d) vcBolClick(d);
     else if ('vcLead' in d) { const l = vcLeadsRes[Number(d.vcLead)]; if (l) vcElegirLead(l); }
     else if ('vcQuitar' in d) { vcLead = null; vcReservas = null; vcReservasError = false; vcPintarLead(); vcActualizarPreview(); }
     else if ('vcSin' in d || 'vcCon' in d) { vcSinReserva = 'vcSin' in d; vcActualizarPreview(); }
@@ -29531,7 +30913,7 @@ function vcResumenSecciones() {
   const texto = (id, partes, vacio) => { document.getElementById(id).textContent = partes.filter(Boolean).join(' · ') || vacio; };
   const reserva = vcReservas?.find(r => String(r.id) === val('vc-reserva-sel'));
   texto('vc-cliente-resumen', [val('vc-cliente-nombre').trim(), val('vc-documento').trim(), val('vc-telefono').trim(), val('vc-asesor'), vcLead?.estado, reserva?.codigo], 'Buscar o completar datos');
-  texto('vc-hospedaje-resumen', [val('vc-destino').trim(), val('vc-habitaciones').trim(), val('vc-modalidad').trim(), val('vc-fecha-entrada') && vcFechaCorta(val('vc-fecha-entrada')), val('vc-fecha-salida') && 'al ' + vcFechaCorta(val('vc-fecha-salida')), val('vc-adultos') && val('vc-adultos') + ' adultos', val('vc-ninos').trim() && 'Niños: ' + val('vc-ninos').trim()], 'Hotel, fechas y pasajeros');
+  texto('vc-hospedaje-resumen', [val('vc-destino').trim(), val('vc-habitaciones').trim(), val('vc-modalidad').trim(), val('vc-fecha-entrada') && vcFechaCorta(val('vc-fecha-entrada')), val('vc-fecha-salida') && 'al ' + vcFechaCorta(val('vc-fecha-salida')), val('vc-adultos') && val('vc-adultos') + ' adultos', val('vc-ninos').trim() && 'Niños: ' + val('vc-ninos').trim(), parseInt(val('vc-infantes'), 10) > 0 && 'Infantes: ' + parseInt(val('vc-infantes'), 10)], 'Hotel, fechas y pasajeros');
   texto('vc-horarios-resumen', ['Entrada ' + (val('vc-check-in').trim() || '3:00 PM'), 'salida ' + (val('vc-check-out').trim() || '12:00 PM'), val('vc-total-dias').trim(), val('vc-status').trim()], '');
   texto('vc-servicios-resumen', vcServicios.length ? [vcServicios.length + ' servicio' + (vcServicios.length === 1 ? '' : 's'), vcMoney(vcServSuma)] : [], 'Opcional · excursiones, traslados y otros');
   texto('vc-pago-resumen', vcNum('vc-total-general') || vcNum('vc-monto-pagado') ? ['Total ' + vcMoney(vcNum('vc-total-general')), 'pagado ' + vcMoney(vcNum('vc-monto-pagado')), 'resta ' + vcMoney(vcNum('vc-resta')), val('vc-forma-pago').trim()] : [val('vc-forma-pago').trim()], 'Total, abono y forma de pago');
@@ -29552,7 +30934,7 @@ function vcSyncPlanes() {
 // Hospedaje del voucher (2026-10-22): reutiliza el buscador, las tarifas y las habitaciones de
 // Cotizaciones (cbHotelBuscar, cbTraerTarifas, cbTraerHabitaciones, cbHabitacionHtml) como hace `ef`.
 // `vcHotel` hace de `it`; sin producto_id el destino, el plan y la habitación quedan a mano.
-const vcHotel = { i: 'vc', producto_id: null, nombre: '', plan: '', planes: [], hab: '', hab_libre: false, _cargando: false, _tarifaError: false, carga: 0 };
+const vcHotel = { i: 'vc', producto_id: null, nombre: '', plan: '', planes: [], hab: '', hab_libre: false, hab_manual: false, _cargando: false, _tarifaError: false, carga: 0 };
 const vcPlanDeTarifario = p => {
   const n = cbTarPlanClave(p);
   return !n ? '' : /todo incluido|all inclusive/.test(n) ? 'Todo incluido' : /full|complet/.test(n) ? 'Pensión completa' : /media/.test(n) ? 'Media pensión'
@@ -29584,17 +30966,84 @@ function vcHotelPlan(plan) {
   vcHotel.plan = plan || '';
   if (!vcHotel.hab_libre) {
     const ops = vcHabOpciones();
-    if (!ops.some(h => cbTarNorm(h) === cbTarNorm(vcHotel.hab))) vcHotel.hab = ops[0] || '';
+    if (!ops.some(h => cbTarNorm(h) === cbTarNorm(vcHotel.hab))) { vcHotel.hab = ops[0] || ''; vcHotel.hab_manual = false; }
     document.getElementById('vc-habitaciones').value = vcHotel.hab;
   }
-  vcHotelPintar();
+  vcHotelPintar(); vcHospRecalc();
+}
+// Precio del hospedaje (2026-11-03): el mismo motor de Cotizaciones (cbTarSugerir/cbTarImporte) sobre
+// un ítem armado con los campos del voucher, siempre 1 habitación. Sin fechas muestra la tarifa más
+// baja vigente; con fechas, la de cada noche. Infantes (0-2) no pagan alojamiento, como en Cotizaciones.
+const vcPaxN = id => { const m = /^\s*(\d{1,2})/.exec(val(id)); return m ? Number(m[1]) : 0; };
+let vcHospMonto = 0, vcAutoAplicado = 0;
+function vcHospItem(hab, adultosDef = 0) {
+  const it = { tipo: 'hotel', producto_id: vcHotel.producto_id, plan: vcHotel.plan, hab, ida: val('vc-fecha-entrada'), vuelta: val('vc-fecha-salida'),
+    adultos: parseInt(val('vc-adultos'), 10) || adultosDef, ninos: vcPaxN('vc-ninos'), habitaciones: 1, unidad: 'persona_noche', unidad_manual: false, tarifa_variante: '', variante_auto: true };
+  cbHotelUnidad(it, cbHotelFilas(it));
+  return it;
+}
+function vcHospDesde(hab) {
+  const it = vcHospItem(hab, 2), porHab = cbPorHabitacion(it);
+  let mejor = null;
+  for (const t of cbTarDelPlan(cbHotelFilas(it), it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(hab))) {
+    if (String(t.moneda || 'USD').toUpperCase() !== 'USD') continue;
+    const p = porHab ? cbTarPrecioHabitacion(t, it.tarifa_variante, TAR_OCUPACION) : cbTarPrecioAdulto(t, it.adultos, TAR_OCUPACION);
+    if (p !== null && (!mejor || p < mejor.precio)) mejor = { precio: p, t, porHab, adultos: it.adultos };
+  }
+  return mejor;
+}
+function vcHospCotizar(hab) {
+  const it = vcHospItem(hab);
+  if (!it.adultos) return { ok: false, texto: 'Indica los adultos para calcular el hospedaje.' };
+  const s = cbTarSugerir(it, cbHotelFilas(it), cbHoy(), TAR_OCUPACION);
+  if (!s.ok) return s;
+  if (it.ninos && s.tramos.some(t => cbTarNum(t.tarifa_nino) === null)) return { ok: false, texto: 'Niños sin tarifa en el tarifario para estas fechas: confirma el precio con el hotel y carga el total a mano.' };
+  return { ...s, it, monto: cbTarImporte({ ...it, tramos: s.tramos }) };
+}
+// Si el asesor no eligió habitación, queda la más barata: con fechas, la de menor total para esas noches.
+function vcHabMasBarata(conFechas) {
+  let mejor = null;
+  for (const h of vcHabOpciones()) {
+    const c = conFechas ? vcHospCotizar(h) : vcHospDesde(h), p = conFechas ? (c.ok ? c.monto : null) : c?.precio ?? null;
+    if (p !== null && (!mejor || p < mejor.p)) mejor = { h, p };
+  }
+  if (!mejor || cbTarNorm(mejor.h) === cbTarNorm(vcHotel.hab)) return;
+  vcHotel.hab = mejor.h; document.getElementById('vc-habitaciones').value = mejor.h; vcHotelPintar();
+}
+function vcHospRecalc() {
+  const box = document.getElementById('vc-hosp-precio'), inf = parseInt(val('vc-infantes'), 10) || 0;
+  let monto = 0, html = '';
+  if (vcHotel.producto_id && vcHotel._cargando) html = 'Cargando tarifas del hotel…';
+  else if (vcHotel.producto_id && vcHotel.hab_libre) html = 'Habitación fuera del tarifario: carga el total a mano.';
+  else if (vcHotel.producto_id && !vcHotel._tarifaError) {
+    const conFechas = !!vcNoches();
+    if (!vcHotel.hab_manual) vcHabMasBarata(conFechas);
+    const unidad = p => p ? 'por habitación/noche' : 'por persona/noche';
+    if (!conFechas) {
+      const d = vcHospDesde(vcHotel.hab), w = d && ((d.t.ventanas || []).find(w => !w.hasta || w.hasta >= cbHoy()) || { desde: d.t.disfrute_desde, hasta: d.t.fecha_fin });
+      html = d ? `Desde <b>${vcMoney(d.precio)}</b> ${unidad(d.porHab)}${d.porHab ? '' : ` (${d.adultos} adultos)`} · ${esc([vcHotel.hab, vcHotel.plan].filter(Boolean).join(' · '))}${w?.desde || w?.hasta ? ` · válida ${w.desde ? 'del ' + vcFechaCorta(w.desde) : ''}${w.hasta ? ' al ' + vcFechaCorta(w.hasta) : ''}` : ''}. Elige las fechas para calcular el total.`
+        : 'Sin tarifa en USD para esta habitación: carga el total a mano.';
+    } else {
+      const c = vcHospCotizar(vcHotel.hab);
+      if (c.ok) {
+        monto = c.monto;
+        const porHab = cbPorHabitacion(c.it), n = c.it.ninos;
+        const tramos = c.tramos.map(t => `${c.tramos.length > 1 ? `${vcFechaCorta(t.desde)} al ${vcFechaCorta(t.hasta)}: ` : ''}${vcMoney(t.tarifa)} ${unidad(porHab)}${n && cbTarNum(t.tarifa_nino) ? ` + niño ${vcMoney(t.tarifa_nino)}` : ''}${t.pax_adic ? ` + ${t.pax_adic} adic. ${vcMoney(t.tarifa_pax_adic)}` : ''}`);
+        html = `Hospedaje según tarifario: <b>${vcMoney(monto)}</b> · ${rvPlural(vcNoches(), 'noche', 'noches')} · ${esc(tramos.join(' · '))}${porHab ? '' : ` × ${rvPlural(c.it.adultos, 'adulto', 'adultos')}`}${n ? ` + ${rvPlural(n, 'niño', 'niños')}` : ''}`
+          + c.avisos.map(a => `<br>${esc(a)}`).join('');
+      } else html = esc(c.texto);
+    }
+    if (inf) html += `<br>${rvPlural(inf, 'infante', 'infantes')}: alojamiento gratis, confirma con el hotel.`;
+  }
+  vcHospMonto = monto; box.innerHTML = html; box.hidden = !html;
+  vcAjustarTotal();
 }
 async function vcHotelElegir(id) {
   const p = cbHoteles.get(Number(id)); if (!p) return;
   const carga = ++vcHotel.carga, inp = document.getElementById('vc-destino');
   inp.value = p.nombre; inp.setAttribute('aria-expanded', 'false'); document.getElementById('vc-hoteles').hidden = true;
-  Object.assign(vcHotel, { producto_id: p.id, nombre: p.nombre, plan: '', planes: [], hab: '', hab_libre: false, _cargando: true, _tarifaError: false });
-  vcHotelPintar(); vcActualizarPreview();
+  Object.assign(vcHotel, { producto_id: p.id, nombre: p.nombre, plan: '', planes: [], hab: '', hab_libre: false, hab_manual: false, _cargando: true, _tarifaError: false });
+  vcHotelPintar(); vcHospRecalc(); vcActualizarPreview();
   try {
     await Promise.all([cbTraerTarifas(p.id), cbTraerHabitaciones(p.id)]);
     if (vcHotel.carga !== carga) return;
@@ -29606,20 +31055,20 @@ async function vcHotelElegir(id) {
     console.error('vcHotelElegir', error);
     if (vcHotel.carga === carga) vcHotel._tarifaError = true;
   } finally {
-    if (vcHotel.carga === carga) { vcHotel._cargando = false; vcHotelPintar(); vcActualizarPreview(); }
+    if (vcHotel.carga === carga) { vcHotel._cargando = false; vcHotelPintar(); vcHospRecalc(); vcActualizarPreview(); }
   }
   const ent = document.getElementById('vc-fecha-entrada');
   if (vcHotel.carga === carga && !ent.value && [inp, document.body].includes(document.activeElement)) ent.focus();
 }
 function vcHotelSoltar() {
-  Object.assign(vcHotel, { producto_id: null, nombre: '', plan: '', planes: [], hab: '', hab_libre: false, _cargando: false, _tarifaError: false, carga: vcHotel.carga + 1 });
-  vcHotelPintar(); vcSyncPlanes();
+  Object.assign(vcHotel, { producto_id: null, nombre: '', plan: '', planes: [], hab: '', hab_libre: false, hab_manual: false, _cargando: false, _tarifaError: false, carga: vcHotel.carga + 1 });
+  vcHotelPintar(); vcSyncPlanes(); vcHospRecalc();
 }
 function vcHabElegir(op) {
   const v = op.dataset.cbHab, inp = document.getElementById('vc-habitaciones');
   vcHotel.hab_libre = v === '__manual__';
-  if (!vcHotel.hab_libre) { vcHotel.hab = v; inp.value = v; } else if (vcHabOpciones().some(h => h === inp.value)) inp.value = '';
-  vcHotelPintar(); vcActualizarPreview();
+  if (!vcHotel.hab_libre) { vcHotel.hab = v; inp.value = v; vcHotel.hab_manual = true; } else if (vcHabOpciones().some(h => h === inp.value)) inp.value = '';
+  vcHotelPintar(); vcHospRecalc(); vcActualizarPreview();
   (vcHotel.hab_libre ? inp : document.getElementById('cb-hab-vc'))?.focus();
 }
 // Devuelve true si el evento era del hospedaje (buscador de hotel, fotos o habitaciones).
@@ -29659,8 +31108,118 @@ const VC_SERV_TIPOS = {
   excursion: { nombre: 'Excursión / full day', pdf: 'EXCURSIÓN', icono: 'fa-umbrella-beach', ph: 'Buscar excursión o full day del tarifario' },
   traslado: { nombre: 'Traslado', pdf: 'TRASLADO', icono: 'fa-van-shuttle', ph: 'Buscar traslado del tarifario' },
   paquete: { nombre: 'Paquete', pdf: 'PAQUETE', icono: 'fa-suitcase', ph: 'Buscar paquete del tarifario' },
-  otro: { nombre: 'Otro servicio', pdf: '', icono: 'fa-plus', ph: 'Seguro de viaje, cena, entrada...' },
+  boleto: { nombre: 'Boleto aéreo', pdf: 'BOLETO AÉREO', icono: 'fa-plane', ph: 'Avior, Laser, Conviasa...' },
+  seguro: { nombre: 'Seguro de viaje', pdf: 'SEGURO DE VIAJE', icono: 'fa-shield-heart', ph: 'Assist Card, Universal Assistance...' },
+  otro: { nombre: 'Otro servicio', pdf: '', icono: 'fa-plus', ph: 'Cena, entrada, alquiler...' },
 };
+const vcServConTarifario = tipo => tipo !== 'otro' && tipo !== 'seguro';
+const vcSeguroVigencia = s => s.fecha && s.hasta && s.hasta !== s.fecha ? `${vcFechaDma(s.fecha)} al ${vcFechaDma(s.hasta)}` : vcFechaDma(s.fecha || s.hasta);
+// Seguro de viaje (2026-11-03): aseguradora va en nombre y plan/cobertura en opcion; vigencia, póliza y asistencia viajan en vouchers.servicios.
+function vcSeguroHtml(s, f) {
+  const num = 'type="number" min="0" step="1" inputmode="numeric"';
+  return `<div class="vc-fila">
+      ${f('nombre', 'Aseguradora', `maxlength="80" autocomplete="off" placeholder="${esc(VC_SERV_TIPOS.seguro.ph)}"`, ' s2')}${f('opcion', 'Plan / cobertura', 'maxlength="120" placeholder="USD 30.000 · Covid incluido"', ' s2')}
+      ${f('fecha', 'Vigencia desde', 'type="date"')}${f('hasta', 'Vigencia hasta', 'type="date"')}${f('poliza', 'N° de póliza (opcional)', 'maxlength="40" autocomplete="off" spellcheck="false"', ' s2')}
+      ${f('adultos', 'Adultos', num)}${f('ninos', 'Niños', num)}${f('infantes', 'Infantes', num)}
+      ${f('monto', 'Monto (USD)', 'type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"')}
+      ${f('asistencia', 'Asistencia 24h (opcional)', 'maxlength="40" inputmode="tel" autocomplete="off" placeholder="+58 212 000 0000"')}
+      ${f('detalle', 'Detalle (opcional)', 'placeholder="Qué cubre, deducible, condiciones..."', ' s3')}
+    </div>`;
+}
+// Boleto aéreo (2026-11-02): aerolínea, localizador, tramos y pasajeros con su N° de boleto viajan en vouchers.servicios.
+const VC_BOL_ESTADOS = { EMITIDO: 'Emitido', RESERVADO: 'Reservado', 'POR EMITIR': 'Por emitir' };
+const VC_BOL_VIAJES = { ida_vuelta: 'Ida y vuelta', ida: 'Solo ida', multi: 'Multidestino' };
+const VC_BOL_PAX = { adulto: 'Adulto', nino: 'Niño', infante: 'Infante' };
+// Resumen de «Servicio de boletos aéreos» de las condiciones generales, más el aviso de confirmar el vuelo.
+const VC_BOL_AVISOS = [
+  'Preséntese en el aeropuerto 2 horas antes de un vuelo nacional y 4 horas antes de uno internacional.',
+  'En el check in muestre su documento de identidad o pasaporte vigente, con fotografía. El nombre debe coincidir con el del boleto.',
+  'Menores de edad: partida de nacimiento y permiso de viaje expedido por el ente encargado.',
+  'Revise nombre, apellido y documento de cada pasajero: tiene 3 horas desde la emisión para reportar un error; después, la multa corre por cuenta del cliente.',
+  'Si no se presenta al primer tramo, la aerolínea cancela automáticamente el tramo de regreso.',
+  'Boletos no reembolsables, no transferibles y no endosables. Cambios sujetos a las condiciones de la tarifa y de la aerolínea.',
+  'Los horarios pueden cambiar por decisión de la aerolínea: confirme el estatus de su vuelo 24 horas antes.',
+];
+const vcBolTramo = (fecha = '', origen = '', destino = '') => ({ vuelo: '', origen, destino, fecha, sale: '', llega: '' });
+// CCS → PMV → CCS: une los tramos sin repetir la escala.
+function vcBolRuta(s) {
+  const r = [];
+  (s.tramos || []).forEach(t => { const o = String(t.origen || '').trim().toUpperCase(), d = String(t.destino || '').trim().toUpperCase(); if (o && r[r.length - 1] !== o) r.push(o); if (d) r.push(d); });
+  return r.join(' → ');
+}
+const vcBolNombre = s => [vcBolRuta(s), String(s.aerolinea || '').trim()].filter(Boolean).join(' · ');
+const vcBolPax = s => { s.adultos = s.ninos = s.infantes = 0; (s.pasajeros || []).forEach(p => { s[{ nino: 'ninos', infante: 'infantes' }[p.tipo] || 'adultos']++; }); };
+const vcFechaDma = f => (f ? String(f).split('-').reverse().join('/') : '');
+const vcHora12 = h => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(h || '').trim()); return m ? `${Number(m[1]) % 12 || 12}:${m[2]} ${Number(m[1]) < 12 ? 'AM' : 'PM'}` : String(h || '').trim(); };
+function vcBolFechas(s) {
+  const fs = (s.tramos || []).map(t => t.fecha).filter(Boolean).sort();
+  if (!fs.length) return '';
+  return fs[0] === fs[fs.length - 1] ? [vcFechaDma(fs[0]), vcHora12(s.tramos.find(t => t.fecha === fs[0])?.sale)].filter(Boolean).join(' ') : `${vcFechaDma(fs[0])} al ${vcFechaDma(fs[fs.length - 1])}`;
+}
+function vcBolCatalogo() {
+  bolAsegurarCatalogo().then(() => {
+    const c = bolCatalogo || {}, llenar = (id, html) => { const el = document.getElementById(id); if (el && !el.childElementCount) el.innerHTML = html; };
+    llenar('vc-dl-aerolinea', (c.aerolineas || []).filter(a => a.activa !== false && a.activo !== false).map(a => `<option value="${esc(a.nombre)}">`).join(''));
+    llenar('vc-dl-aeropuerto', (c.aeropuertos || []).map(a => `<option value="${esc(a.iata_code)}" label="${esc(rvAeropuertoTxt(a))}">`).join(''));
+  });
+}
+function vcBoletoHtml(s, i, f) {
+  const sel = (k, label, ops) => `<label class="vc-c"><span>${label}</span><select class="ei" data-sk="${k}">${Object.entries(ops).map(([v, t]) => `<option value="${esc(v)}"${v === s[k] ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+  const c = (attr, k, label, v, attrs = '') => `<label class="vc-c"><span>${label}</span><input class="ei" data-${attr}="${k}" value="${esc(String(v ?? ''))}" ${attrs}></label>`;
+  const quitar = (attr, n, que) => `<button class="vc-quitar" type="button" data-${attr}="${i}:${n}" title="Quitar ${que}" aria-label="Quitar ${que} ${n + 1}"><i class="fas fa-xmark"></i></button>`;
+  const tramos = (s.tramos || []).map((t, j) => `<div class="vc-bol-fila" data-ti="${j}">
+      ${c('st', 'vuelo', 'Vuelo', t.vuelo, 'maxlength="12" autocomplete="off" placeholder="9V 1234"')}
+      ${c('st', 'origen', 'Origen', t.origen, 'list="vc-dl-aeropuerto" maxlength="40" autocomplete="off" placeholder="CCS"')}
+      ${c('st', 'destino', 'Destino', t.destino, 'list="vc-dl-aeropuerto" maxlength="40" autocomplete="off" placeholder="PMV"')}
+      ${c('st', 'fecha', 'Fecha', t.fecha, 'type="date"')}${c('st', 'sale', 'Sale', t.sale, 'type="time"')}${c('st', 'llega', 'Llega', t.llega, 'type="time"')}
+      ${quitar('vc-tquitar', j, 'tramo')}</div>`).join('');
+  const pax = (s.pasajeros || []).map((p, j) => `<div class="vc-bol-fila pax" data-pi="${j}">
+      ${c('sp', 'nombre', 'Nombre como en el documento', p.nombre, 'maxlength="120" autocomplete="off"')}${c('sp', 'documento', 'Documento', p.documento, 'maxlength="30" autocomplete="off" placeholder="V-12345678"')}
+      <label class="vc-c"><span>Tipo</span><select class="ei" data-sp="tipo">${Object.entries(VC_BOL_PAX).map(([v, t]) => `<option value="${v}"${v === (p.tipo || 'adulto') ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+      ${c('sp', 'ticket', 'N° de boleto', p.ticket, 'maxlength="20" inputmode="numeric" autocomplete="off" placeholder="Al emitir"')}
+      ${quitar('vc-pquitar', j, 'pasajero')}</div>`).join('');
+  return `<div class="vc-fila">
+      ${f('aerolinea', 'Aerolínea', `list="vc-dl-aerolinea" autocomplete="off" placeholder="${esc(VC_SERV_TIPOS.boleto.ph)}"`, ' s2')}
+      ${f('localizador', 'Localizador (PNR)', 'maxlength="20" autocomplete="off" spellcheck="false" placeholder="ABC123"')}${sel('estado', 'Estado', VC_BOL_ESTADOS)}
+      ${sel('viaje', 'Tipo de viaje', VC_BOL_VIAJES)}${f('clase', 'Clase / cabina', 'placeholder="Económica"')}
+      ${f('familia', 'Tarifa (opcional)', 'placeholder="Light, Classic, Flex..."', ' s2')}
+      ${f('equipaje_mano', 'Equipaje de mano', 'placeholder="1 pieza de 10 kg"', ' s2')}${f('equipaje_bodega', 'Equipaje en bodega', 'placeholder="1 pieza de 23 kg, o No incluye"', ' s2')}
+      <div class="vc-bol"><div class="vc-bol-tit"><span>Itinerario</span><button class="vc-mini" type="button" data-vc-tadd="${i}"><i class="fas fa-plus"></i> Tramo</button></div>${tramos}</div>
+      <div class="vc-bol"><div class="vc-bol-tit"><span>Pasajeros y boletos</span><button class="vc-mini" type="button" data-vc-padd="${i}"><i class="fas fa-plus"></i> Pasajero</button></div>${pax}</div>
+      ${f('monto', 'Monto (USD)', 'type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"')}
+      ${f('detalle', 'Observaciones (opcional)', 'placeholder="Asientos, servicios especiales, condición de la tarifa..."', ' s3')}
+    </div>`;
+}
+function vcBolInput(el) {
+  const s = vcServicios[Number(el.closest('[data-si]')?.dataset.si)]; if (!s) return;
+  if (el.dataset.st) s.tramos[Number(el.closest('[data-ti]').dataset.ti)][el.dataset.st] = el.value;
+  else { s.pasajeros[Number(el.closest('[data-pi]').dataset.pi)][el.dataset.sp] = el.value; vcBolPax(s); }
+  s.nombre = vcBolNombre(s); s.fecha = s.tramos[0]?.fecha || '';
+  vcActualizarPreview();
+}
+function vcBolClick(d) {
+  const [i, j] = String(d.vcTadd ?? d.vcTquitar ?? d.vcPadd ?? d.vcPquitar).split(':').map(Number), s = vcServicios[i];
+  if (!s) return;
+  let foco = null;
+  if ('vcTadd' in d) { const u = s.tramos[s.tramos.length - 1]; s.tramos.push(vcBolTramo('', u?.destino || '')); foco = `[data-ti="${s.tramos.length - 1}"] [data-st="${u?.destino ? 'destino' : 'origen'}"]`; }
+  else if ('vcTquitar' in d) s.tramos.splice(j, 1);
+  else if ('vcPadd' in d) { s.pasajeros.push({ nombre: '', documento: '', tipo: 'adulto', ticket: '' }); foco = `[data-pi="${s.pasajeros.length - 1}"] [data-sp="nombre"]`; }
+  else s.pasajeros.splice(j, 1);
+  vcBolPax(s); s.nombre = vcBolNombre(s); s.fecha = s.tramos[0]?.fecha || '';
+  vcPintarServicios(); vcActualizarPreview();
+  if (foco) document.querySelector(`#vc-servicios [data-si="${i}"] ${foco}`)?.focus();
+}
+// El boleto no se guarda incompleto: aerolínea, cada tramo con origen, destino y fecha, y al menos un pasajero.
+function vcBolFalta(s) {
+  if (!String(s.aerolinea || '').trim()) return ['[data-sk="aerolinea"]', 'Falta la aerolínea del boleto'];
+  if (!(s.tramos || []).length) return ['[data-vc-tadd]', 'Agregá al menos un tramo al boleto'];
+  for (const [j, t] of s.tramos.entries()) {
+    const k = ['origen', 'destino', 'fecha'].find(x => !String(t[x] || '').trim());
+    if (k) return [`[data-ti="${j}"] [data-st="${k}"]`, `Completá origen, destino y fecha del tramo ${j + 1} del boleto`];
+  }
+  if (!(s.pasajeros || []).some(p => String(p.nombre || '').trim())) return [(s.pasajeros || []).length ? '[data-pi="0"] [data-sp="nombre"]' : '[data-vc-padd]', 'Falta al menos un pasajero en el boleto'];
+  return null;
+}
 let vcServicios = [], vcServSuma = 0, vcTarifario = null, vcTarifarioPromesa = null;
 function vcCargarTarifario() {
   if (vcTarifarioPromesa) return vcTarifarioPromesa;
@@ -29713,11 +31272,11 @@ function vcServRecalc(s) {
 function vcServHtml(s, i) {
   const t = VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro, prod = vcServProd(s), tar = vcServTarifa(s);
   const f = (k, label, attrs = '', cls = '') => `<label class="vc-c${cls}"><span>${label}</span><input class="ei" data-sk="${k}" value="${esc(String(s[k] ?? ''))}" ${attrs}></label>`;
-  const conTarifario = s.tipo !== 'otro';
+  const conTarifario = vcServConTarifario(s.tipo);
   return `<div class="vc-serv" data-si="${i}" data-key="${vcServKey(s)}">
     <div class="vc-serv-cab"><i class="fas ${t.icono}"></i><span>${t.nombre}</span><b data-s-importe>${s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''}</b>
       <button class="vc-quitar" type="button" data-vc-squitar="${i}" title="Quitar servicio" aria-label="Quitar ${esc(t.nombre)}"><i class="fas fa-trash"></i></button></div>
-    <div class="vc-fila">
+    ${s.tipo === 'boleto' ? vcBoletoHtml(s, i, f) + '</div>' : s.tipo === 'seguro' ? vcSeguroHtml(s, f) + '</div>' : `<div class="vc-fila">
       ${f('nombre', conTarifario ? 'Servicio' : 'Descripción', `placeholder="${esc(t.ph)}"${conTarifario ? ` list="vc-dl-${s.tipo}" autocomplete="off"` : ''}`, ' s2')}
       ${prod?.tarifas.length ? `<label class="vc-c s2"><span>Tarifa / opción</span><select class="ei" data-sk="tarifa_id">${prod.tarifas.map(x => `<option value="${x.id}"${x.id === s.tarifa_id ? ' selected' : ''}>${esc(vcTarifaTxt(x))}</option>`).join('')}</select></label>`
         : f('opcion', 'Opción', `placeholder="${s.tipo === 'traslado' ? 'Privado, compartido, ida y vuelta...' : 'Opcional'}"`, ' s2')}
@@ -29727,22 +31286,39 @@ function vcServHtml(s, i) {
       ${f('adultos', 'Adultos', 'type="number" min="0" step="1" inputmode="numeric"')}${f('ninos', 'Niños', 'type="number" min="0" step="1" inputmode="numeric"')}
       ${f('monto', 'Monto (USD)', `type="number" min="0" step="0.01" inputmode="decimal" placeholder="${prod && !s.montoManual && s.monto === '' ? 'Sin precio en USD' : '0.00'}"`)}
       ${f('detalle', 'Detalle (opcional)', `placeholder="${s.tipo === 'traslado' ? 'Aeropuerto PMV → hotel, vuelo de las 10:30 AM' : 'Qué incluye, punto de encuentro...'}"`, ' s3')}
-    </div></div>`;
+    </div></div>`}`;
 }
 function vcPintarServicios() {
   const box = document.getElementById('vc-servicios'), a = document.activeElement;
   const foco = a && box.contains(a) && a.dataset.sk ? { i: a.closest('[data-si]').dataset.si, k: a.dataset.sk } : null;
   box.innerHTML = vcServicios.map(vcServHtml).join('');
+  if (vcServicios.some(s => s.tipo === 'boleto')) vcBolCatalogo();
   const el = foco && box.querySelector(`[data-si="${foco.i}"] [data-sk="${foco.k}"]`);
   if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (_e) { /* date/number/select no tienen cursor */ } }
 }
 function vcAgregarServicio(tipo) {
   const ni = val('vc-ninos').trim();
+  if (tipo === 'boleto') {
+    const ad = parseInt(val('vc-adultos'), 10) || 1, nn = /^\d+$/.test(ni) ? Number(ni) : 0;
+    const pasajeros = [...Array(Math.min(ad + nn, 9))].map((_, k) => ({ nombre: k ? '' : val('vc-cliente-nombre').trim(), documento: k ? '' : val('vc-documento').trim(), tipo: k < ad ? 'adulto' : 'nino', ticket: '' }));
+    const s = { tipo, producto_id: null, tarifa_id: null, nombre: '', opcion: '', fecha: val('vc-fecha-entrada'), hora: '', aerolinea: '', localizador: '', estado: 'EMITIDO', viaje: 'ida_vuelta',
+      clase: 'Económica', familia: '', equipaje_mano: '', equipaje_bodega: '', tramos: [vcBolTramo(val('vc-fecha-entrada')), vcBolTramo(val('vc-fecha-salida'))], pasajeros, monto: '', detalle: '' };
+    vcBolPax(s); vcServicios.push(s); vcPintarServicios();
+    document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="aerolinea"]`)?.focus();
+    return;
+  }
+  if (tipo === 'seguro') {
+    vcServicios.push({ tipo, producto_id: null, tarifa_id: null, nombre: '', opcion: '', fecha: val('vc-fecha-entrada'), hasta: val('vc-fecha-salida'), hora: '', poliza: '', asistencia: '',
+      adultos: parseInt(val('vc-adultos'), 10) || '', ninos: /^\d+$/.test(ni) ? Number(ni) : '', infantes: parseInt(val('vc-infantes'), 10) || '', monto: '', detalle: '' });
+    vcPintarServicios();
+    document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="nombre"]`)?.focus();
+    return;
+  }
   vcServicios.push({ tipo, producto_id: null, tarifa_id: null, nombre: '', opcion: '', fecha: tipo === 'traslado' ? val('vc-fecha-entrada') : '', hora: '',
     adultos: parseInt(val('vc-adultos'), 10) || '', ninos: /^\d+$/.test(ni) ? Number(ni) : '', monto: '', detalle: '' });
   vcPintarServicios();
   document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="nombre"]`)?.focus();
-  if (tipo !== 'otro') vcCargarTarifario();
+  if (vcServConTarifario(tipo)) vcCargarTarifario();
 }
 function vcServInput(el) {
   const caja = el.closest('[data-si]'), s = vcServicios[Number(caja.dataset.si)], k = el.dataset.sk;
@@ -29750,8 +31326,12 @@ function vcServInput(el) {
   let repintar = false;
   if (k === 'tarifa_id') { s.tarifa_id = Number(el.value); s.tarifaManual = true; s.montoManual = false; repintar = true; }
   else if (k === 'monto') { s.montoManual = el.value !== ''; s.monto = el.value === '' ? '' : Number(el.value); }
-  else s[k] = k === 'adultos' || k === 'ninos' ? (el.value === '' ? '' : Number(el.value)) : el.value;
-  if (k === 'nombre' && s.tipo !== 'otro') {
+  else s[k] = k === 'adultos' || k === 'ninos' || k === 'infantes' ? (el.value === '' ? '' : Number(el.value)) : el.value;
+  if (s.tipo === 'boleto') {
+    // Pasar a ida y vuelta con un solo tramo arma el regreso invertido.
+    if (k === 'viaje' && el.value === 'ida_vuelta' && s.tramos.length === 1) { const t = s.tramos[0]; s.tramos.push(vcBolTramo(val('vc-fecha-salida'), t.destino, t.origen)); repintar = true; }
+    s.nombre = vcBolNombre(s);
+  } else if (k === 'nombre' && vcServConTarifario(s.tipo)) {
     const p = vcTarifario?.porLabel[s.tipo]?.get(el.value.trim()) || null;
     if ((p?.id || null) !== s.producto_id) {
       s.producto_id = p?.id || null; s.tarifa_id = null; s.tarifaManual = s.montoManual = false;
@@ -29768,10 +31348,11 @@ function vcServInput(el) {
   }
   vcAjustarTotal(); vcActualizarPreview();
 }
-// Los servicios se suman solos al total aplicando la diferencia: el total sigue siendo editable a mano.
+// Servicios y hospedaje del tarifario se suman solos al total aplicando la diferencia: el total sigue siendo editable a mano.
 function vcAjustarTotal() {
-  const suma = Math.round(vcServicios.reduce((a, x) => a + (Number(x.monto) || 0), 0) * 100) / 100, d = suma - vcServSuma;
-  vcServSuma = suma;
+  vcServSuma = Math.round(vcServicios.reduce((a, x) => a + (Number(x.monto) || 0), 0) * 100) / 100;
+  const auto = Math.round((vcServSuma + vcHospMonto) * 100) / 100, d = auto - vcAutoAplicado;
+  vcAutoAplicado = auto;
   if (!d) return;
   const t = Math.max(0, Math.round((vcNum('vc-total-general') + d) * 100) / 100);
   document.getElementById('vc-total-general').value = t ? String(t) : ''; vcRestaManual = false;
@@ -29781,8 +31362,18 @@ const vcServLimpio = s => {
   const tar = vcServTarifa(s), n = x => (x === '' || x == null ? null : Number(x));
   return { tipo: s.tipo, producto_id: s.producto_id || null, tarifa_id: tar ? tar.id : null, nombre: String(s.nombre || '').trim(),
     opcion: tar ? vcTarifaTxt(tar) : String(s.opcion || '').trim(), fecha: s.fecha || null, hora: String(s.hora || '').trim(),
-    adultos: n(s.adultos), ninos: n(s.ninos), monto: n(s.monto), detalle: String(s.detalle || '').trim() };
+    adultos: n(s.adultos), ninos: n(s.ninos), monto: n(s.monto), detalle: String(s.detalle || '').trim(), ...(s.tipo === 'boleto' ? vcBolLimpio(s) : {}),
+    ...(s.tipo === 'seguro' ? { hasta: s.hasta || null, infantes: n(s.infantes), poliza: String(s.poliza || '').trim(), asistencia: String(s.asistencia || '').trim() } : {}) };
 };
+function vcBolLimpio(s) {
+  const t = x => String(x ?? '').trim();
+  const tramos = (s.tramos || []).map(x => ({ vuelo: t(x.vuelo).toUpperCase(), origen: t(x.origen).toUpperCase(), destino: t(x.destino).toUpperCase(), fecha: x.fecha || null, sale: t(x.sale), llega: t(x.llega) }))
+    .filter(x => x.vuelo || x.origen || x.destino || x.fecha);
+  return { nombre: vcBolNombre({ ...s, tramos }), opcion: '', fecha: tramos[0]?.fecha || null, hora: tramos[0]?.sale || '',
+    aerolinea: t(s.aerolinea), localizador: t(s.localizador).toUpperCase(), estado: t(s.estado) || 'EMITIDO', viaje: s.viaje || 'ida_vuelta',
+    clase: t(s.clase), familia: t(s.familia), equipaje_mano: t(s.equipaje_mano), equipaje_bodega: t(s.equipaje_bodega), infantes: Number(s.infantes) || 0, tramos,
+    pasajeros: (s.pasajeros || []).map(p => ({ nombre: t(p.nombre), documento: t(p.documento), tipo: p.tipo || 'adulto', ticket: t(p.ticket) })).filter(p => p.nombre) };
+}
 
 // Lead elegido + sus reservas activas. vcReservas null = cargando (o sin lead pagado).
 let vcLead = null, vcReservas = null, vcReservasError = false, vcConVoucher = new Set(), vcUltimaVinculada = null;
@@ -29934,18 +31525,20 @@ function vcActualizarPreview() {
   txt('vc-b-noches', n ? `${n} noche${n === 1 ? '' : 's'}` : '— noches');
   const a = parseInt(val('vc-adultos'), 10) || 0, ni = val('vc-ninos').trim();
   const ninos = !ni || /^(n\/?a|0|no|ninguno)$/i.test(ni) ? '' : /^\d+$/.test(ni) ? `${ni} niño${ni === '1' ? '' : 's'}` : `Niños: ${ni}`;
-  txt('vc-b-pax', [a ? `${a} adulto${a === 1 ? '' : 's'}` : '', ninos].filter(Boolean).join(' + ') || '—');
+  const inf = parseInt(val('vc-infantes'), 10) || 0;
+  txt('vc-b-pax', [a ? `${a} adulto${a === 1 ? '' : 's'}` : '', ninos, inf ? `${inf} infante${inf === 1 ? '' : 's'}` : ''].filter(Boolean).join(' + ') || '—');
   vcSyncPlanes();
   txt('vc-b-hab', val('vc-habitaciones').trim() || '—'); txt('vc-b-plan', val('vc-modalidad').trim() || '—');
   const servs = vcServicios.filter(s => String(s.nombre || '').trim());
-  $('vc-b-servs').innerHTML = servs.map(s => `<div><i class="fas ${(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).icono}"></i><span>${esc(s.nombre.trim())}</span><em>${esc([s.fecha ? vcFechaCorta(s.fecha) : '', s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''].filter(Boolean).join(' · '))}</em></div>`).join('');
+  $('vc-b-servs').innerHTML = servs.map(s => `<div><i class="fas ${(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).icono}"></i><span>${esc(s.nombre.trim())}</span><em>${esc([s.tipo === 'seguro' ? vcSeguroVigencia(s) : s.fecha ? vcFechaCorta(s.fecha) : '', s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''].filter(Boolean).join(' · '))}</em></div>`).join('');
   $('vc-b-servs').hidden = !servs.length;
   const pm = vcEsPagoMovil(), ref = val('vc-referencia').trim(), forma = val('vc-forma-pago').trim();
   $('vc-ref-box').hidden = !pm;
   $('vc-b-ref').innerHTML = forma ? `<i class="fas fa-receipt"></i> ${esc(forma)}${pm && ref ? ` · Ref. <b>${esc(ref)}</b>` : ''}` : '';
   $('vc-b-ref').hidden = !forma;
-  $('vc-total-nota').innerHTML = vcServSuma > 0 ? `<i class="fas fa-circle-info"></i> El total incluye <b>${vcMoney(vcServSuma)}</b> de servicios adicionales (se suman solos; puedes corregirlo a mano).` : '';
-  $('vc-total-nota').hidden = !(vcServSuma > 0);
+  const incluye = [vcHospMonto > 0 ? `<b>${vcMoney(vcHospMonto)}</b> de hospedaje según tarifario` : '', vcServSuma > 0 ? `<b>${vcMoney(vcServSuma)}</b> de servicios adicionales` : ''].filter(Boolean).join(' y ');
+  $('vc-total-nota').innerHTML = incluye ? `<i class="fas fa-circle-info"></i> El total incluye ${incluye} (se suman solos; puedes corregirlo a mano).` : '';
+  $('vc-total-nota').hidden = !incluye;
   txt('vc-b-total', vcMoney(total)); txt('vc-b-pagado', vcMoney(pagado)); txt('vc-b-resta', vcMoney(resta));
   txt('vc-total-accion', vcMoney(total)); txt('vc-pagado-accion', `Pagado ${vcMoney(pagado)} · resta ${vcMoney(resta)}`);
   vcResumenSecciones();
@@ -29973,9 +31566,9 @@ function vcTogglePago(pago) {
 }
 function vcReset() {
   DR?.cancelar('voucher');
-  ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-modalidad', 'vc-habitaciones', 'vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos',
+  ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-modalidad', 'vc-habitaciones', 'vc-fecha-entrada', 'vc-fecha-salida', 'vc-adultos', 'vc-ninos', 'vc-infantes',
     'vc-total-dias', 'vc-status', 'vc-total-general', 'vc-monto-pagado', 'vc-resta', 'vc-forma-pago', 'vc-referencia', 'vc-lead-q'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  vcServicios = []; vcServSuma = 0; vcPlanOtro = false; vcPintarServicios(); vcHotelSoltar();
+  vcServicios = []; vcServSuma = vcHospMonto = vcAutoAplicado = 0; vcPlanOtro = false; vcPintarServicios(); vcHotelSoltar();
   ['vc-cliente-seccion', 'vc-hospedaje-seccion', 'vc-pago-seccion'].forEach(id => document.getElementById(id).open = true);
   ['vc-servicios-seccion', 'vc-horarios-seccion'].forEach(id => document.getElementById(id).open = false);
   document.getElementById('vc-fecha-entrada').min = cbHoy();
@@ -30070,25 +31663,55 @@ async function cargarHistorialVouchers(append) {
       <div><span>Total</span><b>${v.total_general != null ? '$' + fmt(v.total_general) : '—'}</b></div>
     </div>
     <div class="lt-card-pie">
-      <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})"><i class="fas ${v.pdf_path ? 'fa-file-pdf' : 'fa-rotate'}"></i> ${v.pdf_path ? 'Ver PDF' : 'Reconstruir'}</button>
+      <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? docBotonVer('Ver PDF') : '<i class="fas fa-rotate"></i> Reconstruir'}</button>
       ${DR?.acciones('voucher', v) || ''}
-      ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>` : ''}
+      ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>`
+        : vcPuedePasar(v) ? `<button class="btn-sm" type="button" data-vc-pasar="${v.id}" title="Vincular con el cliente y crear su ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> Pasar a Reservas</button>` : ''}
     </div>
   </article>`).join('');
   if (!append && !filas) tbody.innerHTML = '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin vouchers</div>';
   else tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
   tbody.querySelectorAll('[data-vc-res]').forEach(b => b.onclick = () => abrirReservaDeLead(Number(b.dataset.vcRes), b.dataset.cod, b));
+  tbody.querySelectorAll('[data-vc-pasar]').forEach(b => b.onclick = () => vcPasarAReservas(Number(b.dataset.vcPasar), b));
   if (!append) entradaLista(tbody);
   if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
   await actualizarBadgeVoucher();
+}
+// voucher_confirmar_venta: solo admin o el asesor que lo generó, y con el PDF guardado.
+const vcPuedePasar = v => !v.reserva_id && !v.anulado_en && v.pdf_path && (ROL === 'admin' || (ROL === 'asesor' && v.creado_por === MI_USUARIO_ID));
+// Voucher generado como «solo PDF»: misma hoja que al generar (match de cliente / reservas similares).
+async function vcPasarAReservas(id, btn) {
+  btn.disabled = true;
+  try {
+    const { data: v, error } = await sb.from('vouchers').select('*').eq('id', id).single();
+    if (error || !v) throw new Error('No se pudo leer el voucher');
+    const plan = await vcRevisarOperacion(v, { modo: 'solo' });
+    if (!plan || plan.modo === 'solo') return;
+    const cierre = await sb.rpc('voucher_confirmar_venta', { p_voucher_id: v.id, p_modo: plan.modo,
+      p_lead_id: plan.lead?.id || null, p_reserva_id: plan.reserva?.id || null,
+      p_revisadas: plan.revisadas || [], p_motivo: plan.motivo || null, p_pdf_path: v.pdf_path });
+    if (cierre.error || !cierre.data?.ok) throw new Error('No se pasó a Reservas: ' + (cierre.error?.message || cierre.data?.error || 'error desconocido'));
+    if (cierre.data.reutilizado) throw new Error('Este voucher ya tenía su operación confirmada');
+    const pdf = await sb.storage.from('vouchers-pdf').download(v.pdf_path);
+    const nombre = docNombre([`Voucher ${String(v.numero_factura).padStart(6, '0')}`, v.cliente_nombre, v.destino_hospedaje, docFecha(v.fecha_entrada)]);
+    const e = pdf.error ? 'no se pudo descargar el PDF' : await vcAdjuntarPdf(cierre.data.reserva_id, cierre.data.servicio_id, pdf.data, nombre);
+    if (e) errToast(`Quedó en Reservas (${cierre.data.codigo}), pero el PDF no se adjuntó a la ficha: ${e}`);
+    else okToast(`Voucher N° ${v.numero_factura} en Reservas · ${cierre.data.codigo}`);
+    cargarHistorialVouchers(false);
+  } catch (e) { console.error('vcPasarAReservas', e); errToast(e.message); }
+  finally { btn.disabled = false; }
 }
 function cargarMasVouchers() { vcOffset += VC_PAGE_SIZE; cargarHistorialVouchers(true); }
 window.cargarMasVouchers = cargarMasVouchers;
 window.verVoucherPdf = async function verVoucherPdf(pdfPath, numeroFactura) {
   if (pdfPath) {
-    const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(pdfPath, 60);
+    const [{ data, error }, { data: v }] = await Promise.all([
+      sb.storage.from('vouchers-pdf').createSignedUrl(pdfPath, 60),
+      sb.from('vouchers').select('numero_factura,cliente_nombre,destino_hospedaje,fecha_entrada,revision').eq('numero_factura', numeroFactura).maybeSingle()
+    ]);
     if (error || !data?.signedUrl) { errToast('No se pudo abrir el PDF'); return; }
-    window.open(data.signedUrl, '_blank');
+    try { await docEntregarUrl(data.signedUrl, docNombrePorTipo('voucher', v || { numero_factura: numeroFactura })); }
+    catch (e) { console.error('verVoucherPdf', e); errToast('No se pudo abrir el PDF'); }
     return;
   }
   // Voucher generado antes de guardar el PDF real -- se reconstruye desde los
@@ -30125,24 +31748,29 @@ function cargarImagenBase64(src) {
 
 let vcSolicitudPendiente = null, vcGenerando = false;
 async function vcRevisarOperacion(fila, plan) {
-  const { data, error } = await sb.rpc('voucher_revisar_venta', { p_datos: fila });
+  // Sin cliente elegido: mismo match que Importar (teléfono/cédula/nombre) para no crear un lead duplicado.
+  const [{ data, error }, cands] = await Promise.all([sb.rpc('voucher_revisar_venta', { p_datos: fila }),
+    plan.lead ? [] : ivBuscarLeads({ cliente_nombre: fila.cliente_nombre, telefono: fila.telefono, documento: fila.documento_identidad }).catch(() => [])]);
   if (error || !data?.ok) throw new Error('No se pudieron revisar las ventas existentes. Intenta de nuevo.');
-  const similares = data.reservas || [];
+  const similares = data.reservas || [], leads = cands.slice(0, 5);
   const opciones = [{ v: '', t: 'Selecciona qué operación corresponde' }, ...similares.map(r => ({
     v: String(r.id), t: `${r.codigo} · ${r.cliente} · ${r.fecha_viaje_inicio || 'sin fecha'} / ${r.fecha_viaje_fin || 'sin fecha'} · Total ${vcMoney(r.monto_total)} · Abono ${vcMoney(r.monto_pagado)}`,
   }))];
   if (plan.reserva && !similares.some(r => r.id === plan.reserva.id)) opciones.push({ v: String(plan.reserva.id), t: `${plan.reserva.codigo} · ${plan.lead.nombre} · Reserva seleccionada` });
-  opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear una venta para un cliente nuevo' });
-  opciones.push({ v: 'solo', t: 'Generar solo el PDF' });
+  opciones.push(...leads.map(c => ({ v: 'lead:' + c.id, t: `Cliente existente: ${c.nombre || 'Sin nombre'} · ${c.telefono || 'sin teléfono'} · ${c.estado || '—'}${c.asesor ? ' · ' + c.asesor : ''} (${ivMotivos(c)})` })));
+  opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear un cliente nuevo con su venta' });
+  opciones.push({ v: 'solo', t: 'Generar solo el PDF (no queda en Reservas)' });
+  const fuerte = !similares.length && leads.find(c => c.fuerte);
   // Una sola hoja: encadenar otra confirmarSheet/pedirTexto la deja cerrada por el history.back de esta.
   const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Generar voucher',
-    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : 'Elige expresamente cómo guardar este voucher.'}\nCrear venta factura una sola vez el abono${Number(fila.monto_pagado) > 0 ? ' de ' + vcMoney(fila.monto_pagado) : ' (hoy no hay abono cargado)'}.`,
-    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: '', opciones },
-      ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' }] : [])],
+    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : leads.length ? `El cliente ya podría estar en el CRM (${leads.length === 1 ? '1 coincidencia' : leads.length + ' coincidencias'} por teléfono o nombre): elige su ficha para no duplicarlo.` : 'Elige expresamente cómo guardar este voucher.'}\nCrear venta factura una sola vez el abono${Number(fila.monto_pagado) > 0 ? ' de ' + vcMoney(fila.monto_pagado) : ' (hoy no hay abono cargado)'}.`,
+    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: fuerte ? 'lead:' + fuerte.id : '', opciones },
+      ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' || out.operacion?.startsWith('lead:') }] : [])],
   });
   if (!eleccion) return null;
   if (eleccion.operacion === 'solo') return { modo: 'solo' };
-  if (eleccion.operacion !== 'nueva') {
+  if (eleccion.operacion.startsWith('lead:')) plan = { ...plan, lead: leads.find(c => 'lead:' + c.id === eleccion.operacion) };
+  else if (eleccion.operacion !== 'nueva') {
     const reserva = similares.find(r => String(r.id) === eleccion.operacion) || plan.reserva;
     if (!reserva) throw new Error('La reserva seleccionada ya no está disponible.');
     return { modo: 'vincular', lead: { id: reserva.lead_id || plan.lead.id, nombre: reserva.cliente || plan.lead.nombre }, reserva };
@@ -30166,11 +31794,21 @@ async function vcAdjuntarPdf(reservaId, servicioId, blob, nombre) {
   return error || !data?.ok ? rvErr(error, data) : null;
 }
 function vcDescargar(blob, nombre) { descargarArchivo(blob, nombre); }
+// Con la hora en el nombre: el navegador del teléfono abría el PDF viejo con el mismo nombre en vez del nuevo.
+const vcDescargarConHora = (blob, nombre) => vcDescargar(blob, nombre.replace(/\.pdf$/i, '') + ' ' + new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).replace(/\D/g, '-') + '.pdf');
+// El voucher nuevo reemplaza a los anteriores del mismo tipo (mismo servicio y mismo inicio de nombre).
+async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre, tambien = () => false) {
+  const base = nombre.split(' - ').slice(0, 2).join(' - ') + ' - ';
+  const viejos = (Number(RV_RESERVA_ID) === Number(reservaId) ? RV_DET?.documentos || [] : []).filter(d => d.tipo === 'voucher' && !d.anulado_en && (((d.servicio_id ?? null) === (servicioId ?? null) && String(d.nombre || '').startsWith(base)) || tambien(d))).map(d => d.id);
+  const falla = await vcAdjuntarPdf(reservaId, servicioId, blob, nombre);
+  if (!falla && viejos.length) await Promise.all(viejos.map(id => sb.rpc('anular_documento', { p_documento_id: id }).then(({ error }) => error && console.error('voucher: anular previo', id, error))));
+  return falla;
+}
 function vcPintarHecho(h) {
   const box = document.getElementById('vc-hecho');
   box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
     ${h.avisos.map(a => `<small style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</small>`).join('')}
-    <div class="vc-hecho-acc">${h.reservaId && h.codigo ? `<button class="vc-mini" type="button" data-vc-abrir>Abrir ficha ${esc(h.codigo)}</button>` : ''}<button class="vc-mini" type="button" data-vc-ver>Ver PDF</button></div>`;
+    <div class="vc-hecho-acc">${h.reservaId && h.codigo ? `<button class="vc-mini" type="button" data-vc-abrir>Abrir ficha ${esc(h.codigo)}</button>` : ''}<button class="vc-mini" type="button" data-vc-ver>${docBotonVer('Ver PDF')}</button></div>`;
   box.hidden = false;
   box.querySelector('[data-vc-abrir]')?.addEventListener('click', e => abrirReservaDeLead(h.reservaId, h.codigo, e.currentTarget));
   box.querySelector('[data-vc-ver]').addEventListener('click', () => verVoucherPdf(h.pdfPath || '', h.numero));
@@ -30189,8 +31827,12 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     document.getElementById('vc-ref-box').classList.add('falta'); docEnfocar('vc-referencia');
     errToast('Colocá el número de referencia del pago móvil'); return;
   }
+  for (const [i, s] of vcServicios.entries()) {
+    const falta = s.tipo === 'boleto' && vcBolFalta(s);
+    if (falta) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${i}"] ${falta[0]}`)); errToast(falta[1]); return; }
+  }
   const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
-  if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(`Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
+  if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(vcServicios[sinNombre].tipo === 'seguro' ? 'Falta la aseguradora del seguro de viaje (o quitalo)' : `Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
   const planInicial = vcPlan();
   if (planInicial.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
   const asesorNombre = esOficina() ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
@@ -30202,6 +31844,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     check_out: val('vc-check-out').trim() || null, modalidad: val('vc-modalidad').trim() || null,
     total_dias: val('vc-total-dias').trim() || null, habitaciones: val('vc-habitaciones').trim() || null,
     adultos: val('vc-adultos') ? parseInt(val('vc-adultos'), 10) : null, ninos: val('vc-ninos').trim() || null,
+    infantes: parseInt(val('vc-infantes'), 10) > 0 ? Math.min(20, parseInt(val('vc-infantes'), 10)) : null,
     status_reserva: val('vc-status').trim() || null,
     total_general: val('vc-total-general') ? parseFloat(val('vc-total-general')) : null,
     forma_pago: val('vc-forma-pago').trim() || null,
@@ -30281,10 +31924,14 @@ const VC_PRUEBA = {
   destino_hospedaje: 'Hotel de prueba, Los Roques', fecha_entrada: '2026-11-10', check_in: '15:00',
   fecha_salida: '2026-11-14', check_out: '11:00', modalidad: 'Todo incluido', total_dias: '4 días / 3 noches',
   habitaciones: '1 habitación doble', adultos: 2, ninos: '1', status_reserva: 'CONFIRMADA',
-  total_general: 500, forma_pago: 'Pago móvil', referencia_pago: '123456', monto_pagado: 250, resta: 250,
+  total_general: 860, forma_pago: 'Pago móvil', referencia_pago: '123456', monto_pagado: 250, resta: 610,
   servicios: [
     { tipo: 'excursion', nombre: 'Full day Cayo Sal', opcion: 'Con almuerzo', fecha: '2026-11-11', hora: '08:00', adultos: 2, ninos: 1, monto: 80 },
     { tipo: 'traslado', nombre: 'Aeropuerto - hotel', fecha: '2026-11-10', hora: '13:00', adultos: 2, ninos: 1, monto: 40 },
+    { tipo: 'boleto', nombre: 'CCS → LRV → CCS · Aerolínea de prueba', fecha: '2026-11-10', hora: '08:00', aerolinea: 'Aerolínea de prueba', localizador: 'ABC123', estado: 'EMITIDO',
+      viaje: 'ida_vuelta', clase: 'Económica', familia: '', equipaje_mano: '1 pieza de 10 kg', equipaje_bodega: '1 pieza de 23 kg', adultos: 2, ninos: 1, infantes: 0, monto: 360,
+      tramos: [{ vuelo: 'XX 101', origen: 'CCS', destino: 'LRV', fecha: '2026-11-10', sale: '08:00', llega: '08:45' }, { vuelo: 'XX 102', origen: 'LRV', destino: 'CCS', fecha: '2026-11-14', sale: '16:30', llega: '17:15' }],
+      pasajeros: [{ nombre: 'Cliente de prueba', documento: 'V-00000000', tipo: 'adulto', ticket: '0000000000001' }, { nombre: 'Acompañante de prueba', documento: 'V-00000001', tipo: 'adulto', ticket: '0000000000002' }, { nombre: 'Niño de prueba', documento: 'Partida de nacimiento', tipo: 'nino', ticket: '' }] },
   ],
 };
 window.generarVoucherPrueba = async function generarVoucherPrueba() {
@@ -30366,7 +32013,8 @@ function vcpDibujarVoucher(doc, v, ctx) {
   // ---------- Banda de título ----------
   const servs = Array.isArray(v.servicios) ? v.servicios : [];
   const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
-  const titulo = txt(v.titulo_voucher) || (conHosp ? 'VOUCHER DE HOSPEDAJE' : 'VOUCHER DE SERVICIO');
+  const boletos = Array.isArray(v.boletos) ? v.boletos : [];
+  const titulo = txt(v.titulo_voucher) || (conHosp ? 'VOUCHER DE HOSPEDAJE' : boletos.length === servs.length ? 'VOUCHER DE BOLETO AÉREO' : 'VOUCHER DE SERVICIO');
   doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, 114, VCP_W, 42, 'F');
   font('bold', 14.5, [255, 255, 255]); doc.text(titulo, VCP_X0 + 14, 140.5, { charSpace: .6 });
   font('semibold', 10, [255, 255, 255]); doc.text(v.numero_factura ? `FACTURA N° ${txt(v.numero_factura)}` : `RESERVA N° ${txt(v.codigo_reserva)}`, VCP_X1 - 14, 132, { align: 'right' });
@@ -30392,55 +32040,105 @@ function vcpDibujarVoucher(doc, v, ctx) {
   const etiquetaDestino = txt(v.etiqueta_destino) || 'DESTINO / HOSPEDAJE';
   y = tabla(etiquetaDetalle, conHosp ? [
     [etiquetaDestino, { content: txt(v.destino_hospedaje) || '—', colSpan: 3, styles: { fontStyle: st('bold'), fontSize: 10.5 } }],
-    ['FECHA DE ENTRADA', txt(v.fecha_entrada) || '—', 'CHECK IN', txt(v.check_in) || '—'],
-    ['FECHA DE SALIDA', txt(v.fecha_salida) || '—', 'CHECK OUT', txt(v.check_out) || '—'],
+    // Sin hora de check-in/out (voucher armado desde la reserva) la fecha ocupa la fila entera.
+    [txt(v.etiqueta_entrada) || 'FECHA DE ENTRADA', ...(txt(v.check_in) ? [txt(v.fecha_entrada) || '—', 'CHECK IN', txt(v.check_in)] : [{ content: txt(v.fecha_entrada) || '—', colSpan: 3 }])],
+    [txt(v.etiqueta_salida) || 'FECHA DE SALIDA', ...(txt(v.check_out) ? [txt(v.fecha_salida) || '—', 'CHECK OUT', txt(v.check_out)] : [{ content: txt(v.fecha_salida) || '—', colSpan: 3 }])],
     ['MODALIDAD', txt(v.modalidad) || '—', 'DURACIÓN', txt(v.total_dias) || '—'],
     ['HABITACIONES / CLASE', ancho(v.habitaciones)],
     ['ADULTOS', txt(v.adultos) || '—', 'NIÑOS', txt(v.ninos) || 'N/A'],
+    ...(Number(v.infantes) > 0 ? [['INFANTES', { content: txt(v.infantes) + ' (0-2 años)', colSpan: 3 }]] : []),
     filaStatus,
   ] : [
     ['ADULTOS', txt(v.adultos) || '—', 'NIÑOS', txt(v.ninos) || 'N/A'],
+    ...(Number(v.infantes) > 0 ? [['INFANTES', { content: txt(v.infantes) + ' (0-2 años)', colSpan: 3 }]] : []),
     filaStatus,
   ], y) + gap;
 
+  // Tabla de filas con encabezado oscuro (servicios, pasajeros, itinerario).
+  const listado = (head, body, yL, columnStyles = {}, pad = 6) => conBorde({
+    startY: yL, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
+    styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pad, bottom: pad, left: 9, right: 9 } },
+    headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+    columnStyles, head: [head], body,
+  }, VCP_X0, VCP_W);
+
   // ---------- Servicios adicionales ----------
   if (servs.length) {
+    y = listado([txt(v.etiqueta_servicios) || 'SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO'], servs.map(s => [s.nombre, s.fecha, s.pax, usd(s.monto)]), y,
+      { 0: { cellWidth: 250 }, 3: { halign: 'right', fontStyle: st('semibold') } }) + gap;
+  }
+
+  // ---------- Boletos aéreos: datos del boleto, itinerario, pasajeros con N° de boleto e indicaciones ----------
+  const segunTarifa = 'Según la tarifa de la aerolínea';
+  const lugar = c => { const a = c && (bolCatalogo?.aeropuertos || []).find(x => x.iata_code === c); return a?.ciudad ? `${c} · ${a.ciudad}` : txt(c) || '—'; };
+  boletos.forEach(b => {
+    if (y + 160 > 742) { doc.addPage(); y = 40; }
+    const estado = txt(b.estado).toUpperCase();
+    y = tabla(`BOLETO AÉREO · ${txt(b.aerolinea).toUpperCase()}`, [
+      ['LOCALIZADOR (PNR)', { content: txt(b.localizador).toUpperCase() || '—', styles: { fontStyle: st('bold'), fontSize: 11, charSpace: 1 } },
+        'ESTADO', { content: estado || '—', styles: { fontStyle: st('bold'), textColor: estado === 'EMITIDO' ? VCP.verde : VCP.ambarOsc, charSpace: .6 } }],
+      ['TIPO DE VIAJE', VC_BOL_VIAJES[b.viaje] || '—', 'CLASE', txt(b.clase) || '—'],
+      ...(txt(b.familia) ? [['TARIFA', ancho(b.familia)]] : []),
+      ['EQUIPAJE DE MANO', txt(b.equipaje_mano) || segunTarifa, 'EQUIPAJE BODEGA', txt(b.equipaje_bodega) || segunTarifa],
+      ...(txt(b.detalle) ? [['OBSERVACIONES', ancho(b.detalle)]] : []),
+    ], y) + 8;
+    y = listado(['VUELO', 'ORIGEN', 'DESTINO', 'FECHA', 'SALE', 'LLEGA'], (b.tramos || []).map(t => [
+      { content: txt(t.vuelo) || '—', styles: { fontStyle: st('semibold') } }, lugar(t.origen), lugar(t.destino), vcFechaDma(t.fecha) || '—', vcHora12(t.sale) || '—', vcHora12(t.llega) || '—']), y,
+      { 0: { cellWidth: 62 }, 3: { cellWidth: 70 }, 4: { cellWidth: 58 }, 5: { cellWidth: 58 } }, 5) + 8;
+    y = listado(['PASAJERO', 'TIPO', 'DOCUMENTO', 'N° DE BOLETO'], (b.pasajeros || []).map(p => [
+      txt(p.nombre).toUpperCase() || '—', VC_BOL_PAX[p.tipo] || 'Adulto', txt(p.documento) || '—',
+      txt(p.ticket) ? { content: txt(p.ticket), styles: { fontStyle: st('bold'), charSpace: .4 } } : { content: 'Por emitir', styles: { textColor: VCP.ambarOsc } }]), y,
+      { 1: { cellWidth: 60 }, 2: { cellWidth: 110 }, 3: { cellWidth: 130 } }, 5) + gap;
+  });
+  if (boletos.length) {
+    if (y + 125 > 742) { doc.addPage(); y = 40; }
     y = conBorde({
-      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
-      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
-      columnStyles: { 0: { cellWidth: 250 }, 3: { halign: 'right', fontStyle: st('semibold') } },
-      head: [[txt(v.etiqueta_servicios) || 'SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO']],
-      body: servs.map(s => [s.nombre, s.fecha, s.pax, usd(s.monto)]),
+      startY: y, theme: 'plain', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
+      styles: { font: F, fontStyle: st('normal'), fontSize: 7.8, textColor: VCP.cuerpo, cellPadding: { top: 2.2, bottom: 2.2, left: 12, right: 12 } },
+      headStyles: { fillColor: VCP.suave, textColor: VCP.navy, fontStyle: st('semibold'), fontSize: 7.6, cellPadding: { top: 6, bottom: 4, left: 12, right: 12 } },
+      head: [[{ content: 'INDICACIONES PARA SU VIAJE', styles: { charSpace: .8 } }]],
+      body: VC_BOL_AVISOS.map((a, i, all) => [{ content: `•  ${a}`, styles: i === all.length - 1 ? { cellPadding: { top: 2.2, bottom: 7, left: 12, right: 12 } } : {} }]),
     }, VCP_X0, VCP_W) + gap;
   }
 
   // ---------- Pasajeros (opcional: el voucher del paquete los lista) ----------
   if (Array.isArray(v.pasajeros) && v.pasajeros.length) {
-    y = conBorde({
-      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
-      styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
-      columnStyles: { 1: { cellWidth: 170 } },
-      head: [['PASAJEROS', 'DOCUMENTO']],
-      body: v.pasajeros.map(p => [p.nombre || '—', p.documento || '—']),
-    }, VCP_X0, VCP_W) + gap;
+    y = listado(['PASAJEROS', 'DOCUMENTO'], v.pasajeros.map(p => [p.nombre || '—', p.documento || '—']), y, { 1: { cellWidth: 170 } }) + gap;
   }
 
   // ---------- Pago ----------
-  if (y + 98 > 742) { doc.addPage(); y = 40; }
-  const yp = y, half = (VCP_W - 16) / 2;
-  const yA = tabla('FORMA DE PAGO', [
-    ['MÉTODO', txt(v.forma_pago) || '—'],
-    ...(v.referencia_pago ? [['REF. PAGO MÓVIL', txt(v.referencia_pago)]] : []),
-  ], yp, { width: half, lab: 70, cols: 2 });
-  const yB = tabla('RESUMEN DE PAGO', [
+  // Con abonos (pedido del dueño 30-oct): primero lo que el cliente pagó, abono por abono, y abajo el
+  // resumen con el total. Sin el cuadro «Forma de pago»: cada abono ya dice su método y referencia.
+  const resumen = (yR, opt) => tabla('RESUMEN DE PAGO', [
     ['TOTAL GENERAL', { content: usd(v.total_general), styles: { halign: 'right', fontStyle: st('semibold') } }],
     ['PAGADO', { content: usd(v.monto_pagado), styles: { halign: 'right', fontStyle: st('semibold') } }],
     [{ content: 'RESTA', styles: { fillColor: vcpTinte(VCP.naranja, .9), textColor: VCP.ambarOsc, fontStyle: st('bold'), fontSize: 8.4 } },
       { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
-  ], yp, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
-  y = Math.max(yA, yB);
+  ], yR, opt);
+  const half = (VCP_W - 16) / 2;
+  if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
+    if (y + 75 > 742) { doc.addPage(); y = 40; }
+    const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
+    y = conBorde({
+      startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 44 }, rowPageBreak: 'avoid',
+      styles: { font: F, fontStyle: st('medium'), fontSize: 8.4, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 3, bottom: 3, left: 9, right: 9 } },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+      columnStyles: { 0: { cellWidth: 120 }, 3: { halign: 'right', fontStyle: st('semibold') } },
+      head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
+      body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, (a.metodo || '—') + (a.servicio ? ` · ${a.servicio}` : ''), a.referencia || '—', usd(a.monto)]
+        .map(x => a.nuevo ? { content: x, styles: nuevo } : x)),
+    }, VCP_X0, VCP_W) + 6;
+    if (y + 75 > 742) { doc.addPage(); y = 40; }
+    resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
+    return;
+  }
+  if (y + 98 > 742) { doc.addPage(); y = 40; }
+  const yp = y;
+  tabla('FORMA DE PAGO', [
+    ['MÉTODO', txt(v.forma_pago) || '—'],
+    ...(v.referencia_pago ? [['REF. PAGO MÓVIL', txt(v.referencia_pago)]] : []),
+  ], yp, { width: half, lab: 70, cols: 2 });
+  resumen(yp, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
 }
 
 // Pie común a las 4 páginas; se dibuja al final, cuando ya se sabe el total.
@@ -30570,18 +32268,23 @@ async function construirVoucherPdf(v) {
   try { const d = await cargarImagenBase64('logo-color.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
   const ctx = { F, st, logo };
   const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
-  const servicios = (Array.isArray(v.servicios) ? v.servicios : []).map(s => ({
-    nombre: [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion, s.detalle].filter(Boolean).join('\n'),
-    fecha: s.fecha_texto || [s.fecha ? s.fecha.split('-').reverse().join('/') : '', s.hora].filter(Boolean).join(' '),
-    pax: [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños')].filter(Boolean).join(' + '),
+  const lista = Array.isArray(v.servicios) ? v.servicios : [], boletos = lista.filter(s => s.tipo === 'boleto');
+  const servicios = lista.map(s => ({
+    // Helvetica (sin Poppins) no tiene «→»: en el PDF la ruta va como CCS-PMV-CCS.
+    nombre: s.tipo === 'boleto' ? [`BOLETO AÉREO: ${String(s.nombre || '').replace(/ → /g, '-')}`,s.localizador ? `Localizador: ${s.localizador}` : ''].filter(Boolean).join('\n')
+      : [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion,
+        s.tipo === 'seguro' ? [s.poliza && `Póliza: ${s.poliza}`, s.asistencia && `Asistencia 24h: ${s.asistencia}`].filter(Boolean).join(' · ') : '', s.detalle].filter(Boolean).join('\n'),
+    fecha: s.fecha_texto || (s.tipo === 'boleto' ? vcBolFechas(s) : s.tipo === 'seguro' ? vcSeguroVigencia(s) : [vcFechaDma(s.fecha), s.hora].filter(Boolean).join(' ')),
+    pax: [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños'), pl(s.infantes, 'infante', 'infantes')].filter(Boolean).join(' + '),
     monto: s.monto,
   }));
-  vcpDibujarVoucher(doc, { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios }, ctx);
+  if (boletos.length) await bolAsegurarCatalogo();
+  vcpDibujarVoucher(doc, { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios, boletos }, ctx);
   const nVoucher = doc.getNumberOfPages();
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
   vcpPie(doc, ctx, nVoucher);
-  drRotularPdf(doc, v.numero_factura ? `Voucher ${v.numero_factura} · revisión ${v.revision || 1}` : `Voucher ${v.codigo_reserva || ''}`);
+  drRotularPdf(doc, v.rotulo || v.numero_factura ? v.rotulo || `Voucher ${v.numero_factura} · revisión ${v.revision || 1}` : `Voucher ${v.codigo_reserva || ''}`);
   return doc.output('arraybuffer');
 }
 
@@ -30707,7 +32410,34 @@ function tarUnidad(t) {
   return { unidad: dbl > sgl ? 'habitacion_noche' : 'persona_noche', origen: 'deducida' };
 }
 const TAR_UNIDAD_TEXTO = { persona_noche: 'por persona por noche', habitacion_noche: 'por habitación por noche' };
-const cbTarBase = t => { const u = tarUnidad(t).unidad; return TAR_UNIDAD_TEXTO[u] ? u : ''; };
+const cbTarBase = t => { if (t._unidad) return t._unidad; const u = tarUnidad(t).unidad; return TAR_UNIDAD_TEXTO[u] ? u : ''; };
+// Cotización (2026-10-29): 388 tarifas vigentes no declaran unidad y tarUnidad no decide (SGL = DBL o
+// sin SGL); el asesor tenía que elegirla a mano y el precio no salía solo. Solo para esos huecos:
+// alias sencilla/doble, PAX ADIC = por habitación, precio que sube con la ocupación = por habitación
+// y baja = por persona, SGL = DBL = por habitación, todas iguales sin SGL pero con niño = por persona.
+// Lo que siga sin decidir toma la unidad mayoritaria del hotel y, si no hay, por persona por noche.
+function cbTarUnidadInferida(t) {
+  const p = t.precios || {}, occ = new Map();
+  for (const [k, v] of Object.entries(p)) {
+    const n = TAR_OCUPACION.get(cbTarNorm(k)) || Number((/^pax_([1-9]\d*)$/.exec(k) || [])[1]) || 0, precio = cbTarNum(v);
+    if (n && precio !== null && !occ.has(n)) occ.set(n, precio);
+  }
+  if (occ.has(1) && occ.has(2) && occ.get(1) !== occ.get(2)) return occ.get(2) > occ.get(1) ? 'habitacion_noche' : 'persona_noche';
+  if (Object.entries(p).some(([k, v]) => /^(pax_adic(ional)?|extra_pax|adic_adt)$/.test(cbTarNorm(k)) && cbTarNum(v) !== null)) return 'habitacion_noche';
+  const serie = [...occ].sort((a, b) => a[0] - b[0]).map(x => x[1]);
+  const sube = serie.some((v, i) => i && v > serie[i - 1]), baja = serie.some((v, i) => i && v < serie[i - 1]);
+  if (sube !== baja) return sube ? 'habitacion_noche' : 'persona_noche';
+  if (serie.length && !sube && occ.has(1)) return 'habitacion_noche';
+  if (serie.length && Object.keys(p).some(k => /chd|nino/.test(cbTarNorm(k)))) return 'persona_noche';
+  return '';
+}
+function cbTarAnotarUnidades(filas) {
+  for (const t of filas) { const u = tarUnidad(t).unidad; t._unidad = TAR_UNIDAD_TEXTO[u] ? u : cbTarUnidadInferida(t); }
+  const votos = filas.reduce((m, t) => (t._unidad && m.set(t._unidad, (m.get(t._unidad) || 0) + 1), m), new Map());
+  const mayoria = [...votos].sort((a, b) => b[1] - a[1])[0]?.[0] || 'persona_noche';
+  for (const t of filas) if (!t._unidad) t._unidad = mayoria;
+  return filas;
+}
 function cbTarVariantes(t, ocupaciones) {
   const nombres = { 1: 'Sencilla', 2: 'Doble', 3: 'Triple', 4: 'Cuádruple', 5: 'Quíntuple', 6: 'Séxtuple', 7: 'Séptuple', 8: 'Óctuple' };
   return Object.entries(t.precios || {}).filter(([k, v]) => (ocupaciones.has(k) || /^pax_[1-9]\d*$/.test(k)) && cbTarNum(v) !== null)
@@ -30722,11 +32452,13 @@ function cbHotelUnidad(it, filas) {
   const candidatas = cbTarDelPlan(filas, it.plan).filter(t => !it.hab || cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
   const noches = cbTarNoches(it.ida, it.vuelta);
   const aplican = candidatas.filter(t => !noches.length || noches.some(n => cbTarAmplitud(t, n) !== null));
-  const bases = [...new Set(aplican.map(cbTarBase))];
-  it._unidadOrigen = bases.length === 1 && bases[0] ? (aplican.some(t => tarUnidad(t).origen === 'deducida') ? 'deducida' : 'tarifario') : '';
-  it._unidadPendiente = !it.unidad_manual && !(bases.length === 1 && bases[0]);
-  if (!it.unidad_manual && bases.length === 1 && bases[0] && it.unidad !== bases[0]) {
-    it.unidad = bases[0]; it.tarifa = ''; it.tramos = []; it.tarifa_manual = false; delete it.tarifa_variante;
+  // Varias unidades entre temporadas de la misma habitación: manda la mayoritaria, sin preguntar.
+  const votos = aplican.map(cbTarBase).filter(Boolean).reduce((m, u) => m.set(u, (m.get(u) || 0) + 1), new Map());
+  const base = [...votos].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+  it._unidadOrigen = base ? 'tarifario' : '';
+  it._unidadPendiente = !it.unidad_manual && !base;
+  if (!it.unidad_manual && base && it.unidad !== base) {
+    it.unidad = base; it.tarifa = ''; it.tramos = []; it.tarifa_manual = false; delete it.tarifa_variante;
   }
   // Por habitación, la variante sale sola de los adultos por habitación (2 → doble); si nadie la
   // eligió a mano se vuelve a calcular al cambiar la ocupación. Más adultos que la mayor = la mayor + PAX ADIC.
@@ -30752,7 +32484,7 @@ function cbTarPrecioNino(t, cantidad) {
 const cbTarNinoTramo = (it, t) => cbTarNum(it.tarifa_nino_auto === false ? it.tarifa_nino : (t.tarifa_nino ?? it.tarifa_nino));
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
-  if (!noches.length) return fallo('Elige entrada y salida (de 1 a 366 noches).');
+  if (!noches.length) return fallo(it.ida && it.vuelta ? 'Las fechas deben sumar de 1 a 366 noches.' : 'Elige el check-in y las noches: la tarifa sale sola.');
   if (!cbPorNoche(it)) return fallo('La estadía completa se cotiza manualmente.');
   if (it._unidadPendiente) return fallo('El tarifario no declara una unidad única. Confirma «Tarifa por» antes de cargar el precio.');
   if (!it.hab) return fallo('Elige una habitación del tarifario o escribe una tarifa manual.');
@@ -30995,30 +32727,78 @@ function cbResumenCliente(plegar = false) {
   document.getElementById('cb-cliente-resumen').textContent = [nombre, val('cb-vence') && 'Válida hasta ' + cbFechaLarga(val('cb-vence'))].filter(Boolean).join(' · ') || 'Cliente, fecha y vigencia';
   if (plegar && nombre) { document.getElementById('cb-cliente-seccion').open = false; document.querySelector('#cb-cliente-seccion > summary').focus({ preventScroll: true }); }
 }
+// Editor con personalidad (2026-10-29, pedido del dueño): emojis por tipo y campo, contadores −/+
+// en vez de cajas de número, plan en chips, noches con contador (el check-out sale solo) y un
+// desglose del precio. Los emojis viven solo en la pantalla: CB_TIPOS y el PDF no cambian.
+const CB_TIPO_EMOJI = { boleto: '✈️', hotel: '🏨', paquete: '🎒', fullday: '🏝️', tour: '🗺️', traslado: '🚐', otro: '🧩' };
+const CB_CAMPO_EMOJI = { plan: '🍽️', ida: '📅', vuelta: '📅', ida_hora: '🕐', vuelta_hora: '🕐', aerolinea: '🛩️', cant: '🔢', tarifa: '💵' };
+const CB_PAX_EMOJI = { adultos: '🧑', ninos: '🧒', infantes: '👶' };
+const cbEmo = e => e ? `<span class="cb-emo" aria-hidden="true">${e}</span>` : '';
+const cbPlanEmoji = s => { const n = cbTarNorm(s); return /todo incluido|all inclusive/.test(n) ? '🍹' : /desayuno/.test(n) ? '☕' : /pension/.test(n) ? '🍽️' : /solo alojamiento|sin comida/.test(n) ? '🛏️' : '🍴'; };
+const cbBonito = s => s && s === s.toUpperCase() ? s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()) : s;
+const cbSumarDias = (iso, n) => cbTarIso(cbTarFecha(iso) + n * 864e5);
+function cbMinNoches(it) {
+  const ns = cbHotelFilas(it).filter(t => !it.hab || cbTarNorm(t.habitacion) === cbTarNorm(it.hab))
+    .map(t => Number(t.minimo_noches) || (typeof cbTarBloque(t).minimo_noches === 'number' ? cbTarBloque(t).minimo_noches : 0)).filter(n => n > 0);
+  return ns.length ? Math.min(...ns) : 1;
+}
+const cbStepHtml = (i, k, valor, min, nombre) => `<div class="cb-step"><button type="button" class="cb-step-b" data-cb-step="-1" aria-label="Menos ${nombre}">−</button><input id="cb-${k}-${i}" class="ei" data-k="${k}" type="number" inputmode="numeric" min="${min}" step="1" placeholder="0" value="${esc(String(valor ?? ''))}"><button type="button" class="cb-step-b" data-cb-step="1" aria-label="Más ${nombre}">+</button></div>`;
+function cbPaxHtml(it, i, tipo) {
+  const hotel = tipo === 'hotel', porHab = cbPorHabitacion(it), noche = hotel && cbPorNoche(it);
+  const cuentas = CB_PAX_CAMPOS.map(([c, , lc, , min]) => `<div class="field cb-cuenta"><label class="fl" for="cb-${c}-${i}">${cbEmo(CB_PAX_EMOJI[c])}${lc}</label>${cbStepHtml(i, c, it[c], min, lc.toLowerCase())}${hotel && c === 'infantes' && it.infantes_gratis ? '<small class="cb-nota">Gratis en el hotel</small>' : ''}</div>`).join('')
+    + (hotel && it.unidad !== 'persona' ? `<div class="field cb-cuenta"><label class="fl" for="cb-habitaciones-${i}">${cbEmo('🚪')}Habitaciones</label>${cbStepHtml(i, 'habitaciones', it.habitaciones ?? 1, 1, 'habitaciones')}</div>` : '');
+  const precios = CB_PAX_CAMPOS.map(([c, t, lc, lt]) => {
+    if (porHab && t !== 'tarifa_nino') return '';
+    const oculto = (c !== 'adultos' && !(Number(it[c]) > 0)) || (hotel && ((t === 'tarifa_infante' && it.infantes_gratis) || (t === 'tarifa' && it.tramos?.length > 1)));
+    const label = noche ? `${{ adultos: 'Adulto', ninos: 'Niño', infantes: 'Infante' }[c]} por noche` : lt.replace(' (USD)', '');
+    return `<div class="field cb-precio${oculto ? ' cb-oculto' : ''}" data-pax-precio="${c}"><label class="fl" for="cb-${t}-${i}">${cbEmo(CB_PAX_EMOJI[c])}${label}</label><div class="cb-usd"><span aria-hidden="true">$</span><input id="cb-${t}-${i}" class="ei" data-k="${t}" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="${esc(String(it[t] ?? ''))}"></div></div>`;
+  }).join('');
+  return { cuentas: `<div class="cb-sec cb-full">${cbEmo('👥')}Viajeros</div><div class="cb-cuentas cb-full">${cuentas}</div>`, precios: `<div class="cb-precios cb-full">${precios}</div>` };
+}
+function cbFechasHtml(it, i, f) {
+  const n = +cbNoches(it.ida, it.vuelta) || 0;
+  return `<div class="cb-fechas cb-full">${f('ida', 'Check-in', 'type="date"')}${f('vuelta', 'Check-out', 'type="date"')}<div class="field cb-noches"><span class="fl" id="cb-noches-l-${i}">${cbEmo('🌙')}Noches</span><div class="cb-step" role="group" aria-labelledby="cb-noches-l-${i}"><button type="button" class="cb-step-b" data-cb-noches="-1" aria-label="Una noche menos">−</button><output class="ei" aria-live="polite">${n || '–'}</output><button type="button" class="cb-step-b" data-cb-noches="1" aria-label="Una noche más">+</button></div></div></div>`;
+}
+function cbDesgloseHtml(it) {
+  const total = cbImporte(it);
+  if (!cbEsPax(it) || !(total > 0)) return '<div class="cb-desglose cb-full"></div>';
+  const p = cbPax(it), noches = cbNochesCobro(it), varios = it.tipo === 'hotel' && it.tramos?.length > 1, m = n => '$' + cbMonto(n);
+  const x = (n, s, pl, v) => n && v > 0 ? `${n} ${n === 1 ? s : pl} × ${m(v)}` : '';
+  const partes = (varios ? [`${it.tramos.length} temporadas, ${cbNochesTexto(noches)}`]
+    : cbPorHabitacion(it) ? [x(cbHabitaciones(it), 'hab.', 'hab.', Number(it.tarifa)), x(Number(it.tramos?.[0]?.pax_adic) || 0, 'adulto extra', 'adultos extra', Number(it.tramos?.[0]?.tarifa_pax_adic)), x(p.n, 'niño', 'niños', Number(it.tarifa_nino))]
+    : [x(p.a, 'adulto', 'adultos', Number(it.tarifa)), x(p.n, 'niño', 'niños', Number(it.tarifa_nino)), it.tipo === 'hotel' && it.infantes_gratis ? (p.i ? `${p.i} ${p.i === 1 ? 'infante' : 'infantes'} gratis` : '') : x(p.i, 'infante', 'infantes', Number(it.tarifa_infante))]).filter(Boolean);
+  const porNoche = cbPorNoche(it) && !varios ? ` → ${m(total / noches)} por noche × ${cbNochesTexto(noches)}` : '';
+  return `<div class="cb-desglose cb-full"><span class="cb-emo" aria-hidden="true">🧾</span><span>${esc(partes.join(' + ') + porNoche)}<b>${m(total)}</b></span></div>`;
+}
 function cbItemHtml(it, i) {
+  const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto', hotel = tipo === 'hotel', porHab = cbPorHabitacion(it);
   // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
-  const f = (k, label, attrs, full = '') => `<div class="field${full}${attrs.includes('type="date"') ? ' field-fecha' : ''}"><label class="fl" for="cb-${k}-${i}">${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? (k === 'habitaciones' ? 1 : '')))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
-  const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto';
-  const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${t.nombre}</option>`).join('');
-  const unidadDetectada = tipo === 'hotel' && it.producto_id && !it._cargando && !it._unidadPendiente && !it.unidad_manual && !it._unidadEditar && TAR_UNIDAD_TEXTO[it.unidad];
-  const unidad = unidadDetectada ? `<div class="cb-unidad cb-full${it._unidadOrigen === 'deducida' ? ' cb-unidad-deducida' : ''}" role="status"><i class="fas ${cbPorHabitacion(it) ? 'fa-door-closed' : 'fa-user'}" aria-hidden="true"></i><span><b>Este hotel cobra ${TAR_UNIDAD_TEXTO[it.unidad].toUpperCase()}</b><small>${it._unidadOrigen === 'deducida' ? 'Deducido de la grilla (el tarifario no lo dice): confírmalo con el PDF.' : 'Según el tarifario del hotel.'}</small></span><button type="button" class="btn-sm" data-cb-unidad-cambiar>Cambiar</button></div>`
-    : tipo === 'hotel' ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${it._unidadPendiente ? '<option value="" selected disabled>Confirma la unidad</option>' : ''}${[['persona_noche', 'Persona por noche'], ['habitacion_noche', 'Habitación por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${!it._unidadPendiente && (it.unidad || 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${it._unidadPendiente ? '<small>Confirma la unidad: no está indicada en el tarifario.</small>' : ''}</div>` : '';
+  const f = (k, label, attrs, full = '') => `<div class="field${full}${attrs.includes('type="date"') ? ' field-fecha' : ''}"><label class="fl" for="cb-${k}-${i}">${cbEmo(CB_CAMPO_EMOJI[k] || (k === 'nombre' || k === 'ruta' ? CB_TIPO_EMOJI[tipo] : ''))}${label}</label><input id="cb-${k}-${i}" class="ei" data-k="${k}" value="${esc(String(it[k] ?? (k === 'habitaciones' ? 1 : '')))}" ${attrs}${attrs.includes('type="date"') ? ` min="${cbMinFecha(k, it.ida)}"` : ''}></div>`;
+  const opciones = Object.entries(CB_TIPOS).map(([k, t]) => `<option value="${k}"${k === tipo ? ' selected' : ''}>${CB_TIPO_EMOJI[k]} ${t.nombre}</option>`).join('');
+  // La unidad (por persona o por habitación) sale del tarifario sin preguntar; el selector solo
+  // aparece si el hotel no está en el catálogo, si nada la declara o si el asesor pide cambiarla.
+  const unidadDetectada = hotel && it.producto_id && !it._cargando && !it._unidadPendiente && !it.unidad_manual && !it._unidadEditar && TAR_UNIDAD_TEXTO[it.unidad];
+  const chipUnidad = unidadDetectada ? `<span class="cb-unidad-chip">${porHab ? '🚪' : '🧑'} ${TAR_UNIDAD_TEXTO[it.unidad]}<button type="button" class="cb-link" data-cb-unidad-cambiar aria-label="Cambiar la unidad de la tarifa">cambiar</button></span>` : '';
+  const selUnidad = hotel && !unidadDetectada ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${it._unidadPendiente ? '<option value="" selected disabled>Elige la unidad</option>' : ''}${[['persona_noche', 'Persona por noche'], ['habitacion_noche', 'Habitación por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${!it._unidadPendiente && (it.unidad || 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
   const boleto = tipo === 'boleto', campos = CB_TIPOS[tipo].campos.filter(c => !(boleto && c[0] === 'ruta'));
-  if (tipo === 'hotel') { const orden = ['nombre', 'plan', 'hab', 'ida', 'vuelta']; campos.sort((a, b) => orden.indexOf(a[0]) - orden.indexOf(b[0])); }
-  return `<div class="cb-item${tipo === 'hotel' ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
-    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-controls="cb-item-campos-${i}" aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button> Importe <b class="cb-importe">${cbImporteTexto(it)}</b>${cbItems.length > 1 ? ` <button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
+  const pax = CB_TIPOS[tipo].pax ? cbPaxHtml(it, i, tipo) : null;
+  const tarifaSec = extra => `<div class="cb-sec cb-full">${cbEmo('💵')}Tarifa${extra}</div>`;
+  const cuerpo = hotel
+    ? cbHotelHtml(it, i) + cbHotelSelectorHtml(it, i, 'plan', 'Plan') + cbHotelSelectorHtml(it, i, 'hab', 'Habitación') + cbFechasHtml(it, i, f)
+      + pax.cuentas + tarifaSec(chipUnidad) + selUnidad
+      + (porHab ? cbHotelVariantesHtml(it, i) + (it.tramos?.length > 1 ? '' : f('tarifa', 'Habitación por noche (USD)', 'type="number" inputmode="decimal" min="0" step="0.01"', ' cb-dos')) : '')
+      + pax.precios + cbHotelPrecioHtml(it, i) + cbDesgloseHtml(it)
+      + (porHab ? '<small class="cb-full cb-condicion">Precio por habitación: niños y adultos adicionales se suman aparte según el tarifario.</small>' : '')
+    : (boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : '')
+      + campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
+      + (pax ? pax.cuentas + tarifaSec('') + pax.precios + cbDesgloseHtml(it) : '')
+      + (boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : '');
+  return `<div class="cb-item${hotel ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
+    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span class="cb-item-acc"><b class="cb-importe" title="Importe del servicio">${cbImporteTexto(it)}</b><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-controls="cb-item-campos-${i}" aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button>${cbItems.length > 1 ? `<button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-resumen">${esc(cbResumenServicio(it))}</div>
     <div class="cb-item-grid" id="cb-item-campos-${i}">
-      ${boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : ''}
-      ${campos.map((c, j) => tipo === 'hotel' && j === 0 ? cbHotelHtml(it, i) : tipo === 'hotel' && ['plan', 'hab'].includes(c[0]) ? cbHotelSelectorHtml(it, i, c[0], c[1]) : j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')}
-      ${unidad}
-      ${tipo === 'hotel' && !cbPorHabitacion(it) && it.unidad !== 'persona' ? f('habitaciones', 'Habitaciones', 'type="number" min="1" step="1"') : ''}
-      ${cbPorHabitacion(it) ? f('habitaciones', 'Habitaciones', 'type="number" min="1" step="1"') + cbHotelVariantesHtml(it, i) + (it.tramos?.length > 1 ? '' : f('tarifa', 'Precio habitación / noche (USD)', 'type="number" min="0" step="0.01"', ' cb-dos')) : ''}
-      ${CB_TIPOS[tipo].pax ? `<div class="cb-pax cb-full${cbPorHabitacion(it) ? ' cb-pax-habitacion' : ''}">${CB_PAX_CAMPOS.map(([c, t, lc, lt, min]) => `<div class="cb-pax-c"><div class="field"><label class="fl" for="cb-${c}-${i}">${lc}</label><input id="cb-${c}-${i}" class="ei" data-k="${c}" type="number" min="${min}" step="1" placeholder="0" value="${esc(String(it[c] ?? ''))}"></div>${cbPorHabitacion(it) && t !== 'tarifa_nino' ? '' : `<div class="field${tipo === 'hotel' && ((t === 'tarifa_infante' && it.infantes_gratis) || (t === 'tarifa' && it.tramos?.length > 1)) ? ' cb-oculto' : ''}"><label class="fl" for="cb-${t}-${i}">${lt}</label><input id="cb-${t}-${i}" class="ei" data-k="${t}" type="number" min="0" step="0.01" value="${esc(String(it[t] ?? ''))}"></div>`}</div>`).join('')}</div>` : ''}
-      ${cbHotelPrecioHtml(it, i)}
-      ${cbPorHabitacion(it) ? '<small class="cb-full cb-condicion">Precio por habitación: los niños y los adultos adicionales se suman aparte según el tarifario.</small>' : tipo === 'hotel' && it.infantes_gratis ? '<small class="cb-full cb-condicion">Infantes: alojamiento gratis.</small>' : ''}
-      ${boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : ''}
-      <details class="cb-full cb-extra"${it.extra ? ' open' : ''}><summary>Detalle adicional</summary>${f('extra', 'Qué incluye u observaciones', 'placeholder="Equipaje, clase, qué incluye, observaciones..."')}</details>
+      ${cuerpo}
+      <details class="cb-full cb-extra"${it.extra ? ' open' : ''}><summary>${cbEmo('📝')}Detalle adicional</summary>${f('extra', 'Qué incluye u observaciones', 'placeholder="Equipaje, clase, qué incluye, observaciones..."')}</details>
     </div>
   </div>`;
 }
@@ -31220,7 +33000,7 @@ function cbPickerTeclas(e, box, elegir) {
 }
 function cbHotelHtml(it, i) {
   const p = cbHoteles.get(Number(it.producto_id)), foto = ordenarFotos(p?.producto_fotos || [])[0];
-  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">Hotel o posada</label>${foto ? `<img class="cb-hotel-foto" src="${esc(fotoMini(foto.storage_path, 256))}" width="64" height="64" alt="Foto de ${esc(p.nombre)}" decoding="async">` : ''}<input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="Buscar hotel o escribir otro…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
+  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-hotel-${i}">${cbEmo('🏨')}Hotel o posada</label>${foto ? `<img class="cb-hotel-foto" src="${esc(fotoMini(foto.storage_path, 256))}" width="64" height="64" alt="Foto de ${esc(p.nombre)}" decoding="async">` : ''}<input id="cb-hotel-${i}" class="ei" data-busca="hotel" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="🔎 Busca el hotel o escríbelo…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-hoteles-${i}"><div id="cb-hoteles-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div>`;
 }
 const cbHotelDestinoOrden = p => {
   const destino = cbTarNorm(p.destino);
@@ -31248,7 +33028,7 @@ async function cbTraerTarifas(id) {
     const consulta = (async () => {
       const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
       if (error) throw error;
-      return data || [];
+      return cbTarAnotarUnidades(data || []);
     })();
     const peticion = Promise.race([consulta, espera]).then(filas => { cbHotelTarifas.set(id, filas); return filas; }).finally(() => {
       clearTimeout(reloj); if (cbHotelPeticiones.get(id) === peticion) cbHotelPeticiones.delete(id);
@@ -31346,7 +33126,7 @@ function cbHabMiniHtml(it, nombre) {
 }
 function cbHabitacionHtml(it, i, opciones) {
   const foto = cbHabitacionFotos(it, it.hab)[0];
-  return `<div class="field cb-dos cb-hotel-selector cb-picker"><label class="fl" id="cb-hab-label-${i}" for="cb-hab-${i}">Habitación</label>
+  return `<div class="field cb-dos cb-hotel-selector cb-picker"><label class="fl" id="cb-hab-label-${i}" for="cb-hab-${i}">${cbEmo('🛏️')}Habitación</label>
     <button type="button" id="cb-hab-${i}" class="ei cb-hab-elegida" role="combobox" data-cb-hab-abrir aria-haspopup="listbox" aria-labelledby="cb-hab-label-${i} cb-hab-texto-${i}" aria-expanded="false" aria-controls="cb-habitaciones-${i}">${cbHabMiniHtml(it, it.hab)}<span id="cb-hab-texto-${i}">${esc(it.hab || (it._cargando ? 'Cargando habitaciones…' : 'Elige una habitación'))}</span><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
     <div id="cb-habitaciones-${i}" class="cb-picker-lista" role="listbox" aria-label="Habitaciones" hidden>${opciones.map(h => `<button type="button" tabindex="-1" role="option" aria-selected="${cbTarNorm(it.hab) === cbTarNorm(h)}" data-cb-hab="${esc(h)}">${cbHabMiniHtml(it, h)}<span>${esc(h)}</span></button>`).join('')}<button type="button" tabindex="-1" role="option" aria-selected="false" data-cb-hab="__manual__"><span>Escribir otra habitación</span></button></div>
     ${it.hab_libre ? `<input id="cb-hab-${i}-manual" class="ei" data-k="hab" value="${esc(it.hab || '')}" aria-label="Habitación manual" placeholder="Escribe la habitación confirmada">` : ''}
@@ -31381,8 +33161,9 @@ function cbHotelSelectorHtml(it, i, campo, label) {
   if (!esPlan) return cbHabitacionHtml(it, i, opciones);
   const clave = esPlan ? cbTarPlanClave : cbTarNorm, actual = opciones.find(o => clave(o) === clave(it[campo]));
   const libre = it[campo + '_libre'] || (!!it[campo] && !actual), id = `cb-${campo}-${i}`;
+  if (!libre && !it._cargando && opciones.length && opciones.length <= 4) return `<div class="field cb-dos cb-hotel-selector" data-campo="plan"><span class="fl" id="${id}-l">${cbEmo('🍽️')}${label}</span><div class="cb-chips" role="radiogroup" aria-labelledby="${id}-l">${opciones.map(o => `<button type="button" class="cb-chip" role="radio" aria-checked="${o === actual}" data-cb-plan="${esc(o)}">${cbPlanEmoji(o)} ${esc(cbBonito(o))}</button>`).join('')}<button type="button" class="cb-chip cb-chip-otro" role="radio" aria-checked="false" data-cb-plan="__manual__">✏️ Otro</button></div></div>`;
   const vacio = it._cargando ? 'Cargando opciones…' : it._tarifaError ? 'Carga pendiente: reintenta o escribe el dato' : opciones.length ? `Selecciona ${esPlan ? 'el plan' : 'la habitación'}` : esPlan ? 'Plan no indicado en el tarifario' : 'Sin habitaciones cargadas';
-  return `<div class="field cb-dos cb-hotel-selector"><label class="fl" for="${id}">${label}</label><select id="${id}" class="ei" data-cb-campo="${campo}"${it._cargando ? ' disabled' : ''}>
+  return `<div class="field cb-dos cb-hotel-selector" data-campo="${campo}"><label class="fl" for="${id}">${cbEmo('🍽️')}${label}</label><select id="${id}" class="ei" data-cb-campo="${campo}"${it._cargando ? ' disabled' : ''}>
     <option value=""${!libre && !actual ? ' selected' : ''}>${vacio}</option>${opciones.map(o => `<option value="${esc(o)}"${!libre && o === actual ? ' selected' : ''}>${esc(o)}</option>`).join('')}
     <option value="__manual__"${libre ? ' selected' : ''}>${esPlan ? 'Escribir plan confirmado' : 'Escribir otra habitación'}</option></select>
     ${libre ? `<label class="fl" for="${id}-manual">${esPlan ? 'Plan confirmado' : 'Habitación manual'}</label><input id="${id}-manual" class="ei cb-manual-input" data-k="${campo}" value="${esc(it[campo] || '')}" placeholder="${esPlan ? 'Plan confirmado con el proveedor' : 'Nombre de la habitación'}">` : ''}</div>`;
@@ -31394,12 +33175,12 @@ function cbHotelCambiarOpcion(it, campo, valor) {
   if (campo === 'plan') { it.hab = ''; it.habitacion_manual = false; it.hab_libre = false; }
   else it.habitacion_manual = true;
   it.tarifa_variante = '';
-  if (campo === 'hab' || campo === 'plan') { it.tarifa_manual = false; it.tarifa = ''; it.tramos = []; }
+  if (campo === 'hab' || campo === 'plan') { it.tarifa_manual = false; it.tarifa = ''; it.tramos = []; it.unidad_manual = false; it._unidadEditar = false; }
   cbHotelRecalcular(it);
 }
 function cbHotelPrecioHtml(it, i) {
   if (it.tipo !== 'hotel') return '';
-  return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span>Cargando tarifas del hotel…</span>' : ''}${it._aviso ? `<p>${esc(it._aviso)}</p>` : ''}
+  return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span class="cb-aviso">⏳ Buscando las tarifas del hotel…</span>' : ''}${it._aviso ? `<p class="cb-aviso"><span aria-hidden="true">💡</span>${esc(it._aviso)}</p>` : ''}
     ${it._tarifaError ? '<button type="button" class="dbtn" style="min-height:44px" data-cb-reintentar>Reintentar carga de tarifas</button>' : ''}
     ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por ${cbPorHabitacion(it) ? 'habitación' : 'persona'}/noche${Number(it.ninos) > 0 ? ` · niños: ${cbTarNinoTramo(it, t) === null ? 'por confirmar' : '$' + cbMonto(cbTarNinoTramo(it, t)) + '/noche'}` : ''}</small></span><input class="ei" aria-label="Tarifa ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>`).join('')}</div>` : ''}
     ${it.tarifa_manual && it._sugerencia?.ok ? `<button type="button" class="btn-sm" data-cb-usar>Usar tarifa del tarifario · ${it._sugerencia.tramos.map(t => '$' + cbMonto(t.tarifa)).join(' / ')}</button>` : ''}
@@ -31509,7 +33290,12 @@ function cbRestaurarBorrador(b, sel) {
   cbItems.forEach(it => {
     if (it.tipo !== 'hotel') return;
     if (!it.producto_id) return;
-    Promise.all([cbTraerTarifas(it.producto_id), cbTraerHabitaciones(it.producto_id)]).then(() => { if (cbItems.includes(it)) cbRenderItems(); }).catch(() => {});
+    // Sin precio guardado: la unidad y la tarifa salen del tarifario como si recién eligiera el hotel.
+    Promise.all([cbTraerTarifas(it.producto_id), cbTraerHabitaciones(it.producto_id)]).then(() => {
+      if (!cbItems.includes(it)) return;
+      if (!it.tramos?.length && !(Number(it.tarifa) > 0)) { it.unidad_manual = false; cbHotelRecalcular(it); }
+      cbRenderItems();
+    }).catch(() => {});
   });
   [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
   // Un borrador de días atrás trae la fecha y la vigencia de entonces: vuelven a hoy.
@@ -31648,6 +33434,25 @@ async function cbCargarSeccion() {
       if (hotel) { cbHotelElegir(hotel.closest('.cb-item'), hotel.dataset.cbHotel); return; }
       const card = e.target.closest('.cb-item'); if (!card) return;
       const it = cbItems[+card.dataset.i], viaje = e.target.closest('[data-viaje]'), ref = e.target.closest('.cb-ref-usar');
+      const paso = e.target.closest('[data-cb-step]');
+      if (paso) {
+        const inp = paso.parentElement.querySelector('input');
+        inp.value = Math.max(Number(inp.getAttribute('min')) || 0, (Number(inp.value) || 0) + Number(paso.dataset.cbStep));
+        inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+      const noches = e.target.closest('[data-cb-noches]');
+      if (noches) {
+        if (!it.ida) { errToast('Primero elige el check-in'); docEnfocar(card.querySelector('[data-k="ida"]')); return; }
+        it.vuelta = cbSumarDias(it.ida, Math.max(1, (+cbNoches(it.ida, it.vuelta) || 0) + Number(noches.dataset.cbNoches)));
+        cbHotelRecalcular(it); cbRenderItems(); cbProgramarBorrador(); return;
+      }
+      const plan = e.target.closest('[data-cb-plan]');
+      if (plan) {
+        cbHotelCambiarOpcion(it, 'plan', plan.dataset.cbPlan); cbRenderItems(); cbProgramarBorrador();
+        if (it.plan_libre) document.getElementById(`cb-plan-${card.dataset.i}-manual`)?.focus();
+        return;
+      }
       if (e.target.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(it, it.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
       if (e.target.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }); return; }
       if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
@@ -31694,7 +33499,7 @@ async function cbCargarSeccion() {
           it.plan = ''; it.hab = ''; it.plan_libre = false; it.hab_libre = false; it.tarifa_avisos = [];
           it.unidad_manual = false; it._unidadPendiente = true; it.tarifa_variante = '';
           card.querySelectorAll('.cb-hotel-selector').forEach(el => {
-            const campo = el.querySelector('select')?.dataset.cbCampo || 'hab';
+            const campo = el.dataset.campo || el.querySelector('select')?.dataset.cbCampo || 'hab';
             el.outerHTML = cbHotelSelectorHtml(it, +card.dataset.i, campo, campo === 'plan' ? 'Plan' : 'Habitación');
           });
         }
@@ -31715,9 +33520,19 @@ async function cbCargarSeccion() {
         const detalle = card.querySelector('.cb-tarifario');
         if (detalle) detalle.outerHTML = cbHotelPrecioHtml(it, +card.dataset.i);
       }
+      // Hotel: al mover el check-in se conservan las noches; sin check-out, sale con el mínimo del hotel.
+      if (k === 'ida' && it.tipo === 'hotel' && !Number.isNaN(cbTarFecha(it.ida))) {
+        const antes = +cbNoches(previo, it.vuelta) || 0;
+        if (antes || !it.vuelta || it.vuelta <= it.ida) {
+          it.vuelta = cbSumarDias(it.ida, antes || cbMinNoches(it));
+          const v = card.querySelector('[data-k="vuelta"]'); if (v) v.value = it.vuelta;
+        }
+      }
       if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
       if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbRenderItems(); return; }
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
+      if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (k === 'infantes' && it.tipo === 'hotel' && it.infantes_gratis));
+      const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
       cbActualizarTotal();
     });
     cbLista.addEventListener('change', e => {
@@ -32399,7 +34214,7 @@ async function msgErrorFn(error, data) {
   if (data?.error) return data.error;
   const ctx = error?.context;
   if (ctx && typeof ctx.json === 'function') {
-    try { const body = await ctx.clone().json(); if (body?.error) return body.error; } catch {}
+    try { const body = await ctx.clone().json(); if (body?.error) return body.error === 'error_rpc' && body.detalle ? body.detalle : body.error; } catch {}
   }
   return error?.message || 'error desconocido';
 }
@@ -32700,16 +34515,19 @@ const NAV_ITEMS = [
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: 'nav-admin-only', sub: 'Links de pago declarados, pendientes de aprobar', badge: 'nav-pagos-count', badgeDefault: '0' },
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, calidad, errores y costos' },
+  { sec: 'costos-digitales', icon: 'fas fa-wallet', label: 'Costos digitales', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Suscripciones y consumo de IA, por mes' },
   { sec: 'asistente', icon: 'fas fa-robot', label: 'Asistente', padre: 'grp-ia', roles: 'nav-boleteria-ok', sub: 'Lyra: cotiza, revisa reservas, busca en la web y escribe a proveedores' },
   { sec: 'ia-atencion', icon: 'fas fa-headset', label: 'Prospectos de IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Posadas que quieren el asistente' },
   { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Quienes escriben al bot para ofrecer algo' },
   { sec: 'redes', icon: 'fa-brands fa-instagram', label: 'Redes', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok' },
+  { sec: 'ads', icon: 'fas fa-bullhorn', label: 'Anuncios Meta', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Gasto, leads y ventas por anuncio' },
+  { sec: 'contenido', icon: 'fas fa-layer-group', label: 'Contenido', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok', sub: 'Calendario de publicaciones y marcas de clientes' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
   { sec: 'induccion', icon: 'fas fa-graduation-cap', label: 'Inducción', padre: 'grp-equipo', roles: 'nav-admin-only', sub: 'Cómo le fue a cada persona en el modo de prueba' },
@@ -33104,7 +34922,10 @@ function cargarSeccion(sec) {
   if (sec === 'contactos-directos') loadContactosDirectos();
   if (sec === 'repartir') repPoblarAsesores();
   if (sec === 'stop-sales') { loadStopSalesVigentes(); ssCargarPdfActual(); }
-  if (sec === 'redes') cargarRedActual();
+  if (sec === 'redes') { redesCargarMarcas(); cargarRedActual(); }
+  if (sec === 'ads') adsMeta().cargar();
+  if (sec === 'contenido') marketing().cargar();
+  if (sec === 'costos-digitales') costosDigitales().cargar();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'bol-solicitudes') bolColaAlEntrar();
@@ -33503,7 +35324,6 @@ function setupLeadsTabs() {
   }));
   document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
   document.getElementById('ll-refrescar')?.addEventListener('click', () => loadLeadsAsignadosLote());
-  loadLeadsEnFacturacion(); // el contador de la pestaña tiene que estar antes de que la abran
   loadLeadsAsignadosLote(); // idem: el badge de "Asignados en lote" cuenta pendientes
   loadColaBoleteria();
   setupLeadsDropTargets();

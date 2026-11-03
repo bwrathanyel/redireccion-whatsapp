@@ -1,4 +1,4 @@
-// Abonos de una reserva: lista + alta + anulación.
+// Abonos de una reserva: lista + alta + edición + eliminación.
 // Vive aparte de app.js (mismo patrón que documentos-revisiones.js) porque app.js
 // ya está en 30k líneas y la UI de abonos tiene su propio ciclo de vida.
 // La tabla reserva_abonos no tiene grants: todo pasa por las RPC.
@@ -13,12 +13,15 @@ const ERRORES = {
   captura_requerida: 'Subí la captura del comprobante del pago (o elegí Efectivo si no hay comprobante).',
   referencia_invalida: 'La referencia es demasiado larga.',
   nota_demasiado_larga: 'La nota es demasiado larga.',
-  tasa_no_disponible: 'No hay tasa BCV cargada: registra el abono en dólares o pide que la carguen.',
+  tasa_no_disponible: 'No hay tasa cargada para esa opción: elegí otra tasa o registrá el abono en dólares.',
+  tasa_tipo_invalida: 'Elegí la tasa del cobro: BCV dólar, BCV euro o USDT.',
   comprobante_path_invalido: 'La captura no quedó guardada en tu carpeta. Vuelve a subirla.',
   solicitud_requerida: 'No se pudo identificar la operación. Cierra el formulario y reintenta.',
   solicitud_con_otros_datos: 'Esa operación ya se registró con otros datos. Recarga la reserva y verifica.',
-  abono_anulado: 'Ese abono ya estaba anulado.',
-  abono_respaldo_no_anulable: 'El saldo anterior es el acumulado que ya tenía la reserva: no se anula desde aquí.',
+  abono_anulado: 'Ese abono está anulado: no se edita, se elimina.',
+  fecha_invalida: 'La fecha del abono no puede ser futura.',
+  tasa_invalida: 'Escribí una tasa mayor a cero.',
+  abono_respaldo_no_anulable: 'El saldo anterior es el acumulado que ya tenía la reserva: no se elimina, editalo con los datos del pago.',
   abono_no_encontrado: 'El abono no existe.',
   motivo_requerido: 'Explica el motivo con al menos 4 caracteres.',
   motivo_demasiado_largo: 'El motivo es demasiado largo.',
@@ -27,7 +30,20 @@ const ERRORES = {
   documento_anulado: 'El voucher está anulado: no se le puede agregar el abono.',
   sincronizar_solo_pago: 'El voucher cambió de total: esto es una corrección, no un abono. Revisalo desde Voucher.',
   sincronizar_baja_pago: 'El voucher ya declara más cobrado que la reserva. Revisalo desde Voucher.',
+  montos_invalidos: 'El voucher quedaría con más pagado que su total. Revisalo desde Voucher.',
+  fechas_invalidas: 'El voucher tiene la salida antes de la entrada. Corregilo desde Voucher.',
+  nombre_requerido: 'El voucher no tiene nombre de cliente. Corregilo desde Voucher.',
+  selecciona_servicio: 'La reserva tiene varios servicios y ninguno es hospedaje: actualizá el voucher desde Voucher.',
+  voucher_pendiente_confirmacion: 'El voucher todavía no está confirmado como venta.',
+  pago_movil_en_bs: 'El Pago móvil se registra en bolívares: elegí VES y escribí el monto en Bs.',
+  sin_librerias: 'No cargaron las herramientas de PDF. Recargá la página y tocá «Reintentar documentos».',
+  voucher_no_leido: 'No se pudo leer el voucher de la reserva. Tocá «Reintentar documentos».',
+  servicio_invalido: 'Ese servicio ya no está en la reserva. Recargá la reserva y elegí otro.',
+  posible_duplicado: 'Ya hay un pago con ese monto y esa referencia en las últimas 48 horas.',
 };
+const TIPO_SERV = { hospedaje: 'Hospedaje', boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', full_day: 'Full day', seguro: 'Seguro', otro: 'Otro' };
+// El abono en Bs se cobra a la tasa que se elija (pedido del dueño 30-oct); USDT es Binance P2P.
+const TASAS = { USD: 'BCV dólar', EUR: 'BCV euro', USDT: 'USDT' };
 const METODOS = ['Pago móvil', 'Zelle', 'Efectivo', 'Transferencia', 'TDC', 'Binance'];
 const CSS = `
 .ab-top{display:flex;flex-wrap:wrap;gap:7px;align-items:stretch;margin:0 0 14px}
@@ -40,6 +56,8 @@ const CSS = `
 .ab-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .ab-tasa{margin:9px 0 0;padding:9px 11px;border-radius:10px;background:var(--accent-soft);color:var(--accent-txt);font-size:11px}
 .ab-tasa b{color:var(--txt)}
+.ab-tasa .ab-chips{margin:0 0 7px}
+.ab-tasa-fecha{color:var(--muted)}
 .ab-chips{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0 0}
 .ab-chip{min-height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;transition:all var(--dur-rapida) var(--ease-salida)}
 .ab-chip:hover{color:var(--txt);border-color:var(--line2)}
@@ -77,7 +95,13 @@ export function crearAbonos(c) {
   const mensaje = e => ERRORES[e?.message || e] || (e?.message || e) || 'No se pudo completar la operación';
   const panel = () => document.querySelector('[data-rv-panel="abonos"]');
   const miUid = () => String(c.usuario() || '');
-  let est = { reservaId: null, datos: null, token: 0, tokenIA: 0, metodo: '', moneda: 'USD', archivo: null, guardando: false, formAbierto: false };
+  const nombreServ = s => `${TIPO_SERV[s.tipo] || s.tipo}${s.descripcion ? ' · ' + s.descripcion : ''}`;
+  // Regla del dueño: los abonos son del hospedaje y los boletos se pagan de contado.
+  const tasaDe = (d, t) => Number(d?.tasas?.[t]?.tasa || (t === 'USD' ? d?.tasa_ves : 0) || 0);
+  const nombreTasa = t => TASAS[t] || 'BCV dólar';
+  const diaIso = f => new Date(f || Date.now()).toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+  const hospUnico = d => { const h = (d?.servicios || []).filter(s => s.tipo === 'hospedaje'); return h.length === 1 ? Number(h[0].id) : null; };
+  let est = { reservaId: null, datos: null, token: 0, tokenIA: 0, metodo: '', moneda: 'USD', tasaTipo: 'USD', archivo: null, guardando: false, formAbierto: false };
 
   function inyectarCss() {
     if (document.getElementById('ab-css')) return;
@@ -89,20 +113,31 @@ export function crearAbonos(c) {
     p.onclick = e => {
       const b = e.target.closest('[data-ab-accion]'); if (!b) return;
       const a = b.dataset.abAccion;
+      if (!['metodo', 'tasa', 'cerrar'].includes(a)) c.usoBoton?.('ab:' + a, est.reservaId);
       if (a === 'nuevo') abrirForm();
-      else if (a === 'cerrar') { est.archivo = null; est.formAbierto = false; pintar(); }
+      else if (a === 'cerrar') { est.archivo = null; est.formAbierto = false; est.editando = null; pintar(); }
       else if (a === 'guardar') guardar(b);
-      else if (a === 'anular') anular(Number(b.dataset.id));
+      else if (a === 'eliminar') eliminar(Number(b.dataset.id));
+      else if (a === 'editar') abrirForm(Number(b.dataset.id));
       else if (a === 'recibo') verRecibo(b.dataset.id, b);
       else if (a === 'reintentar') reintentarDocumentos(Number(b.dataset.id), b);
       else if (a === 'metodo') {
         // Sin repintar: pintar() recrea el formulario y borraría lo ya escrito.
         est.metodo = b.dataset.metodo;
         p.querySelectorAll('[data-ab-accion="metodo"]').forEach(x => x.classList.toggle('on', x.dataset.metodo === est.metodo));
+        const mon = document.getElementById('ab-moneda');
+        if (est.metodo === 'Pago móvil' && mon) { mon.value = 'VES'; est.moneda = 'VES'; actualizarTasa(); }
+      }
+      else if (a === 'tasa') {
+        est.tasaTipo = b.dataset.tasa;
+        const man = document.getElementById('ab-tasa-manual'), ed = est.editando;
+        if (man) man.value = ed?.moneda === 'VES' && ed.tasa_tipo === est.tasaTipo ? ed.tasa_usd_ves : tasaDe(est.datos, est.tasaTipo) || '';
+        p.querySelectorAll('[data-ab-accion="tasa"]').forEach(x => x.classList.toggle('on', x.dataset.tasa === est.tasaTipo));
+        actualizarTasa();
       }
     };
     p.oninput = e => {
-      if (e.target.id === 'ab-monto' || e.target.id === 'ab-moneda') actualizarTasa();
+      if (['ab-monto', 'ab-moneda', 'ab-tasa-manual'].includes(e.target.id)) actualizarTasa();
     };
     p.onchange = e => { if (e.target.id === 'ab-file') { est.archivo = e.target.files?.[0] || null; if (est.archivo) leerComprobante(est.archivo); } };
     return true;
@@ -118,48 +153,64 @@ export function crearAbonos(c) {
   function avisoCuadre(d) {
     const dif = Number(d.monto_pagado || 0) - Number(d.pagado_con_detalle || 0);
     if (Math.abs(dif) < 0.005) return '';
-    return `<p class="ab-aviso">Hay ${usd(dif)} cobrados sin detalle de pago. El próximo abono los agrupa como «Saldo anterior».</p>`;
+    return `<p class="ab-aviso">Hay ${usd(dif)} cobrados sin detalle de pago${(d.abonos || []).length ? '' : '. El próximo abono los agrupa como «Saldo anterior»'}.</p>`;
   }
   function formHtml(d) {
     const chips = METODOS.map(m => `<button class="ab-chip ${m === est.metodo ? 'on' : ''}" type="button" data-ab-accion="metodo" data-metodo="${esc(m)}">${esc(m)}</button>`).join('');
+    const servs = d.servicios || [], hosp = hospUnico(d), ed = est.editando;
+    const elegido = ed ? Number(ed.servicio_id || 0) : hosp;
+    const servicio = servs.length > 1 ? `<label class="fl" for="ab-servicio">Servicio que paga</label><select class="ei" id="ab-servicio">
+        ${hosp && !ed ? '' : '<option value="">Toda la reserva</option>'}${servs.map(s => `<option value="${s.id}"${Number(s.id) === elegido ? ' selected' : ''}>${esc(nombreServ(s))} · ${usd(s.precio_usd)}</option>`).join('')}</select>` : '';
     return `<div class="ab-form">
+      ${ed ? `<p class="ab-fila-sub">Editando el abono de ${usd(ed.monto_usd)} del ${esc(c.fecha(ed.fecha))}. El recibo se vuelve a generar.</p>` : ''}
       <div class="ab-grid">
-        <div><label class="fl" for="ab-monto">Monto</label><input class="ei" id="ab-monto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></div>
+        <div><label class="fl" for="ab-monto">Monto</label><input class="ei" id="ab-monto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" value="${ed ? esc(ed.monto_original) : ''}"></div>
         <div><label class="fl" for="ab-moneda">Moneda</label><select class="ei" id="ab-moneda">
           <option value="USD"${est.moneda === 'USD' ? ' selected' : ''}>Dólares (USD)</option>
           <option value="VES"${est.moneda === 'VES' ? ' selected' : ''}>Bolívares (VES)</option></select></div>
       </div>
-      <div class="ab-tasa" id="ab-tasa-box" ${est.moneda === 'VES' ? '' : 'hidden'}>Tasa BCV <b id="ab-tasa">${num(d.tasa_ves, 4)}</b> Bs/USD · Equivale a <b id="ab-usd">—</b></div>
+      <div class="ab-tasa" id="ab-tasa-box" ${est.moneda === 'VES' ? '' : 'hidden'}>
+        <div class="ab-chips" role="group" aria-label="Tasa del cobro">${Object.entries(TASAS).map(([t, n]) => `<button class="ab-chip ${t === est.tasaTipo ? 'on' : ''}" type="button" data-ab-accion="tasa" data-tasa="${t}"${tasaDe(d, t) || ed ? '' : ' disabled title="Sin tasa cargada"'}>${n}</button>`).join('')}</div>
+        Tasa <span id="ab-tasa-nombre"></span> <b id="ab-tasa">—</b> Bs/USD <span class="ab-tasa-fecha" id="ab-tasa-fecha"></span> · Equivale a <b id="ab-usd">—</b>
+        ${ed ? `<label class="fl" for="ab-tasa-manual">Tasa del día del pago (Bs/USD)</label><input class="ei" id="ab-tasa-manual" type="number" min="0" step="0.0001" inputmode="decimal" value="${ed.moneda === 'VES' ? esc(ed.tasa_usd_ves || '') : esc(tasaDe(d, est.tasaTipo) || '')}">` : ''}</div>
       <label class="fl">Método de pago</label>
       <div class="ab-chips">${chips}</div>
-      <label class="fl" for="ab-ref">Referencia</label><input class="ei" id="ab-ref" maxlength="120" placeholder="Número de operación">
-      <label class="fl" for="ab-nota">Nota (opcional)</label><textarea class="ei" id="ab-nota" maxlength="2000" rows="2"></textarea>
-      <label class="fl" for="ab-file">Captura del comprobante del pago</label>
-      <input class="ei" id="ab-file" type="file" accept="image/jpeg,image/png,image/webp">
+      ${servicio}
+      <label class="fl" for="ab-ref">Referencia</label><input class="ei" id="ab-ref" maxlength="120" placeholder="Número de operación" value="${ed ? esc(ed.referencia || '') : ''}">
+      ${ed ? `<label class="fl" for="ab-fecha">Fecha del pago</label><input class="ei" id="ab-fecha" type="date" max="${diaIso(new Date())}" value="${diaIso(ed.fecha)}">` : ''}
+      <label class="fl" for="ab-nota">Nota (opcional)</label><textarea class="ei" id="ab-nota" maxlength="2000" rows="2">${ed ? esc(ed.nota || '') : ''}</textarea>
+      ${ed ? '' : `<label class="fl" for="ab-file">Captura del comprobante del pago (opcional)</label>
+      <input class="ei" id="ab-file" type="file" accept="image/jpeg,image/png,image/webp">`}
       <p class="ab-ia" id="ab-ia" hidden></p>
       <p class="ab-err" id="ab-err"></p>
       <div class="ab-acciones">
-        <button class="dbtn save" type="button" data-ab-accion="guardar"><i class="fas fa-floppy-disk"></i> Registrar abono</button>
+        <button class="dbtn save" type="button" data-ab-accion="guardar"><i class="fas fa-floppy-disk"></i> ${ed ? 'Guardar cambios' : 'Registrar abono'}</button>
         <button class="dbtn gh" type="button" data-ab-accion="cerrar">Cancelar</button>
       </div>
     </div>`;
   }
   function filaHtml(a) {
     const ref = a.referencia ? ` · ${esc(a.referencia)}` : a.comprobante_path ? ' · captura adjunta' : '';
+    const servs = est.datos?.servicios || [];
+    const serv = servs.length > 1 && a.servicio_id ? servs.find(s => Number(s.id) === Number(a.servicio_id)) : null;
     return `<li class="ab-fila${a.anulado_en ? ' ab-anulada' : ''}">
       <div class="ab-fila-top"><b>${usd(a.monto_usd)}</b>
-        <span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${num(a.tasa_usd_ves, 4)}` : ''}</span>
+        <span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${a.tasa_tipo ? nombreTasa(a.tasa_tipo) + ' ' : ''}${num(a.tasa_usd_ves, 4)}` : ''}</span>
         <span class="ab-tag">${esc(a.metodo)}</span>
-        ${a.respaldo ? '<span class="ab-tag ab-respaldo">Sin detalle</span>' : ''}
+        ${serv ? `<span class="ab-tag" title="${esc(nombreServ(serv))}">${esc(TIPO_SERV[serv.tipo] || serv.tipo)}</span>` : ''}
+        ${/^inicial/i.test(a.nota || '') ? '<span class="ab-tag">Inicial reserva</span>' : ''}
+        ${a.respaldo ? '<span class="ab-tag ab-respaldo" title="Lo cobrado antes de que existiera el registro de abonos: no tiene recibo propio">Cobrado antes</span>' : ''}
         ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : ''}
       </div>
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
-      ${a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>`
-        : a.respaldo ? '' : `<div class="ab-fila-acc">
+      ${a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
+        <div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button></div>`
+        : a.respaldo ? `<div class="ab-fila-acc"><button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button></div>` : `<div class="ab-fila-acc">
           ${a.recibo_documento_id ? `<button class="ab-mini" type="button" data-ab-accion="recibo" data-id="${a.recibo_documento_id}"><i class="fas fa-file-pdf"></i>Recibo</button>` : ''}
           ${a.documentos_estado && a.documentos_estado !== 'listo' ? `<span class="ab-docs${a.documentos_estado === 'fallido' ? ' fallo' : ''}" title="${esc(a.documentos_error || '')}">${a.documentos_estado === 'fallido' ? 'Documentos con error' : 'Documentos pendientes'}</span>
-            <button class="ab-mini" type="button" data-ab-accion="reintentar" data-id="${a.id}"><i class="fas fa-rotate"></i>Reintentar documentos</button>` : ''}
-          <button class="ab-anular" type="button" data-ab-accion="anular" data-id="${a.id}">Anular abono</button>
+            <button class="ab-mini" type="button" data-ab-accion="reintentar" data-id="${a.id}"><i class="fas fa-rotate"></i>${a.documentos_estado === 'fallido' ? 'Reintentar documentos' : 'Generar documentos'}</button>` : ''}
+          <button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button>
+          <button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button>
         </div>`}
     </li>`;
   }
@@ -175,13 +226,18 @@ export function crearAbonos(c) {
     const box = document.getElementById('ab-tasa-box'); if (!box) return;
     const moneda = document.getElementById('ab-moneda')?.value || est.moneda;
     const monto = Number(document.getElementById('ab-monto')?.value || 0);
-    const tasa = Number(est.datos?.tasa_ves || 0);
+    const man = Number(document.getElementById('ab-tasa-manual')?.value || 0);
+    const tasa = man > 0 ? man : tasaDe(est.datos, est.tasaTipo);
     box.hidden = moneda !== 'VES';
     if (moneda !== 'VES') return;
+    const en = est.datos?.tasas?.[est.tasaTipo]?.actualizado_en;
+    document.getElementById('ab-tasa-nombre').textContent = nombreTasa(est.tasaTipo);
+    document.getElementById('ab-tasa').textContent = tasa ? num(tasa, 4) : 'sin cargar';
+    document.getElementById('ab-tasa-fecha').textContent = man > 0 ? '' : en ? `(${c.fecha(en)})` : '';
     const eq = document.getElementById('ab-usd');
     if (eq) eq.textContent = !monto || !tasa ? '—' : usd(monto / tasa);
   }
-  // La captura ya es obligatoria: se aprovecha para prellenar (EF analizar-comprobante).
+  // Si suben la captura, se aprovecha para prellenar (EF analizar-comprobante).
   // Solo completa lo que está vacío; nunca registra nada.
   async function leerComprobante(archivo) {
     const aviso = document.getElementById('ab-ia'); if (!aviso) return;
@@ -192,6 +248,7 @@ export function crearAbonos(c) {
     const { data, error } = await sb.functions.invoke('analizar-comprobante', { body: { reserva_id: est.reservaId, mime: archivo.type || 'image/jpeg', imagen } });
     if (token !== est.tokenIA || !document.getElementById('ab-ia')) return;
     if (error || !data?.ok) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
+    c.usoHerramienta?.(null, 'leer_comprobante', est.reservaId);
     const d = data.datos || {}, puestos = [];
     const monto = document.getElementById('ab-monto'), moneda = document.getElementById('ab-moneda'), ref = document.getElementById('ab-ref');
     if (d.moneda && moneda && !monto.value) { moneda.value = d.moneda; est.moneda = d.moneda; puestos.push('moneda'); }
@@ -204,8 +261,15 @@ export function crearAbonos(c) {
     actualizarTasa();
     aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revisalo antes de registrar.` : 'No se encontraron datos en la captura.';
   }
-  function abrirForm() {
-    est.metodo = est.metodo || 'Zelle'; est.moneda = 'USD'; est.archivo = null; est.formAbierto = true;
+  // `id`: editar ese abono (form precargado); sin id, abono nuevo.
+  function abrirForm(id) {
+    const ed = id ? (est.datos?.abonos || []).find(x => Number(x.id) === id) || null : null;
+    est.editando = ed;
+    if (ed) { est.metodo = METODOS.includes(ed.metodo) ? ed.metodo : ''; est.moneda = ed.moneda; }
+    else { est.metodo = est.metodo || 'Zelle'; est.moneda = est.metodo === 'Pago móvil' ? 'VES' : 'USD'; }
+    est.archivo = null; est.formAbierto = true;
+    est.tasaTipo = ed?.tasa_tipo || 'USD';
+    est.solicitud = crypto.randomUUID();
     pintar();
     document.getElementById('ab-monto')?.focus();
   }
@@ -231,6 +295,7 @@ export function crearAbonos(c) {
   }
   async function guardar(btn) {
     if (est.guardando) return;
+    if (est.editando) return guardarEdicion(btn);
     const err = document.getElementById('ab-err');
     const poner = m => { if (err) err.textContent = m || ''; };
     poner('');
@@ -239,30 +304,95 @@ export function crearAbonos(c) {
     const referencia = (document.getElementById('ab-ref')?.value || '').trim();
     const nota = (document.getElementById('ab-nota')?.value || '').trim();
     const archivo = est.archivo || document.getElementById('ab-file')?.files?.[0] || null;
+    const servicio = Number(document.getElementById('ab-servicio')?.value || 0) || null;
     if (!(monto > 0)) return poner(ERRORES.monto_invalido);
     if (!est.metodo) return poner(ERRORES.metodo_invalido);
-    if (!archivo && est.metodo !== 'Efectivo') return poner(ERRORES.captura_requerida);
+    if (est.metodo === 'Pago móvil' && moneda !== 'VES') return poner(ERRORES.pago_movil_en_bs);
+    // La misma solicitud en cada reintento: si el primer intento sí entró, el servidor lo reconoce.
+    est.solicitud = est.solicitud || crypto.randomUUID();
     est.guardando = true;
     btn.disabled = true;
     try {
       const comprobante = archivo ? await subirCaptura(archivo) : null;
-      const { data, error } = await sb.rpc('registrar_abono_reserva_v2', {
+      const llamar = forzar => sb.rpc('registrar_abono_reserva_v2', {
         p_reserva_id: est.reservaId, p_monto_original: monto, p_moneda: moneda, p_metodo: est.metodo,
-        p_solicitud_id: crypto.randomUUID(), p_referencia: referencia || null, p_nota: nota || null,
-        p_comprobante_path: comprobante, p_comprobante_datos: null,
+        p_solicitud_id: est.solicitud, p_referencia: referencia || null, p_nota: nota || null,
+        p_comprobante_path: comprobante, p_comprobante_datos: null, p_servicio_id: servicio, p_forzar: forzar,
+        p_tasa_tipo: moneda === 'VES' ? est.tasaTipo : null, p_tasa_esperada: moneda === 'VES' ? tasaDe(est.datos, est.tasaTipo) || null : null,
       });
+      let { data, error } = await llamar(false);
+      // A3: el mismo pago cargado dos veces (R-000133). Solo sigue si confirman que es otro pago.
+      if (!error && data?.error === 'posible_duplicado') {
+        const x = data.duplicado || {};
+        const otro = await c.confirmar({ titulo: '¿Es el mismo pago?', textoOk: 'Es otro pago: registrar', textoCancelar: 'No registrar',
+          detalle: `Ya hay ${x.origen === 'pago' ? 'un pago declarado' : 'un abono'} de ${usd(x.monto_usd)} con la referencia ${x.referencia || '—'} del ${c.fecha(x.fecha)}${x.codigo ? ` en ${x.codigo}` : ''}.\nSi es el mismo pago, no lo cargues de nuevo.` });
+        if (!otro) { poner('No se registró: ese pago ya estaba cargado.'); return; }
+        ({ data, error } = await llamar(true));
+      }
+      // M10: la tasa se actualizó con el form abierto. Se muestra la nueva y se pide confirmar de nuevo.
+      if (!error && data?.error === 'tasa_cambio') {
+        est.datos.tasas = est.datos.tasas || {};
+        (est.datos.tasas[data.tasa_tipo] ||= {}).tasa = data.tasa;
+        actualizarTasa();
+        poner(`La tasa ${nombreTasa(data.tasa_tipo)} cambió a ${num(data.tasa, 4)}. Revisá el equivalente y registrá de nuevo.`);
+        return;
+      }
       if (error) throw new Error(error.code === '42501' ? 'Tu usuario no puede registrar abonos en esta reserva.' : error.message);
       if (!data?.ok) throw new Error(data?.error || 'Sin respuesta del servidor');
-      est.archivo = null;
+      est.archivo = null; est.solicitud = null;
       est.formAbierto = false;
       // El pago ya quedó: ahora los documentos (voucher revisado + recibo).
       const docs = await cadenaAbono({
         id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
-        moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, metodo: data.metodo,
-        referencia: data.referencia, fecha: new Date().toISOString(),
+        moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
+        referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: new Date().toISOString(),
       }, data.monto_pagado, data.saldo_pendiente);
-      if (docs.fallo) c.error(`Abono registrado, pero los documentos no salieron: ${docs.fallo}`);
-      else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero} rev. ${docs.voucherInfo.revision}` : 'sin revisión de voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
+      // El pago quedó guardado: nunca un toast de error, o lo vuelven a cargar (R-000133, abonos 66-68).
+      if (docs.fallo) c.ok(`Abono registrado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): no lo cargues de nuevo, usá «Reintentar documentos».`);
+      else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero}${docs.voucherInfo.revision ? ` rev. ${docs.voucherInfo.revision}` : ''}` : 'sin voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
+      est.datos = null;
+      await cargar(est.reservaId);
+      c.pagosCambiaron?.();
+      await ofrecerDocumento(docs, data.saldo_pendiente);
+    } catch (e) {
+      poner(mensaje(e));
+      c.error(mensaje(e));
+    } finally {
+      est.guardando = false;
+      if (btn?.isConnected) btn.disabled = false;
+    }
+  }
+  async function guardarEdicion(btn) {
+    const ed = est.editando, err = document.getElementById('ab-err');
+    const poner = m => { if (err) err.textContent = m || ''; };
+    poner('');
+    const val = id => (document.getElementById(id)?.value || '').trim();
+    const monto = Number(val('ab-monto') || 0), moneda = val('ab-moneda') || 'USD', tasa = Number(val('ab-tasa-manual') || 0);
+    if (!(monto > 0)) return poner(ERRORES.monto_invalido);
+    if (!est.metodo) return poner(ERRORES.metodo_invalido);
+    if (est.metodo === 'Pago móvil' && moneda !== 'VES') return poner(ERRORES.pago_movil_en_bs);
+    if (moneda === 'VES' && !(tasa > 0) && !tasaDe(est.datos, est.tasaTipo)) return poner(ERRORES.tasa_invalida);
+    est.guardando = true; btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('editar_abono_reserva', {
+        p_abono_id: ed.id, p_monto_original: monto, p_moneda: moneda, p_metodo: est.metodo,
+        p_referencia: val('ab-ref') || null, p_nota: val('ab-nota') || null,
+        p_servicio_id: document.getElementById('ab-servicio') ? Number(val('ab-servicio') || 0) : null,
+        p_tasa_tipo: moneda === 'VES' ? est.tasaTipo : null, p_tasa: moneda === 'VES' && tasa > 0 ? tasa : null,
+        p_fecha: val('ab-fecha') || null,
+      });
+      if (error) throw new Error(error.code === '42501' ? 'Tu usuario no puede editar este abono.' : error.message);
+      if (!data?.ok) throw new Error(data?.error || 'Sin respuesta del servidor');
+      est.formAbierto = false; est.editando = null;
+      if (data.sin_cambios) { c.ok('El abono no tenía cambios.'); pintar(); return; }
+      let docs = { fallo: null };
+      if (data.documentos_estado !== 'listo') docs = await cadenaAbono({
+        id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
+        moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
+        referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: data.fecha,
+      }, data.monto_pagado, data.saldo_pendiente);
+      if (docs.fallo) c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): usá «Reintentar documentos».`);
+      else c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}${docs.reciboId ? ' · Recibo nuevo' : ''}`);
       est.datos = null;
       await cargar(est.reservaId);
       c.pagosCambiaron?.();
@@ -274,20 +404,33 @@ export function crearAbonos(c) {
       if (btn?.isConnected) btn.disabled = false;
     }
   }
-  async function anular(id) {
+  // Pedido del dueño: no quedan anulados. Borra el abono y su recibo; queda el evento en el historial.
+  async function eliminar(id) {
     const a = (est.datos?.abonos || []).find(x => Number(x.id) === id); if (!a) return;
     const motivo = await c.pedir({
-      titulo: 'Anular abono', detalle: `${usd(a.monto_usd)} · ${a.metodo}. El abono queda marcado y el acumulado de la reserva baja.`,
-      label: 'Motivo de la anulación', tipo: 'textarea', requerido: true, textoOk: 'Anular', destructivo: true,
+      titulo: 'Eliminar abono', detalle: `${usd(a.monto_usd)} · ${a.metodo}. ${a.anulado_en ? 'Ya estaba anulado: se borra de la lista.' : 'Se borra el abono y su recibo, y el acumulado de la reserva baja.'}`,
+      label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Eliminar', destructivo: true,
     });
     if (!motivo) return;
-    const { data, error } = await sb.rpc('anular_abono_reserva', { p_abono_id: id, p_motivo: motivo });
-    if (error) return c.error(error.code === '42501' ? 'Tu usuario no puede anular este abono.' : error.message);
+    const { data, error } = await sb.rpc('eliminar_abono_reserva', { p_abono_id: id, p_motivo: motivo });
+    if (error) return c.error(error.code === '42501' ? 'Tu usuario no puede eliminar este abono.' : error.message);
     if (!data?.ok) return c.error(mensaje(data?.error));
-    c.ok(`Abono anulado · saldo ${usd(data.saldo_pendiente)}`);
+    if (Number(est.editando?.id) === id) { est.formAbierto = false; est.editando = null; }
     est.datos = null;
     await cargar(est.reservaId);
     c.pagosCambiaron?.();
+    // El voucher se reimprime sin ese abono (un anulado ya no estaba en el voucher).
+    let aviso = '';
+    if (!a.anulado_en && est.datos?.voucher?.id && puedeGenerar()) {
+      try {
+        const actual = (await rpcDoc('documento_historial', { p_tipo: 'voucher', p_id: String(est.datos.voucher.id) }))?.actual || null;
+        // El abono ya no existe: sin abono_id, documento_preparar no lo busca.
+        const v = await revisarVoucher({ ...a, id: null }, data.monto_pagado, actual, true);
+        if (v) aviso = ` · voucher ${v.numero} rev. ${v.revision}`;
+      } catch (e) { aviso = `. El voucher no se actualizó (${mensaje(e)}): revisalo desde Voucher`; }
+    }
+    c.ok(`Abono eliminado · saldo ${usd(data.saldo_pendiente)}${aviso}`);
+    if (aviso.startsWith(' ·')) { est.datos = null; await cargar(est.reservaId); }
   }
   // ------------------------------------------------ documentos del abono (fase 3)
   // El abono (el pago) ya está guardado y es la fuente de verdad: acá solo se arman los
@@ -303,30 +446,110 @@ export function crearAbonos(c) {
 
   // Revisión automática del voucher con el ajuste sincronizar_abono: sube la revisión y NO
   // vuelve a sumar el pago a la reserva (eso ya lo hizo el abono).
-  async function revisarVoucher(abono, pagado, actual) {
+  // `anulacion`: el abono se acaba de anular; el voucher baja y el abono sale del detalle.
+  async function revisarVoucher(abono, pagado, actual, anulacion = false) {
     if (!actual || actual.anulado_en || !puedeGenerar()) return null;
+    await c.librerias();
     const v = est.datos.voucher;
-    const datos = { ...actual, monto_pagado: Number(pagado) };
+    const totalDoc = Number(actual.total_general || 0);
+    const S = servicioDelVoucher(totalDoc);
+    // D1: el abono de otro servicio (p. ej. el boleto de contado) no toca el voucher del hotel.
+    if (S && abono.servicio_id && Number(abono.servicio_id) !== S) return null;
+    const pagadoDoc = Math.min(totalDoc, S ? pagadoServicio(S, abono, anulacion) : Number(pagado));
+    const datos = { ...actual, monto_pagado: pagadoDoc };
     const pre = await rpcDoc('documento_preparar', {
       p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1,
       p_datos: datos, p_finanzas: { tipo: 'sincronizar_abono', abono_id: abono.id },
     });
     if (!pre?.candidato || Number(pre.candidato.monto_pagado) === Number(actual.monto_pagado)) return null;
     const operacion = crypto.randomUUID();
-    const pdf = await c.pdfVoucher(pre.candidato);
+    const pdf = await c.pdfVoucher({ ...pre.candidato, abonos_detalle: abonosDetalle(anulacion ? null : abono, pagadoDoc, S) });
+    const nombre = c.nombreArchivo ? c.nombreArchivo('voucher', pre.candidato) : `Voucher-${pre.candidato.numero_factura || v.id}-r${pre.candidato.revision}.pdf`;
     const path = `${miUid()}/documentos/voucher/${v.id}/r${pre.candidato.revision}-${operacion}.pdf`;
     const up = await sb.storage.from('vouchers-pdf').upload(path, pdf, { contentType: 'application/pdf' });
     if (up.error && String(up.error.statusCode) !== '409') throw new Error('No se pudo subir el PDF del voucher.');
     const adjunto = c.prepararAdjunto && pre.candidato.reserva_id
-      ? await c.prepararAdjunto(pre.candidato.reserva_id, pre.impacto?.servicio_id ?? null, pdf, c.nombreArchivo ? c.nombreArchivo('voucher', pre.candidato) : `Voucher-${pre.candidato.numero_factura || v.id}-r${pre.candidato.revision}.pdf`)
+      ? await c.prepararAdjunto(pre.candidato.reserva_id, pre.impacto?.servicio_id ?? null, pdf, nombre)
       : null;
-    const r = await rpcDoc('documento_guardar', {
-      p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1, p_datos: datos,
-      p_motivo: `Abono ${usd(abono.monto_usd)} del ${diaMesAnio(abono.fecha)}`, p_operacion: operacion,
-      p_huella: pre.huella, p_pdf_path: path,
-      p_finanzas: { tipo: 'sincronizar_abono', abono_id: abono.id }, p_adjunto: adjunto,
-    });
-    return { revision: r.documento?.revision ?? pre.candidato.revision, documentoId: r.documento?.revision_documento_reserva ?? null, numero: r.documento?.numero_factura || v.numero_factura };
+    let r;
+    try {
+      r = await rpcDoc('documento_guardar', {
+        p_tipo: 'voucher', p_id: String(v.id), p_version: actual.revision || 1, p_datos: datos,
+        p_motivo: `${anulacion ? 'Anulación del abono' : 'Abono'} ${usd(abono.monto_usd)} del ${diaMesAnio(abono.fecha)}`, p_operacion: operacion,
+        p_huella: pre.huella, p_pdf_path: path,
+        p_finanzas: { tipo: 'sincronizar_abono', abono_id: abono.id }, p_adjunto: adjunto,
+      });
+    } catch (e) {
+      // Sin revisión guardada, el PDF subido no lo referencia nadie: se borra para no dejar huérfanos.
+      sb.storage.from('vouchers-pdf').remove([path]).catch(() => {});
+      throw e;
+    }
+    return { revision: r.documento?.revision ?? pre.candidato.revision, documentoId: r.documento?.revision_documento_reserva ?? null, numero: r.documento?.numero_factura || v.numero_factura, voucherId: v.id, pdf, nombre };
+  }
+
+  // Servicio que cubre el voucher: el de su documento; sin él, si el voucher no cubre toda la
+  // reserva, el hospedaje. null = voucher de toda la reserva.
+  function servicioDelVoucher(totalDoc) {
+    const d = est.datos || {};
+    if (d.voucher?.servicio_id) return Number(d.voucher.servicio_id);
+    return totalDoc < Number(d.monto_total || 0) - 0.005 ? hospUnico(d) : null;
+  }
+  // Abono sin servicio = de toda la reserva: cuenta para cualquier voucher.
+  const delServicio = (a, S) => !S || a.servicio_id == null || Number(a.servicio_id) === S;
+  // Lo pagado del servicio: sus abonos vivos (+ el nuevo) y, en el hospedaje, lo cobrado sin detalle.
+  function pagadoServicio(S, abono, anulacion) {
+    const d = est.datos || {};
+    const otros = (d.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono.id) && delServicio(a, S));
+    const sinDetalle = S === hospUnico(d) ? Math.max(0, Number(d.monto_pagado || 0) - Number(d.pagado_con_detalle || 0)) : 0;
+    const suma = otros.reduce((s, a) => s + Number(a.monto_usd || 0), 0) + (anulacion ? 0 : Number(abono.monto_usd || 0)) + sinDetalle;
+    return Math.round(suma * 100) / 100;
+  }
+
+  // Líneas de abonos del voucher reimpreso: los vigentes del servicio `S` + el nuevo (resaltado). Lo
+  // cobrado sin fila de abono (p. ej. el pago que traía un voucher importado) va como «Pagos anteriores».
+  function abonosDetalle(abono, pagado, S = null) {
+    const fila = (a, nuevo) => ({ fecha: diaMesAnio(a.fecha), metodo: /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? 'Abono' : a.metodo, referencia: a.referencia, monto: Number(a.monto_usd || 0), nuevo });
+    const otros = (est.datos?.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono?.id) && delServicio(a, S));
+    const filas = [...otros.map(a => fila(a, false)), ...(abono ? [fila(abono, true)] : [])];
+    const sinDetalle = Math.round((Number(pagado || 0) - filas.reduce((s, f) => s + f.monto, 0)) * 100) / 100;
+    return sinDetalle > 0 ? [{ fecha: '—', metodo: 'Abono anterior', referencia: '', monto: sinDetalle }, ...filas] : filas;
+  }
+
+  // Reserva sin voucher propio: se reimprime desde la reserva con el N° del voucher importado
+  // (sin N°, rotulado con el código de la reserva). No crea fila en vouchers ni gasta numeración.
+  async function voucherDeReserva(abono, pagado, saldo) {
+    const d = est.datos || {};
+    if (!c.voucherReserva || !c.adjuntarVoucher || !puedeGenerar()) return null;
+    const base = c.voucherReserva({ reservaId: est.reservaId, pagado, saldo, metodo: abono.metodo, referencia: abono.referencia });
+    if (!base) return null;
+    const numero = d.voucher_importado?.numero_voucher ? String(d.voucher_importado.numero_voucher).padStart(6, '0') : '';
+    const v = { ...base, numero_factura: numero, rotulo: `Voucher ${numero || d.codigo || ''} · abono del ${diaMesAnio(abono.fecha)}`, abonos_detalle: abonosDetalle(abono, pagado) };
+    await c.librerias();
+    const pdf = await c.pdfVoucher(v);
+    const nombre = c.nombreArchivo ? c.nombreArchivo('voucher', { ...v, numero_factura: numero || d.codigo, fecha_entrada: null }) : `Voucher ${numero || d.codigo}.pdf`;
+    await c.adjuntarVoucher(est.reservaId, pdf, nombre);
+    return { numero: numero || d.codigo, revision: null, documentoId: null, pdf, nombre };
+  }
+
+  // Tras el abono: el voucher al día (o, sin voucher, el recibo) listo para mandarlo al cliente.
+  async function ofrecerDocumento(docs, saldo) {
+    const v = docs.voucherInfo, doc = v?.pdf ? v : docs.recibo;
+    if (!doc?.pdf || !c.confirmar) return;
+    const file = new File([doc.pdf], doc.nombre, { type: 'application/pdf' });
+    const compartir = !!navigator.canShare?.({ files: [file] });
+    const titulo = v?.pdf ? `Voucher ${v.numero}${v.revision ? ` · revisión ${v.revision}` : ''} actualizado` : 'Recibo del abono listo';
+    const ok = await c.confirmar({ titulo, textoOk: compartir ? 'Compartir con el cliente' : 'Descargar PDF', textoCancelar: 'Cerrar',
+      detalle: `${v?.pdf ? 'Incluye el abono nuevo, el total abonado' : 'Esta reserva no tiene voucher para reimprimir. El recibo trae el total pagado'} y el saldo de ${usd(saldo)}.\nYa quedó adjunto en la reserva.` });
+    if (!ok) return;
+    let accion = 'descarga';
+    if (compartir) {
+      try { await navigator.share({ files: [file], title: doc.nombre }); accion = 'compartir'; }
+      catch (e) { if (e.name === 'AbortError') return; c.descargar(doc.pdf, doc.nombre); }
+    } else c.descargar(doc.pdf, doc.nombre);
+    if (v?.pdf && v.revision && v.voucherId) {
+      try { await rpcDoc('documento_registrar_entrega', { p_tipo: 'voucher', p_id: String(v.voucherId), p_version: v.revision, p_accion: accion, p_operacion: crypto.randomUUID() }); }
+      catch { /* la entrega ya ocurrió: solo falta el registro en el historial */ }
+    }
   }
 
   // Recibo de abono: 1 página con el membrete del voucher.
@@ -346,7 +569,7 @@ export function crearAbonos(c) {
     doc.setDrawColor(220, 224, 232); doc.setLineWidth(0.8); doc.line(X0, y + 12, X1, y + 12);
     y += 40;
     const monto = d.moneda === 'VES'
-      ? `Bs ${num(d.monto_original)}${d.tasa ? ` · tasa ${num(d.tasa, 4)}` : ''}`
+      ? `Bs ${num(d.monto_original)}${d.tasa ? ` · tasa ${d.tasa_tipo ? nombreTasa(d.tasa_tipo) + ' ' : ''}${num(d.tasa, 4)}` : ''}`
       : usd(d.monto_original);
     const filas = [['Fecha del abono', d.fechaTexto], ['Cliente', d.cliente], ['Monto recibido', monto],
       ['Equivalente en dólares', usd(d.monto_usd)], ['Método de pago', d.metodo], ['Referencia', d.referencia]];
@@ -374,50 +597,55 @@ export function crearAbonos(c) {
 
   async function adjuntarRecibo(blob, nombre) {
     const firma = await sb.functions.invoke('reservas-documentos', { body: { accion: 'subir', reserva_id: est.reservaId, servicio_id: null, tipo: 'recibo_abono', nombre, mime: 'application/pdf', tamano: blob.size } });
-    if (firma.error || !firma.data?.ok) throw new Error('No se pudo preparar el recibo en la reserva.');
+    if (firma.error || !firma.data?.ok) throw new Error(`No se pudo preparar el recibo en la reserva${c.errorFn ? ` (${await c.errorFn(firma.error, firma.data)})` : ''}.`);
     const up = await sb.storage.from('reservas-documentos').uploadToSignedUrl(firma.data.path, firma.data.token, blob, { contentType: 'application/pdf' });
     if (up.error) throw new Error('No se pudo subir el recibo a la reserva.');
     const r = await rpcDoc('registrar_documento', { p_reserva_id: est.reservaId, p_servicio_id: null, p_tipo: 'recibo_abono', p_storage_path: firma.data.path, p_nombre: nombre });
     return r.documento_id;
   }
 
-  async function cadenaAbono(abono, pagado, saldo) {
+  // `reciboPrevio`: al reintentar, el recibo que ya quedó adjunto no se vuelve a generar (no duplica).
+  // `alAbono` ({ pagado, saldo }): los totales del recibo cuando no son los de hoy (reintento de un abono viejo).
+  async function cadenaAbono(abono, pagado, saldo, reciboPrevio = null, alAbono = null) {
     const d = est.datos || {};
     let actual = null;
     if (d.voucher?.id) { try { actual = (await rpcDoc('documento_historial', { p_tipo: 'voucher', p_id: String(d.voucher.id) }))?.actual || null; } catch { actual = null; } }
-    let voucherInfo = null, reciboId = null, fallo = null;
+    let voucherInfo = null, reciboId = reciboPrevio, recibo = null, fallo = null;
+    if (!puedeGenerar()) fallo = ERRORES.sin_librerias;
+    else if (d.voucher?.id && !actual) fallo = ERRORES.voucher_no_leido;
     try {
-      voucherInfo = await revisarVoucher(abono, pagado, actual);
+      if (!fallo) voucherInfo = d.voucher?.id ? await revisarVoucher(abono, pagado, actual) : await voucherDeReserva(abono, pagado, saldo);
     } catch (e) { fallo = mensaje(e); }
     try {
-      if (puedeGenerar()) {
+      if (puedeGenerar() && !reciboPrevio) {
         const blob = await reciboPdf({
           codigo: d.codigo, cliente: actual?.cliente_nombre, numero: voucherInfo?.numero || d.voucher?.numero_factura,
           revision: voucherInfo?.revision || d.voucher?.revision, fechaTexto: diaMesAnio(abono.fecha),
-          monto_original: abono.monto_original, moneda: abono.moneda, tasa: abono.tasa_usd_ves,
+          monto_original: abono.monto_original, moneda: abono.moneda, tasa: abono.tasa_usd_ves, tasa_tipo: abono.tasa_tipo,
           monto_usd: abono.monto_usd, metodo: abono.metodo, referencia: abono.referencia,
-          total_pagado: pagado, saldo,
+          total_pagado: alAbono?.pagado ?? pagado, saldo: alAbono?.saldo ?? saldo,
         });
-        reciboId = await adjuntarRecibo(blob, c.nombreArchivo ? c.nombreArchivo('recibo', { cliente: actual?.cliente_nombre, codigo: d.codigo, fecha: abono.fecha }) : `Recibo abono ${diaMesAnio(abono.fecha)}.pdf`);
+        recibo = { pdf: blob, nombre: c.nombreArchivo ? c.nombreArchivo('recibo', { cliente: actual?.cliente_nombre, codigo: d.codigo, fecha: abono.fecha }) : `Recibo abono ${diaMesAnio(abono.fecha)}.pdf` };
+        reciboId = await adjuntarRecibo(blob, recibo.nombre);
       }
     } catch (e) { fallo = fallo || mensaje(e); }
-    try {
-      await rpcDoc('abono_documentos_registrar', {
-        p_abono_id: abono.id, p_recibo_documento_id: reciboId,
-        p_voucher_documento_id: voucherInfo?.documentoId ?? null,
-        p_voucher_revision: voucherInfo?.revision ?? null, p_error: fallo,
-      });
-    } catch { /* el abono ya está guardado: el estado de documentos no lo puede tumbar */ }
-    return { voucherInfo, reciboId, fallo };
+    // Si este registro se pierde, el recibo queda sin enlazar y un reintento lo duplicaría: se
+    // reintenta una vez y, si igual falla, se avisa (el abono ya está guardado).
+    const registro = { p_abono_id: abono.id, p_recibo_documento_id: reciboId,
+      p_voucher_documento_id: voucherInfo?.documentoId ?? null,
+      p_voucher_revision: voucherInfo?.revision ?? null, p_error: fallo ? String(fallo).slice(0, 300) : null };
+    try { await rpcDoc('abono_documentos_registrar', registro); }
+    catch { try { await rpcDoc('abono_documentos_registrar', registro); } catch (e) { fallo = fallo || `no quedó registrado en el abono (${mensaje(e)})`; } }
+    return { voucherInfo, reciboId, recibo, fallo };
   }
 
   async function verRecibo(documentoId, btn) {
     if (btn) btn.disabled = true;
     const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: Number(documentoId) } });
-    if (btn) btn.disabled = false;
-    if (error || !data?.ok) return c.error('No se pudo abrir el recibo. Reintenta en unos segundos.');
-    const w = window.open(data.url, '_blank');
-    if (w) w.opener = null; else c.error('El navegador bloqueó la ventana. Permite las ventanas emergentes para ver el recibo.');
+    if (error || !data?.ok) { if (btn) btn.disabled = false; return c.error('No se pudo abrir el recibo. Reintenta en unos segundos.'); }
+    try { await c.entregarUrl(data.url, data.nombre || 'Recibo de abono.pdf', data.mime || 'application/pdf'); }
+    catch { c.error('No se pudo abrir el recibo. Reintenta en unos segundos.'); }
+    finally { if (btn) btn.disabled = false; }
   }
 
   async function reintentarDocumentos(id, btn) {
@@ -425,18 +653,26 @@ export function crearAbonos(c) {
     if (!a || !est.datos) return;
     const previo = btn?.innerHTML;
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
-    const docs = await cadenaAbono({ id: a.id, monto_usd: a.monto_usd, monto_original: a.monto_original, moneda: a.moneda, tasa_usd_ves: a.tasa_usd_ves, metodo: a.metodo, referencia: a.referencia, fecha: a.fecha }, est.datos.monto_pagado, est.datos.saldo_pendiente);
+    // El recibo de un abono viejo lleva el pagado y el saldo de ese momento: sus abonos vivos hasta
+    // él + lo cobrado sin fila. El voucher sí se revisa con lo de hoy.
+    const d = est.datos, vivos = (d.abonos || []).filter(x => !x.anulado_en);
+    const suma = l => l.reduce((s, x) => s + Number(x.monto_usd || 0), 0);
+    const pagadoAlAbono = Math.round((suma(vivos.filter(x => Number(x.id) <= id)) + Math.max(0, Number(d.monto_pagado || 0) - suma(vivos))) * 100) / 100;
+    const alAbono = { pagado: pagadoAlAbono, saldo: Math.max(0, Math.round((Number(d.monto_total || 0) - pagadoAlAbono) * 100) / 100) };
+    const docs = await cadenaAbono({ id: a.id, monto_usd: a.monto_usd, monto_original: a.monto_original, moneda: a.moneda, tasa_usd_ves: a.tasa_usd_ves, tasa_tipo: a.tasa_tipo, metodo: a.metodo, referencia: a.referencia, servicio_id: a.servicio_id ?? null, fecha: a.fecha }, d.monto_pagado, d.saldo_pendiente, a.recibo_documento_id || null, alAbono);
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
     if (docs.fallo) c.error(`No se pudieron generar los documentos: ${docs.fallo}`);
     else c.ok('Documentos del abono generados.');
     est.datos = null; await cargar(est.reservaId);
+    await ofrecerDocumento(docs, est.datos?.saldo_pendiente ?? a.saldo);
   }
 
   // Punto de montaje que llama app.js desde rvIniciar.
   function montar(reservaId, conForm) {
     if (!asentar()) return;
     est.reservaId = reservaId;
-    est.datos = null; est.archivo = null; est.metodo = conForm ? 'Pago móvil' : ''; est.formAbierto = !!conForm;
+    est.datos = null; est.archivo = null; est.editando = null; est.metodo = conForm ? 'Pago móvil' : ''; est.formAbierto = !!conForm;
+    est.moneda = conForm ? 'VES' : 'USD'; est.solicitud = conForm ? crypto.randomUUID() : null;
     cargar(reservaId);
   }
   return { montar, recargar: () => est.reservaId && cargar(est.reservaId) };

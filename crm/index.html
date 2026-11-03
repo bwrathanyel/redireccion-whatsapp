@@ -3930,6 +3930,8 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 #sec-voucher .vc-grupo+.vc-grupo{margin-top:0;padding-top:0}
 #sec-voucher .vc-hospedaje-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 #sec-voucher .vc-estadia-grid{margin-top:10px}
+@media (min-width:761px){#sec-voucher .vc-estadia-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
+#sec-voucher .vc-hosp-precio{display:block;margin-top:8px;font-size:12px;line-height:1.5;color:var(--muted)}#sec-voucher .vc-hosp-precio b{color:var(--txt)}#sec-voucher .vc-hosp-precio[hidden]{display:none}
 #sec-voucher .vc-form .ei{min-height:44px}
 #sec-voucher .vc-buscar>i{top:22px}
 #sec-voucher .vc-plan{margin-top:12px;min-width:0}
@@ -10386,8 +10388,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
               <label class="vc-c"><span>Entrada</span><input id="vc-fecha-entrada" class="ei" type="date"></label>
               <label class="vc-c"><span>Salida</span><input id="vc-fecha-salida" class="ei" type="date"></label>
               <label class="vc-c"><span>Adultos</span><input id="vc-adultos" class="ei" type="number" min="0" step="1" inputmode="numeric"></label>
-              <label class="vc-c"><span>Niños</span><input id="vc-ninos" class="ei" placeholder="N/A"></label>
+              <label class="vc-c"><span>Niños (3+ años)</span><input id="vc-ninos" class="ei" placeholder="N/A" inputmode="numeric"></label>
+              <label class="vc-c"><span>Infantes (0-2 años)</span><input id="vc-infantes" class="ei" type="number" min="0" max="20" step="1" inputmode="numeric" placeholder="0"></label>
             </div>
+            <small class="vc-hosp-precio" id="vc-hosp-precio" aria-live="polite" hidden></small>
             <details class="doc-detalle" id="vc-horarios-seccion">
               <summary>Horarios y localizador <small id="vc-horarios-resumen">Entrada 3:00 PM · salida 12:00 PM</small></summary>
               <div class="vc-fila">
@@ -10410,6 +10414,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
               <button type="button" data-vc-add="traslado"><i class="fas fa-van-shuttle"></i> Traslado</button>
               <button type="button" data-vc-add="paquete"><i class="fas fa-suitcase"></i> Paquete</button>
               <button type="button" data-vc-add="boleto"><i class="fas fa-plane"></i> Boleto aéreo</button>
+              <button type="button" data-vc-add="seguro"><i class="fas fa-shield-heart"></i> Seguro de viaje</button>
               <button type="button" data-vc-add="otro"><i class="fas fa-plus"></i> Otro servicio</button>
             </div>
             <datalist id="vc-dl-excursion"></datalist><datalist id="vc-dl-traslado"></datalist><datalist id="vc-dl-paquete"></datalist>
