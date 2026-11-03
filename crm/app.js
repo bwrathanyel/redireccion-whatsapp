@@ -10130,7 +10130,8 @@ function riaPintarDashboard(data) {
 }
 
 async function loadResumenIADashboard(forzar = false) {
-  if (!esOficina() || !document.getElementById('ria-dashboard')) return;
+  // Solo admin: panel_rendimiento_ia hace assert_rol(['admin']).
+  if (ROL !== 'admin' || !document.getElementById('ria-dashboard')) return;
   try { riaPintarDashboard(await riaConsultar(1, forzar, false)); }
   catch (e) {
     console.error('rendimiento IA dashboard', e);
@@ -17739,7 +17740,8 @@ function setupVozIA() {
   // en cada login de asesor, para una sección que ni siquiera puede abrir.
   // También hace que la vista previa de rol "asesor" (ver activarVistaPreviaRol)
   // se comporte igual que un asesor real: sin esta sección.
-  if (!esOficina() && ROL !== 'marketing') return;
+  // No esOficina(): el administrativo no tiene IA y las RPCs solo aceptan admin/marketing (3 errToast al cargar, 2026-11-03).
+  if (ROL !== 'admin' && ROL !== 'marketing') return;
   document.getElementById('vi-modo')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-vi-modo]');
     if (!b) return;
