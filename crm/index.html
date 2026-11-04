@@ -1336,6 +1336,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .tarcmp-pie{padding:10px 16px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted2)}
 .dactions{display:flex;gap:10px;margin-top:22px}
 .dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:filter .15s,transform .15s}
+#emp-facturar[hidden]{display:none}
 .dbtn:disabled{opacity:.45;cursor:not-allowed}
 .dbtn.wa{background:var(--wa);color:#fff}.dbtn.wa:hover{filter:brightness(1.08)}
 .dbtn.gh{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line2)}
@@ -9708,6 +9709,9 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
     </section>
 
+    <!-- FACTURAS A EMPRESAS (2026-11-04; admin y administrativo): facturas-empresa.js, RPC listar_/guardar_/estado_factura_empresa. -->
+    <section class="section" id="sec-facturas-empresa"><div id="facturas-empresa-root"></div></section>
+
     <!-- APARTAMENTOS (2026-10-07; Fase 1 catálogo, solo admin): proveedor > apartamento > habitación > fotos.
          Vinculado al producto del Tarifario sin tocarlo. RPC listar_apto_proveedores / listar_apartamentos / guardar_apto_*. -->
     <section class="section" id="sec-apartamentos">
@@ -10077,6 +10081,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div style="flex:1"><label class="fl" for="emp-telefono">Teléfono <span class="ef-opc">(opcional)</span></label><input id="emp-telefono" class="ei" type="tel" maxlength="40" placeholder="+58 412 1234567" autocomplete="off"></div>
           <div style="flex:1"><label class="fl" for="emp-email">Email <span class="ef-opc">(para el asistente)</span></label><input id="emp-email" class="ei" type="email" maxlength="160" autocomplete="off"></div>
         </div>
+        <label class="fl" for="emp-direccion">Dirección fiscal <span class="ef-opc">(sale en sus facturas)</span></label>
+        <input id="emp-direccion" class="ei" maxlength="300" placeholder="Av. Principal, Edif. Ejemplo, piso 2, Valencia, Carabobo" autocomplete="off">
         <div class="ef-fila">
           <div style="flex:1"><label class="fl" for="emp-dias">Días de crédito</label><input id="emp-dias" class="ei" type="number" min="0" max="365" step="1" placeholder="0"></div>
           <div style="flex:1"><label class="fl" for="emp-fijo">Cliente fijo</label>
@@ -10094,6 +10100,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
       <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
         <button class="dbtn" id="emp-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn" id="emp-facturar" type="button" style="flex:1" hidden><i class="fas fa-file-invoice"></i> Facturar</button>
         <button class="dbtn save" id="emp-guardar" type="button" style="flex:1">Guardar</button>
       </div>
     </div>

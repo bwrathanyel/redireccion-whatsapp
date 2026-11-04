@@ -9,6 +9,7 @@ import { crearAdsMeta } from './ads-meta.js';
 import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
+import { crearFacturasEmpresa } from './facturas-empresa.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -1693,7 +1694,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
@@ -3585,6 +3586,10 @@ let BOLETOS_EMITIDOS = null;
 const boletosEmitidos = () => BOLETOS_EMITIDOS ||= crearBoletosEmitidos({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('boletos-emitidos-root'),
   librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), paleta: VCP,
   entregar: pdfEntregar, slug: pdfSlug, limpiar: pdfSinEmojis, pdfjs: cargarPdfjs, catalogo: () => bolAsegurarCatalogo().then(() => bolCatalogo) });
+let FACTURAS_EMPRESA = null;
+const facturasEmpresa = () => FACTURAS_EMPRESA ||= crearFacturasEmpresa({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: () => ROL, raiz: document.getElementById('facturas-empresa-root'),
+  librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), franja: (...a) => vcpFranja(...a), paleta: VCP,
+  entregar: pdfEntregar, slug: pdfSlug, limpiar: pdfSinEmojis, fichaEmpresa: empresaFichaDesdeFactura });
 const pvCampanas = () => PV_CAMPANAS ||=crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
@@ -22821,7 +22826,7 @@ const EMP_ERRORES = {
   dato_invalido: 'Algún dato no es válido o es demasiado largo.',
   no_existe: 'Esa empresa ya no existe: se recargó la lista.',
 };
-let EMP_CACHE = [], EMP_EDITANDO = null;
+let EMP_CACHE = [], EMP_EDITANDO = null, EMP_AL_GUARDAR = null;
 async function loadEmpresas() {
   if (!esOficina()) return;
   const cargando = document.getElementById('emp-loading');
@@ -22861,22 +22866,24 @@ function renderEmpresas() {
       <div class="lt-card-pie"><button class="btn-sm" type="button" data-emp-id="${e.id}"><i class="fas fa-id-card"></i> Ver ficha</button></div>
     </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${EMP_CACHE.length ? 'Ninguna empresa coincide con la búsqueda o el filtro' : 'Todavía no hay empresas cargadas'}</div>`;
 }
-function abrirEmpresaSheet(id = null) {
+// `alGuardar`: quien abrió la ficha (Facturas) recibe la empresa guardada; `nombre` precarga una nueva.
+function abrirEmpresaSheet(id = null, { nombre = '', alGuardar = null } = {}) {
   const e = id == null ? null : EMP_CACHE.find(x => x.id === id);
   if (id != null && !e) return;
-  EMP_EDITANDO = e;
+  EMP_EDITANDO = e; EMP_AL_GUARDAR = alGuardar;
   document.getElementById('emp-sheet-title').innerHTML = `<i class="fas fa-building"></i> ${e ? esc(e.nombre) : 'Nueva empresa'}`;
   const poner = (elId, v) => { document.getElementById(elId).value = v ?? ''; };
-  poner('emp-nombre', e?.nombre); poner('emp-tipo', e?.tipo || 'corporativa'); poner('emp-rif', e?.rif);
-  poner('emp-contacto', e?.contacto); poner('emp-telefono', e?.telefono); poner('emp-email', e?.email);
+  poner('emp-nombre', e?.nombre ?? nombre); poner('emp-tipo', e?.tipo || 'corporativa'); poner('emp-rif', e?.rif);
+  poner('emp-contacto', e?.contacto); poner('emp-telefono', e?.telefono); poner('emp-email', e?.email); poner('emp-direccion', e?.direccion);
   poner('emp-dias', e?.dias_credito);
   poner('emp-fijo', e?.cliente_fijo ? '1' : '0'); poner('emp-activo', e && !e.activo ? '0' : '1'); poner('emp-notas', e?.notas);
   const reservas = e?.reservas || [];
   document.getElementById('emp-reservas').innerHTML = !e ? '' : reservas.length
     ? reservas.map(r => `<div class="emp-res"><b>${esc(r.codigo || '#' + r.id)}</b> · ${esc((PV_ETAPAS[r.etapa] || [r.etapa])[0])}${r.referencia ? ' · ref. ' + esc(r.referencia) : ''}<span>${r.fecha_viaje_inicio ? pvFecha(r.fecha_viaje_inicio) : 'Sin fecha'}</span></div>`).join('')
     : '<div class="emp-res">Sin reservas enlazadas. Se enlazan desde la reserva (campo Empresa) o con el asistente.</div>';
-  document.getElementById('emp-reservas-box').hidden = !e;
-  if (e && reservas.length) empCargarReservas(e);
+  document.getElementById('emp-reservas-box').hidden = !e || !!alGuardar;
+  if (e && reservas.length && !alGuardar) empCargarReservas(e);
+  document.getElementById('emp-facturar').hidden = !e || !e.activo || !!alGuardar;
   document.getElementById('emp-err').textContent = '';
   openSheet('empresa-sheet');
 }
@@ -22902,7 +22909,7 @@ async function guardarEmpresa() {
   const modalidad = editando?.modalidad_precio || 'neto', pct = editando?.comision_pct;
   const datos = {
     nombre, tipo: val('emp-tipo'), rif: val('emp-rif'), contacto: val('emp-contacto'), telefono: val('emp-telefono'),
-    email: val('emp-email'), dias_credito: dias, modalidad_precio: modalidad, cliente_fijo: val('emp-fijo') === '1',
+    email: val('emp-email'), direccion: val('emp-direccion'), dias_credito: dias, modalidad_precio: modalidad, cliente_fijo: val('emp-fijo') === '1',
     activo: val('emp-activo') === '1', notas: val('emp-notas'),
   };
   if (modalidad === 'comision') datos.comision_pct = pct;
@@ -22917,8 +22924,15 @@ async function guardarEmpresa() {
   }
   closeSheet('empresa-sheet');
   okToast(editando ? 'Empresa actualizada' : 'Empresa creada');
-  EMP_EDITANDO = null;
+  const alGuardar = EMP_AL_GUARDAR;
+  EMP_EDITANDO = null; EMP_AL_GUARDAR = null;
   loadEmpresas();
+  alGuardar?.(data.empresa);
+}
+// Ficha de empresa pedida desde Facturas: EMP_CACHE puede estar vacío si nunca se abrió Empresas.
+async function empresaFichaDesdeFactura(id, nombre, alGuardar) {
+  if (id != null && !EMP_CACHE.some(e => e.id === id)) await loadEmpresas();
+  abrirEmpresaSheet(id, { nombre, alGuardar });
 }
 function setupEmpresas() {
   document.getElementById('emp-search').addEventListener('input', renderEmpresas);
@@ -22930,6 +22944,11 @@ function setupEmpresas() {
   });
   document.getElementById('emp-cancelar').addEventListener('click', () => closeSheet('empresa-sheet'));
   document.getElementById('emp-guardar').addEventListener('click', guardarEmpresa);
+  document.getElementById('emp-facturar').addEventListener('click', () => {
+    const id = EMP_EDITANDO?.id;
+    closeSheet('empresa-sheet');
+    if (id != null) { activateSection('facturas-empresa'); facturasEmpresa().facturarA(id); }
+  });
 }
 /* ---------- Reservas de empresas (pestaña de Reservas; solo admin) ----------
    Reservas y cotizaciones de los clientes empresariales, con la empresa como
@@ -34701,6 +34720,7 @@ const NAV_ITEMS = [
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
+  { sec: 'facturas-empresa', icon: 'fas fa-file-invoice', label: 'Facturas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Facturas a empresas: emitir, PDF y cobro' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'costos-digitales', icon: 'fas fa-wallet', label: 'Costos digitales', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Suscripciones y consumo de IA, por mes' },
@@ -35109,6 +35129,7 @@ function cargarSeccion(sec) {
   if (sec === 'contenido') marketing().cargar();
   if (sec === 'costos-digitales') costosDigitales().cargar();
   if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
+  if (sec === 'facturas-empresa') facturasEmpresa().cargar();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'bol-solicitudes') bolColaAlEntrar();
@@ -37545,6 +37566,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-04', emoji: '🧾', titulo: 'Facturas a empresas, ahora dentro del CRM', texto: 'Nueva entrada «Facturas» en Corporativo (lo que antes se hacía en Zoho, desde la INV-000030). Elegí la empresa o, si no está, creala ahí mismo; cargá los conceptos y sale el PDF con el membrete de Lotus. Descuento e IVA son opcionales: en 0 no aparecen. Desde la lista la marcás pagada o la anulás, y ves lo que falta cobrar y lo vencido. También hay un botón «Facturar» en la ficha de cada empresa.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-04', emoji: '🎫', titulo: 'Boletos emitidos: el recibo del boleto con el logo de la aerolínea', texto: 'Nueva entrada «Boletos emitidos». Suelta el PDF que manda el consolidador y se llenan solos pasajero, cédula, N° de boleto, código de reserva y vuelos (puedes subir varios: uno por pasajero o por aerolínea). Revisa, toca «Guardar y generar PDF» y sale un recibo claro para el cliente: logo de la aerolínea, horas grandes, equipaje en palabras y lo que debe saber antes de volar. Queda en el Historial para buscarlo y volver a descargarlo.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-11-04', emoji: '🧾', titulo: 'Voucher en una sola hoja', texto: 'El voucher ya no parte el resumen de pago a la hoja 2: si los servicios y abonos no entran, se compacta solo (espacios y letra un poco más chicos) para que todo, con el total, pagado y resta, quede junto en la primera hoja.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-11-04', emoji: '💵', titulo: 'Pago del cliente al cargar un servicio', texto: 'Al agregar o editar un servicio de la reserva, en «Pago del cliente» elegí «Abono» (el monto que pagó) o «Pago completo» (lo que falta del servicio), el método, la referencia y la captura del comprobante: la IA lee la captura y completa los datos. Queda en Abonos con su recibo y el voucher actualizado.', roles: ['admin', 'asesor', 'administrativo'] },
