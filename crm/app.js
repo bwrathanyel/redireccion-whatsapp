@@ -8,6 +8,7 @@ import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
 import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
+import { crearBoletosEmitidos } from './boletos-emitidos.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -1692,7 +1693,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
@@ -3580,6 +3581,10 @@ let MARKETING = null;
 const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root') });
 let COSTOS_DIGITALES = null;
 const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
+let BOLETOS_EMITIDOS = null;
+const boletosEmitidos = () => BOLETOS_EMITIDOS ||= crearBoletosEmitidos({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('boletos-emitidos-root'),
+  librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), paleta: VCP,
+  entregar: pdfEntregar, slug: pdfSlug, limpiar: pdfSinEmojis, pdfjs: cargarPdfjs, catalogo: () => bolAsegurarCatalogo().then(() => bolCatalogo) });
 const pvCampanas = () => PV_CAMPANAS ||=crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
@@ -34686,6 +34691,8 @@ const NAV_ITEMS = [
   // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
   // Ya no es pestaña de Leads (2026-10-17): entrada propia del menú en todos los modos (también la ficha del lead la abre con cbDesdeLead).
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
+  // Boletos emitidos (2026-11-04): solo admin y rol boletería (dueño); asesor+boletería y administrativo no.
+  { sec: 'boletos-emitidos', icon: 'fas fa-ticket', label: 'Boletos emitidos', roles: 'nav-admin-only nav-administrativo-no nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Recibo de itinerario con el logo de la aerolínea; se llena solo con el PDF del consolidador' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
@@ -34723,6 +34730,7 @@ const NAV_PADRES = [
   { sec: 'tareas', hoja: true },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
   { sec: 'cotizacion-boletos', hoja: true },
+  { sec: 'boletos-emitidos', hoja: true },
   // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
   { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja', badge: 'nav-bandeja-count', badgeDefault: '0' },
   { sec: 'mensajes', hoja: true },
@@ -35100,6 +35108,7 @@ function cargarSeccion(sec) {
   if (sec === 'ads') adsMeta().cargar();
   if (sec === 'contenido') marketing().cargar();
   if (sec === 'costos-digitales') costosDigitales().cargar();
+  if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'bol-solicitudes') bolColaAlEntrar();
@@ -37536,6 +37545,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-04', emoji: '🎫', titulo: 'Boletos emitidos: el recibo del boleto con el logo de la aerolínea', texto: 'Nueva entrada «Boletos emitidos». Suelta el PDF que manda el consolidador y se llenan solos pasajero, cédula, N° de boleto, código de reserva y vuelos (puedes subir varios: uno por pasajero o por aerolínea). Revisa, toca «Guardar y generar PDF» y sale un recibo claro para el cliente: logo de la aerolínea, horas grandes, equipaje en palabras y lo que debe saber antes de volar. Queda en el Historial para buscarlo y volver a descargarlo.', roles: ['admin', 'boleteria'] },
   { fecha: '2026-11-04', emoji: '🧾', titulo: 'Voucher en una sola hoja', texto: 'El voucher ya no parte el resumen de pago a la hoja 2: si los servicios y abonos no entran, se compacta solo (espacios y letra un poco más chicos) para que todo, con el total, pagado y resta, quede junto en la primera hoja.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-11-04', emoji: '💵', titulo: 'Pago del cliente al cargar un servicio', texto: 'Al agregar o editar un servicio de la reserva, en «Pago del cliente» elegí «Abono» (el monto que pagó) o «Pago completo» (lo que falta del servicio), el método, la referencia y la captura del comprobante: la IA lee la captura y completa los datos. Queda en Abonos con su recibo y el voucher actualizado.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-11-03', emoji: '🛡️', titulo: 'Voucher: infantes, precio del hotel y seguro de viaje', texto: 'En Voucher ahora hay casilla de Infantes (0-2 años; niños desde 3). Al elegir el hotel del tarifario se ve la tarifa más baja y, con las fechas, el precio del hospedaje se suma solo al total (por temporada si cruza dos; podés corregirlo a mano). Y en Servicios adicionales hay «Seguro de viaje»: aseguradora, plan, vigencia, póliza y teléfono de asistencia salen en el PDF.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
