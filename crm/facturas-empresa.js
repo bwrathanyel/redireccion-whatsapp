@@ -696,7 +696,7 @@ export function crearFacturasEmpresa(c) {
     if (!montado) {
       css();
       if (!permitido()) { raiz.innerHTML = '<div class="card fe-vacio">Esta sección es solo para administración.</div>'; return; }
-      marco(); nueva(); montado = true; mostrarVista('lista');
+      marco(); nueva(); montado = true; mostrarVista('editor');
     }
     await cargarLista();
   }
