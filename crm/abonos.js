@@ -243,13 +243,10 @@ export function crearAbonos(c) {
     const aviso = document.getElementById('ab-ia'); if (!aviso) return;
     const token = ++est.tokenIA;
     aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
-    const imagen = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.onerror = () => r(null); fr.readAsDataURL(archivo); });
-    if (!imagen) { aviso.hidden = true; return; }
-    const { data, error } = await sb.functions.invoke('analizar-comprobante', { body: { reserva_id: est.reservaId, mime: archivo.type || 'image/jpeg', imagen } });
+    const d = await analizarCaptura(archivo);
     if (token !== est.tokenIA || !document.getElementById('ab-ia')) return;
-    if (error || !data?.ok) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
-    c.usoHerramienta?.(null, 'leer_comprobante', est.reservaId);
-    const d = data.datos || {}, puestos = [];
+    if (!d) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
+    const puestos = [];
     const monto = document.getElementById('ab-monto'), moneda = document.getElementById('ab-moneda'), ref = document.getElementById('ab-ref');
     if (d.moneda && moneda && !monto.value) { moneda.value = d.moneda; est.moneda = d.moneda; puestos.push('moneda'); }
     if (d.monto != null && monto && !monto.value) { monto.value = d.monto; puestos.push('monto'); }
@@ -260,6 +257,15 @@ export function crearAbonos(c) {
     }
     actualizarTasa();
     aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revisalo antes de registrar.` : 'No se encontraron datos en la captura.';
+  }
+  // null = no se pudo leer. También la usa el pago del formulario de servicio.
+  async function analizarCaptura(archivo) {
+    const imagen = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.onerror = () => r(null); fr.readAsDataURL(archivo); });
+    if (!imagen) return null;
+    const { data, error } = await sb.functions.invoke('analizar-comprobante', { body: { reserva_id: est.reservaId, mime: archivo.type || 'image/jpeg', imagen } });
+    if (error || !data?.ok) return null;
+    c.usoHerramienta?.(null, 'leer_comprobante', est.reservaId);
+    return data.datos || {};
   }
   // `id`: editar ese abono (form precargado); sin id, abono nuevo.
   function abrirForm(id) {
@@ -299,61 +305,17 @@ export function crearAbonos(c) {
     const err = document.getElementById('ab-err');
     const poner = m => { if (err) err.textContent = m || ''; };
     poner('');
-    const monto = Number(document.getElementById('ab-monto')?.value || 0);
-    const moneda = document.getElementById('ab-moneda')?.value || 'USD';
-    const referencia = (document.getElementById('ab-ref')?.value || '').trim();
-    const nota = (document.getElementById('ab-nota')?.value || '').trim();
-    const archivo = est.archivo || document.getElementById('ab-file')?.files?.[0] || null;
-    const servicio = Number(document.getElementById('ab-servicio')?.value || 0) || null;
-    if (!(monto > 0)) return poner(ERRORES.monto_invalido);
-    if (!est.metodo) return poner(ERRORES.metodo_invalido);
-    if (est.metodo === 'Pago móvil' && moneda !== 'VES') return poner(ERRORES.pago_movil_en_bs);
+    const v = id => (document.getElementById(id)?.value || '').trim();
     // La misma solicitud en cada reintento: si el primer intento sí entró, el servidor lo reconoce.
     est.solicitud = est.solicitud || crypto.randomUUID();
     est.guardando = true;
     btn.disabled = true;
     try {
-      const comprobante = archivo ? await subirCaptura(archivo) : null;
-      const llamar = forzar => sb.rpc('registrar_abono_reserva_v2', {
-        p_reserva_id: est.reservaId, p_monto_original: monto, p_moneda: moneda, p_metodo: est.metodo,
-        p_solicitud_id: est.solicitud, p_referencia: referencia || null, p_nota: nota || null,
-        p_comprobante_path: comprobante, p_comprobante_datos: null, p_servicio_id: servicio, p_forzar: forzar,
-        p_tasa_tipo: moneda === 'VES' ? est.tasaTipo : null, p_tasa_esperada: moneda === 'VES' ? tasaDe(est.datos, est.tasaTipo) || null : null,
-      });
-      let { data, error } = await llamar(false);
-      // A3: el mismo pago cargado dos veces (R-000133). Solo sigue si confirman que es otro pago.
-      if (!error && data?.error === 'posible_duplicado') {
-        const x = data.duplicado || {};
-        const otro = await c.confirmar({ titulo: '¿Es el mismo pago?', textoOk: 'Es otro pago: registrar', textoCancelar: 'No registrar',
-          detalle: `Ya hay ${x.origen === 'pago' ? 'un pago declarado' : 'un abono'} de ${usd(x.monto_usd)} con la referencia ${x.referencia || '—'} del ${c.fecha(x.fecha)}${x.codigo ? ` en ${x.codigo}` : ''}.\nSi es el mismo pago, no lo cargues de nuevo.` });
-        if (!otro) { poner('No se registró: ese pago ya estaba cargado.'); return; }
-        ({ data, error } = await llamar(true));
-      }
-      // M10: la tasa se actualizó con el form abierto. Se muestra la nueva y se pide confirmar de nuevo.
-      if (!error && data?.error === 'tasa_cambio') {
-        est.datos.tasas = est.datos.tasas || {};
-        (est.datos.tasas[data.tasa_tipo] ||= {}).tasa = data.tasa;
-        actualizarTasa();
-        poner(`La tasa ${nombreTasa(data.tasa_tipo)} cambió a ${num(data.tasa, 4)}. Revisá el equivalente y registrá de nuevo.`);
-        return;
-      }
-      if (error) throw new Error(error.code === '42501' ? 'Tu usuario no puede registrar abonos en esta reserva.' : error.message);
-      if (!data?.ok) throw new Error(data?.error || 'Sin respuesta del servidor');
-      est.archivo = null; est.solicitud = null;
-      est.formAbierto = false;
-      // El pago ya quedó: ahora los documentos (voucher revisado + recibo).
-      const docs = await cadenaAbono({
-        id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
-        moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
-        referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: new Date().toISOString(),
-      }, data.monto_pagado, data.saldo_pendiente);
-      // El pago quedó guardado: nunca un toast de error, o lo vuelven a cargar (R-000133, abonos 66-68).
-      if (docs.fallo) c.ok(`Abono registrado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): no lo cargues de nuevo, usá «Reintentar documentos».`);
-      else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero}${docs.voucherInfo.revision ? ` rev. ${docs.voucherInfo.revision}` : ''}` : 'sin voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
-      est.datos = null;
-      await cargar(est.reservaId);
-      c.pagosCambiaron?.();
-      await ofrecerDocumento(docs, data.saldo_pendiente);
+      await registrar({
+        monto: Number(v('ab-monto') || 0), moneda: v('ab-moneda') || 'USD', metodo: est.metodo, referencia: v('ab-ref'), nota: v('ab-nota'),
+        archivo: est.archivo || document.getElementById('ab-file')?.files?.[0] || null, servicio: Number(v('ab-servicio') || 0) || null,
+        tasaTipo: est.tasaTipo, solicitud: est.solicitud,
+      }, poner);
     } catch (e) {
       poner(mensaje(e));
       c.error(mensaje(e));
@@ -361,6 +323,87 @@ export function crearAbonos(c) {
       est.guardando = false;
       if (btn?.isConnected) btn.disabled = false;
     }
+  }
+  // Alta de un abono con su cadena de documentos. La usan el formulario de Abonos y el pago del
+  // formulario de servicio (pagarServicio). true = quedó registrado; los errores de validación van a `poner`.
+  async function registrar(p, poner) {
+    if (!(p.monto > 0)) { poner(ERRORES.monto_invalido); return false; }
+    if (!p.metodo) { poner(ERRORES.metodo_invalido); return false; }
+    if (p.metodo === 'Pago móvil' && p.moneda !== 'VES') { poner(ERRORES.pago_movil_en_bs); return false; }
+    const ves = p.moneda === 'VES';
+    const comprobante = p.archivo ? await subirCaptura(p.archivo) : null;
+    const llamar = forzar => sb.rpc('registrar_abono_reserva_v2', {
+      p_reserva_id: est.reservaId, p_monto_original: p.monto, p_moneda: p.moneda, p_metodo: p.metodo,
+      p_solicitud_id: p.solicitud, p_referencia: p.referencia || null, p_nota: p.nota || null,
+      p_comprobante_path: comprobante, p_comprobante_datos: null, p_servicio_id: p.servicio, p_forzar: forzar,
+      p_tasa_tipo: ves ? p.tasaTipo : null, p_tasa_esperada: ves ? tasaDe(est.datos, p.tasaTipo) || null : null,
+    });
+    let { data, error } = await llamar(false);
+    // A3: el mismo pago cargado dos veces (R-000133). Solo sigue si confirman que es otro pago.
+    if (!error && data?.error === 'posible_duplicado') {
+      const x = data.duplicado || {};
+      const otro = await c.confirmar({ titulo: '¿Es el mismo pago?', textoOk: 'Es otro pago: registrar', textoCancelar: 'No registrar',
+        detalle: `Ya hay ${x.origen === 'pago' ? 'un pago declarado' : 'un abono'} de ${usd(x.monto_usd)} con la referencia ${x.referencia || '—'} del ${c.fecha(x.fecha)}${x.codigo ? ` en ${x.codigo}` : ''}.\nSi es el mismo pago, no lo cargues de nuevo.` });
+      if (!otro) { poner('No se registró: ese pago ya estaba cargado.'); return false; }
+      ({ data, error } = await llamar(true));
+    }
+    // M10: la tasa se actualizó con el form abierto. Se muestra la nueva y se pide confirmar de nuevo.
+    if (!error && data?.error === 'tasa_cambio') {
+      est.datos.tasas = est.datos.tasas || {};
+      (est.datos.tasas[data.tasa_tipo] ||= {}).tasa = data.tasa;
+      actualizarTasa();
+      poner(`La tasa ${nombreTasa(data.tasa_tipo)} cambió a ${num(data.tasa, 4)}. Revisá el equivalente y registrá de nuevo.`);
+      return false;
+    }
+    if (error) throw new Error(error.code === '42501' ? 'Tu usuario no puede registrar abonos en esta reserva.' : error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Sin respuesta del servidor');
+    est.archivo = null; est.solicitud = null;
+    est.formAbierto = false;
+    // El pago ya quedó: ahora los documentos (voucher revisado + recibo).
+    const docs = await cadenaAbono({
+      id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
+      moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
+      referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: new Date().toISOString(),
+    }, data.monto_pagado, data.saldo_pendiente);
+    // El pago quedó guardado: nunca un toast de error, o lo vuelven a cargar (R-000133, abonos 66-68).
+    if (docs.fallo) c.ok(`Abono registrado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): no lo cargues de nuevo, usá «Reintentar documentos».`);
+    else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero}${docs.voucherInfo.revision ? ` rev. ${docs.voucherInfo.revision}` : ''}` : 'sin voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
+    est.datos = null;
+    await cargar(est.reservaId);
+    c.pagosCambiaron?.();
+    await ofrecerDocumento(docs, data.saldo_pendiente);
+    return true;
+  }
+  // Lo ya cobrado de un servicio: sus abonos vivos y, si es el hospedaje (o el único servicio), también
+  // los abonos de toda la reserva y lo cobrado sin detalle (regla del dueño: los abonos son del hospedaje).
+  function pagadoDe(sid) {
+    const d = est.datos; if (!d) return null;
+    const servs = d.servicios || [], propio = (servs.length === 1 && Number(servs[0].id) === sid) || hospUnico(d) === sid;
+    const suma = (d.abonos || []).filter(a => !a.anulado_en && (Number(a.servicio_id) === sid || (propio && a.servicio_id == null))).reduce((s, a) => s + Number(a.monto_usd || 0), 0);
+    return Math.round((suma + (propio ? Math.max(0, Number(d.monto_pagado || 0) - Number(d.pagado_con_detalle || 0)) : 0)) * 100) / 100;
+  }
+  // Pago cargado desde el formulario del servicio (recién guardado: se relee la reserva para que esté su
+  // precio). `p.completo`: el monto es lo que le falta al servicio, sin pasar el saldo de la reserva.
+  async function pagarServicio(reservaId, p, poner) {
+    if (est.guardando) { poner('Ya hay un abono registrándose: esperá a que termine.'); return false; }
+    est.guardando = true;
+    try {
+      if (reservaId !== est.reservaId) throw new Error('reserva_no_disponible');
+      est.datos = null; await cargar(reservaId);
+      if (!est.datos) throw new Error('No se pudieron leer los abonos de la reserva.');
+      if (p.completo) {
+        const s = (est.datos.servicios || []).find(x => Number(x.id) === p.servicio);
+        if (!s) throw new Error('servicio_invalido');
+        const falta = Math.min(Math.round((Number(s.precio_usd || 0) - pagadoDe(p.servicio)) * 100) / 100, Number(est.datos.saldo_pendiente || 0));
+        if (!(falta > 0)) { poner('Ese servicio ya está pagado completo.'); return false; }
+        const tasa = tasaDe(est.datos, p.tasaTipo);
+        if (p.moneda === 'VES' && !tasa) throw new Error('tasa_no_disponible');
+        // En Bs se redondea hacia abajo: un céntimo de más daría supera_saldo.
+        p = { ...p, monto: p.moneda === 'VES' ? Math.floor(falta * tasa * 100) / 100 : falta };
+      }
+      return await registrar({ ...p, solicitud: p.solicitud || crypto.randomUUID() }, poner);
+    } catch (e) { poner(mensaje(e)); return false; }
+    finally { est.guardando = false; }
   }
   async function guardarEdicion(btn) {
     const ed = est.editando, err = document.getElementById('ab-err');
@@ -675,5 +718,9 @@ export function crearAbonos(c) {
     est.moneda = conForm ? 'VES' : 'USD'; est.solicitud = conForm ? crypto.randomUUID() : null;
     cargar(reservaId);
   }
-  return { montar, recargar: () => est.reservaId && cargar(est.reservaId) };
+  return {
+    montar, recargar: () => est.reservaId && cargar(est.reservaId),
+    // Para el pago del formulario de servicio (app.js rvPagoHtml / rvGuardarServicio).
+    pagarServicio, analizarCaptura, pagadoDe, datos: () => est.datos, tasa: t => tasaDe(est.datos, t), METODOS, TASAS,
+  };
 }
