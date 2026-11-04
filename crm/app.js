@@ -10721,6 +10721,7 @@ function indAgilidad(s) {
   return Math.max(0, Math.round(100 - resta));
 }
 async function loadInduccion() {
+  if (IND_TAB === 'vivo') indVivoArranca();
   const cont = document.getElementById('ind-lista');
   const { data, error } = await sb.rpc('prueba_resumen');
   if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver la inducción' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
@@ -10800,6 +10801,123 @@ function setupInduccion() {
   const lista = document.getElementById('ind-lista');
   lista.addEventListener('click', abre);
   lista.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('ind-card')) { e.preventDefault(); abre(e); } });
+  document.getElementById('ind-tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-ind-tab]'); if (!b) return;
+    IND_TAB = b.dataset.indTab;
+    document.querySelectorAll('#ind-tabs [data-ind-tab]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); });
+    document.getElementById('ind-pane-misiones').hidden = IND_TAB !== 'misiones';
+    document.getElementById('ind-pane-vivo').hidden = IND_TAB !== 'vivo';
+    if (IND_TAB === 'vivo') indVivoArranca();
+  });
+  const vivo = document.getElementById('ind-vivo-lista');
+  const abreSim = e => { const c = e.target.closest('.ind-sim'); if (c) indChatAbre(IND_CHAT === c.dataset.sim ? null : c.dataset.sim); };
+  vivo.addEventListener('click', abreSim);
+  vivo.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('ind-sim')) { e.preventDefault(); abreSim(e); } });
+  document.getElementById('ind-chat').addEventListener('click', e => { if (e.target.closest('[data-ind-cerrar]')) indChatAbre(null); });
+  document.addEventListener('visibilitychange', () => { if (indVivoVisible()) indVivoArranca(); });
+}
+
+/* ---------- Inducción › En vivo: práctica con clientes IA del modo prueba ----------
+   Una tarjeta por chat tocado en los últimos 45 min (prueba_sim_vivo). En ámbar si el cliente lleva
+   más de 2 min sin respuesta, si se está yendo o si el chat lleva 5 min sin moverse. */
+let IND_TAB = 'misiones', IND_VIVO = null, IND_CHAT = null, IND_CHAT_VER = null, IND_VIVO_T = null, IND_DESFASE = 0;
+const IND_PASOS = [['rapidez', 'Atender en menos de 2 min'], ['presentacion', 'Saludar y presentarse'], ['calificacion', 'Calificar'], ['ficha', 'Anotar en la ficha'],
+  ['tarifario', 'Buscar en el Tarifario'], ['opciones', 'Mandar opciones'], ['cotizacion', 'Cotización PDF'], ['objeciones', 'Resolver dudas'], ['cierre', 'Cerrar con abono'], ['registro', 'Registrar el pago']];
+const IND_ESTADO = { vendido: '✅ Vendió', perdido: '❌ Se fue', abandonada: '⏸ Terminado sin cerrar' };
+const indAhora = () => Date.now() - IND_DESFASE;
+const indVivoVisible = () => IND_TAB === 'vivo' && !document.hidden && !!document.getElementById('sec-induccion')?.classList.contains('active');
+function indVivoArranca() { clearTimeout(IND_VIVO_T); indVivoCargar(); }
+let indVivoEnVuelo = false;
+async function indVivoCargar() {
+  clearTimeout(IND_VIVO_T);
+  if (!indVivoVisible() || indVivoEnVuelo) return;
+  indVivoEnVuelo = true;
+  const [{ data, error }, cfg] = await Promise.all([sb.rpc('prueba_sim_vivo'), sb.rpc('prueba_ia_config')]).finally(() => { indVivoEnVuelo = false; });
+  clearTimeout(IND_VIVO_T); IND_VIVO_T = setTimeout(indVivoCargar, 5000);
+  const cont = document.getElementById('ind-vivo-lista');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver la práctica en vivo' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
+  IND_DESFASE = Date.now() - Date.parse(data.ahora);
+  IND_VIVO = { ...data, gasto: cfg.data || null };
+  indVivoPintar();
+  if (IND_CHAT) { const s = data.simulaciones.find(x => x.id === IND_CHAT); if (s && s.actualizado_en !== IND_CHAT_VER) indChatCargar(IND_CHAT); }
+}
+function indAlerta(s) {
+  if (s.estado !== 'en_curso') return '';
+  const espera = s.ultimo_cliente_en && (!s.ultimo_asesor_en || s.ultimo_asesor_en < s.ultimo_cliente_en) ? (indAhora() - Date.parse(s.ultimo_cliente_en)) / 1000 : 0;
+  if (espera > 120) return `El cliente espera respuesta hace ${indDur(espera)}`;
+  if (s.decision === 'irse' || (s.temperatura != null && s.temperatura < 30)) return 'El cliente se está yendo';
+  const quieto = (indAhora() - Date.parse(s.actualizado_en)) / 1000;
+  return quieto > 300 ? `Sin movimiento hace ${indDur(quieto)}` : '';
+}
+function indVivoPintar() {
+  const { simulaciones: sims, practicantes: pr, gasto } = IND_VIVO;
+  const enCurso = sims.filter(s => s.estado === 'en_curso'), alertas = enCurso.filter(indAlerta);
+  const conNota = pr.filter(p => p.puntaje_hoy != null);
+  const n = document.getElementById('ind-vivo-n');
+  n.hidden = !enCurso.length; n.textContent = enCurso.length;
+  pintarKPIs('ind-vivo-kpis', [
+    { t: 'Atendiendo ahora', v: fmt(enCurso.length), d: alertas.length ? `${fmt(alertas.length)} necesitan atención` : 'Todo en orden', i: 'fa-comments', c: alertas.length ? 'var(--amber)' : 'var(--green)' },
+    { t: 'Practicantes hoy', v: fmt(pr.length), d: `${fmt(pr.reduce((a, p) => a + p.hoy, 0))} clientes atendidos`, i: 'fa-user-graduate', c: 'var(--blue)' },
+    { t: 'Puntaje medio hoy', v: conNota.length ? fmt(Math.round(conNota.reduce((a, p) => a + Number(p.puntaje_hoy), 0) / conNota.length)) : '—', d: `${fmt(pr.reduce((a, p) => a + p.aprobadas_hoy, 0))} aprobados`, i: 'fa-star', c: 'var(--purple)' },
+    { t: 'Gasto IA', v: gasto ? `US$${Number(gasto.gastado).toFixed(2)}` : '—', d: gasto ? `de US$${fmt(gasto.tope)} · hoy US$${Number(gasto.hoy).toFixed(2)}` : 'Sin datos', i: 'fa-coins', c: 'var(--accent)' },
+  ]);
+  const cont = document.getElementById('ind-vivo-lista');
+  if (!sims.length) {
+    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-tower-broadcast"></i><b>Nadie está atendiendo clientes ahora</b>
+      <div style="font-size:12.5px;margin-top:6px">Cuando un practicante termina las misiones del modo de prueba le empiezan a llegar clientes simulados. Se ven acá al instante.</div></div>`;
+    return;
+  }
+  const nivelDe = Object.fromEntries(pr.map(p => [p.nombre, p]));
+  const orden = [...sims].sort((a, b) => (a.estado === 'en_curso' ? 0 : 1) - (b.estado === 'en_curso' ? 0 : 1) || (indAlerta(b) ? 1 : 0) - (indAlerta(a) ? 1 : 0) || (a.actualizado_en < b.actualizado_en ? 1 : -1));
+  cont.innerHTML = `<div class="ce-grupo">${orden.map(s => {
+    const alerta = indAlerta(s), p = nivelDe[s.nombre], pasos = s.pasos || {}, paso = IND_PASOS.find(([k]) => !pasos[k]);
+    const ult = s.ultimo ? `${s.ultimo.de === 'asesor' ? 'Practicante' : s.ultimo.de === 'cliente' ? s.cliente?.split(' ')[0] || 'Cliente' : 'CRM'}: ${s.ultimo.texto || ''}` : '';
+    return `<div class="ce-card ind-sim${alerta ? ' alerta' : ''}${s.estado !== 'en_curso' ? ' cerrada' : ''}${IND_CHAT === s.id ? ' on' : ''}" data-sim="${esc(s.id)}" role="button" tabindex="0" aria-pressed="${IND_CHAT === s.id}">
+      <div class="cev-top"><div class="cev-nom">${esc(s.nombre)}</div>
+        <span class="cev-cod">${s.estado === 'en_curso' ? `Nivel ${s.nivel}` : s.puntaje != null ? `${s.puntaje}/100` : IND_ESTADO[s.estado] || s.estado}</span></div>
+      <div class="ia-datos">
+        <span class="ia-dato"><i class="fas fa-user"></i> ${esc(s.cliente || 'Cliente')} · ${esc(s.destino || '')}</span>
+        <span class="ia-dato"><i class="fas fa-stopwatch"></i> ${indDur((indAhora() - Date.parse(s.creado_en)) / 1000)}</span>
+        <span class="ia-dato"><i class="fas fa-comment"></i> ${fmt(s.turnos)} respuestas</span>
+        ${s.estado !== 'en_curso' ? `<span class="ia-dato">${IND_ESTADO[s.estado] || esc(s.estado)}</span>` : paso ? `<span class="ia-dato" title="Próximo paso del procedimiento"><i class="fas fa-shoe-prints"></i> ${esc(paso[1])}</span>` : ''}
+        ${p?.puntaje_hoy != null ? `<span class="ia-dato" title="Promedio de hoy"><i class="fas fa-star"></i> ${fmt(p.puntaje_hoy)} hoy · nivel ${p.nivel}</span>` : ''}
+      </div>
+      <div class="ind-pasos" aria-label="${IND_PASOS.filter(([k]) => pasos[k]).length} de ${IND_PASOS.length} pasos">${IND_PASOS.map(([k, t]) => `<span class="${pasos[k] ? 'ok' : ''}" title="${esc(t)}"></span>`).join('')}</div>
+      ${s.estado === 'en_curso' && s.temperatura != null ? `<div class="ind-temp"><span>Interés</span><i style="--t:${s.temperatura}%"></i><span>${s.temperatura}</span></div>` : ''}
+      ${alerta ? `<div class="ind-alerta"><i class="fas fa-triangle-exclamation"></i> ${esc(alerta)}</div>` : ''}
+      ${ult ? `<div class="ind-ultimo">${esc(ult)}</div>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+function indChatAbre(id) {
+  IND_CHAT = id; IND_CHAT_VER = null;
+  const box = document.getElementById('ind-chat');
+  box.hidden = !id;
+  document.querySelectorAll('#ind-vivo-lista .ind-sim').forEach(c => { c.classList.toggle('on', c.dataset.sim === id); c.setAttribute('aria-pressed', String(c.dataset.sim === id)); });
+  if (!id) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="tbl-state skel show" style="padding:16px"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  indChatCargar(id);
+}
+async function indChatCargar(id) {
+  const { data, error } = await sb.rpc('prueba_sim_detalle', { p_id: id });
+  if (IND_CHAT !== id) return;
+  const box = document.getElementById('ind-chat');
+  if (error || !data?.ok) { box.innerHTML = `<div class="ind-chat-nota">No se pudo cargar el chat${error ? ': ' + esc(error.message || '') : ''} <button class="ce-mini" type="button" data-ind-cerrar>Cerrar</button></div>`; return; }
+  IND_CHAT_VER = data.actualizado_en;
+  const viejo = box.querySelector('.ind-chat-log'), alFondo = !viejo || viejo.scrollHeight - viejo.scrollTop - viejo.clientHeight < 60;
+  const hora = ts => new Date(ts).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+  const cli = data.escenario?.nombre || 'Cliente', pasos = data.pasos || {}, ev = data.evaluacion;
+  const msg = h => h.de === 'asesor' ? `<div class="ind-msg yo">${esc(h.texto)}<time>${hora(h.ts)}</time></div>`
+    : h.de === 'cliente' ? `<div class="ind-msg">${esc(h.texto)}${h.adjunto === 'comprobante' ? '\n🧾 Mandó el comprobante de pago' : ''}<time>${hora(h.ts)}</time></div>`
+    : `<div class="ind-msg sis">${h.de === 'reloj' ? '⏱ ' : '📎 '}${esc(h.texto)}</div>`;
+  box.innerHTML = `<div class="ind-chat-cab"><span class="ind-ava">${esc(cli.split(' ').map(x => x[0]).join('').slice(0, 2))}</span>
+      <div><b>${esc(cli)}</b><small>Atiende ${esc(data.nombre)} · nivel ${data.nivel}${data.estado === 'en_curso' ? '' : ' · ' + (IND_ESTADO[data.estado] || data.estado)}</small></div>
+      <button type="button" data-ind-cerrar aria-label="Cerrar el chat"><i class="fas fa-xmark"></i></button></div>
+    <div class="ind-chat-pasos">${IND_PASOS.map(([k, t]) => `<span class="${pasos[k] ? 'ok' : ''}">${pasos[k] ? '✓' : '○'} ${esc(t)}</span>`).join('')}</div>
+    <div class="ind-chat-log">${(data.historial || []).map(msg).join('')}</div>
+    ${ev && data.puntaje != null ? `<div class="ind-chat-nota"><b>${data.puntaje}/100</b>${data.aprobada ? ' · aprobado' : ''}${ev.mejoras?.length ? `<br>Para mejorar: ${esc(ev.mejoras.join(' · '))}` : ''}</div>` : ''}`;
+  const log = box.querySelector('.ind-chat-log');
+  if (alFondo) log.scrollTop = log.scrollHeight;
 }
 
 function setupClientesEventos() {

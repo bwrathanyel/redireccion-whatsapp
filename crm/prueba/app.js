@@ -8,6 +8,8 @@ import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
 import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
+import { crearBoletosEmitidos } from './boletos-emitidos.js';
+import { crearFacturasEmpresa } from './facturas-empresa.js';
 
 const SUPABASE_URL = 'https://demo.invalid';
 const FOTOS_BASE = 'prueba-fotos/';
@@ -1693,7 +1695,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos',
+  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
@@ -3581,6 +3583,14 @@ let MARKETING = null;
 const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root') });
 let COSTOS_DIGITALES = null;
 const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
+let BOLETOS_EMITIDOS = null;
+const boletosEmitidos = () => BOLETOS_EMITIDOS ||= crearBoletosEmitidos({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('boletos-emitidos-root'),
+  librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), paleta: VCP,
+  entregar: pdfEntregar, slug: pdfSlug, limpiar: pdfSinEmojis, pdfjs: cargarPdfjs, catalogo: () => bolAsegurarCatalogo().then(() => bolCatalogo) });
+let FACTURAS_EMPRESA = null;
+const facturasEmpresa = () => FACTURAS_EMPRESA ||= crearFacturasEmpresa({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: () => ROL, raiz: document.getElementById('facturas-empresa-root'),
+  librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), franja: (...a) => vcpFranja(...a), paleta: VCP,
+  entregar: pdfEntregar, slug: pdfSlug, limpiar: pdfSinEmojis, fichaEmpresa: empresaFichaDesdeFactura });
 const pvCampanas = () => PV_CAMPANAS ||=crearCampanasWa({ sb, esc, ok: okToast, error: errToast, origen: 'reservas', rol: ROL, etapaTxt: k => (PV_ETAPAS[k] || [k])[0] });
 const pvWaMotivo = k => k ? (PV_WA_MOTIVOS[k] || [k, 'fa-circle-minus', 'var(--muted)']) : PV_WA_ELEGIBLE;
 async function pvWhatsappCargar() {
@@ -5268,7 +5278,9 @@ function rvFormServicio(p) {
     <div id="rv-s-detalle"></div>
     <div class="eb-title" style="margin-top:14px"><i class="fas fa-tag"></i> Precio al cliente</div>
     <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
+    ${rvPagoHtml(s)}
     ${rvBotones('guardar-servicio')}</div>`;
+  rvPagoInit(p, s);
   const desc = document.getElementById('rv-s-desc');
   desc.dataset.manual = desc.value ? '1' : '';
   desc.addEventListener('input', () => { desc.dataset.manual = desc.value ? '1' : ''; });
@@ -5292,6 +5304,92 @@ function rvFormServicio(p) {
   if (viaje === 'ow') { const fin = document.getElementById('rv-s-fin'); if (fin) fin.disabled = true; }
   rvAptoCampo();
   rvHoraVisible();
+}
+// Pago del cliente al cargar o editar el servicio (pedido del dueño 04-nov): abono o pago completo con
+// método, referencia y captura. Se registra con la cadena de abonos.js (duplicados, recibo, voucher) al guardar.
+const rvUsd = n => rvMonto(Math.round(Number(n || 0) * 100), 'USD');
+const rvPuedePagar = () => rvPuedeEditar() && ['admin', 'asesor', 'administrativo'].includes(ROL);
+function rvPagoHtml(s) {
+  if (!rvPuedePagar() || s?.anulado_en) return '';
+  const ab = abonosModulo(), d = ab.datos();
+  const pagos = s && d ? (d.abonos || []).filter(a => !a.anulado_en && Number(a.servicio_id) === s.id) : [];
+  const pagado = s ? ab.pagadoDe(s.id) : null, precio = Number(s?.precio_usd_centavos || 0) / 100;
+  const resumen = s && pagado != null ? `<div class="csub">Pagado <b>${rvUsd(pagado)}</b> de ${rvUsd(precio)}${precio > pagado ? ` · falta <b>${rvUsd(precio - pagado)}</b>` : precio > 0 ? ' · pagado completo' : ''}${pagos.length ? ` (${pagos.map(a => `${rvUsd(a.monto_usd)} ${esc(a.metodo)}`).join(', ')})` : ''}</div>` : '';
+  const chips = ab.METODOS.map(m => `<button class="ab-chip${m === 'Zelle' ? ' on' : ''}" type="button" data-rv-pago-metodo="${esc(m)}">${esc(m)}</button>`).join('');
+  const tasas = Object.entries(ab.TASAS).map(([t, n]) => `<option value="${t}" ${ab.tasa(t) ? '' : 'disabled'}>${n}${ab.tasa(t) ? ` · ${ab.tasa(t).toLocaleString('es-VE', { maximumFractionDigits: 4 })}` : ' · sin cargar'}</option>`).join('');
+  return `<div class="eb-title" style="margin-top:14px"><i class="fas fa-money-bill-wave"></i> Pago del cliente</div>
+    ${resumen}
+    <div class="seg-group seg-group-sm" id="rv-s-pago-modo">${Object.entries({ no: 'Sin pago ahora', abono: 'Abono', completo: 'Pago completo' }).map(([k, t]) => `<button class="seg${k === 'no' ? ' on' : ''}" type="button" data-rv-pago-modo="${k}">${t}</button>`).join('')}</div>
+    <div id="rv-s-pago-campos" hidden>
+      <div class="rv-3"><div id="rv-s-pago-monto-box"><label class="fl" for="rv-s-pago-monto">Monto del abono</label><input class="ei" id="rv-s-pago-monto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></div>
+        <div><label class="fl" for="rv-s-pago-moneda">Moneda</label><select class="ei" id="rv-s-pago-moneda"><option value="USD">Dólares (USD)</option><option value="VES">Bolívares (VES)</option></select></div>
+        <div id="rv-s-pago-tasa-box" hidden><label class="fl" for="rv-s-pago-tasa">Tasa</label><select class="ei" id="rv-s-pago-tasa">${tasas}</select></div></div>
+      <div class="csub" id="rv-s-pago-eq"></div>
+      <label class="fl">Método de pago</label><div class="ab-chips" id="rv-s-pago-metodos">${chips}</div>
+      <label class="fl" for="rv-s-pago-ref">Referencia</label><input class="ei" id="rv-s-pago-ref" maxlength="120" placeholder="Número de operación">
+      <label class="fl" for="rv-s-pago-file">Captura del comprobante (opcional)</label><input class="ei" id="rv-s-pago-file" type="file" accept="image/jpeg,image/png,image/webp">
+      <div class="csub" id="rv-s-pago-ia" hidden></div>
+      <label class="fl" for="rv-s-pago-nota">Nota (opcional)</label><input class="ei" id="rv-s-pago-nota" maxlength="2000">
+      <div class="csub">Queda en Abonos con su recibo y actualiza el voucher, igual que un abono cargado desde ahí.</div>
+    </div>`;
+}
+// Lo que falta del servicio según el precio escrito (estimado: el monto real del pago completo se calcula al guardar).
+function rvPagoFalta(s) {
+  const precio = Number(val('rv-s-precio') || 0), mon = val('rv-s-moneda'), tasa = Number(val('rv-s-tasa') || 0);
+  const usd = mon === 'USD' ? precio : tasa > 0 ? precio / tasa : s && Number(s.precio_centavos || 0) / 100 === precio ? Number(s.precio_usd_centavos || 0) / 100 : null;
+  return usd == null ? null : Math.max(0, usd - (s ? abonosModulo().pagadoDe(s.id) || 0 : 0));
+}
+function rvPagoInit(p, s) {
+  const box = document.getElementById('rv-s-pago-campos'); if (!box) return;
+  const modo = () => p.querySelector('[data-rv-pago-modo].on')?.dataset.rvPagoModo || 'no';
+  const pintar = () => {
+    const m = modo(), ves = val('rv-s-pago-moneda') === 'VES', ab = abonosModulo();
+    box.hidden = m === 'no';
+    document.getElementById('rv-s-pago-monto-box').hidden = m === 'completo';
+    document.getElementById('rv-s-pago-tasa-box').hidden = !ves;
+    const tasa = ab.tasa(val('rv-s-pago-tasa')), monto = Number(val('rv-s-pago-monto') || 0), falta = rvPagoFalta(s);
+    document.getElementById('rv-s-pago-eq').textContent = m === 'completo'
+      ? (falta == null ? 'Se cobra lo que le falte al servicio (se calcula al guardar).' : `Se cobra lo que le falta al servicio: ${rvUsd(falta)}${ves && tasa ? ` ≈ Bs ${(falta * tasa).toLocaleString('es-VE', { maximumFractionDigits: 2 })}` : ''}.`)
+      : ves && monto ? (tasa ? `Equivale a ${rvUsd(monto / tasa)}` : 'No hay tasa cargada: elegí otra o cobrá en dólares.') : '';
+  };
+  p.querySelectorAll('[data-rv-pago-modo]').forEach(b => b.onclick = () => { p.querySelectorAll('[data-rv-pago-modo]').forEach(x => x.classList.toggle('on', x === b)); pintar(); });
+  p.querySelectorAll('[data-rv-pago-metodo]').forEach(b => b.onclick = () => {
+    p.querySelectorAll('[data-rv-pago-metodo]').forEach(x => x.classList.toggle('on', x === b));
+    if (b.dataset.rvPagoMetodo === 'Pago móvil') document.getElementById('rv-s-pago-moneda').value = 'VES';
+    pintar();
+  });
+  ['rv-s-pago-monto', 'rv-s-pago-moneda', 'rv-s-pago-tasa', 'rv-s-precio', 'rv-s-moneda', 'rv-s-tasa'].forEach(k => document.getElementById(k)?.addEventListener('input', pintar));
+  ['rv-s-pago-moneda', 'rv-s-pago-tasa', 'rv-s-moneda'].forEach(k => document.getElementById(k)?.addEventListener('change', pintar));
+  // La captura prellena lo que esté vacío (EF analizar-comprobante, la misma de Abonos); nunca registra nada.
+  document.getElementById('rv-s-pago-file').onchange = async e => {
+    const archivo = e.target.files?.[0], aviso = document.getElementById('rv-s-pago-ia'); if (!archivo) { aviso.hidden = true; return; }
+    aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
+    const d = await abonosModulo().analizarCaptura(archivo);
+    if (!aviso.isConnected || e.target.files?.[0] !== archivo) return;
+    if (!d) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
+    const puestos = [], monto = document.getElementById('rv-s-pago-monto'), ref = document.getElementById('rv-s-pago-ref');
+    if (d.moneda && ['USD', 'VES'].includes(d.moneda) && !monto.value) { document.getElementById('rv-s-pago-moneda').value = d.moneda; puestos.push('moneda'); }
+    if (d.monto != null && modo() === 'abono' && !monto.value) { monto.value = d.monto; puestos.push('monto'); }
+    if (d.referencia && !ref.value) { ref.value = d.referencia; puestos.push('referencia'); }
+    const chip = d.metodo && p.querySelector(`[data-rv-pago-metodo="${CSS.escape(d.metodo)}"]`);
+    if (chip) { p.querySelectorAll('[data-rv-pago-metodo]').forEach(x => x.classList.toggle('on', x === chip)); puestos.push('método'); }
+    aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revisalo antes de guardar.` : 'No se encontraron datos en la captura.';
+    pintar();
+  };
+  pintar();
+}
+// null = sin pago; { error } = falta algo antes de guardar el servicio.
+function rvPagoLeer() {
+  const m = document.querySelector('#rv-s-pago-modo [data-rv-pago-modo].on')?.dataset.rvPagoModo;
+  if (!m || m === 'no') return null;
+  const moneda = val('rv-s-pago-moneda'), metodo = document.querySelector('#rv-s-pago-metodos [data-rv-pago-metodo].on')?.dataset.rvPagoMetodo || '';
+  const monto = Number(val('rv-s-pago-monto') || 0);
+  if (m === 'abono' && !(monto > 0)) return { error: 'Escribí el monto del abono (mayor a cero) o elegí «Sin pago ahora».' };
+  if (!metodo) return { error: 'Elegí el método de pago.' };
+  if (metodo === 'Pago móvil' && moneda !== 'VES') return { error: 'El Pago móvil se registra en bolívares: elegí VES.' };
+  if (moneda === 'VES' && !abonosModulo().tasa(val('rv-s-pago-tasa'))) return { error: 'No hay tasa cargada para esa opción: elegí otra o cobrá en dólares.' };
+  return { completo: m === 'completo', monto, moneda, metodo, tasaTipo: moneda === 'VES' ? val('rv-s-pago-tasa') : 'USD',
+    referencia: val('rv-s-pago-ref').trim(), nota: val('rv-s-pago-nota').trim(), archivo: document.getElementById('rv-s-pago-file')?.files?.[0] || null };
 }
 // Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
 // La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.
@@ -5593,6 +5691,9 @@ async function rvGuardarServicio(btn) {
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
     if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
   }
+  // El pago se valida antes de guardar el servicio: un error después ya no deja corregirlo en el formulario.
+  const pago = rvVista() !== 'boleteria' ? rvPagoLeer() : null;
+  if (pago?.error) { err.textContent = pago.error; return; }
   // Apartamento: solo si el selector está en pantalla (si no cargó, no se toca lo asignado).
   const selApto = rvVista() !== 'boleteria' && datos.tipo === 'hospedaje' ? document.getElementById('rv-s-apto-sel') : null;
   const tenia = id ? RV_APTOS[id] : null, quiere = selApto?.value || '';
@@ -5627,6 +5728,11 @@ async function rvGuardarServicio(btn) {
   RV_FORM = null; rvTrasCambio();
   if (falla || fallaTramos) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}${falla ? ', pero el apartamento no se asignó: ' + falla : ''}${fallaTramos ? '; los tramos no se cargaron: ' + fallaTramos : ''}`);
   else okToast((id ? 'Servicio actualizado' : 'Servicio agregado') + aviso);
+  if (pago && sid) {
+    // El servicio ya quedó: si el pago falla se avisa y se lleva a Abonos (no se vuelve a guardar el servicio).
+    const ok = await abonosModulo().pagarServicio(RV_RESERVA_ID, { ...pago, servicio: sid }, m => { if (m) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}, pero el pago no se registró: ${m}. Cargalo desde Abonos.`); });
+    if (!ok) rvTab('abonos');
+  }
 }
 function rvFormCosto(p) {
   const s = (RV_DET.servicios || []).find(x => x.id === RV_FORM.id);
@@ -10131,7 +10237,8 @@ function riaPintarDashboard(data) {
 }
 
 async function loadResumenIADashboard(forzar = false) {
-  if (!esOficina() || !document.getElementById('ria-dashboard')) return;
+  // Solo admin: panel_rendimiento_ia hace assert_rol(['admin']).
+  if (ROL !== 'admin' || !document.getElementById('ria-dashboard')) return;
   try { riaPintarDashboard(await riaConsultar(1, forzar, false)); }
   catch (e) {
     console.error('rendimiento IA dashboard', e);
@@ -10615,6 +10722,7 @@ function indAgilidad(s) {
   return Math.max(0, Math.round(100 - resta));
 }
 async function loadInduccion() {
+  if (IND_TAB === 'vivo') indVivoArranca();
   const cont = document.getElementById('ind-lista');
   const { data, error } = await sb.rpc('prueba_resumen');
   if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver la inducción' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
@@ -10694,6 +10802,123 @@ function setupInduccion() {
   const lista = document.getElementById('ind-lista');
   lista.addEventListener('click', abre);
   lista.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('ind-card')) { e.preventDefault(); abre(e); } });
+  document.getElementById('ind-tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-ind-tab]'); if (!b) return;
+    IND_TAB = b.dataset.indTab;
+    document.querySelectorAll('#ind-tabs [data-ind-tab]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); });
+    document.getElementById('ind-pane-misiones').hidden = IND_TAB !== 'misiones';
+    document.getElementById('ind-pane-vivo').hidden = IND_TAB !== 'vivo';
+    if (IND_TAB === 'vivo') indVivoArranca();
+  });
+  const vivo = document.getElementById('ind-vivo-lista');
+  const abreSim = e => { const c = e.target.closest('.ind-sim'); if (c) indChatAbre(IND_CHAT === c.dataset.sim ? null : c.dataset.sim); };
+  vivo.addEventListener('click', abreSim);
+  vivo.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('ind-sim')) { e.preventDefault(); abreSim(e); } });
+  document.getElementById('ind-chat').addEventListener('click', e => { if (e.target.closest('[data-ind-cerrar]')) indChatAbre(null); });
+  document.addEventListener('visibilitychange', () => { if (indVivoVisible()) indVivoArranca(); });
+}
+
+/* ---------- Inducción › En vivo: práctica con clientes IA del modo prueba ----------
+   Una tarjeta por chat tocado en los últimos 45 min (prueba_sim_vivo). En ámbar si el cliente lleva
+   más de 2 min sin respuesta, si se está yendo o si el chat lleva 5 min sin moverse. */
+let IND_TAB = 'misiones', IND_VIVO = null, IND_CHAT = null, IND_CHAT_VER = null, IND_VIVO_T = null, IND_DESFASE = 0;
+const IND_PASOS = [['rapidez', 'Atender en menos de 2 min'], ['presentacion', 'Saludar y presentarse'], ['calificacion', 'Calificar'], ['ficha', 'Anotar en la ficha'],
+  ['tarifario', 'Buscar en el Tarifario'], ['opciones', 'Mandar opciones'], ['cotizacion', 'Cotización PDF'], ['objeciones', 'Resolver dudas'], ['cierre', 'Cerrar con abono'], ['registro', 'Registrar el pago']];
+const IND_ESTADO = { vendido: '✅ Vendió', perdido: '❌ Se fue', abandonada: '⏸ Terminado sin cerrar' };
+const indAhora = () => Date.now() - IND_DESFASE;
+const indVivoVisible = () => IND_TAB === 'vivo' && !document.hidden && !!document.getElementById('sec-induccion')?.classList.contains('active');
+function indVivoArranca() { clearTimeout(IND_VIVO_T); indVivoCargar(); }
+let indVivoEnVuelo = false;
+async function indVivoCargar() {
+  clearTimeout(IND_VIVO_T);
+  if (!indVivoVisible() || indVivoEnVuelo) return;
+  indVivoEnVuelo = true;
+  const [{ data, error }, cfg] = await Promise.all([sb.rpc('prueba_sim_vivo'), sb.rpc('prueba_ia_config')]).finally(() => { indVivoEnVuelo = false; });
+  clearTimeout(IND_VIVO_T); IND_VIVO_T = setTimeout(indVivoCargar, 5000);
+  const cont = document.getElementById('ind-vivo-lista');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver la práctica en vivo' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
+  IND_DESFASE = Date.now() - Date.parse(data.ahora);
+  IND_VIVO = { ...data, gasto: cfg.data || null };
+  indVivoPintar();
+  if (IND_CHAT) { const s = data.simulaciones.find(x => x.id === IND_CHAT); if (s && s.actualizado_en !== IND_CHAT_VER) indChatCargar(IND_CHAT); }
+}
+function indAlerta(s) {
+  if (s.estado !== 'en_curso') return '';
+  const espera = s.ultimo_cliente_en && (!s.ultimo_asesor_en || s.ultimo_asesor_en < s.ultimo_cliente_en) ? (indAhora() - Date.parse(s.ultimo_cliente_en)) / 1000 : 0;
+  if (espera > 120) return `El cliente espera respuesta hace ${indDur(espera)}`;
+  if (s.decision === 'irse' || (s.temperatura != null && s.temperatura < 30)) return 'El cliente se está yendo';
+  const quieto = (indAhora() - Date.parse(s.actualizado_en)) / 1000;
+  return quieto > 300 ? `Sin movimiento hace ${indDur(quieto)}` : '';
+}
+function indVivoPintar() {
+  const { simulaciones: sims, practicantes: pr, gasto } = IND_VIVO;
+  const enCurso = sims.filter(s => s.estado === 'en_curso'), alertas = enCurso.filter(indAlerta);
+  const conNota = pr.filter(p => p.puntaje_hoy != null);
+  const n = document.getElementById('ind-vivo-n');
+  n.hidden = !enCurso.length; n.textContent = enCurso.length;
+  pintarKPIs('ind-vivo-kpis', [
+    { t: 'Atendiendo ahora', v: fmt(enCurso.length), d: alertas.length ? `${fmt(alertas.length)} necesitan atención` : 'Todo en orden', i: 'fa-comments', c: alertas.length ? 'var(--amber)' : 'var(--green)' },
+    { t: 'Practicantes hoy', v: fmt(pr.length), d: `${fmt(pr.reduce((a, p) => a + p.hoy, 0))} clientes atendidos`, i: 'fa-user-graduate', c: 'var(--blue)' },
+    { t: 'Puntaje medio hoy', v: conNota.length ? fmt(Math.round(conNota.reduce((a, p) => a + Number(p.puntaje_hoy), 0) / conNota.length)) : '—', d: `${fmt(pr.reduce((a, p) => a + p.aprobadas_hoy, 0))} aprobados`, i: 'fa-star', c: 'var(--purple)' },
+    { t: 'Gasto IA', v: gasto ? `US$${Number(gasto.gastado).toFixed(2)}` : '—', d: gasto ? `de US$${fmt(gasto.tope)} · hoy US$${Number(gasto.hoy).toFixed(2)}` : 'Sin datos', i: 'fa-coins', c: 'var(--accent)' },
+  ]);
+  const cont = document.getElementById('ind-vivo-lista');
+  if (!sims.length) {
+    cont.innerHTML = `<div class="vig-vacio"><i class="fas fa-tower-broadcast"></i><b>Nadie está atendiendo clientes ahora</b>
+      <div style="font-size:12.5px;margin-top:6px">Cuando un practicante termina las misiones del modo de prueba le empiezan a llegar clientes simulados. Se ven acá al instante.</div></div>`;
+    return;
+  }
+  const nivelDe = Object.fromEntries(pr.map(p => [p.nombre, p]));
+  const orden = [...sims].sort((a, b) => (a.estado === 'en_curso' ? 0 : 1) - (b.estado === 'en_curso' ? 0 : 1) || (indAlerta(b) ? 1 : 0) - (indAlerta(a) ? 1 : 0) || (a.actualizado_en < b.actualizado_en ? 1 : -1));
+  cont.innerHTML = `<div class="ce-grupo">${orden.map(s => {
+    const alerta = indAlerta(s), p = nivelDe[s.nombre], pasos = s.pasos || {}, paso = IND_PASOS.find(([k]) => !pasos[k]);
+    const ult = s.ultimo ? `${s.ultimo.de === 'asesor' ? 'Practicante' : s.ultimo.de === 'cliente' ? s.cliente?.split(' ')[0] || 'Cliente' : 'CRM'}: ${s.ultimo.texto || ''}` : '';
+    return `<div class="ce-card ind-sim${alerta ? ' alerta' : ''}${s.estado !== 'en_curso' ? ' cerrada' : ''}${IND_CHAT === s.id ? ' on' : ''}" data-sim="${esc(s.id)}" role="button" tabindex="0" aria-pressed="${IND_CHAT === s.id}">
+      <div class="cev-top"><div class="cev-nom">${esc(s.nombre)}</div>
+        <span class="cev-cod">${s.estado === 'en_curso' ? `Nivel ${s.nivel}` : s.puntaje != null ? `${s.puntaje}/100` : IND_ESTADO[s.estado] || s.estado}</span></div>
+      <div class="ia-datos">
+        <span class="ia-dato"><i class="fas fa-user"></i> ${esc(s.cliente || 'Cliente')} · ${esc(s.destino || '')}</span>
+        <span class="ia-dato"><i class="fas fa-stopwatch"></i> ${indDur((indAhora() - Date.parse(s.creado_en)) / 1000)}</span>
+        <span class="ia-dato"><i class="fas fa-comment"></i> ${fmt(s.turnos)} respuestas</span>
+        ${s.estado !== 'en_curso' ? `<span class="ia-dato">${IND_ESTADO[s.estado] || esc(s.estado)}</span>` : paso ? `<span class="ia-dato" title="Próximo paso del procedimiento"><i class="fas fa-shoe-prints"></i> ${esc(paso[1])}</span>` : ''}
+        ${p?.puntaje_hoy != null ? `<span class="ia-dato" title="Promedio de hoy"><i class="fas fa-star"></i> ${fmt(p.puntaje_hoy)} hoy · nivel ${p.nivel}</span>` : ''}
+      </div>
+      <div class="ind-pasos" aria-label="${IND_PASOS.filter(([k]) => pasos[k]).length} de ${IND_PASOS.length} pasos">${IND_PASOS.map(([k, t]) => `<span class="${pasos[k] ? 'ok' : ''}" title="${esc(t)}"></span>`).join('')}</div>
+      ${s.estado === 'en_curso' && s.temperatura != null ? `<div class="ind-temp"><span>Interés</span><i style="--t:${s.temperatura}%"></i><span>${s.temperatura}</span></div>` : ''}
+      ${alerta ? `<div class="ind-alerta"><i class="fas fa-triangle-exclamation"></i> ${esc(alerta)}</div>` : ''}
+      ${ult ? `<div class="ind-ultimo">${esc(ult)}</div>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+function indChatAbre(id) {
+  IND_CHAT = id; IND_CHAT_VER = null;
+  const box = document.getElementById('ind-chat');
+  box.hidden = !id;
+  document.querySelectorAll('#ind-vivo-lista .ind-sim').forEach(c => { c.classList.toggle('on', c.dataset.sim === id); c.setAttribute('aria-pressed', String(c.dataset.sim === id)); });
+  if (!id) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="tbl-state skel show" style="padding:16px"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
+  indChatCargar(id);
+}
+async function indChatCargar(id) {
+  const { data, error } = await sb.rpc('prueba_sim_detalle', { p_id: id });
+  if (IND_CHAT !== id) return;
+  const box = document.getElementById('ind-chat');
+  if (error || !data?.ok) { box.innerHTML = `<div class="ind-chat-nota">No se pudo cargar el chat${error ? ': ' + esc(error.message || '') : ''} <button class="ce-mini" type="button" data-ind-cerrar>Cerrar</button></div>`; return; }
+  IND_CHAT_VER = data.actualizado_en;
+  const viejo = box.querySelector('.ind-chat-log'), alFondo = !viejo || viejo.scrollHeight - viejo.scrollTop - viejo.clientHeight < 60;
+  const hora = ts => new Date(ts).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+  const cli = data.escenario?.nombre || 'Cliente', pasos = data.pasos || {}, ev = data.evaluacion;
+  const msg = h => h.de === 'asesor' ? `<div class="ind-msg yo">${esc(h.texto)}<time>${hora(h.ts)}</time></div>`
+    : h.de === 'cliente' ? `<div class="ind-msg">${esc(h.texto)}${h.adjunto === 'comprobante' ? '\n🧾 Mandó el comprobante de pago' : ''}<time>${hora(h.ts)}</time></div>`
+    : `<div class="ind-msg sis">${h.de === 'reloj' ? '⏱ ' : '📎 '}${esc(h.texto)}</div>`;
+  box.innerHTML = `<div class="ind-chat-cab"><span class="ind-ava">${esc(cli.split(' ').map(x => x[0]).join('').slice(0, 2))}</span>
+      <div><b>${esc(cli)}</b><small>Atiende ${esc(data.nombre)} · nivel ${data.nivel}${data.estado === 'en_curso' ? '' : ' · ' + (IND_ESTADO[data.estado] || data.estado)}</small></div>
+      <button type="button" data-ind-cerrar aria-label="Cerrar el chat"><i class="fas fa-xmark"></i></button></div>
+    <div class="ind-chat-pasos">${IND_PASOS.map(([k, t]) => `<span class="${pasos[k] ? 'ok' : ''}">${pasos[k] ? '✓' : '○'} ${esc(t)}</span>`).join('')}</div>
+    <div class="ind-chat-log">${(data.historial || []).map(msg).join('')}</div>
+    ${ev && data.puntaje != null ? `<div class="ind-chat-nota"><b>${data.puntaje}/100</b>${data.aprobada ? ' · aprobado' : ''}${ev.mejoras?.length ? `<br>Para mejorar: ${esc(ev.mejoras.join(' · '))}` : ''}</div>` : ''}`;
+  const log = box.querySelector('.ind-chat-log');
+  if (alFondo) log.scrollTop = log.scrollHeight;
 }
 
 function setupClientesEventos() {
@@ -17740,7 +17965,8 @@ function setupVozIA() {
   // en cada login de asesor, para una sección que ni siquiera puede abrir.
   // También hace que la vista previa de rol "asesor" (ver activarVistaPreviaRol)
   // se comporte igual que un asesor real: sin esta sección.
-  if (!esOficina() && ROL !== 'marketing') return;
+  // No esOficina(): el administrativo no tiene IA y las RPCs solo aceptan admin/marketing (3 errToast al cargar, 2026-11-03).
+  if (ROL !== 'admin' && ROL !== 'marketing') return;
   document.getElementById('vi-modo')?.addEventListener('click', (e) => {
     const b = e.target.closest('[data-vi-modo]');
     if (!b) return;
@@ -20739,7 +20965,10 @@ const docBotonVer = (texto = 'Ver') => docTactil() ? '<i class="fas fa-share-nod
 async function docEntregarUrl(url, nombre, mime = 'application/pdf') {
   const res = await fetch(url);
   if (!res.ok) throw new Error('sin_archivo');
-  const file = new File([await res.blob()], nombre, { type: mime });
+  return docEntregarBlob(await res.blob(), nombre, mime);
+}
+async function docEntregarBlob(blob, nombre, mime = 'application/pdf') {
+  const file = new File([blob], nombre, { type: mime || blob.type || 'application/octet-stream' });
   if (docTactil() && navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) {
       if (e.name === 'AbortError') return;
@@ -20747,6 +20976,7 @@ async function docEntregarUrl(url, nombre, mime = 'application/pdf') {
       if (e.name === 'NotAllowedError') { docToastCompartir(file); return; }
     }
   }
+  if (!/^(application\/pdf|image\/)/.test(file.type)) { descargarArchivo(file, nombre); return; }
   const u = URL.createObjectURL(file), w = window.open(u, '_blank');
   if (w) w.opener = null; else descargarArchivo(file, nombre);
   setTimeout(() => URL.revokeObjectURL(u), 60000);
@@ -22715,7 +22945,7 @@ const EMP_ERRORES = {
   dato_invalido: 'Algún dato no es válido o es demasiado largo.',
   no_existe: 'Esa empresa ya no existe: se recargó la lista.',
 };
-let EMP_CACHE = [], EMP_EDITANDO = null;
+let EMP_CACHE = [], EMP_EDITANDO = null, EMP_AL_GUARDAR = null;
 async function loadEmpresas() {
   if (!esOficina()) return;
   const cargando = document.getElementById('emp-loading');
@@ -22755,22 +22985,24 @@ function renderEmpresas() {
       <div class="lt-card-pie"><button class="btn-sm" type="button" data-emp-id="${e.id}"><i class="fas fa-id-card"></i> Ver ficha</button></div>
     </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${EMP_CACHE.length ? 'Ninguna empresa coincide con la búsqueda o el filtro' : 'Todavía no hay empresas cargadas'}</div>`;
 }
-function abrirEmpresaSheet(id = null) {
+// `alGuardar`: quien abrió la ficha (Facturas) recibe la empresa guardada; `nombre` precarga una nueva.
+function abrirEmpresaSheet(id = null, { nombre = '', alGuardar = null } = {}) {
   const e = id == null ? null : EMP_CACHE.find(x => x.id === id);
   if (id != null && !e) return;
-  EMP_EDITANDO = e;
+  EMP_EDITANDO = e; EMP_AL_GUARDAR = alGuardar;
   document.getElementById('emp-sheet-title').innerHTML = `<i class="fas fa-building"></i> ${e ? esc(e.nombre) : 'Nueva empresa'}`;
   const poner = (elId, v) => { document.getElementById(elId).value = v ?? ''; };
-  poner('emp-nombre', e?.nombre); poner('emp-tipo', e?.tipo || 'corporativa'); poner('emp-rif', e?.rif);
-  poner('emp-contacto', e?.contacto); poner('emp-telefono', e?.telefono); poner('emp-email', e?.email);
+  poner('emp-nombre', e?.nombre ?? nombre); poner('emp-tipo', e?.tipo || 'corporativa'); poner('emp-rif', e?.rif);
+  poner('emp-contacto', e?.contacto); poner('emp-telefono', e?.telefono); poner('emp-email', e?.email); poner('emp-direccion', e?.direccion);
   poner('emp-dias', e?.dias_credito);
   poner('emp-fijo', e?.cliente_fijo ? '1' : '0'); poner('emp-activo', e && !e.activo ? '0' : '1'); poner('emp-notas', e?.notas);
   const reservas = e?.reservas || [];
   document.getElementById('emp-reservas').innerHTML = !e ? '' : reservas.length
     ? reservas.map(r => `<div class="emp-res"><b>${esc(r.codigo || '#' + r.id)}</b> · ${esc((PV_ETAPAS[r.etapa] || [r.etapa])[0])}${r.referencia ? ' · ref. ' + esc(r.referencia) : ''}<span>${r.fecha_viaje_inicio ? pvFecha(r.fecha_viaje_inicio) : 'Sin fecha'}</span></div>`).join('')
     : '<div class="emp-res">Sin reservas enlazadas. Se enlazan desde la reserva (campo Empresa) o con el asistente.</div>';
-  document.getElementById('emp-reservas-box').hidden = !e;
-  if (e && reservas.length) empCargarReservas(e);
+  document.getElementById('emp-reservas-box').hidden = !e || !!alGuardar;
+  if (e && reservas.length && !alGuardar) empCargarReservas(e);
+  document.getElementById('emp-facturar').hidden = !e || !e.activo || !!alGuardar;
   document.getElementById('emp-err').textContent = '';
   openSheet('empresa-sheet');
 }
@@ -22796,7 +23028,7 @@ async function guardarEmpresa() {
   const modalidad = editando?.modalidad_precio || 'neto', pct = editando?.comision_pct;
   const datos = {
     nombre, tipo: val('emp-tipo'), rif: val('emp-rif'), contacto: val('emp-contacto'), telefono: val('emp-telefono'),
-    email: val('emp-email'), dias_credito: dias, modalidad_precio: modalidad, cliente_fijo: val('emp-fijo') === '1',
+    email: val('emp-email'), direccion: val('emp-direccion'), dias_credito: dias, modalidad_precio: modalidad, cliente_fijo: val('emp-fijo') === '1',
     activo: val('emp-activo') === '1', notas: val('emp-notas'),
   };
   if (modalidad === 'comision') datos.comision_pct = pct;
@@ -22811,8 +23043,15 @@ async function guardarEmpresa() {
   }
   closeSheet('empresa-sheet');
   okToast(editando ? 'Empresa actualizada' : 'Empresa creada');
-  EMP_EDITANDO = null;
+  const alGuardar = EMP_AL_GUARDAR;
+  EMP_EDITANDO = null; EMP_AL_GUARDAR = null;
   loadEmpresas();
+  alGuardar?.(data.empresa);
+}
+// Ficha de empresa pedida desde Facturas: EMP_CACHE puede estar vacío si nunca se abrió Empresas.
+async function empresaFichaDesdeFactura(id, nombre, alGuardar) {
+  if (id != null && !EMP_CACHE.some(e => e.id === id)) await loadEmpresas();
+  abrirEmpresaSheet(id, { nombre, alGuardar });
 }
 function setupEmpresas() {
   document.getElementById('emp-search').addEventListener('input', renderEmpresas);
@@ -22824,6 +23063,11 @@ function setupEmpresas() {
   });
   document.getElementById('emp-cancelar').addEventListener('click', () => closeSheet('empresa-sheet'));
   document.getElementById('emp-guardar').addEventListener('click', guardarEmpresa);
+  document.getElementById('emp-facturar').addEventListener('click', () => {
+    const id = EMP_EDITANDO?.id;
+    closeSheet('empresa-sheet');
+    if (id != null) { activateSection('facturas-empresa'); facturasEmpresa().facturarA(id); }
+  });
 }
 /* ---------- Reservas de empresas (pestaña de Reservas; solo admin) ----------
    Reservas y cotizaciones de los clientes empresariales, con la empresa como
@@ -29876,7 +30120,8 @@ function chatSetupLog() {
     const vel = t.closest('[data-vel]'); if (vel) { chatAudioVelocidad(); return; }
     const img = t.closest('[data-img]'); if (img) { openLightbox([img.dataset.img], 0); return; }
     const vid = t.closest('[data-video]'); if (vid) { reproducirVideo(vid); return; }
-    const doc = t.closest('[data-doc]'); if (doc) { window.open(doc.dataset.doc, '_blank'); return; }
+    const doc = t.closest('[data-doc]');
+    if (doc) { docEntregarUrl(doc.dataset.doc, doc.querySelector('.msg-doc-nombre')?.textContent || 'Documento', '').catch(() => errToast('No se pudo abrir el documento. Reintenta.')); return; }
     const adj = t.closest('[data-adjunto-path]'); if (adj) { abrirAdjuntoChat(adj.dataset.adjuntoPath); return; }
     const stk = t.closest('.cp-sticker'); if (stk) chatMenuMensaje(stk.closest('.chat-msg'));
   });
@@ -30896,6 +31141,8 @@ function setupVoucher() {
   q.addEventListener('focus', () => { if (vcLeadsRes.length && q.value.trim().length >= 3) res.hidden = false; });
   document.getElementById('vc-destino').addEventListener('focus', vcCargarTarifario, { once: true });
   vcHotelSetup(form);
+  ['input', 'change', 'click'].forEach(t => form.addEventListener(t, vcProgramarBorrador));
+  window.addEventListener('pagehide', vcGuardarBorrador);
   const ent = document.getElementById('vc-fecha-entrada');
   ent.min = cbHoy();
   // Salida sugerida a una noche cuando falta o quedó antes de la entrada nueva.
@@ -31483,9 +31730,9 @@ function vcPintarLead() {
 }
 // Qué pasa al generar. Decisión del dueño: lead sin PAGO REALIZADO (o sin lead) -> se cierra la venta.
 function vcPlan() {
-  const l = vcLead, pagado = vcNum('vc-monto-pagado');
+  const l = vcLead;
   if (vcSinReserva) return { modo: 'solo', manual: true };
-  if (!l || l.estado !== 'PAGO REALIZADO') return pagado > 0 ? { modo: 'cerrar', lead: l } : { modo: 'solo', motivo: 'sin_pago' };
+  if (!l || l.estado !== 'PAGO REALIZADO') return { modo: 'cerrar', lead: l };
   if (vcReservasError) return { modo: 'solo', motivo: 'error' };
   if (vcReservas === null) return { modo: 'cargando', lead: l };
   const v = document.getElementById('vc-reserva-sel')?.value || 'nueva';
@@ -31496,14 +31743,14 @@ function vcPintarPlan(p) {
   if (DR?.edicion('voucher')) { document.getElementById('vc-plan').textContent = 'Corrección del voucher existente. La reserva vinculada se conserva.'; return; }
   const pagado = vcNum('vc-monto-pagado'), nom = esc(p.lead?.nombre || val('vc-cliente-nombre').trim() || 'el cliente');
   const txt = {
-    cerrar: p.lead ? `<i class="fas fa-handshake"></i> Se <b>cierra la venta</b> de ${nom} por <b>${vcMoney(pagado)}</b> (pasa a PAGO REALIZADO: factura y comisión) y queda su ficha en Reservas con el voucher.`
+    cerrar: !(pagado > 0) ? `<i class="fas fa-hourglass-half"></i> ${p.lead ? `Se crea la reserva de ${nom}` : 'Cliente nuevo: se <b>crea en el CRM</b> con su reserva'} como <b>cobro pendiente</b> (pasa a EN ESPERA DE PAGO, sin facturar) y queda su ficha en Reservas con el voucher.`
+      : p.lead ? `<i class="fas fa-handshake"></i> Se <b>cierra la venta</b> de ${nom} por <b>${vcMoney(pagado)}</b> (pasa a PAGO REALIZADO: factura y comisión) y queda su ficha en Reservas con el voucher.`
       : `<i class="fas fa-user-plus"></i> Cliente nuevo: se <b>crea en el CRM</b>, se <b>cierra la venta</b> por <b>${vcMoney(pagado)}</b> y queda su ficha en Reservas con el voucher.`,
     nueva: `<i class="fas fa-plus"></i> Se crea una <b>reserva nueva</b> (otro viaje) de ${nom}${pagado > 0 ? ` y se factura <b>${vcMoney(pagado)}</b>` : ', sin facturar (no hay pago)'}.`,
     vincular: `<i class="fas fa-link"></i> Se actualiza la ficha <b>${esc(p.reserva?.codigo || '')}</b>: hospedaje, fechas y voucher adjunto. <b>No se factura de nuevo.</b>`,
     cargando: '<i class="fas fa-spinner fa-spin"></i> Cargando las reservas del cliente...',
     solo: p.manual ? '<i class="fas fa-file-pdf"></i> Solo se genera el PDF, sin tocar Reservas.'
-      : p.motivo === 'error' ? '<i class="fas fa-triangle-exclamation"></i> No se pudieron cargar las reservas del cliente: solo se genera el PDF.'
-      : '<i class="fas fa-file-pdf"></i> Sin monto pagado: solo se genera el PDF. Cargá lo pagado para cerrar la venta y crear la ficha.',
+      : '<i class="fas fa-triangle-exclamation"></i> No se pudieron cargar las reservas del cliente: solo se genera el PDF.',
   }[p.modo];
   const link = p.modo === 'solo' ? (p.manual ? ' <button class="vc-link" type="button" data-vc-con>Vincular con Reservas</button>' : '')
     : p.modo === 'cargando' ? '' : ' <button class="vc-link" type="button" data-vc-sin>Solo PDF, sin reserva</button>';
@@ -31578,7 +31825,60 @@ function vcReset() {
   document.getElementById('vc-sugerencia').hidden = true;
   vcCerrarRes(); vcPintarLead(); vcSyncChips(); vcActualizarPreview();
 }
-window.vcLimpiar = () => { document.getElementById('vc-hecho').hidden = true; vcReset(); };
+window.vcLimpiar = () => { document.getElementById('vc-hecho').hidden = true; vcReset(); vcBorrarBorrador(); vcBorradorListo = true; };
+// Borrador local: recargar por una actualización del CRM no borra el voucher a medio llenar.
+const VC_BORRADOR_IDS = ['vc-cliente-nombre', 'vc-documento', 'vc-telefono', 'vc-destino', 'vc-fecha-entrada', 'vc-check-in', 'vc-fecha-salida', 'vc-check-out', 'vc-modalidad',
+  'vc-total-dias', 'vc-habitaciones', 'vc-adultos', 'vc-ninos', 'vc-infantes', 'vc-status', 'vc-total-general', 'vc-forma-pago', 'vc-referencia', 'vc-monto-pagado', 'vc-resta', 'vc-asesor'];
+let vcBorradorTimer = null, vcBorradorListo = false, vcBorradorLeido = false;
+const vcBorradorClave = () => 'vc_borrador_' + (MI_NOMBRE || '');
+const vcBorrarBorrador = () => { try { localStorage.removeItem(vcBorradorClave()); } catch { /* sin storage */ } };
+const vcProgramarBorrador = () => { clearTimeout(vcBorradorTimer); vcBorradorTimer = setTimeout(vcGuardarBorrador, 400); };
+function vcGuardarBorrador() {
+  clearTimeout(vcBorradorTimer);
+  if (!vcBorradorListo || DR?.edicion('voucher')) return;
+  const campos = Object.fromEntries(VC_BORRADOR_IDS.map(id => [id, document.getElementById(id)?.value || '']));
+  if (!['vc-cliente-nombre', 'vc-telefono', 'vc-destino'].some(id => campos[id].trim()) && !vcServicios.length && !vcLead) { vcBorrarBorrador(); return; }
+  const h = vcHotel.producto_id ? { producto_id: vcHotel.producto_id, nombre: vcHotel.nombre, plan: vcHotel.plan, hab: vcHotel.hab, hab_libre: vcHotel.hab_libre, hab_manual: vcHotel.hab_manual } : null;
+  try {
+    localStorage.setItem(vcBorradorClave(), JSON.stringify({ campos, servicios: vcServicios, lead: vcLead, sinReserva: vcSinReserva, hotel: h,
+      hospMonto: vcHospMonto, autoAplicado: vcAutoAplicado, diasManual: vcDiasManual, restaManual: vcRestaManual, planOtro: vcPlanOtro }));
+  } catch { /* sin storage */ }
+}
+async function vcRestaurarBorrador() {
+  if (vcBorradorLeido || !MI_NOMBRE) return;
+  vcBorradorLeido = vcBorradorListo = true;
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(vcBorradorClave()) || 'null'); } catch { /* sin storage */ }
+  if (!b?.campos || DR?.edicion('voucher') || val('vc-cliente-nombre').trim() || vcServicios.length) return;
+  Object.entries(b.campos).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (!el || v === '' || el.disabled || (el.tagName === 'SELECT' && ![...el.options].some(o => o.value === v))) return;
+    el.value = v;
+  });
+  vcServicios = Array.isArray(b.servicios) ? b.servicios : [];
+  vcServSuma = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
+  vcHospMonto = Number(b.hospMonto) || 0; vcAutoAplicado = Number(b.autoAplicado) || 0;
+  vcDiasManual = !!b.diasManual; vcRestaManual = !!b.restaManual; vcPlanOtro = !!b.planOtro;
+  vcPintarServicios(); vcSyncChips();
+  if (b.lead?.id) vcElegirLead(b.lead);
+  vcSinReserva = !!b.sinReserva;
+  vcActualizarPreview(); okToast('Recuperamos el voucher que estabas llenando');
+  if (!b.hotel?.producto_id) return;
+  const carga = ++vcHotel.carga;
+  Object.assign(vcHotel, { ...b.hotel, planes: [], _cargando: true, _tarifaError: false });
+  vcHotelPintar();
+  try {
+    await Promise.all([cbTraerTarifas(b.hotel.producto_id), cbTraerHabitaciones(b.hotel.producto_id)]);
+    if (vcHotel.carga !== carga || DR?.edicion('voucher')) return;
+    vcHotel.planes = cbTarOpciones(cbHotelFilas(vcHotel), 'plan');
+    vcHotel._cargando = false; vcHotelPintar(); vcHospRecalc();
+  } catch (error) {
+    console.error('vcRestaurarBorrador', error);
+    // Sin tarifas no se recalcula: el total guardado ya incluye el hospedaje.
+    if (vcHotel.carga === carga) { vcHotel._cargando = false; vcHotel._tarifaError = true; vcHotelPintar(); }
+  }
+  vcActualizarPreview();
+}
 async function loadVoucherSeccion() {
   const sel = document.getElementById('vc-asesor');
   const optHtml = (nombre, sel_) => `<option value="${esc(nombre)}" ${nombre === sel_ ? 'selected' : ''}>${esc(nombre)}</option>`;
@@ -31592,7 +31892,7 @@ async function loadVoucherSeccion() {
   }
   if (!val('vc-check-in')) document.getElementById('vc-check-in').value = '3:00 PM';
   if (!val('vc-check-out')) document.getElementById('vc-check-out').value = '12:00 PM';
-  vcActualizarPreview();
+  vcActualizarPreview(); vcRestaurarBorrador();
   vcOffset = 0;
   await cargarHistorialVouchers(false);
 }
@@ -31749,22 +32049,25 @@ function cargarImagenBase64(src) {
 let vcSolicitudPendiente = null, vcGenerando = false;
 async function vcRevisarOperacion(fila, plan) {
   // Sin cliente elegido: mismo match que Importar (teléfono/cédula/nombre) para no crear un lead duplicado.
-  const [{ data, error }, cands] = await Promise.all([sb.rpc('voucher_revisar_venta', { p_datos: fila }),
-    plan.lead ? [] : ivBuscarLeads({ cliente_nombre: fila.cliente_nombre, telefono: fila.telefono, documento: fila.documento_identidad }).catch(() => [])]);
+  const [{ data, error }, cands, previas] = await Promise.all([sb.rpc('voucher_revisar_venta', { p_datos: fila }),
+    plan.lead ? [] : ivBuscarLeads({ cliente_nombre: fila.cliente_nombre, telefono: fila.telefono, documento: fila.documento_identidad }).catch(() => []),
+    plan.lead ? sb.rpc('reservas_de_lead', { p_lead_id: plan.lead.id }) : null]);
   if (error || !data?.ok) throw new Error('No se pudieron revisar las ventas existentes. Intenta de nuevo.');
   const similares = data.reservas || [], leads = cands.slice(0, 5);
-  const opciones = [{ v: '', t: 'Selecciona qué operación corresponde' }, ...similares.map(r => ({
+  const opciones = [...similares.map(r => ({
     v: String(r.id), t: `${r.codigo} · ${r.cliente} · ${r.fecha_viaje_inicio || 'sin fecha'} / ${r.fecha_viaje_fin || 'sin fecha'} · Total ${vcMoney(r.monto_total)} · Abono ${vcMoney(r.monto_pagado)}`,
   }))];
   if (plan.reserva && !similares.some(r => r.id === plan.reserva.id)) opciones.push({ v: String(plan.reserva.id), t: `${plan.reserva.codigo} · ${plan.lead.nombre} · Reserva seleccionada` });
   opciones.push(...leads.map(c => ({ v: 'lead:' + c.id, t: `Cliente existente: ${c.nombre || 'Sin nombre'} · ${c.telefono || 'sin teléfono'} · ${c.estado || '—'}${c.asesor ? ' · ' + c.asesor : ''} (${ivMotivos(c)})` })));
-  opciones.push({ v: 'nueva', t: plan.lead ? 'Crear otra venta para el cliente seleccionado' : 'Crear un cliente nuevo con su venta' });
+  // «Otra venta» solo si el cliente ya compró o tiene una reserva activa; si no, es su primera venta.
+  const yaTieneVenta = similares.length || plan.reserva || ['PAGO REALIZADO', 'VENTA COMPLETA'].includes(plan.lead?.estado) || previas?.data?.reservas?.some(r => r.activo);
+  opciones.push({ v: 'nueva', t: !plan.lead ? 'Crear un cliente nuevo con su venta' : yaTieneVenta ? 'Crear otra venta para el cliente seleccionado' : 'Crear la venta para el cliente seleccionado' });
   opciones.push({ v: 'solo', t: 'Generar solo el PDF (no queda en Reservas)' });
   const fuerte = !similares.length && leads.find(c => c.fuerte);
   // Una sola hoja: encadenar otra confirmarSheet/pedirTexto la deja cerrada por el history.back de esta.
   const eleccion = await confirmarSheet({ titulo: similares.length ? 'Revisa las ventas antes de generar' : '¿Vincular o crear una venta?', textoOk: 'Generar voucher',
-    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : leads.length ? `El cliente ya podría estar en el CRM (${leads.length === 1 ? '1 coincidencia' : leads.length + ' coincidencias'} por teléfono o nombre): elige su ficha para no duplicarlo.` : 'Elige expresamente cómo guardar este voucher.'}\nCrear venta factura una sola vez el abono${Number(fila.monto_pagado) > 0 ? ' de ' + vcMoney(fila.monto_pagado) : ' (hoy no hay abono cargado)'}.`,
-    campos: [{ id: 'operacion', tipo: 'select', label: 'Operación', requerido: true, valor: fuerte ? 'lead:' + fuerte.id : '', opciones },
+    detalle: `${fila.cliente_nombre}\nViaje: ${fila.fecha_entrada || 'sin fecha'} / ${fila.fecha_salida || 'sin fecha'}\nTotal ${vcMoney(fila.total_general)} · Abono ${vcMoney(fila.monto_pagado)} · Saldo ${vcMoney(fila.resta)}\n${similares.length ? 'Hay operaciones que podrían ser la misma venta. Revisa también las fechas y los teléfonos antes de elegir. Vincular actualiza el viaje sin volver a facturarlo.' : leads.length ? `El cliente ya podría estar en el CRM (${leads.length === 1 ? '1 coincidencia' : leads.length + ' coincidencias'} por teléfono o nombre): elige su ficha para no duplicarlo.` : 'Elige expresamente cómo guardar este voucher.'}\n${Number(fila.monto_pagado) > 0 ? 'Crear venta factura una sola vez el abono de ' + vcMoney(fila.monto_pagado) + '.' : 'Sin abono cargado: queda en Reservas como cobro pendiente, sin facturar.'}`,
+    campos: [{ id: 'operacion', tipo: 'radio', label: 'Operación', requerido: true, valor: fuerte ? 'lead:' + fuerte.id : '', opciones },
       ...(similares.length ? [{ id: 'motivo', tipo: 'textarea', label: 'Motivo si es una venta distinta (mínimo 8 caracteres)', placeholder: 'Qué diferencia esta compra de las existentes', requeridoSi: out => out.operacion === 'nueva' || out.operacion?.startsWith('lead:') }] : [])],
   });
   if (!eleccion) return null;
@@ -31781,7 +32084,6 @@ async function vcRevisarOperacion(fila, plan) {
     if (motivo.trim().length < 8) throw new Error('Explica el motivo con al menos 8 caracteres.');
   }
   const otroViaje = plan.lead && ['PAGO REALIZADO', 'VENTA COMPLETA'].includes(plan.lead.estado);
-  if (!(Number(fila.monto_pagado) > 0) && !otroViaje) throw new Error('Para crear una venta carga el abono o elige generar solo el PDF.');
   return { modo: otroViaje ? 'nueva' : 'cerrar', lead: plan.lead, revisadas: similares.map(r => r.id), motivo };
 }
 
@@ -31805,6 +32107,7 @@ async function vcAdjuntarVoucherReemplazando(reservaId, servicioId, blob, nombre
   return falla;
 }
 function vcPintarHecho(h) {
+  clearTimeout(vcBorradorTimer); vcBorrarBorrador();
   const box = document.getElementById('vc-hecho');
   box.innerHTML = `<b><i class="fas fa-circle-check"></i> Voucher N° ${fmt(h.numero)} generado</b><span>${esc(h.resumen)}</span>
     ${h.avisos.map(a => `<small style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</small>`).join('')}
@@ -31893,7 +32196,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     const avisos = [], st = { leadId: cierre.data.lead_id, reservaId: cierre.data.reserva_id, codigo: cierre.data.codigo };
     if (st.reservaId && !cierre.data.reutilizado) { const e = await vcAdjuntarPdf(st.reservaId, cierre.data.servicio_id, blob, nombreArchivo); if (e) avisos.push('El PDF quedó en el historial de vouchers, pero no se pudo adjuntar a la ficha: ' + e); }
     const resumen = avisos.length ? 'El PDF se descargó, pero revisá lo de abajo'
-      : { cerrar: `Venta cerrada por ${vcMoney(pagado)}`, nueva: `Reserva nueva${pagado > 0 ? ' facturada por ' + vcMoney(pagado) : ''}`, vincular: 'Ficha actualizada con el voucher', solo: 'Solo PDF, sin ficha en Reservas' }[plan.modo]
+      : { cerrar: pagado > 0 ? `Venta cerrada por ${vcMoney(pagado)}` : 'Reserva creada · cobro pendiente', nueva: `Reserva nueva${pagado > 0 ? ' facturada por ' + vcMoney(pagado) : ''}`, vincular: 'Ficha actualizada con el voucher', solo: 'Solo PDF, sin ficha en Reservas' }[plan.modo]
         + (st.codigo && plan.modo !== 'solo' ? ` · ${st.codigo}` : '');
     vcPintarHecho({ numero: registro.numero_factura, resumen, avisos, reservaId: st.reservaId, codigo: st.codigo, pdfPath });
     if (avisos.length) errToast(avisos[0]); else okToast(`Voucher N° ${registro.numero_factura} generado`);
@@ -31974,9 +32277,12 @@ function vcpMembrete(doc, { F, st, logo }) {
   vcpFranja(doc, VCP_X0, 100, VCP_W, 2);
 }
 
+// Niveles de compactación del voucher (espaciado, letra): construirVoucherPdf prueba del 0 en adelante hasta que entre en una hoja.
+const VCP_DENSIDAD = [[1, 1], [.78, .95], [.6, .9], [.45, .85]];
 function vcpDibujarVoucher(doc, v, ctx) {
   const { F, st } = ctx;
-  const nServ = Array.isArray(v.servicios) ? v.servicios.length : 0, pv = nServ ? 4.5 : 6.5, gap = nServ ? 12 : 16;
+  const [E, FZ] = VCP_DENSIDAD[ctx.z || 0];
+  const nServ = Array.isArray(v.servicios) ? v.servicios.length : 0, pv = (nServ ? 4.5 : 6.5) * E, gap = (nServ ? 12 : 16) * E;
   const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
   const usd = n => n != null && n !== '' ? `$${Number(n).toFixed(2)}` : '';
   const txt = s => String(s ?? '').trim();
@@ -31995,12 +32301,12 @@ function vcpDibujarVoucher(doc, v, ctx) {
   };
 
   // Tabla etiqueta/valor a 4 columnas con encabezado oscuro; contorno fuerte afuera, líneas finas adentro.
-  const tabla = (titulo, filas, y, { left = VCP_X0, width = VCP_W, lab = 120, cols = 4 } = {}) => {
-    const etiqueta = { fillColor: VCP.suave, textColor: VCP.gris, fontStyle: st('semibold'), fontSize: 7, cellWidth: lab };
+  const tabla = (titulo, filas, y, { left = VCP_X0, width = VCP_W, lab = 120, cols = 4, pageBreak = 'auto' } = {}) => {
+    const etiqueta = { fillColor: VCP.suave, textColor: VCP.gris, fontStyle: st('semibold'), fontSize: 7 * FZ, cellWidth: lab };
     return conBorde({
-      startY: y, theme: 'grid', margin: { left, right: 612 - left - width, bottom: 50 }, tableWidth: width,
-      styles: { font: F, fontStyle: st('medium'), fontSize: 9, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pv, bottom: pv, left: 9, right: 9 }, valign: 'middle' },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 8, lineWidth: 0, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
+      startY: y, theme: 'grid', margin: { left, right: 612 - left - width, bottom: 50 }, tableWidth: width, pageBreak,
+      styles: { font: F, fontStyle: st('medium'), fontSize: 9 * FZ, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pv, bottom: pv, left: 9, right: 9 }, valign: 'middle' },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 8 * FZ, lineWidth: 0, cellPadding: { top: 6 * E, bottom: 6 * E, left: 9, right: 9 } },
       columnStyles: cols === 4 ? { 0: etiqueta, 2: { ...etiqueta, cellWidth: lab - 14 } } : { 0: etiqueta },
       head: [[{ content: titulo, colSpan: cols, styles: { charSpace: .8 } }]],
       body: filas,
@@ -32021,10 +32327,11 @@ function vcpDibujarVoucher(doc, v, ctx) {
   font('normal', 8, vcpTinte(VCP.navy, .7)); doc.text(`Fecha de emisión: ${v.fecha_emision}`, VCP_X1 - 14, 146, { align: 'right' });
 
   // ---------- Saludo ----------
-  font('normal', 8.6, VCP.gris);
+  font('normal', 8.6 * FZ, VCP.gris);
   const saludo = doc.splitTextToSize('¡Felicidades! Se ha hecho acreedor de un servicio turístico de calidad con el sello de Destino y Eventos Lotus 360. Nuestro deseo es brindarle la mayor satisfacción que usted merece.', VCP_W);
-  doc.text(saludo, VCP_X0, 176, { lineHeightFactor: 1.4 });
-  let y = 176 + saludo.length * 12 + 8;
+  const ys = 156 + 20 * E;
+  doc.text(saludo, VCP_X0, ys, { lineHeightFactor: 1.4 });
+  let y = ys + saludo.length * 12 * FZ + 8 * E;
 
   // ---------- Cliente ----------
   y = tabla('DATOS DEL CLIENTE', [
@@ -32057,8 +32364,8 @@ function vcpDibujarVoucher(doc, v, ctx) {
   // Tabla de filas con encabezado oscuro (servicios, pasajeros, itinerario).
   const listado = (head, body, yL, columnStyles = {}, pad = 6) => conBorde({
     startY: yL, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
-    styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pad, bottom: pad, left: 9, right: 9 } },
-    headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+    styles: { font: F, fontStyle: st('medium'), fontSize: 8.6 * FZ, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pad * E, bottom: pad * E, left: 9, right: 9 } },
+    headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6 * FZ, lineWidth: 0 },
     columnStyles, head: [head], body,
   }, VCP_X0, VCP_W);
 
@@ -32113,22 +32420,21 @@ function vcpDibujarVoucher(doc, v, ctx) {
     ['TOTAL GENERAL', { content: usd(v.total_general), styles: { halign: 'right', fontStyle: st('semibold') } }],
     ['PAGADO', { content: usd(v.monto_pagado), styles: { halign: 'right', fontStyle: st('semibold') } }],
     [{ content: 'RESTA', styles: { fillColor: vcpTinte(VCP.naranja, .9), textColor: VCP.ambarOsc, fontStyle: st('bold'), fontSize: 8.4 } },
-      { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
-  ], yR, opt);
+      { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13 * FZ, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
+  ], yR, { ...opt, pageBreak: 'avoid' });
   const half = (VCP_W - 16) / 2;
   if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
     if (y + 75 > 742) { doc.addPage(); y = 40; }
     const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
     y = conBorde({
       startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 44 }, rowPageBreak: 'avoid',
-      styles: { font: F, fontStyle: st('medium'), fontSize: 8.4, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 3, bottom: 3, left: 9, right: 9 } },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+      styles: { font: F, fontStyle: st('medium'), fontSize: 8.4 * FZ, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 3 * Math.max(E, .6), bottom: 3 * Math.max(E, .6), left: 9, right: 9 } },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6 * FZ, lineWidth: 0 },
       columnStyles: { 0: { cellWidth: 120 }, 3: { halign: 'right', fontStyle: st('semibold') } },
       head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
       body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, (a.metodo || '—') + (a.servicio ? ` · ${a.servicio}` : ''), a.referencia || '—', usd(a.monto)]
         .map(x => a.nuevo ? { content: x, styles: nuevo } : x)),
-    }, VCP_X0, VCP_W) + 6;
-    if (y + 75 > 742) { doc.addPage(); y = 40; }
+    }, VCP_X0, VCP_W) + 6 * E;
     resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
     return;
   }
@@ -32258,12 +32564,16 @@ function vcpDibujarTerminos(doc, ctx, T) {
 
 async function construirVoucherPdf(v) {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  let F = 'helvetica', st = s => (s === 'normal' || s === 'medium' ? 'normal' : 'bold');
+  let fuentes = [], F = 'helvetica', st = s => (s === 'normal' || s === 'medium' ? 'normal' : 'bold');
   try {
-    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    fuentes = await cargarFuentesPdf();
     F = 'Poppins'; st = s => s;
   } catch (_e) { /* sin Poppins sale en Helvetica */ }
+  const nuevoDoc = () => {
+    const d = new jsPDF({ unit: 'pt', format: 'letter' });
+    fuentes.forEach(([a, e, b]) => { d.addFileToVFS(a, b); d.addFont(a, 'Poppins', e); });
+    return d;
+  };
   let logo = null;
   try { const d = await cargarImagenBase64('logo-color.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
   const ctx = { F, st, logo };
@@ -32279,7 +32589,15 @@ async function construirVoucherPdf(v) {
     monto: s.monto,
   }));
   if (boletos.length) await bolAsegurarCatalogo();
-  vcpDibujarVoucher(doc, { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios, boletos }, ctx);
+  const datos = { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios, boletos };
+  // Pedido del dueño (04-nov): el voucher entero, con el resumen de pago, va en la hoja 1. Se compacta
+  // nivel por nivel hasta que entre; si ni el más compacto alcanza (varios boletos), sale en más hojas.
+  let doc;
+  for (let z = 0; z < VCP_DENSIDAD.length; z++) {
+    doc = nuevoDoc();
+    vcpDibujarVoucher(doc, datos, { ...ctx, z });
+    if (doc.getNumberOfPages() === 1) break;
+  }
   const nVoucher = doc.getNumberOfPages();
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
@@ -33653,7 +33971,7 @@ async function cbCargarHistorial(append) {
     </div>
     <div class="lt-card-meta">${ventas ? '<i class="fas fa-user-check"></i> Para el cliente' : c.enviado_a ? `<i class="fas fa-paper-plane"></i> Enviada a ${esc(c.enviado_a_nombre || 'asesor')}` : '<i class="fas fa-circle-minus"></i> Sin enviar'}</div>
     <div class="lt-card-pie">
-      <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Ver PDF</button>
+      <button class="btn-sm lt-primario" type="button" onclick="cbVerPdf('${c.id}')">${docBotonVer('Ver PDF')}</button>
       ${DR?.acciones('cotizacion', c) || ''}
       ${!c.anulado_en && ventas ? (c.lead_id ? `<button class="btn-sm" type="button" onclick="cbReintentarLead('${c.id}', this)">Registrar en lead</button>` : '') : ''}
     </div>
@@ -33777,8 +34095,8 @@ window.cbVerPdf = async function cbVerPdf(id) {
   if (!c) return;
   try {
     await ensureVoucherLibs();
-    const blob = c.pdf_revision_path ? await DR.pdfVigente('cotizacion', c) : await cbPdfDe(c);
-    window.open(URL.createObjectURL(blob), '_blank');
+    const blob = DR ? await DR.pdfVigente('cotizacion', c) : await cbPdfDe(c);
+    await docEntregarBlob(blob, docNombrePorTipo('cotizacion', c));
   } catch (e) { console.error('cbVerPdf', e); errToast('No se pudo generar el PDF'); }
 };
 window.cbReenviar = async function cbReenviar(id, btn) {
@@ -34511,6 +34829,8 @@ const NAV_ITEMS = [
   // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
   // Ya no es pestaña de Leads (2026-10-17): entrada propia del menú en todos los modos (también la ficha del lead la abre con cbDesdeLead).
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
+  // Boletos emitidos (2026-11-04): solo admin y rol boletería (dueño); asesor+boletería y administrativo no.
+  { sec: 'boletos-emitidos', icon: 'fas fa-ticket', label: 'Boletos emitidos', roles: 'nav-admin-only nav-administrativo-no nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Recibo de itinerario con el logo de la aerolínea; se llena solo con el PDF del consolidador' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
@@ -34519,6 +34839,7 @@ const NAV_ITEMS = [
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
+  { sec: 'facturas-empresa', icon: 'fas fa-file-invoice', label: 'Facturas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Facturas a empresas: emitir, PDF y cobro' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'costos-digitales', icon: 'fas fa-wallet', label: 'Costos digitales', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Suscripciones y consumo de IA, por mes' },
@@ -34548,6 +34869,7 @@ const NAV_PADRES = [
   { sec: 'tareas', hoja: true },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
   { sec: 'cotizacion-boletos', hoja: true },
+  { sec: 'boletos-emitidos', hoja: true },
   // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
   { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja', badge: 'nav-bandeja-count', badgeDefault: '0' },
   { sec: 'mensajes', hoja: true },
@@ -34926,6 +35248,8 @@ function cargarSeccion(sec) {
   if (sec === 'ads') adsMeta().cargar();
   if (sec === 'contenido') marketing().cargar();
   if (sec === 'costos-digitales') costosDigitales().cargar();
+  if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
+  if (sec === 'facturas-empresa') facturasEmpresa().cargar();
   if (sec === 'voucher') loadVoucherSeccion();
   if (sec === 'cotizacion-boletos') cbCargarSeccion();
   if (sec === 'bol-solicitudes') bolColaAlEntrar();
@@ -37088,6 +37412,8 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
       if (c.tipo === 'check') return `<label class="csc-check"><input type="checkbox" id="${idc}"${c.valor ? ' checked' : ''}> ${esc(c.label)}</label>`;
       const lab = c.label ? `<label class="fl" for="${idc}">${esc(c.label)}${!c.requerido && !c.requeridoSi ? ' <span style="font-weight:400">(opcional)</span>' : ''}</label>` : '';
       if (c.tipo === 'select') return `${lab}<select class="ei" id="${idc}">${(c.opciones || []).map(o => `<option value="${esc(o.v)}"${String(o.v) === String(val) ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select>`;
+      // Radio: opciones a la vista (titilan hasta elegir una), para elecciones que en un desplegable se pasaban por alto.
+      if (c.tipo === 'radio') return `${lab}<div class="csc-opciones" id="${idc}" role="radiogroup">${(c.opciones || []).map(o => `<label class="csc-opcion"><input type="radio" name="${idc}" value="${esc(o.v)}"${String(o.v) === String(val) ? ' checked' : ''}><span>${esc(o.t)}</span></label>`).join('')}</div>`;
       if (c.tipo === 'textarea') return `${lab}<textarea class="ei" id="${idc}" placeholder="${esc(c.placeholder || '')}">${esc(val)}</textarea>`;
       const extra = c.tipo === 'number' ? ` inputmode="decimal" step="${c.step ?? 'any'}"${c.min != null ? ` min="${c.min}"` : ''}${c.max != null ? ` max="${c.max}"` : ''}` : '';
       return `${lab}<input class="ei" id="${idc}" type="${c.tipo || 'text'}" value="${esc(val)}" placeholder="${esc(c.placeholder || '')}"${extra}>`;
@@ -37096,7 +37422,7 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
     err.textContent = ''; err.style.display = 'none';
     document.getElementById('confirmar-sheet-acciones').classList.toggle('sheet-acciones', !!confirmarSheetCampos);
     openSheet('confirmar-sheet');
-    if (confirmarSheetCampos) setTimeout(() => cont.querySelector('input:not([type=checkbox]),textarea,select')?.focus(), 60);
+    if (confirmarSheetCampos) setTimeout(() => cont.querySelector('input:not([type=checkbox]):not([type=radio]),textarea,select')?.focus(), 60);
   });
 }
 function resolverConfirmarSheet(valor) {
@@ -37106,7 +37432,7 @@ function resolverConfirmarSheet(valor) {
     let falta = null;
     campos.forEach((c, i) => {
       const el = document.getElementById(`csc-${i}`);
-      const v = c.tipo === 'check' ? !!el?.checked : (el?.value ?? '').trim();
+      const v = c.tipo === 'check' ? !!el?.checked : c.tipo === 'radio' ? (el?.querySelector('input:checked')?.value ?? '') : (el?.value ?? '').trim();
       const requerido = typeof c.requeridoSi === 'function' ? !!c.requeridoSi(out) : c.requerido;
       if (requerido && c.tipo !== 'check' && !v && !falta) falta = c;
       out[c.id ?? i] = v;

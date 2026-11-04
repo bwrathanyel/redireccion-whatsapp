@@ -1,0 +1,565 @@
+/* Práctica con clientes IA (inducción): al terminar las misiones llegan a Leads clientes simulados
+   por la Edge Function prueba-cliente-ia y se atienden en WhatsApp empresa con piel de WhatsApp.
+   La guía tilda el procedimiento con las señales del mock ('prueba:accion') y del chat; al cerrar,
+   la EF evalúa y decide si se sube de nivel. Además de la telemetría, la única salida al proyecto
+   real es esa EF (la permite el gate de build-crm-prueba.mjs).
+   Plan: ~/.claude/plans/recuerdas-que-la-semana-eager-lake.md */
+(() => {
+  'use strict';
+  const P = window.__PRUEBA, D = window.PRUEBA_DATOS, R = window.PRUEBA_RPCS;
+  if (!P || !D || !R) return;
+  const URL_IA = 'https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/prueba-cliente-ia';
+  const ss = (k, v) => { try { return v === undefined ? sessionStorage.getItem(k) : v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch { return null; } };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+  const $ = id => document.getElementById(id);
+  const ahora = () => new Date().toISOString();
+  const espera = ms => new Promise(r => setTimeout(r, ms));
+  const tabla = t => (P.m.tablas[t] ||= []);
+  const sesion = ss('clientes:sesion') || (ss('clientes:sesion', crypto.randomUUID()), ss('clientes:sesion'));
+  const nombre = () => ss('prueba:nombre') || D.ASESORA;
+
+  /* ---------- Estado ---------- */
+  const S = { activo: ss('clientes:activo') === '1', nivel: 1, pasos: [], sims: new Map(), llegando: false, aviso: null, nSim: 0 };
+  const simDeLead = id => [...S.sims.values()].find(s => s.leadId === Number(id));
+  const simDeConv = id => [...S.sims.values()].find(s => s.convId === Number(id));
+  const simDeTel = tel => [...S.sims.values()].find(s => s.tel.replace(/\D/g, '') === tel);
+  const abiertas = () => [...S.sims.values()].filter(s => !s.cerrada);
+  const chatAbierto = () => $('sec-wa-bandeja')?.classList.contains('active') && !$('wb-head')?.hidden
+    ? abiertas().find(s => s.cliente.nombre === $('wb-titulo')?.textContent) : null;
+  const foco = () => chatAbierto() || abiertas().at(-1) || null;
+  window.__pruebaClientes = { activo: () => S.activo, abrirChat };
+  const misionPrevia = window.__pruebaMision;
+  window.__pruebaMision = () => S.activo ? (foco() ? `cliente-n${foco().nivel}` : 'clientes') : misionPrevia?.() ?? null;
+
+  async function ia(cuerpo) {
+    try {
+      const r = await P.fetchReal(URL_IA, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify(cuerpo) });
+      return (await r.json().catch(() => null)) || { ok: false, motivo: 'red' };
+    } catch { return { ok: false, motivo: 'red' }; }
+  }
+  const MOTIVOS = {
+    tope: 'La práctica con clientes está en pausa: se llegó al tope de gasto. Avísale a administración.',
+    limite_dia: 'Ya atendiste 15 clientes hoy. Mañana sigues.',
+    red: 'No hay conexión con el cliente simulado. Revisa internet: se reintenta solo.',
+    ia: 'El cliente tardó en contestar. Se reintenta solo.',
+  };
+
+  /* ---------- Llegada de un cliente: lead POR ATENDER + chat con su primer mensaje ---------- */
+  async function nuevoCliente() {
+    if (S.llegando) return;
+    S.llegando = true;
+    const r = await ia({ accion: 'iniciar', sesion, nombre: nombre(), nivel: S.nivel });
+    S.llegando = false;
+    if (!r.ok) {
+      if (r.motivo === 'tope' || r.motivo === 'limite_dia') S.bloqueo = MOTIVOS[r.motivo];
+      avisa(MOTIVOS[r.motivo] || 'No se pudo traer al próximo cliente.'); if (r.motivo === 'red' || r.motivo === 'error') setTimeout(nuevoCliente, 15000); return; }
+    S.pasos = r.pasos || S.pasos;
+    crearSim({ id: r.sim_id, nivel: r.nivel, nivelJuego: r.nivel_juego, titulo: r.titulo, guia: r.guia, cliente: r.cliente, paciencia: r.paciencia_min,
+      historial: [{ de: 'cliente', texto: r.primer_mensaje, ts: Date.now() }] });
+    sonido();
+  }
+  function crearSim(o, rehidratada) {
+    const n = ++S.nSim, t = ahora();
+    const tel = `+58414777${String(1000 + n + Math.floor(Math.random() * 8000)).slice(-4)}`;
+    const lead = D.lead(o.cliente.nombre, 'POR ATENDER', o.cliente.destino, { canal: o.cliente.canal, servicio: 'Hospedaje', personas: null, fecha_estimada: null });
+    Object.assign(lead, { id: 9600 + n, telefono: tel, numero: tel, fecha_creacion: t, lote_asignado_at: t, vence_at: new Date(Date.now() + 3600e3).toISOString() });
+    const sim = { ...o, leadId: lead.id, convId: 700 + n, tel, llego: Date.now(), pasos: { ...(o.pasos || {}) }, pend: nuevoPend(), ocupado: false, otraVez: false,
+      escribiendo: false, insistencias: 0, cerrada: false, comprobanteEn: null, registroEn: null, temperatura: null, cots: [], guiaVista: null };
+    S.sims.set(sim.id, sim);
+    if (rehidratada && o.historial.some(h => h.de === 'asesor')) { lead.estado = 'ATENDIDO'; lead.fecha_primer_contacto = t; }
+    tabla('leads').push(lead); P.empuja('leads', 'INSERT', lead);
+    const conv = { id: sim.convId, nombre: o.cliente.nombre, wa_id: tel.slice(1), no_leidos: 0, ultimo_mensaje_at: t, ultimo_entrante_at: t, lead_id: lead.id, asesor: D.ASESORA, phone_number_id: 'prueba' };
+    tabla('whatsapp_conversaciones').push(conv); P.empuja('whatsapp_conversaciones', 'INSERT', conv);
+    for (const h of o.historial) {
+      if (h.de === 'cliente') entrante(sim, h.texto, h.ts);
+      else if (h.de === 'asesor') guardaMensaje(sim, { direccion: 'saliente_api', tipo: 'text', texto: h.texto, estado: 'leido', enviado_en: new Date(h.ts).toISOString() });
+      if (h.adjunto === 'comprobante') comprobante(sim, h.ts);
+    }
+    S.activo = true; pinta();
+    return sim;
+  }
+  const nuevoPend = () => ({ textos: [], crm: [], eventos: [], reloj: '' });
+
+  let nMsg = 0;
+  function guardaMensaje(sim, campos) {
+    const id = 80000 + ++nMsg;
+    const fila = { id, conversacion_id: sim.convId, wamid: `prueba-${id}`, direccion: 'entrante', tipo: 'text', texto: null, enviado_en: ahora(), estado: null, error: null,
+      enviado_por: campos.direccion === 'entrante' ? null : D.ASESORA, plantilla: null, media_id: null, media_mime: null, media_path: null, transcripcion: null, ...campos };
+    tabla('whatsapp_mensajes').push(fila); P.empuja('whatsapp_mensajes', 'INSERT', fila);
+    const conv = tabla('whatsapp_conversaciones').find(c => c.id === sim.convId);
+    if (conv) {
+      conv.ultimo_mensaje_at = fila.enviado_en;
+      if (fila.direccion === 'entrante') { conv.ultimo_entrante_at = fila.enviado_en; if (chatAbierto() !== sim) conv.no_leidos = (conv.no_leidos || 0) + 1; }
+      P.empuja('whatsapp_conversaciones', 'UPDATE', conv);
+    }
+    return fila;
+  }
+  function entrante(sim, texto, ts) {
+    sim.ultimoCliente = ts || Date.now(); sim.respondido = false;
+    return guardaMensaje(sim, { direccion: 'entrante', texto, enviado_en: new Date(sim.ultimoCliente).toISOString() });
+  }
+  const tick = (fila, estado) => { fila.estado = estado; P.empuja('whatsapp_mensajes', 'UPDATE', fila); };
+
+  /* ---------- Lo que manda el asesor (mock de whatsapp-enviar) ---------- */
+  R.FUNCIONES['whatsapp-enviar'] = (m, a) => {
+    if (!a || a.conversacion_id == null) return { ok: true, plantillas: [] };
+    const sim = simDeConv(a.conversacion_id);
+    if (!tabla('whatsapp_conversaciones').some(c => c.id === Number(a.conversacion_id))) return { __status: 404, body: { ok: false, error: 'sin_acceso' } };
+    const archivo = a.archivo instanceof File ? a.archivo : null, imagen = a.tipo === 'imagen';
+    const fila = guardaMensaje(sim || { convId: Number(a.conversacion_id) }, archivo
+      ? { direccion: 'saliente_api', tipo: imagen ? 'image' : 'document', texto: a.texto || null, estado: 'enviado', media_mime: imagen ? archivo.type : archivo.name, media_path: P.blob(archivo) }
+      : { direccion: 'saliente_api', tipo: 'text', texto: String(a.texto || ''), estado: 'enviado' });
+    setTimeout(() => fila.estado === 'enviado' && tick(fila, 'entregado'), 700);
+    if (sim && !sim.cerrada) saliente(sim, fila, archivo);
+    return { ok: true, mensaje: { ...fila } };
+  };
+  R.RPCS.wa_marcar_leida = (m, a) => {
+    const conv = tabla('whatsapp_conversaciones').find(c => c.id === Number(a.p_conversacion));
+    if (conv && conv.no_leidos) { conv.no_leidos = 0; P.empuja('whatsapp_conversaciones', 'UPDATE', conv); }
+    return { ok: true };
+  };
+
+  const RE_PRESENTA = /(soy|mi nombre|te habla|le habla|te saluda|le saluda|te escribe|le escribe|te atiende|le atiende)/i;
+  const RE_FECHAS = /(fecha|cu[aá]ndo|d[ií]as|noches|mes)/i, RE_PERSONAS = /(cu[aá]nt[oa]s|personas|adultos|ni[ñn]os|viajan|acompa)/i;
+  const RE_PAGO = /(abono|separ|transfer|pago m[oó]vil|zelle|datos (de|para) (pago|pagar)|cuenta|binance|efectivo)/i;
+  function saliente(sim, fila, archivo) {
+    sim.respondido = true; sim.ultimoAsesor = Date.now(); sim.insistencias = Math.min(sim.insistencias, 1);
+    if (fila.tipo === 'text') {
+      sim.pend.textos.push(fila.texto);
+      sim.textosAsesor = [...(sim.textosAsesor || []), fila.texto];
+      const todo = sim.textosAsesor.join('\n');
+      if (/lotus/i.test(todo) && RE_PRESENTA.test(todo)) marca(sim, 'presentacion');
+      if (RE_FECHAS.test(todo) && RE_PERSONAS.test(todo)) marca(sim, 'calificacion');
+      if (RE_PAGO.test(fila.texto)) marca(sim, 'cierre');
+    } else if (fila.tipo === 'image') {
+      sim.pend.crm.push(`El asesor te mandó una foto${fila.texto ? ` con el texto «${fila.texto}»` : ''}.`);
+      marca(sim, 'opciones');
+    } else {
+      const cot = sim.cots.at(-1) || ultimaCotizacion(sim);
+      if (cot) {
+        sim.pend.crm.push(`El asesor te mandó un PDF «${archivo?.name || 'cotización'}»: ${cot.detalle}. Total ${cot.total ?? '?'} $.`);
+        sim.pend.eventos.push({ tipo: 'cotizacion', total: cot.total, detalle: cot.detalle.slice(0, 300) });
+        marca(sim, 'cotizacion');
+      } else sim.pend.crm.push(`El asesor te mandó un PDF «${archivo?.name || 'archivo'}» que no es una cotización (no trae precios).`);
+      if (fila.texto) sim.pend.textos.push(fila.texto);
+    }
+    programa(sim);
+  }
+  // Como una persona real: espera a que el asesor termine de escribir (5 s sin mensajes nuevos, más si sigue tecleando).
+  function programa(sim, extra = 0) {
+    clearTimeout(sim.timer);
+    sim.timer = setTimeout(() => {
+      const tecleando = chatAbierto() === sim && ($('wb-texto')?.value || '').trim();
+      if (tecleando && extra < 12000) return programa(sim, extra + 3000);
+      contesta(sim);
+    }, 5000 + (extra ? 3000 : 0));
+  }
+
+  async function contesta(sim, reintento) {
+    if (sim.cerrada) return;
+    if (sim.ocupado) { sim.otraVez = true; return; }
+    const p = sim.pend;
+    if (!reintento && !p.textos.length && !p.crm.length && !p.reloj) return;
+    sim.pend = nuevoPend(); sim.ocupado = true;
+    await espera(600 + Math.random() * 900);
+    tabla('whatsapp_mensajes').filter(f => f.conversacion_id === sim.convId && f.direccion !== 'entrante' && f.estado !== 'leido').forEach(f => tick(f, 'leido'));
+    const r = await ia({ accion: 'responder', sesion, sim_id: sim.id, textos: p.textos, crm: p.crm, eventos: p.eventos, reloj: p.reloj, pasos: sim.pasos, reintento: !!reintento });
+    if (!r.ok) {
+      sim.ocupado = false;
+      if (r.motivo === 'cerrada' || r.motivo === 'forma') return;
+      if (r.motivo === 'tope' || r.motivo === 'turnos') { avisa(MOTIVOS[r.motivo] || 'Este chat llegó a su límite de mensajes.'); return cierra(sim, 'limite'); }
+      // 'ia': la EF ya guardó lo del asesor, el reintento va vacío. 'red': no llegó nada, se reenvía igual.
+      if (r.motivo === 'red') sim.pend = { textos: [...p.textos, ...sim.pend.textos], crm: [...p.crm, ...sim.pend.crm], eventos: [...p.eventos, ...sim.pend.eventos], reloj: p.reloj || sim.pend.reloj };
+      avisa(MOTIVOS[r.motivo] || MOTIVOS.ia);
+      setTimeout(() => contesta(sim, r.motivo !== 'red'), 5000);
+      return;
+    }
+    S.aviso = null;
+    Object.assign(sim, { temperatura: r.temperatura, decision: r.decision });
+    if (r.decision === 'comprar') marca(sim, 'objeciones');
+    await escribe(sim, r.burbujas || []);
+    if (r.adjunto === 'comprobante') { await espera(1500); comprobante(sim); marca(sim, 'cierre'); }
+    sim.ocupado = false;
+    if (r.decision === 'irse') { setTimeout(() => cierra(sim, 'perdido'), 5000); return; }
+    if (sim.otraVez) { sim.otraVez = false; contesta(sim); }
+    pinta();
+  }
+  async function escribe(sim, burbujas) {
+    for (const [i, b] of burbujas.entries()) {
+      sim.escribiendo = true; pinta(); pintaEscribiendo();
+      await espera(Math.min(Math.max(b.length * 45, 1300), 6500) + (i ? 500 : 0));
+      sim.escribiendo = false;
+      if (sim.cerrada) return;
+      entrante(sim, b);
+      pintaEscribiendo();
+    }
+    pinta();
+  }
+
+  /* ---------- Comprobante de pago del cliente (imagen + lectura «IA» como en el CRM real) ---------- */
+  function montoAbono(sim) {
+    const textos = (sim.textosAsesor || []).slice(-6).join(' ');
+    const m = [...textos.matchAll(/(?:\$\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:\$|d[oó]lares|usd))/gi)].at(-1);
+    const v = m ? Number((m[1] || m[2]).replace(',', '.')) : NaN;
+    return Number.isFinite(v) && v > 0 ? v : Math.round((sim.cots.at(-1)?.total || 200) / 2);
+  }
+  function comprobante(sim, ts) {
+    const monto = montoAbono(sim), ref = String(Math.floor(1e9 + Math.random() * 9e9)).slice(0, 10);
+    const fila = guardaMensaje(sim, { direccion: 'entrante', tipo: 'image', texto: null, media_mime: 'image/svg+xml', media_path: `prueba-comprobante/${monto}/${ref}`,
+      enviado_en: new Date(ts || Date.now()).toISOString() });
+    const c = { id: 500 + fila.id, conversacion_id: sim.convId, wamid: fila.wamid, estado: 'pendiente', duplicado_de: null,
+      datos: { metodo: 'Pago móvil', referencia: ref, monto, moneda: 'USD', fecha: new Date().toLocaleDateString('es-VE') } };
+    tabla('wa_comprobantes').push(c); P.empuja('wa_comprobantes', 'INSERT', c);
+    sim.comprobanteEn = Date.now();
+  }
+  window.__pruebaComprobante = s => {
+    const [, monto = '0', ref = ''] = /prueba-comprobante\/([\d.]+)\/(\d+)/.exec(s) || [];
+    const fecha = new Date().toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' });
+    const fila = (y, a, b) => `<text x="32" y="${y}" font-size="15" fill="#6b7280">${a}</text><text x="328" y="${y}" font-size="15" fill="#111827" text-anchor="end" font-weight="600">${b}</text>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="520" viewBox="0 0 360 520" font-family="Arial,Helvetica,sans-serif">
+<rect width="360" height="520" fill="#ffffff"/><rect width="360" height="84" fill="#0f766e"/><text x="180" y="52" fill="#fff" font-size="21" text-anchor="middle" font-weight="700">Pago móvil</text>
+<circle cx="180" cy="142" r="32" fill="#16a34a"/><path d="M165 142l10 10 21-22" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="180" y="210" font-size="17" text-anchor="middle" fill="#111827">Operación exitosa</text><text x="180" y="262" font-size="36" text-anchor="middle" font-weight="700" fill="#111827">$ ${Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</text>
+${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino', 'Lotus 360')}${fila(428, 'Concepto', 'Abono reserva')}
+<text x="180" y="490" font-size="11" text-anchor="middle" fill="#9ca3af">Comprobante de práctica · no es un pago real</text></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  };
+
+  /* ---------- Señales del CRM que tildan pasos ---------- */
+  const PASO_PAGO = new Set(['PAGO REALIZADO', 'VENTA COMPLETA']);
+  function ultimaCotizacion(sim) {
+    const c = tabla('cotizaciones_boleteria').filter(x => x.lead_id === sim.leadId || x.lead_id == null).at(-1);
+    return c ? cotizacionDe(c) : null;
+  }
+  const cotizacionDe = c => ({
+    total: Number.isFinite(Number(c.total)) ? Number(c.total) : null,
+    detalle: (c.items || []).map(it => Object.entries(it).filter(([k, v]) => v !== '' && v != null && typeof v !== 'object' && !/(^id$|_id$|^_)/.test(k)).map(([k, v]) => `${k}: ${v}`).join(', ').slice(0, 300)).join(' | ')
+      + (c.fecha ? ` (emitida ${c.fecha}${c.vence ? `, vence ${c.vence}` : ''})` : ''),
+  });
+  addEventListener('prueba:accion', e => {
+    const d = e.detail || {};
+    if (!S.activo || d.error) return;
+    if (d.tipo === 'insert' && d.tabla === 'cotizaciones_boleteria') {
+      for (const c of d.filas || []) { const sim = simDeLead(c.lead_id) || foco(); if (sim) { sim.cots.push(cotizacionDe(c)); evento(sim, { tipo: 'cotizacion_creada', total: Number(c.total) || null }); } }
+      return;
+    }
+    if (d.tipo === 'update' && d.tabla === 'leads') { (d.filas || []).forEach(f => { const s = simDeLead(f.id); if (s) marca(s, 'ficha'); }); return; }
+    if (d.tipo !== 'rpc') return;
+    const a = d.args || {}, sim = simDeLead(a.p_lead_id);
+    if (!sim) return;
+    if (d.nombre === 'actualizar_lead') {
+      if (a.p_estado === 'ATENDIDO' && !sim.atendido) {
+        sim.atendido = Date.now();
+        const seg = Math.round((sim.atendido - sim.llego) / 1000);
+        evento(sim, { tipo: 'atendido', seg });
+        if (seg <= 120) marca(sim, 'rapidez'); else avisa(`Lo atendiste a los ${Math.round(seg / 60)} min: con un cliente real, a esa altura ya le escribió a otra agencia.`);
+      }
+      if (Object.keys(a).some(k => !['p_lead_id', 'p_estado'].includes(k) && a[k] != null && a[k] !== '')) marca(sim, 'ficha');
+      if (a.p_estado) evento(sim, { tipo: 'estado', estado: a.p_estado });
+      if (PASO_PAGO.has(a.p_estado)) registro(sim);
+    } else if (['guardar_notas_lead', 'fijar_proxima_accion', 'registrar_interaccion_lead'].includes(d.nombre)) marca(sim, 'ficha');
+    else if ((d.nombre === 'guardar_postventa' && a.p_marcar_pagado) || /^registrar_abono/.test(d.nombre) || d.nombre === 'voucher_preparar') registro(sim);
+  });
+  function registro(sim) {
+    if (sim.registroEn) return;
+    sim.registroEn = Date.now(); marca(sim, 'registro'); evento(sim, { tipo: 'pago_registrado' });
+    if (sim.comprobanteEn) setTimeout(() => cierra(sim, 'vendido'), 12000);
+  }
+  let busca = null;
+  document.addEventListener('input', e => {
+    if (!S.activo || !e.target.matches?.('#tar-search,[id*="tar-"][type="search"]')) return;
+    clearTimeout(busca);
+    busca = setTimeout(() => { const s = foco(), v = e.target.value.trim(); if (s && v.length > 2) { marca(s, 'tarifario'); evento(s, { tipo: 'busqueda', texto: v.slice(0, 60) }); } }, 1200);
+  }, true);
+  function marca(sim, paso) {
+    if (sim.pasos[paso]) return;
+    sim.pasos[paso] = true;
+    ia({ accion: 'marcar', sesion, sim_id: sim.id, pasos: sim.pasos });
+    pinta(true);
+  }
+  const evento = (sim, ev) => { sim.pend.eventos.push({ ...ev, ts: Date.now() }); };
+
+  /* ---------- Reloj: el cliente reclama si lo dejan esperando ---------- */
+  setInterval(() => {
+    if (!S.activo || document.hidden) return;
+    for (const sim of abiertas()) {
+      if (sim.ocupado || sim.escribiendo) continue;
+      // Pagó y nadie lo registró: a los 5 min se evalúa igual (el paso queda sin hacer).
+      if (sim.comprobanteEn && !sim.registroEn && Date.now() - sim.comprobanteEn > 5 * 60e3) { cierra(sim, 'vendido'); continue; }
+      if (sim.respondido || sim.comprobanteEn) continue;
+      const min = (Date.now() - sim.ultimoCliente) / 60e3, umbral = sim.paciencia * [0.5, 1, 1.6][sim.insistencias];
+      if (umbral && min >= umbral) {
+        sim.insistencias++;
+        sim.pend.reloj = `Pasaron ${Math.round((Date.now() - sim.llego) / 60e3)} minutos desde tu primer mensaje y ${Math.round(min)} desde el último sin respuesta del asesor.`;
+        contesta(sim);
+      }
+    }
+    pinta();
+  }, 5000);
+
+  /* ---------- Cierre y evaluación ---------- */
+  async function cierra(sim, motivo) {
+    if (sim.cerrada) return;
+    sim.cerrada = true; clearTimeout(sim.timer);
+    pinta();
+    tarjeta(null, sim);
+    const pend = sim.pend; sim.pend = nuevoPend();
+    let r = await ia({ accion: 'evaluar', sesion, sim_id: sim.id, motivo, pasos: sim.pasos, eventos: pend.eventos });
+    for (let i = 0; !r.ok && r.motivo !== 'tope' && r.motivo !== 'sim' && i < 2; i++) { await espera(4000); r = await ia({ accion: 'evaluar', sesion, sim_id: sim.id, motivo, pasos: sim.pasos }); }
+    if (r.ok) { if (r.nivel) S.nivel = r.nivel; ss('clientes:nivel', String(S.nivel)); }
+    tarjeta(r, sim);
+  }
+  const PUNTOS = n => n >= 85 ? '#25d366' : n >= 70 ? '#53bdeb' : n >= 50 ? '#ffb020' : '#ef4444';
+  function tarjeta(r, sim) {
+    $('pc-nota')?.remove();
+    const m = document.createElement('div');
+    m.id = 'pc-nota'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+    if (!r) m.innerHTML = `<div class="pc-caja"><div class="pc-cargando"></div><h3>Evaluando tu atención a ${esc(sim.cliente.nombre)}…</h3><p>El supervisor está leyendo el chat.</p></div>`;
+    else if (!r.ok) m.innerHTML = `<div class="pc-caja"><h3>No se pudo evaluar</h3><p>${esc(MOTIVOS[r.motivo] || 'Inténtalo de nuevo en un rato.')}</p><div class="pc-acc"><button class="pp-ir" data-pc="sig">Siguiente cliente</button></div></div>`;
+    else {
+      const nombres = Object.fromEntries((S.pasos || []).map(p => [p.id, p.texto]));
+      const res = r.hechos?.resultado === 'vendido' ? '✅ Venta cerrada' : r.hechos?.resultado === 'perdido' ? '❌ Se fue sin comprar' : '⏸ Quedó abierto';
+      m.innerHTML = `<div class="pc-caja pc-larga">
+        <div class="pc-cab"><div class="pc-puntaje" style="--c:${PUNTOS(r.puntaje)}"><b>${r.puntaje}</b><small>de 100</small></div>
+          <div><h3>${esc(sim.cliente.nombre)} · Nivel ${sim.nivel}</h3><p>${res}${r.hechos?.cotizacion_ok ? ' · cotización correcta' : r.hechos?.cotizaciones?.length ? ' · <b>el total de la cotización no era el correcto</b>' : ' · sin cotización en PDF'}</p>
+          <p class="pc-estado ${r.aprobada ? 'ok' : ''}">${r.aprobada ? `Aprobado · ${r.aprobadas_nivel} de ${r.para_subir} en este nivel` : 'Este no cuenta para subir de nivel (hace falta 70+, venta cerrada y total correcto)'}</p></div></div>
+        ${r.subio ? `<div class="pc-subio">🎉 ¡Subiste al nivel ${r.nivel}! Los próximos clientes son más exigentes.</div>` : ''}
+        <div class="pc-cols"><div><h4>Lo hiciste bien</h4><ul>${(r.aciertos || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+          <div><h4>Para mejorar</h4><ul>${(r.mejoras || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></div>
+        ${r.frase_ideal ? `<div class="pc-ideal"><h4>Cómo lo diría un asesor top</h4><p>«${esc(r.frase_ideal)}»</p></div>` : ''}
+        <details class="pc-pasos"><summary>Puntaje por paso</summary>${Object.entries(r.pasos || {}).map(([k, v]) => `<div class="pc-paso"><span>${esc(nombres[k] || k)}</span><i style="--v:${v * 10}%;--c:${PUNTOS(v * 10)}"></i><b>${v}</b></div>`).join('')}</details>
+        <div class="pc-acc"><button class="pp-ir" data-pc="sig">Siguiente cliente →</button></div></div>`;
+    }
+    m.addEventListener('click', e => {
+      if (!e.target.closest('[data-pc="sig"]')) return;
+      m.remove(); S.sims.delete(sim.id); pinta();
+      if (!abiertas().length) setTimeout(nuevoCliente, 8000 + Math.random() * 7000);
+    });
+    document.body.appendChild(m);
+    m.querySelector('[data-pc]')?.focus();
+  }
+
+  /* ---------- «Atender» abre el chat del cliente en WhatsApp empresa ---------- */
+  function abrirChat(url) {
+    const tel = (/wa\.me\/(\d+)/.exec(url) || [])[1], sim = tel && simDeTel(tel);
+    if (!sim) return false;
+    setTimeout(() => irAlChat(sim), 500);
+    return true;
+  }
+  async function irAlChat(sim) {
+    window.__pruebaMisiones?.vista('wa-bandeja');
+    if (!$('sec-wa-bandeja')?.classList.contains('active')) window.__pruebaIr?.('wa-bandeja');
+    for (let i = 0; i < 40; i++) {
+      const fila = document.querySelector(`#wb-inbox [data-wb="${sim.convId}"]`);
+      if (fila) { if (chatAbierto() !== sim) fila.click(); return; }
+      await espera(100);
+    }
+  }
+
+  /* ---------- Panel de la guía ---------- */
+  const GUIA = {
+    rapidez: ['Toca <b>Atender</b> en el cliente nuevo: se abre su chat.', { sec: 'leads', foco: 'Atender' }],
+    presentacion: ['Salúdalo y preséntate: tu nombre y que eres de <b>Lotus 360</b>.', { chat: '#wb-texto' }],
+    calificacion: ['Pregunta lo que falta: <b>fechas</b>, <b>cuántas personas</b> (niños y edades) y <b>presupuesto</b>.', { chat: '#wb-texto' }],
+    ficha: ['Anota en su ficha lo que te contó: toca <b>Ver lead</b>.', { chat: '#wb-ver-lead' }],
+    tarifario: ['Busca el hotel o el destino en el <b>Tarifario</b>: precio por persona y qué incluye.', { sec: 'tarifario', sel: '#tar-search' }],
+    opciones: ['Mándale fotos y explícale qué incluye (📎 en el chat).', { chat: '#wb-adjuntar' }],
+    cotizacion: ['En <b>Cotizaciones</b> vincula al cliente, arma el servicio, <b>Descarga el PDF</b> y mándaselo con 📎.', { sec: 'cotizacion-boletos', sel: '#cb-lead-q' }],
+    objeciones: ['Responde sus dudas. Si no sabes algo, no inventes: dile que lo confirmas.', { chat: '#wb-texto' }],
+    cierre: ['Propón separar con un <b>abono</b> y pásale los datos de pago.', { chat: '#wb-texto' }],
+    registro: ['Llegó el comprobante: abre su ficha (<b>Ver lead</b>) y registra el pago.', { chat: '#wb-ver-lead' }],
+  };
+  const siguientePaso = sim => (S.pasos || []).find(p => !sim.pasos[p.id] && !(p.id === 'registro' && !sim.comprobanteEn));
+  async function llevame(sim, paso) {
+    const [, d] = GUIA[paso.id] || [];
+    const G = window.__pruebaGuia;
+    if (!d || !G) return;
+    if (d.chat) { await irAlChat(sim); await espera(350); G.destaca('wa-bandeja', false, null, { dura: 6000, sel: d.chat }); if (d.chat === '#wb-texto') $('wb-texto')?.focus(); }
+    else G.destaca(d.sec, true, d.foco, { dura: 7000, sel: d.sel });
+  }
+  const reloj = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  // En el celular la guía arranca plegada (solo la pista del paso que sigue) para no tapar la pantalla.
+  let panel = null, plegadoGeneral = false, plegadoMovil = true;
+  const movil = () => matchMedia('(max-width:760px)').matches;
+  function pinta(festeja) {
+    const enChat = S.activo && !!$('sec-wa-bandeja')?.classList.contains('active');
+    document.body.classList.toggle('pc-wa', S.activo);
+    document.body.classList.toggle('pc-chat', enChat);
+    if (S.activo) $('prueba-panel')?.remove();
+    if (!S.activo || window.__pruebaMisiones?.terminadas?.() === false) { panel?.remove(); panel = null; return; }
+    const plegado = movil() ? plegadoMovil : plegadoGeneral;
+    if (!panel) {
+      panel = document.createElement('section');
+      panel.id = 'pc-panel'; panel.setAttribute('aria-label', 'Práctica con clientes');
+      panel.addEventListener('click', e => {
+        const b = e.target.closest('[data-pc]'); if (!b) return;
+        const sim = S.sims.get(b.dataset.sim) || foco();
+        if (b.dataset.pc === 'plegar') { if (movil()) plegadoMovil = !plegadoMovil; else plegadoGeneral = !plegadoGeneral; }
+        if (b.dataset.pc === 'chat' && sim) irAlChat(sim);
+        if (b.dataset.pc === 'ir' && sim) { const p = siguientePaso(sim); if (p) llevame(sim, p); }
+        if (b.dataset.pc === 'terminar' && sim) { if (b.dataset.seguro) cierra(sim, 'terminar'); else { b.dataset.seguro = '1'; b.textContent = '¿Seguro? Toca otra vez'; return; } }
+        pinta();
+      });
+      document.body.appendChild(panel);
+    }
+    const sim = foco();
+    let html;
+    if (!sim) {
+      html = `<div class="pc-fila"><span class="pc-ava">⏳</span><div class="pc-tit">${S.bloqueo ? 'Práctica en pausa' : S.llegando ? 'Llega un cliente…' : 'Esperando al próximo cliente'}<small>${S.bloqueo ? esc(S.bloqueo) : `Nivel ${S.nivel} · los clientes entran por Leads`}</small></div></div>`;
+    } else {
+      const esperando = !sim.respondido && !sim.escribiendo && !sim.comprobanteEn ? Date.now() - sim.ultimoCliente : 0;
+      const paso = siguientePaso(sim), guia = sim.guia;
+      const pista = guia === 'completa' || (guia === 'pistas' && esperando > 60e3);
+      const otras = abiertas().filter(x => x !== sim);
+      const pistaHtml = paso && pista ? `<div class="pc-pista">${GUIA[paso.id]?.[0] || ''}${guia === 'completa' ? ` <button class="pp-ir" data-pc="ir" data-sim="${sim.id}">Llévame</button>` : ''}</div>` : '';
+      html = `<div class="pc-fila"><button class="pc-ava" data-pc="chat" data-sim="${sim.id}" title="Abrir el chat">${esc(sim.cliente.nombre.split(' ').map(x => x[0]).join('').slice(0, 2))}</button>
+          <div class="pc-tit">${esc(sim.cliente.nombre)}<small>Nivel ${sim.nivel} · ${esc(sim.titulo || '')}${sim.escribiendo ? ' · <b class="pc-esc">escribiendo…</b>' : esperando > 20e3 ? ` · <b class="${esperando > sim.paciencia * 30e3 ? 'pc-tarde' : ''}">esperando tu respuesta ${reloj(esperando)}</b>` : ''}</small></div>
+          <button class="pc-mini" data-pc="plegar" aria-label="${plegado ? 'Mostrar' : 'Ocultar'} la guía">${plegado ? '▴' : '▾'}</button></div>
+        ${otras.length ? `<div class="pc-otras">${otras.map(o => `<button data-pc="chat" data-sim="${o.id}">${esc(o.cliente.nombre.split(' ')[0])}${!o.respondido ? ' •' : ''}</button>`).join('')}</div>` : ''}
+        ${plegado ? (guia !== 'ninguna' && !(enChat && movil()) ? pistaHtml : '') + (S.aviso ? `<div class="pc-acc"><span class="pc-aviso">${esc(S.aviso)}</span></div>` : '') : `${guia !== 'ninguna' && sim.temperatura != null ? `<div class="pc-temp" title="Qué tan cerca está de comprar"><span>Interés del cliente</span><i style="--t:${sim.temperatura}%"></i></div>` : ''}
+        ${guia === 'ninguna' ? '<p class="pc-sola">Sin guía: atiéndelo como a un cliente real. Al final ves tu puntaje.</p>'
+          : `<ol class="pc-pasos">${(S.pasos || []).map(p => `<li class="${sim.pasos[p.id] ? 'hecho' : p === paso ? 'ahora' : ''}">${esc(p.texto)}</li>`).join('')}</ol>
+             ${pistaHtml}`}
+        <div class="pc-acc">${S.aviso ? `<span class="pc-aviso">${esc(S.aviso)}</span>` : ''}<button class="pc-terminar" data-pc="terminar" data-sim="${sim.id}">Terminar chat</button></div>`}`;
+    }
+    if (panel.dataset.html !== html) { panel.dataset.html = html; panel.innerHTML = html; }
+    if (festeja) { panel.classList.remove('pc-festejo'); void panel.offsetWidth; panel.classList.add('pc-festejo'); }
+    pintaEstado();
+  }
+  function avisa(t) { S.aviso = t; pinta(); clearTimeout(avisa.t); avisa.t = setTimeout(() => { S.aviso = null; pinta(); }, 9000); }
+
+  /* ---------- Piel de WhatsApp: «en línea / escribiendo…» y burbuja de tres puntos ---------- */
+  function pintaEstado() {
+    const sub = $('wb-sub'); if (!sub) return;
+    let el = $('pc-wa-estado');
+    if (!el) { el = document.createElement('div'); el.id = 'pc-wa-estado'; el.className = 'msg-conv-sub'; sub.after(el); }
+    const sim = chatAbierto();
+    // Solo si cambia: reasignar el mismo texto igual es una mutación y el MutationObserver de abajo entraría en bucle.
+    const t = !sim ? '' : sim.escribiendo ? 'escribiendo…' : sim.cerrada ? '' : 'en línea';
+    if (el.textContent !== t) el.textContent = t;
+    el.classList.toggle('pc-esc', !!sim?.escribiendo);
+  }
+  function pintaEscribiendo() {
+    const log = $('wb-log'), sim = chatAbierto();
+    const hay = log?.querySelector('.pc-puntos');
+    if (sim?.escribiendo && log && !hay) { log.insertAdjacentHTML('beforeend', '<div class="chat-msg other pc-puntos" aria-label="escribiendo"><i></i><i></i><i></i></div>'); log.scrollTop = log.scrollHeight; }
+    else if (!sim?.escribiendo && hay) hay.remove();
+    pintaEstado();
+  }
+  // whatsapp-bandeja.js repinta #wb-log entero con cada mensaje: los tres puntos se vuelven a poner.
+  new MutationObserver(() => { if (abiertas().some(s => s.escribiendo)) pintaEscribiendo(); }).observe(document.documentElement, { childList: true, subtree: true });
+  // Al entrar o salir de WhatsApp empresa la guía se corre para no tapar el botón de enviar.
+  const secWa = $('sec-wa-bandeja');
+  if (secWa) new MutationObserver(() => S.activo && pinta()).observe(secWa, { attributes: true, attributeFilter: ['class'] });
+
+  function sonido() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [[880, 0], [1320, 0.13]].forEach(([f, t]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = f; g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.25);
+        o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.3);
+      });
+    } catch { /* sin audio */ }
+  }
+
+  /* ---------- Arranque: después de la última misión (o al recargar con la práctica en curso) ---------- */
+  async function empezar(rehidratar) {
+    const r = await ia({ accion: 'estado', sesion, nombre: nombre() });
+    if (r.ok) { S.nivel = r.nivel; S.pasos = r.pasos; }
+    S.activo = true; ss('clientes:activo', '1'); pinta();
+    if (r.ok && r.frenado) { S.bloqueo = MOTIVOS.tope; return avisa(MOTIVOS.tope); }
+    const previas = rehidratar && r.ok ? r.en_curso || [] : [];
+    for (const s of previas) crearSim({ id: s.sim_id, nivel: s.nivel, nivelJuego: s.nivel, titulo: '', guia: s.guia, cliente: s.cliente, paciencia: s.paciencia_min, historial: s.historial, pasos: s.pasos }, true);
+    if (!previas.length) setTimeout(nuevoCliente, rehidratar ? 3000 : 6000);
+  }
+  function presenta() {
+    const M = window.__pruebaMisiones;
+    if (!M || ss('clientes:intro')) return;
+    ss('clientes:intro', '1');
+    M.modal([
+      { icono: '💬', titulo: 'Ahora, clientes que escriben de verdad', texto: 'Van a llegar clientes a <b>Leads</b> como en un día normal. Tocas <b>Atender</b> y se abre su WhatsApp aquí mismo. Escríbeles como a un cliente real: del otro lado responde una IA que actúa como cliente.' },
+      { icono: '🧭', titulo: 'Te guío mientras atiendes', texto: 'Abajo a la derecha ves el procedimiento y se tilda solo a medida que avanzas. En el nivel 1 te llevo a cada paso; después te ayudo cada vez menos.' },
+      { icono: '🏆', titulo: 'Niveles', texto: 'Cada cliente termina con un puntaje. Con 2 ventas cerradas de 70 o más subes de nivel, y el próximo cliente insiste justo en lo que te costó.' },
+    ], 'Que llegue el primero', () => empezar(false));
+  }
+  addEventListener('prueba:misiones-fin', () => { if (P.m.rol === 'asesor') presenta(); });
+  setTimeout(function arranca() {
+    if (P.m.rol !== 'asesor' || !window.__pruebaMisiones?.terminadas?.()) return setTimeout(arranca, 2000);
+    if (S.activo) { S.activo = false; empezar(true); } else if (!ss('clientes:intro')) presenta();
+  }, 2500);
+
+  /* ---------- Estilos ---------- */
+  const css = document.createElement('style');
+  css.textContent = `
+#pc-panel{position:fixed;right:16px;bottom:16px;z-index:99980;width:min(340px,calc(100vw - 32px));padding:10px 12px;border-radius:16px;background:color-mix(in srgb,var(--panel-solid,#1b1b1f) 92%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 16px 36px -16px rgba(0,0,0,.6);color:var(--txt,#eee);font:13px/1.4 system-ui,sans-serif}
+#pc-panel.pc-festejo{animation:pc-pulso .7s}
+@keyframes pc-pulso{30%{box-shadow:0 0 0 4px rgba(37,211,102,.45),0 16px 36px -16px rgba(0,0,0,.6)}}
+#pc-panel .pc-fila{display:flex;align-items:center;gap:10px}
+#pc-panel .pc-ava{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;border:none;background:#25d366;color:#05301a;font:700 13px system-ui;cursor:pointer}
+#pc-panel .pc-tit{flex:1;min-width:0;font-weight:600;font-size:14px}
+#pc-panel .pc-tit small{display:block;font-weight:400;font-size:11.5px;color:var(--muted,#aaa)}
+#pc-panel .pc-esc{color:#25d366;font-weight:600}#pc-panel .pc-tarde{color:#ef4444}
+#pc-panel button{font:inherit;cursor:pointer;color:inherit}
+#pc-panel .pc-mini{border:none;background:transparent;font-size:16px;padding:4px 6px;color:var(--muted,#aaa)}
+#pc-panel .pc-otras{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+#pc-panel .pc-otras button{border:1px solid var(--line2,rgba(255,255,255,.14));background:transparent;border-radius:999px;padding:3px 10px;font-size:12px}
+#pc-panel .pc-temp{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:11.5px;color:var(--muted,#aaa)}
+#pc-panel .pc-temp i{flex:1;height:6px;border-radius:9px;background:var(--line2,rgba(255,255,255,.12));position:relative;overflow:hidden}
+#pc-panel .pc-temp i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--t);background:linear-gradient(90deg,#ef4444,#ffb020,#25d366);transition:width .6s}
+#pc-panel .pc-pasos{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:3px;max-height:38vh;overflow:auto}
+#pc-panel .pc-pasos li{position:relative;padding-left:22px;font-size:12.5px;color:var(--muted,#aaa)}
+#pc-panel .pc-pasos li::before{content:"○";position:absolute;left:3px}
+#pc-panel .pc-pasos li.hecho{color:var(--txt,#eee);text-decoration:line-through;text-decoration-color:rgba(37,211,102,.6)}
+#pc-panel .pc-pasos li.hecho::before{content:"✓";color:#25d366;font-weight:700}
+#pc-panel .pc-pasos li.ahora{color:var(--txt,#eee);font-weight:600}#pc-panel .pc-pasos li.ahora::before{content:"●";color:#ffb020}
+#pc-panel .pc-pista{margin-top:9px;padding:9px 10px;border-radius:12px;background:rgba(255,176,32,.12);border:1px solid rgba(255,176,32,.35);font-size:12.5px}
+#pc-panel .pc-pista button{margin-left:6px;border-radius:999px;padding:4px 12px;font-size:12px}
+#pc-panel .pc-sola{margin:9px 0 0;font-size:12.5px;color:var(--muted,#aaa)}
+#pc-panel .pc-acc{display:flex;align-items:center;gap:8px;margin-top:10px}
+#pc-panel .pc-aviso{flex:1;font-size:12px;color:#ffb020}
+#pc-panel .pc-terminar{margin-left:auto;border:1px solid var(--line2,rgba(255,255,255,.14));background:transparent;border-radius:10px;padding:5px 10px;font-size:12px;color:var(--muted,#aaa)}
+#pc-panel button.pp-ir,#pc-nota button.pp-ir{background:#25d366;color:#05301a;border:1px solid #25d366;font-weight:700}
+#pc-nota{position:fixed;inset:0;z-index:99996;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.55);font:14px/1.45 system-ui,sans-serif;color:var(--txt,#eee)}
+#pc-nota .pc-caja{width:min(440px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:22px;border-radius:18px;background:var(--panel-solid,#1b1b1f);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 24px 60px -20px rgba(0,0,0,.8);text-align:center}
+#pc-nota .pc-larga{width:min(620px,100%);text-align:left}
+#pc-nota h3{margin:0 0 4px;font-size:17px}#pc-nota h4{margin:14px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted,#aaa)}
+#pc-nota p{margin:0;color:var(--muted,#bbb)}#pc-nota ul{margin:0;padding-left:18px;display:grid;gap:4px}
+#pc-nota .pc-cab{display:flex;gap:16px;align-items:center}
+#pc-nota .pc-puntaje{flex:none;display:grid;place-items:center;width:84px;height:84px;border-radius:50%;border:5px solid var(--c);text-align:center;line-height:1}
+#pc-nota .pc-puntaje b{font-size:28px}#pc-nota .pc-puntaje small{font-size:11px;color:var(--muted,#aaa)}
+#pc-nota .pc-estado{margin-top:6px;font-size:12.5px}#pc-nota .pc-estado.ok{color:#25d366;font-weight:600}
+#pc-nota .pc-subio{margin-top:14px;padding:10px 12px;border-radius:12px;background:rgba(37,211,102,.14);border:1px solid rgba(37,211,102,.4);font-weight:600}
+#pc-nota .pc-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+#pc-nota .pc-ideal p{padding:10px 12px;border-radius:10px;background:var(--wa-mia,#005c4b);color:var(--wa-mia-txt,#e9edef);font-style:italic}
+#pc-nota .pc-pasos{margin-top:14px}#pc-nota .pc-pasos summary{cursor:pointer;color:var(--muted,#aaa)}
+#pc-nota .pc-paso{display:grid;grid-template-columns:1fr 90px 22px;gap:8px;align-items:center;font-size:12.5px;margin-top:6px}
+#pc-nota .pc-paso i{height:6px;border-radius:9px;background:var(--line2,rgba(255,255,255,.12));position:relative;overflow:hidden}
+#pc-nota .pc-paso i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--v);background:var(--c)}
+#pc-nota .pc-acc{display:flex;justify-content:flex-end;margin-top:18px}
+#pc-nota button{font:inherit;border-radius:10px;padding:9px 16px;cursor:pointer}
+#pc-nota .pc-cargando{width:38px;height:38px;margin:4px auto 14px;border-radius:50%;border:4px solid var(--line2,rgba(255,255,255,.14));border-top-color:#25d366;animation:pc-gira 1s linear infinite}
+@keyframes pc-gira{to{transform:rotate(1turn)}}
+@media(max-width:760px){#pc-panel{left:10px;right:10px;bottom:10px;width:auto}#pc-panel .pc-pasos{max-height:24vh}#pc-nota .pc-cols{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){#pc-panel.pc-festejo,#pc-nota .pc-cargando{animation:none}}
+@media(min-width:761px){body.pc-chat #sec-wa-bandeja{padding-right:356px}}
+@media(max-width:760px){body.pc-chat #pc-panel{top:calc(8px + env(safe-area-inset-top,0px));bottom:auto}}
+body.pc-wa #sec-wa-bandeja #wb-sub,body.pc-wa #sec-wa-bandeja .wb-por,body.pc-wa #sec-wa-bandeja #wb-recargar{display:none}
+body.pc-wa #sec-wa-bandeja .wa-cab{background:var(--wa-cabecera,#202c33)}
+body.pc-wa #sec-wa-bandeja #wb-head{background:var(--wa-cabecera,#202c33);border-bottom:1px solid rgba(134,150,160,.15)}
+body.pc-wa #sec-wa-bandeja #wb-head .msg-avatar{border-radius:50%}
+body.pc-wa #pc-wa-estado{font-size:12px;color:var(--wa-meta,#8696a0)}body.pc-wa #pc-wa-estado.pc-esc{color:#25d366}
+body.pc-wa #sec-wa-bandeja .wb-compose{background:var(--wa-cabecera,#202c33);border-top:none;padding:8px 10px}
+body.pc-wa #sec-wa-bandeja .wb-compose textarea{border:none;border-radius:8px;background:var(--wa-entrada,#2a3942);color:var(--wa-ajena-txt,#e9edef)}
+body.pc-wa #sec-wa-bandeja .wb-send{background:#00a884;color:#fff}
+body.pc-wa #sec-wa-bandeja .msg-inbox-badge{background:#25d366;color:#05301a;font-weight:700}
+body.pc-wa #sec-wa-bandeja .msg-inbox-row .msg-avatar{border-radius:50%}
+body.pc-wa #sec-wa-bandeja .pc-puntos{display:flex;gap:4px;padding:11px 12px}
+body.pc-wa #sec-wa-bandeja .pc-puntos i{width:7px;height:7px;border-radius:50%;background:var(--wa-meta,#8696a0);animation:pc-salta 1.2s infinite}
+body.pc-wa #sec-wa-bandeja .pc-puntos i:nth-child(2){animation-delay:.15s}body.pc-wa #sec-wa-bandeja .pc-puntos i:nth-child(3){animation-delay:.3s}
+@keyframes pc-salta{0%,60%,100%{transform:none;opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+:root[data-theme="light"] body.pc-wa #sec-wa-bandeja :is(.wa-cab,#wb-head,.wb-compose){background:#f0f2f5}
+:root[data-theme="light"] body.pc-wa #sec-wa-bandeja .wb-compose textarea{background:#fff;color:#111b21}`;
+  document.head.appendChild(css);
+})();

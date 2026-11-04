@@ -552,15 +552,18 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     const mi = actual();
     if (mi) return presenta(mi);
     aplicaGuia();
-    modal([{ icono: '🏁', titulo: 'Desbloqueaste todo el CRM', texto: 'Ahora ves el menú completo, igual que en el CRM real. ' + cierre() }], 'Ver el CRM completo', pinta);
+    modal([{ icono: '🏁', titulo: 'Desbloqueaste todo el CRM', texto: 'Ahora ves el menú completo, igual que en el CRM real. ' + cierre() }], 'Ver el CRM completo', () => { pinta(); dispatchEvent(new Event('prueba:misiones-fin')); });
   }
+  // clientes-ia.js arranca cuando no quedan misiones y reusa la ventana de explicación.
+  window.__pruebaMisiones = { terminadas: () => !enLogin() && !presentando() && !!estado.bienvenida && !actual(), modal,
+    vista: s => { if (!estado.vistas.includes(s)) { estado.vistas.push(s); guarda(estado); } } };
 
   /* ---------- Panel: píldora con la tarea; la explicación se despliega encima ---------- */
   // abierto: la explicación a la vista. Se abre sola una vez por tarea nueva; se cierra con Llévame, «i» o tocando fuera.
   let panel = null, abierto = false, detalleDe = null, pintado = '';
   const INFO = '<button class="pp-info" data-acc="info" aria-label="Ver la explicación de la tarea" title="Ver la explicación">i</button>';
   function pinta(festejo) {
-    if (enLogin() || !estado.bienvenida) { panel?.remove(); panel = null; pintado = ''; return; }
+    if (enLogin() || !estado.bienvenida || window.__pruebaClientes?.activo()) { panel?.remove(); panel = null; pintado = ''; return; }
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'prueba-panel'; panel.setAttribute('aria-label', 'Tu práctica');
@@ -708,13 +711,14 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   window.open = (url, ...r) => {
     if (/demo\.invalid/.test(String(url || ''))) return abrir(P.fotoLocal(String(url)), ...r);
     if (!EXTERNO.test(String(url || ''))) return abrir(url, ...r);
-    avisoExterno();
+    // El WhatsApp de un cliente simulado se abre en WhatsApp empresa (clientes-ia.js).
+    if (!window.__pruebaClientes?.abrirChat(String(url))) avisoExterno();
     return { closed: false, close() {}, focus() {}, location: {} };
   };
   document.addEventListener('click', e => {
     if (e.target.closest('#prueba-panel,#prueba-modal')) return;
     const a = e.target.closest('a[href]');
-    if (a && EXTERNO.test(a.getAttribute('href'))) { e.preventDefault(); avisoExterno(); return; }
+    if (a && EXTERNO.test(a.getAttribute('href'))) { e.preventDefault(); if (!window.__pruebaClientes?.abrirChat(a.getAttribute('href'))) avisoExterno(); return; }
     const sec = e.target.closest('[id^="sec-"]');
     if (sec) registra({ tipo: 'click', dentro: sec.id.slice(4), kpi: !!e.target.closest('canvas,.kpi,.pstep,#destConversion *'), fila: !!e.target.closest('.pc-dias') });
   }, true);

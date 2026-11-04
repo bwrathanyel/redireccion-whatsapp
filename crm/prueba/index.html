@@ -1335,6 +1335,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb),.05)}
 .tarcmp-pie{padding:10px 16px;border-top:1px solid var(--line);font-size:10.5px;color:var(--muted2)}
 .dactions{display:flex;gap:10px;margin-top:22px}
 .dbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer;border:none;font-family:inherit;transition:filter .15s,transform .15s}
+#emp-facturar[hidden]{display:none}
 .dbtn:disabled{opacity:.45;cursor:not-allowed}
 .dbtn.wa{background:var(--wa);color:#fff}.dbtn.wa:hover{filter:brightness(1.08)}
 .dbtn.gh{background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line2)}
@@ -1781,6 +1782,13 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .confirmar-sheet-campos textarea.ei{min-height:84px;resize:vertical}
 .confirmar-sheet-campos .csc-check{display:flex;align-items:center;gap:10px;margin:12px 0 2px;font-size:14px;color:var(--txt);cursor:pointer}
 .confirmar-sheet-campos .csc-check input{width:20px;height:20px;accent-color:var(--accent)}
+.confirmar-sheet-campos .csc-opciones{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.confirmar-sheet-campos .csc-opcion{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1.5px solid var(--line2);border-radius:12px;font-size:14px;line-height:1.35;color:var(--txt);cursor:pointer;animation:csc-titila 1.1s ease-in-out infinite}
+.confirmar-sheet-campos .csc-opcion input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--accent)}
+.confirmar-sheet-campos .csc-opciones:has(input:checked) .csc-opcion{animation:none}
+.confirmar-sheet-campos .csc-opcion:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+@keyframes csc-titila{50%{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}}
+@media (prefers-reduced-motion:reduce){.confirmar-sheet-campos .csc-opcion{animation:none;border-color:rgba(var(--accent-rgb),.6)}}
 #vc-generar-btn{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;border:none;border-radius:12px;padding:15px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:10px;transition:filter .15s,transform .15s,box-shadow .15s;box-shadow:0 10px 24px rgba(var(--accent-rgb),.32)}
 #vc-generar-btn i{font-size:16px}
 #vc-generar-btn:hover{filter:brightness(1.08);transform:translateY(-2px);box-shadow:0 14px 28px rgba(var(--accent-rgb),.42)}
@@ -5462,6 +5470,36 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .ind-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ind-detalle{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);cursor:default}
 .ind-detalle .ce-grupo-t{margin-top:10px}
+.ind-vivo{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.ind-vivo:has(.ind-chat:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(0,420px)}
+.ind-sim{border-left:3px solid var(--line2)}
+.ind-sim.on{outline:2px solid var(--accent);outline-offset:2px}
+.ind-sim.alerta{border-left-color:var(--amber);background:color-mix(in srgb,var(--amber) 7%,var(--bg2))}
+.ind-sim.cerrada{opacity:.72}
+.ind-alerta{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12.5px;font-weight:600;color:var(--amber)}
+.ind-temp{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--muted)}
+.ind-temp i{flex:1;max-width:180px;height:6px;border-radius:9px;background:var(--line2);position:relative;overflow:hidden}
+.ind-temp i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--t);background:linear-gradient(90deg,var(--red),var(--amber),var(--green))}
+.ind-pasos{display:flex;gap:3px;margin-top:8px}
+.ind-pasos span{flex:1;max-width:28px;height:5px;border-radius:9px;background:var(--line2)}
+.ind-pasos span.ok{background:var(--green)}
+.ind-ultimo{margin-top:8px;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ind-chat{--wa-mia:#005c4b;--wa-mia-txt:#e9edef;--wa-ajena:#202c33;--wa-ajena-txt:#e9edef;--wa-fondo:#0b141a;--wa-meta:rgba(233,237,239,.62);--wa-cab:#202c33;
+  position:sticky;top:12px;display:flex;flex-direction:column;max-height:calc(100dvh - 140px);border-radius:16px;overflow:hidden;border:1px solid var(--line2);background:var(--wa-fondo)}
+:root[data-theme="light"] .ind-chat{--wa-mia:#d9fdd3;--wa-mia-txt:#111b21;--wa-ajena:#fff;--wa-ajena-txt:#111b21;--wa-fondo:#efeae2;--wa-meta:#667781;--wa-cab:#f0f2f5}
+.ind-chat-cab{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--wa-cab);color:var(--wa-ajena-txt)}
+.ind-chat-cab .ind-ava{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#25d366;color:#05301a;font-weight:700;font-size:13px}
+.ind-chat-cab b{display:block;font-size:14px}.ind-chat-cab small{font-size:12px;color:var(--wa-meta)}
+.ind-chat-cab button{margin-left:auto;border:none;background:transparent;color:var(--wa-meta);font-size:16px;cursor:pointer;padding:6px}
+.ind-chat-pasos{display:flex;flex-wrap:wrap;gap:4px 10px;padding:8px 12px;background:var(--wa-cab);border-top:1px solid rgba(134,150,160,.15);font-size:11.5px;color:var(--wa-meta)}
+.ind-chat-pasos .ok{color:#25d366}
+.ind-chat-log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:6px;min-height:240px}
+.ind-msg{max-width:82%;padding:6px 9px 4px;border-radius:8px;font-size:13.5px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;background:var(--wa-ajena);color:var(--wa-ajena-txt);align-self:flex-start}
+.ind-msg.yo{align-self:flex-end;background:var(--wa-mia);color:var(--wa-mia-txt)}
+.ind-msg time{display:block;text-align:right;font-size:10.5px;color:var(--wa-meta);margin-top:2px}
+.ind-msg.sis{align-self:center;max-width:92%;background:transparent;color:var(--wa-meta);font-size:12px;font-style:italic;text-align:center}
+.ind-chat-nota{padding:10px 12px;background:var(--wa-cab);color:var(--wa-ajena-txt);font-size:12.5px;border-top:1px solid rgba(134,150,160,.15)}
+@media(max-width:900px){.ind-vivo:has(.ind-chat:not([hidden])){grid-template-columns:minmax(0,1fr)}.ind-chat{position:static;max-height:70vh}}
 .ce-card.apagada .ce-texto{text-decoration:line-through;text-decoration-color:var(--muted2)}
 /* Los hoteles que la regla nombra, con su foto: sin esto la tarjeta muestra un
    "[hotel#1086]" crudo, que no le dice nada a quien la está leyendo. */
@@ -8310,7 +8348,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <!-- DASHBOARD -->
     <section class="section active" id="sec-dashboard">
       <div class="kpis" id="kpis"></div>
-      <button class="ria-dashboard nav-admin-only" id="ria-dashboard" type="button">
+      <button class="ria-dashboard nav-admin-only nav-administrativo-no" id="ria-dashboard" type="button">
         <span class="ria-db-title"><i class="fas fa-wand-magic-sparkles"></i> IA comercial
           <small id="ria-db-estado">Cargando el resumen de hoy…</small></span>
         <span class="ria-db-m"><b id="ria-db-conversaciones">—</b>Conversaciones</span>
@@ -9700,6 +9738,9 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
     </section>
 
+    <!-- FACTURAS A EMPRESAS (2026-11-04; admin y administrativo): facturas-empresa.js, RPC listar_/guardar_/estado_factura_empresa. -->
+    <section class="section" id="sec-facturas-empresa"><div id="facturas-empresa-root"></div></section>
+
     <!-- APARTAMENTOS (2026-10-07; Fase 1 catálogo, solo admin): proveedor > apartamento > habitación > fotos.
          Vinculado al producto del Tarifario sin tocarlo. RPC listar_apto_proveedores / listar_apartamentos / guardar_apto_*. -->
     <section class="section" id="sec-apartamentos">
@@ -10069,6 +10110,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div style="flex:1"><label class="fl" for="emp-telefono">Teléfono <span class="ef-opc">(opcional)</span></label><input id="emp-telefono" class="ei" type="tel" maxlength="40" placeholder="+58 412 1234567" autocomplete="off"></div>
           <div style="flex:1"><label class="fl" for="emp-email">Email <span class="ef-opc">(para el asistente)</span></label><input id="emp-email" class="ei" type="email" maxlength="160" autocomplete="off"></div>
         </div>
+        <label class="fl" for="emp-direccion">Dirección fiscal <span class="ef-opc">(sale en sus facturas)</span></label>
+        <input id="emp-direccion" class="ei" maxlength="300" placeholder="Av. Principal, Edif. Ejemplo, piso 2, Valencia, Carabobo" autocomplete="off">
         <div class="ef-fila">
           <div style="flex:1"><label class="fl" for="emp-dias">Días de crédito</label><input id="emp-dias" class="ei" type="number" min="0" max="365" step="1" placeholder="0"></div>
           <div style="flex:1"><label class="fl" for="emp-fijo">Cliente fijo</label>
@@ -10086,6 +10129,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
       <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
         <button class="dbtn" id="emp-cancelar" type="button" style="flex:1">Cancelar</button>
+        <button class="dbtn" id="emp-facturar" type="button" style="flex:1" hidden><i class="fas fa-file-invoice"></i> Facturar</button>
         <button class="dbtn save" id="emp-guardar" type="button" style="flex:1">Guardar</button>
       </div>
     </div>
@@ -10759,6 +10803,19 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         Quienes practicaron en el <b>modo de prueba</b> y cómo les fue: cuánto tardaron, qué tareas saltaron,
         dónde se trabaron y qué le preguntaron a Lyra. Tocá una persona para ver el detalle. Solo lo ven los admin.
       </div>
+      <div class="apto-tabs" id="ind-tabs" role="tablist">
+        <button class="apto-tab on" type="button" data-ind-tab="misiones" role="tab" aria-selected="true"><i class="fas fa-list-check"></i> Misiones</button>
+        <button class="apto-tab" type="button" data-ind-tab="vivo" role="tab" aria-selected="false"><i class="fas fa-tower-broadcast"></i> En vivo <span class="ce-dest" id="ind-vivo-n" hidden></span></button>
+      </div>
+      <!-- En vivo: práctica con clientes IA (RPC prueba_sim_vivo, refresco cada 5 s mientras está a la vista). -->
+      <div id="ind-pane-vivo" hidden>
+        <div class="kpis" id="ind-vivo-kpis"></div>
+        <div class="ind-vivo">
+          <div id="ind-vivo-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+          <aside class="ind-chat" id="ind-chat" hidden aria-live="polite"></aside>
+        </div>
+      </div>
+      <div id="ind-pane-misiones">
       <div class="ce-barra">
         <input class="ei" type="search" id="ind-buscar" placeholder="Buscar por nombre" aria-label="Buscar por nombre" style="max-width:280px">
         <select class="ei" id="ind-rol" style="max-width:200px" aria-label="Cargo">
@@ -10770,6 +10827,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
       <div class="kpis" id="ind-kpis"></div>
       <div id="ind-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+      </div>
     </section>
 
     <!-- CLIENTES EVENTOS: quienes se registraron con el QR del stand (/juega) y los
@@ -11245,6 +11303,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-contenido"><div id="contenido-root"></div></section>
     <!-- IA › COSTOS DIGITALES (costos-digitales.js + RPC costos_digitales) -->
     <section class="section" id="sec-costos-digitales"><div id="costos-digitales-root"></div></section>
+    <!-- BOLETERÍA › BOLETOS EMITIDOS (boletos-emitidos.js + tabla boletos_emitidos) -->
+    <section class="section" id="sec-boletos-emitidos"><div id="boletos-emitidos-root"></div></section>
 
     <!-- REDES (Instagram + TikTok: métricas + analista IA) -->
     <section class="section" id="sec-redes">
@@ -12288,12 +12348,13 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
      tarAbrirComparador() con las tarifas elegidas y se vacía al cerrar. -->
 <div class="tarcmp" id="tarcmp"></div>
 
-<script src="medicion.js?v=5409215"></script>
-<script src="datos-prueba.js?v=5409215"></script>
-<script src="rpcs-prueba.js?v=5409215"></script>
-<script src="prueba-mock.js?v=5409215"></script>
-<script src="misiones.js?v=5409215"></script>
-<script src="presentacion.js?v=5409215"></script>
-<script type="module" src="app.js?v=5409215"></script>
+<script src="medicion.js?v=5819424"></script>
+<script src="datos-prueba.js?v=5819424"></script>
+<script src="rpcs-prueba.js?v=5819424"></script>
+<script src="prueba-mock.js?v=5819424"></script>
+<script src="misiones.js?v=5819424"></script>
+<script src="presentacion.js?v=5819424"></script>
+<script src="clientes-ia.js?v=5819424"></script>
+<script type="module" src="app.js?v=5819424"></script>
 </body>
 </html>

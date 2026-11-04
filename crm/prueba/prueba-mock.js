@@ -187,7 +187,9 @@
     let raw = init?.body;
     if (raw == null && req) { try { raw = await req.clone().text(); } catch { raw = null; } }
     if (raw == null || raw === '') return null;
-    if (typeof raw !== 'string') { if (raw instanceof FormData || raw instanceof Blob) return null; try { raw = await new Response(raw).text(); } catch { return null; } }
+    // FormData (adjuntos de WhatsApp empresa): el File viaja tal cual al mock de la función.
+    if (raw instanceof FormData) return Object.fromEntries(raw.entries());
+    if (typeof raw !== 'string') { if (raw instanceof Blob) return null; try { raw = await new Response(raw).text(); } catch { return null; } }
     try { return JSON.parse(raw); } catch { return Object.fromEntries(new URLSearchParams(raw)); }
   }
   async function pruebaFetch(input, init) {
@@ -229,8 +231,20 @@
   const NFOTOS = 6;
   const hash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
   // Hoteles reales: prueba-fotos/h/<id>-<k>.jpg, venga como original o como derivado _d/<ancho>/….jpg.
-  const fotoLocal = s => { const r = /\bh\/\d+-\d+\.jpg/.exec(s); return r ? `prueba-fotos/${r[0]}` : `prueba-fotos/f${hash(s) % NFOTOS + 1}.jpg`; };
+  // Lo que adjunta la persona en el chat vive como blob: URL (blob()); el comprobante del cliente simulado lo dibuja clientes-ia.js.
+  const blobs = new Map();
+  const blob = archivo => { const k = crypto.randomUUID(); blobs.set(k, URL.createObjectURL(archivo)); return 'prueba-blob/' + k; };
+  const fotoLocal = s => {
+    const b = /prueba-blob\/([\w-]+)/.exec(s); if (b && blobs.has(b[1])) return blobs.get(b[1]);
+    if (/prueba-comprobante\//.test(s) && g.__pruebaComprobante) return g.__pruebaComprobante(s);
+    const r = /\bh\/\d+-\d+\.jpg/.exec(s); return r ? `prueba-fotos/${r[0]}` : `prueba-fotos/f${hash(s) % NFOTOS + 1}.jpg`;
+  };
   const fotoResp = p => origFetch(fotoLocal(p));
+  // Adjuntos del chat (blob del practicante, comprobante del cliente): se cambian apenas se asigna la URL firmada,
+  // sin esperar al error de red de demo.invalid (tarda y el chat se repinta en el medio).
+  new MutationObserver(ms => {
+    for (const { target: el } of ms) if (el.tagName === 'IMG' && /demo\.invalid\/storage\/.*prueba-(blob|comprobante)\//.test(el.src)) el.src = fotoLocal(el.src);
+  }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['src'] });
   document.addEventListener('error', e => {
     const el = e.target;
     if (!el || el.tagName !== 'IMG' || el.dataset.pruebaFoto || /logo|icons\//.test(el.src || '')) return;
@@ -241,7 +255,7 @@
   const sockets = new Set();
   class FakeWS {
     constructor(url) {
-      Object.assign(this, { url, readyState: 0, protocol: '', extensions: '', bufferedAmount: 0, binaryType: 'blob', _l: {}, _ids: 0, _v2: /vsn=2/.test(url) });
+      Object.assign(this, { url, readyState: 0, protocol: '', extensions: '', bufferedAmount: 0, binaryType: 'blob', _l: {}, _ids: 0, _v2: /vsn=2/.test(url), _joins: new Map() });
       sockets.add(this);
       setTimeout(() => { this.readyState = 1; this._emit('open', { type: 'open' }); }, 0);
     }
@@ -257,8 +271,12 @@
       if (this.readyState !== 1 || typeof data !== 'string') return;
       let joinRef, ref, topic, event, payload;
       try { const x = JSON.parse(data); if (Array.isArray(x)) [joinRef, ref, topic, event, payload] = x; else ({ join_ref: joinRef, ref, topic, event, payload } = x); } catch { return; }
-      if (event === 'phx_join') this._manda(joinRef, ref, topic, 'phx_reply', { status: 'ok', response: { postgres_changes: (payload?.config?.postgres_changes || []).map(c => ({ ...c, id: ++this._ids })) } });
-      else if (event === 'phx_leave') { this._manda(joinRef, ref, topic, 'phx_reply', { status: 'ok', response: {} }); this._manda(joinRef, null, topic, 'phx_close', {}); }
+      if (event === 'phx_join') {
+        const pcs = (payload?.config?.postgres_changes || []).map(c => ({ ...c, id: ++this._ids }));
+        this._joins.set(topic, pcs);
+        this._manda(joinRef, ref, topic, 'phx_reply', { status: 'ok', response: { postgres_changes: pcs } });
+      }
+      else if (event === 'phx_leave') { this._joins.delete(topic); this._manda(joinRef, ref, topic, 'phx_reply', { status: 'ok', response: {} }); this._manda(joinRef, null, topic, 'phx_close', {}); }
       else if (ref != null) this._manda(joinRef, ref, topic, 'phx_reply', { status: 'ok', response: {} });
     }
     close(code = 1000, reason = '') {
@@ -267,11 +285,22 @@
       setTimeout(() => { this.readyState = 3; this._emit('close', { type: 'close', code, reason, wasClean: true }); }, 0);
     }
   }
+  // Cambio de tabla hacia los canales suscritos (lo usa clientes-ia.js): mismo payload que manda Realtime, filtro eq incluido.
+  function empuja(tabla, tipo, fila, previa = null) {
+    const T = tipo.toUpperCase(), base = fila || previa || {};
+    const data = { schema: 'public', table: tabla, commit_timestamp: new Date().toISOString(), type: T, record: fila || {}, old_record: previa || {},
+      columns: Object.keys(base).map(name => ({ name, type: 'text' })), errors: null };
+    const pasa = f => { const x = /^(\w+)=(.+)$/.exec(f || ''); return !x || cumple(base, x[1], x[2]); };
+    for (const s of sockets) for (const [topic, pcs] of s._joins) {
+      const ids = pcs.filter(c => c.table === tabla && (c.event === '*' || c.event === T) && pasa(c.filter)).map(c => c.id);
+      if (ids.length) s._manda(null, null, topic, 'postgres_changes', { ids, data });
+    }
+  }
   function WS(url, protocols) { return String(url).includes(HOST) ? new FakeWS(String(url)) : new RealWS(url, protocols); }
   Object.assign(WS, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
   Object.assign(FakeWS, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
   if (RealWS) WS.prototype = RealWS.prototype;
   g.WebSocket = WS;
 
-  g.__PRUEBA = { m, inicia, emite, avisados, fotoLocal };
+  g.__PRUEBA = { m, inicia, emite, avisados, fotoLocal, empuja, blob, fetchReal: origFetch };
 })();
