@@ -32134,9 +32134,12 @@ function vcpMembrete(doc, { F, st, logo }) {
   vcpFranja(doc, VCP_X0, 100, VCP_W, 2);
 }
 
+// Niveles de compactación del voucher (espaciado, letra): construirVoucherPdf prueba del 0 en adelante hasta que entre en una hoja.
+const VCP_DENSIDAD = [[1, 1], [.78, .95], [.6, .9], [.45, .85]];
 function vcpDibujarVoucher(doc, v, ctx) {
   const { F, st } = ctx;
-  const nServ = Array.isArray(v.servicios) ? v.servicios.length : 0, pv = nServ ? 4.5 : 6.5, gap = nServ ? 12 : 16;
+  const [E, FZ] = VCP_DENSIDAD[ctx.z || 0];
+  const nServ = Array.isArray(v.servicios) ? v.servicios.length : 0, pv = (nServ ? 4.5 : 6.5) * E, gap = (nServ ? 12 : 16) * E;
   const font = (s, size, rgb) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...rgb); };
   const usd = n => n != null && n !== '' ? `$${Number(n).toFixed(2)}` : '';
   const txt = s => String(s ?? '').trim();
@@ -32155,12 +32158,12 @@ function vcpDibujarVoucher(doc, v, ctx) {
   };
 
   // Tabla etiqueta/valor a 4 columnas con encabezado oscuro; contorno fuerte afuera, líneas finas adentro.
-  const tabla = (titulo, filas, y, { left = VCP_X0, width = VCP_W, lab = 120, cols = 4 } = {}) => {
-    const etiqueta = { fillColor: VCP.suave, textColor: VCP.gris, fontStyle: st('semibold'), fontSize: 7, cellWidth: lab };
+  const tabla = (titulo, filas, y, { left = VCP_X0, width = VCP_W, lab = 120, cols = 4, pageBreak = 'auto' } = {}) => {
+    const etiqueta = { fillColor: VCP.suave, textColor: VCP.gris, fontStyle: st('semibold'), fontSize: 7 * FZ, cellWidth: lab };
     return conBorde({
-      startY: y, theme: 'grid', margin: { left, right: 612 - left - width, bottom: 50 }, tableWidth: width,
-      styles: { font: F, fontStyle: st('medium'), fontSize: 9, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pv, bottom: pv, left: 9, right: 9 }, valign: 'middle' },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 8, lineWidth: 0, cellPadding: { top: 6, bottom: 6, left: 9, right: 9 } },
+      startY: y, theme: 'grid', margin: { left, right: 612 - left - width, bottom: 50 }, tableWidth: width, pageBreak,
+      styles: { font: F, fontStyle: st('medium'), fontSize: 9 * FZ, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pv, bottom: pv, left: 9, right: 9 }, valign: 'middle' },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 8 * FZ, lineWidth: 0, cellPadding: { top: 6 * E, bottom: 6 * E, left: 9, right: 9 } },
       columnStyles: cols === 4 ? { 0: etiqueta, 2: { ...etiqueta, cellWidth: lab - 14 } } : { 0: etiqueta },
       head: [[{ content: titulo, colSpan: cols, styles: { charSpace: .8 } }]],
       body: filas,
@@ -32181,10 +32184,11 @@ function vcpDibujarVoucher(doc, v, ctx) {
   font('normal', 8, vcpTinte(VCP.navy, .7)); doc.text(`Fecha de emisión: ${v.fecha_emision}`, VCP_X1 - 14, 146, { align: 'right' });
 
   // ---------- Saludo ----------
-  font('normal', 8.6, VCP.gris);
+  font('normal', 8.6 * FZ, VCP.gris);
   const saludo = doc.splitTextToSize('¡Felicidades! Se ha hecho acreedor de un servicio turístico de calidad con el sello de Destino y Eventos Lotus 360. Nuestro deseo es brindarle la mayor satisfacción que usted merece.', VCP_W);
-  doc.text(saludo, VCP_X0, 176, { lineHeightFactor: 1.4 });
-  let y = 176 + saludo.length * 12 + 8;
+  const ys = 156 + 20 * E;
+  doc.text(saludo, VCP_X0, ys, { lineHeightFactor: 1.4 });
+  let y = ys + saludo.length * 12 * FZ + 8 * E;
 
   // ---------- Cliente ----------
   y = tabla('DATOS DEL CLIENTE', [
@@ -32217,8 +32221,8 @@ function vcpDibujarVoucher(doc, v, ctx) {
   // Tabla de filas con encabezado oscuro (servicios, pasajeros, itinerario).
   const listado = (head, body, yL, columnStyles = {}, pad = 6) => conBorde({
     startY: yL, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 50 }, rowPageBreak: 'avoid',
-    styles: { font: F, fontStyle: st('medium'), fontSize: 8.6, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pad, bottom: pad, left: 9, right: 9 } },
-    headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+    styles: { font: F, fontStyle: st('medium'), fontSize: 8.6 * FZ, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: pad * E, bottom: pad * E, left: 9, right: 9 } },
+    headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6 * FZ, lineWidth: 0 },
     columnStyles, head: [head], body,
   }, VCP_X0, VCP_W);
 
@@ -32273,22 +32277,21 @@ function vcpDibujarVoucher(doc, v, ctx) {
     ['TOTAL GENERAL', { content: usd(v.total_general), styles: { halign: 'right', fontStyle: st('semibold') } }],
     ['PAGADO', { content: usd(v.monto_pagado), styles: { halign: 'right', fontStyle: st('semibold') } }],
     [{ content: 'RESTA', styles: { fillColor: vcpTinte(VCP.naranja, .9), textColor: VCP.ambarOsc, fontStyle: st('bold'), fontSize: 8.4 } },
-      { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
-  ], yR, opt);
+      { content: usd(v.resta), styles: { halign: 'right', fontStyle: st('bold'), fontSize: 13 * FZ, textColor: VCP.ambarOsc, fillColor: vcpTinte(VCP.naranja, .9) } }],
+  ], yR, { ...opt, pageBreak: 'avoid' });
   const half = (VCP_W - 16) / 2;
   if (Array.isArray(v.abonos_detalle) && v.abonos_detalle.length) {
     if (y + 75 > 742) { doc.addPage(); y = 40; }
     const nuevo = { fillColor: vcpTinte(VCP.naranja, .9), fontStyle: st('bold') };
     y = conBorde({
       startY: y, theme: 'grid', margin: { left: VCP_X0, right: VCP_X0, bottom: 44 }, rowPageBreak: 'avoid',
-      styles: { font: F, fontStyle: st('medium'), fontSize: 8.4, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 3, bottom: 3, left: 9, right: 9 } },
-      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6, lineWidth: 0 },
+      styles: { font: F, fontStyle: st('medium'), fontSize: 8.4 * FZ, textColor: VCP.navy, lineColor: VCP.linea, lineWidth: .6, cellPadding: { top: 3 * Math.max(E, .6), bottom: 3 * Math.max(E, .6), left: 9, right: 9 } },
+      headStyles: { fillColor: VCP.navy, textColor: 255, fontStyle: st('semibold'), fontSize: 7.6 * FZ, lineWidth: 0 },
       columnStyles: { 0: { cellWidth: 120 }, 3: { halign: 'right', fontStyle: st('semibold') } },
       head: [['ABONOS', 'MÉTODO', 'REFERENCIA', 'MONTO']],
       body: v.abonos_detalle.map(a => [a.nuevo ? `${a.fecha} · nuevo` : a.fecha, (a.metodo || '—') + (a.servicio ? ` · ${a.servicio}` : ''), a.referencia || '—', usd(a.monto)]
         .map(x => a.nuevo ? { content: x, styles: nuevo } : x)),
-    }, VCP_X0, VCP_W) + 6;
-    if (y + 75 > 742) { doc.addPage(); y = 40; }
+    }, VCP_X0, VCP_W) + 6 * E;
     resumen(y, { left: VCP_X0 + half + 16, width: half, lab: 110, cols: 2 });
     return;
   }
@@ -32418,12 +32421,16 @@ function vcpDibujarTerminos(doc, ctx, T) {
 
 async function construirVoucherPdf(v) {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-  let F = 'helvetica', st = s => (s === 'normal' || s === 'medium' ? 'normal' : 'bold');
+  let fuentes = [], F = 'helvetica', st = s => (s === 'normal' || s === 'medium' ? 'normal' : 'bold');
   try {
-    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    fuentes = await cargarFuentesPdf();
     F = 'Poppins'; st = s => s;
   } catch (_e) { /* sin Poppins sale en Helvetica */ }
+  const nuevoDoc = () => {
+    const d = new jsPDF({ unit: 'pt', format: 'letter' });
+    fuentes.forEach(([a, e, b]) => { d.addFileToVFS(a, b); d.addFont(a, 'Poppins', e); });
+    return d;
+  };
   let logo = null;
   try { const d = await cargarImagenBase64('logo-color.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
   const ctx = { F, st, logo };
@@ -32439,7 +32446,15 @@ async function construirVoucherPdf(v) {
     monto: s.monto,
   }));
   if (boletos.length) await bolAsegurarCatalogo();
-  vcpDibujarVoucher(doc, { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios, boletos }, ctx);
+  const datos = { ...v, fecha_emision: new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }), servicios, boletos };
+  // Pedido del dueño (04-nov): el voucher entero, con el resumen de pago, va en la hoja 1. Se compacta
+  // nivel por nivel hasta que entre; si ni el más compacto alcanza (varios boletos), sale en más hojas.
+  let doc;
+  for (let z = 0; z < VCP_DENSIDAD.length; z++) {
+    doc = nuevoDoc();
+    vcpDibujarVoucher(doc, datos, { ...ctx, z });
+    if (doc.getNumberOfPages() === 1) break;
+  }
   const nVoucher = doc.getNumberOfPages();
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
@@ -37521,6 +37536,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-04', emoji: '🧾', titulo: 'Voucher en una sola hoja', texto: 'El voucher ya no parte el resumen de pago a la hoja 2: si los servicios y abonos no entran, se compacta solo (espacios y letra un poco más chicos) para que todo, con el total, pagado y resta, quede junto en la primera hoja.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-11-04', emoji: '💵', titulo: 'Pago del cliente al cargar un servicio', texto: 'Al agregar o editar un servicio de la reserva, en «Pago del cliente» elegí «Abono» (el monto que pagó) o «Pago completo» (lo que falta del servicio), el método, la referencia y la captura del comprobante: la IA lee la captura y completa los datos. Queda en Abonos con su recibo y el voucher actualizado.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-11-03', emoji: '🛡️', titulo: 'Voucher: infantes, precio del hotel y seguro de viaje', texto: 'En Voucher ahora hay casilla de Infantes (0-2 años; niños desde 3). Al elegir el hotel del tarifario se ve la tarifa más baja y, con las fechas, el precio del hospedaje se suma solo al total (por temporada si cruza dos; podés corregirlo a mano). Y en Servicios adicionales hay «Seguro de viaje»: aseguradora, plan, vigencia, póliza y teléfono de asistencia salen en el PDF.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
   { fecha: '2026-11-02', emoji: '📎', titulo: 'Compartir vouchers y documentos como archivo', texto: 'En el celular, el botón «Compartir» de vouchers, documentos de la reserva y recibos abre la hoja de compartir con el PDF adjunto y un nombre claro (ej. «Lotus 360 - Voucher 000123 - Cliente…»). A WhatsApp llega el documento, ya no el link largo. Si aparece un aviso «Compartir…», tocalo una vez más.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
