@@ -38,9 +38,10 @@ const CSS = `
 .wb-comp-acc button{padding:5px 9px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--txt);font:inherit;font-size:12px;cursor:pointer}
 `;
 
-export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, ok, error }) {
+export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, ok, error, navPush, navConsume }) {
   let convs = [];
   let actual = null;
+  let navWb = null;
   let mensajes = [];
   let comprobantes = new Map();
   let plantillas = null;
@@ -101,6 +102,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
   async function abrir(c) {
     const g = ++gen;
     actual = c;
+    if (!navWb && matchMedia('(max-width:760px)').matches) { navWb = { type: 'wb-conv' }; navPush?.(navWb); }
     $('wb-shell').classList.add('ver-chat');
     $('wb-vacio').hidden = true;
     ['wb-head', 'wb-log'].forEach(id => $(id).hidden = false);
@@ -127,7 +129,9 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     }
   }
 
-  function cerrar() {
+  function cerrar(desdeNav) {
+    if (desdeNav !== true && navWb) navConsume?.();
+    navWb = null;
     gen++;
     actual = null; mensajes = []; comprobantes = new Map();
     if (canalChat) { sb.removeChannel(canalChat); canalChat = null; }
@@ -156,7 +160,14 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     // transcripcion: la escribe whatsapp-webhook al bajar la nota de voz (mismo bloque que Meta DM).
     if (m.tipo === 'audio') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>${m.transcripcion ? `<div class="wa-transcripcion"><i class="fas fa-microphone"></i><span>${esc(m.transcripcion)}</span></div>` : ''}`;
     if (m.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
-    return `<div class="msg-doc" ${fuente} data-wb-doc="1"><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(m.media_mime || 'Archivo')}</div></div></div>`;
+    return `<div class="msg-doc" ${fuente} data-wb-doc="1"><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(etiquetaDoc(m))}</div></div></div>`;
+  }
+  function etiquetaDoc(m) {
+    const mime = (m.media_mime || '').toLowerCase();
+    if (mime.includes('pdf')) return 'Documento PDF';
+    if (mime.includes('sheet') || mime.includes('excel')) return 'Hoja de cálculo';
+    if (mime.includes('word') || mime.includes('msword') || mime.includes('opendocument.text')) return 'Documento';
+    return 'Archivo';
   }
 
   const atributosTick = m => `class="msg-tick${m.estado === 'leido' ? ' leido' : ''}${m.estado === 'fallido' ? ' wb-fallido' : ''}" title="${esc(m.error || m.estado || '')}"`;
@@ -235,6 +246,8 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     const url = await urlFirmada(el.dataset.wbMedia);
     if (!url) return;
     if (el.dataset.wbDoc) { el.addEventListener('click', () => window.open(url, '_blank', 'noopener')); return; }
+    const log = $('wb-log'), pegado = log.scrollTop + log.clientHeight >= log.scrollHeight - 60;
+    el.addEventListener(el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load', () => { if (pegado) log.scrollTop = log.scrollHeight; }, { once: true });
     el.src = url;
     if (el.tagName === 'IMG') el.addEventListener('click', () => openLightbox([url], 0));
   }
@@ -282,6 +295,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     const ta = $('wb-texto'), texto = ta.value.trim();
     if (!texto || !actual) return;
     ta.value = ''; autoAlto();
+    ta.focus({ preventScroll: true });
     const tmp = { wamid: 'tmp-' + Date.now(), _tmp: true, direccion: 'saliente_api', tipo: 'text', texto, enviado_en: new Date().toISOString(), estado: 'enviando' };
     mensajes.push(tmp); pintarMensajes(true);
     const r = await invocar({ conversacion_id: actual.id, tipo: 'texto', texto });
@@ -351,7 +365,9 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
 
   function autoAlto() {
     const ta = $('wb-texto');
-    ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px';
+    const movil = matchMedia('(max-width:760px)').matches;
+    ta.style.height = 'auto';
+    ta.style.height = (movil ? (ta.value ? Math.min(ta.scrollHeight + 2, 140) : 44) : Math.min(ta.scrollHeight, 140)) + 'px';
   }
 
   function enlazar() {
@@ -370,14 +386,16 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       const c = row && convs.find(x => x.id === Number(row.dataset.wb));
       if (c) abrir(c);
     });
-    $('wb-back').addEventListener('click', cerrar);
+    $('wb-back').addEventListener('click', () => cerrar());
     $('wb-log').addEventListener('click', ev => {
       const b = ev.target.closest('[data-wb-comp]');
       if (b) marcarComprobante(Number(b.dataset.wbComp), b.dataset.wbEst);
     });
     $('wb-ver-lead').addEventListener('click', () => actual?.lead_id && abrirLead(actual.lead_id));
+    if (matchMedia('(max-width:760px)').matches) $('wb-texto').placeholder = 'Mensaje';
     $('wb-texto').addEventListener('input', autoAlto);
     $('wb-texto').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey && !matchMedia('(pointer:coarse)').matches) { ev.preventDefault(); enviarTexto(); } });
+    $('wb-enviar').addEventListener('mousedown', ev => ev.preventDefault());
     $('wb-enviar').addEventListener('click', enviarTexto);
     $('wb-adjuntar').addEventListener('click', () => $('wb-archivo').click());
     $('wb-archivo').addEventListener('change', ev => { const f = ev.target.files?.[0]; ev.target.value = ''; enviarArchivo(f); });

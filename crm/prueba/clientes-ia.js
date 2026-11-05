@@ -457,12 +457,16 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
   }
   const reloj = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   // En el celular la guía arranca plegada (solo la pista del paso que sigue) para no tapar la pantalla.
-  let panel = null, plegadoGeneral = false, plegadoMovil = true;
+  let panel = null, plegadoGeneral = false, plegadoMovil = true, enChatPrev = false;
   const movil = () => matchMedia('(max-width:760px)').matches;
   function pinta(festeja) {
-    const enChat = S.activo && !!$('sec-wa-bandeja')?.classList.contains('active');
+    // pc-sec: WhatsApp empresa a la vista. pc-chat: además hay una conversación abierta (ahí el panel va arriba; en la lista, abajo como en el resto).
+    const enChat = S.activo && window.__pruebaMisiones?.terminadas?.() !== false && !!document.querySelector('.section.active .dm-shell.ver-chat');
     document.body.classList.toggle('pc-wa', S.activo);
+    document.body.classList.toggle('pc-sec', S.activo && !!$('sec-wa-bandeja')?.classList.contains('active'));
     document.body.classList.toggle('pc-chat', enChat);
+    if (enChat && !enChatPrev && movil()) plegadoMovil = true;
+    enChatPrev = enChat;
     if (S.activo) $('prueba-panel')?.remove();
     if (!S.activo || window.__pruebaMisiones?.terminadas?.() === false) { panel?.remove(); panel = null; return; }
     const plegado = movil() ? plegadoMovil : plegadoGeneral;
@@ -507,6 +511,8 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     }
     if (enExamen()) html = `<div class="pc-examen">⏱ Examen «hora pico» · quedan <b>${Math.max(0, Math.ceil((EXAMEN.min * 60e3 - (Date.now() - S.examen.inicio)) / 60e3))} min</b> · ${S.examen.lanzados} de ${EXAMEN.clientes} clientes</div>` + html;
     if (panel.dataset.html !== html) { panel.dataset.html = html; panel.innerHTML = html; }
+    // Con un chat abierto en el celular el chat baja lo que mide el panel PLEGADO (--pc-h); desplegado se superpone y no se mide.
+    if (enChat && movil() && !(sim && !plegado) && panel.offsetHeight) document.documentElement.style.setProperty('--pc-h', panel.offsetTop + panel.offsetHeight + 'px');
     if (festeja) { panel.classList.remove('pc-festejo'); void panel.offsetWidth; panel.classList.add('pc-festejo'); }
     pintaEstado();
   }
@@ -534,9 +540,9 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
   }
   // whatsapp-bandeja.js repinta #wb-log entero con cada mensaje: los tres puntos se vuelven a poner.
   new MutationObserver(() => { if (abiertas().some(s => s.escribiendo)) pintaEscribiendo(); }).observe(document.documentElement, { childList: true, subtree: true });
-  // Al entrar o salir de WhatsApp empresa la guía se corre para no tapar el botón de enviar.
-  const secWa = $('sec-wa-bandeja');
-  if (secWa) new MutationObserver(() => S.activo && pinta()).observe(secWa, { attributes: true, attributeFilter: ['class'] });
+  // Al abrir o cerrar un chat (`ver-chat`) o cambiar de sección (`active`) la guía se mueve: arriba con un chat abierto, abajo en el resto.
+  const obsPc = new MutationObserver(() => S.activo && pinta());
+  document.querySelectorAll('.section, .dm-shell').forEach(el => obsPc.observe(el, { attributes: true, attributeFilter: ['class'] }));
 
   /* ---------- Nota de voz: se graba en el navegador y el cliente «escucha» la transcripción (Web Speech, sin costo ni audio a la EF) ---------- */
   const Reconoce = window.SpeechRecognition || window.webkitSpeechRecognition, VOZ_MAX = 60;
@@ -702,17 +708,18 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
 #pc-nota button{font:inherit;border-radius:10px;padding:9px 16px;cursor:pointer}
 #pc-nota .pc-cargando{width:38px;height:38px;margin:4px auto 14px;border-radius:50%;border:4px solid var(--line2,rgba(255,255,255,.14));border-top-color:#25d366;animation:pc-gira 1s linear infinite}
 @keyframes pc-gira{to{transform:rotate(1turn)}}
-@media(max-width:760px){#pc-panel{left:10px;right:10px;bottom:10px;width:auto}#pc-panel .pc-pasos{max-height:24vh}#pc-nota .pc-cols{grid-template-columns:1fr}}
+@media(max-width:760px){#pc-panel{left:10px;right:10px;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:auto}body:has(>.mfab) #pc-panel{bottom:calc(144px + env(safe-area-inset-bottom,0px))}body.pc-wa:not(.pc-chat) .main{padding-bottom:calc(170px + env(safe-area-inset-bottom,0px))}#pc-panel .pc-pasos{max-height:24dvh}#pc-panel .pc-mini{min-width:44px;min-height:44px}#pc-nota .pc-cols{grid-template-columns:1fr}
+#pc-nota .pc-caja{max-height:calc(100dvh - 32px);padding:16px}#pc-nota .pc-caja:has(.pc-acc){padding-bottom:0}#pc-nota .pc-acc{position:sticky;bottom:0;margin:12px -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--panel-solid,#1b1b1f)}}
 @media(prefers-reduced-motion:reduce){#pc-panel.pc-festejo,#pc-nota .pc-cargando{animation:none}}
-@media(min-width:761px){body.pc-chat #sec-wa-bandeja{padding-right:356px}}
-@media(max-width:760px){body.pc-chat #pc-panel{top:calc(8px + env(safe-area-inset-top,0px));bottom:auto}}
+@media(min-width:761px){body.pc-sec #sec-wa-bandeja{padding-right:356px}}
+@media(max-width:760px){body.pc-chat #pc-panel{top:env(safe-area-inset-top,0px);bottom:auto;max-height:36dvh;overflow:auto}body.pc-chat #pc-panel .pc-pasos{max-height:none}body.pc-chat .dm-shell.ver-chat{margin-top:var(--pc-h,76px);height:calc(100dvh - var(--pc-h,76px))}body.pc-chat.teclado #pc-panel{display:none}body.pc-chat.teclado .dm-shell.ver-chat{margin-top:0;height:100dvh}}
 body.pc-wa #sec-wa-bandeja #wb-sub,body.pc-wa #sec-wa-bandeja .wb-por,body.pc-wa #sec-wa-bandeja #wb-recargar{display:none}
 body.pc-wa #sec-wa-bandeja .wa-cab{background:var(--wa-cabecera,#202c33)}
 body.pc-wa #sec-wa-bandeja #wb-head{background:var(--wa-cabecera,#202c33);border-bottom:1px solid rgba(134,150,160,.15)}
 body.pc-wa #sec-wa-bandeja #wb-head .msg-avatar{border-radius:50%}
 body.pc-wa #pc-wa-estado{font-size:12px;color:var(--wa-meta,#8696a0)}body.pc-wa #pc-wa-estado.pc-esc{color:#25d366}
-body.pc-wa #sec-wa-bandeja .wb-compose{background:var(--wa-cabecera,#202c33);border-top:none;padding:8px 10px}
-body.pc-wa #sec-wa-bandeja .wb-compose textarea{border:none;border-radius:8px;background:var(--wa-entrada,#2a3942);color:var(--wa-ajena-txt,#e9edef)}
+body.pc-wa #sec-wa-bandeja .wb-compose{background:var(--wa-cabecera,#202c33);border-top:none}
+body.pc-wa #sec-wa-bandeja .wb-compose textarea{border:none;background:var(--wa-entrada,#2a3942);color:var(--wa-ajena-txt,#e9edef)}
 body.pc-wa #sec-wa-bandeja .wb-send{background:#00a884;color:#fff}
 #sec-wa-bandeja .wb-compose.pc-graba>:not(#pc-grabando){display:none!important}
 #pc-grabando{flex:1;min-width:0;display:flex;align-items:center;gap:10px}

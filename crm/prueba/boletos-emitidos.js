@@ -87,6 +87,7 @@ const CSS = `
   .be-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .be-fila{grid-template-columns:1fr auto}
   .be-fila .det:nth-child(3){display:none}
+  .be-grid .field:has(input[type=date]){grid-column:1/-1}
 }
 `;
 
@@ -342,7 +343,19 @@ export async function construirPdf(d, numero, c) {
   const P = c.paleta, limpiar = c.limpiar || (s => String(s ?? '').trim());
   const tinte = (col, k) => col.map(v => Math.round(v + (255 - v) * k));
   const imagen = async src => { try { const u = await c.imagen(src); return String(u).startsWith('data:image/png') ? u : null; } catch (_e) { return null; } };
-  const logo = await imagen('logo-color.png');
+  // Logo en negro: se tiñe el de color (mismas proporciones que espera el membrete).
+  const enNegro = u => new Promise(ok => {
+    if (!u) return ok(null);
+    const im = new Image();
+    im.onload = () => {
+      const cv = Object.assign(document.createElement('canvas'), { width: im.naturalWidth, height: im.naturalHeight }), g = cv.getContext('2d');
+      g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+      ok(cv.toDataURL('image/png'));
+    };
+    im.onerror = () => ok(u);
+    im.src = u;
+  });
+  const logo = await enNegro(await imagen('logo-color.png'));
   const logos = {};
   for (const t of d.tramos) { const a = aerolineaDe(t); if (a.logo && !(a.id in logos)) logos[a.id] = await imagen(logoDe(a)); }
   const font = (s, size, col) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...col); };
@@ -556,7 +569,7 @@ export function crearBoletosEmitidos(c) {
       </div>
       <div data-panel="editor"><div class="be-layout">
         <div class="be-form">
-          <label class="be-drop" id="be-drop"><i class="fas fa-file-arrow-up"></i><span><b>Suelta aquí el PDF del boleto</b><small>o tócalo para elegirlo · puedes subir varios (uno por pasajero o por aerolínea)</small></span>
+          <label class="be-drop" id="be-drop"><i class="fas fa-file-arrow-up"></i><span>${matchMedia('(pointer:coarse)').matches ? '<b>Toca para subir el PDF del boleto</b><small>Puedes subir varios (uno por pasajero o por aerolínea)</small>' : '<b>Suelta aquí el PDF del boleto</b><small>o tócalo para elegirlo · puedes subir varios (uno por pasajero o por aerolínea)</small>'}</span>
             <input type="file" id="be-archivo" accept="application/pdf,.pdf" multiple></label>
           <div id="be-aviso"></div>
           <div class="card be-bloque"><h3><i class="fas fa-plane"></i> Vuelos</h3><div id="be-tramos"></div>
@@ -598,6 +611,7 @@ export function crearBoletosEmitidos(c) {
   const opcionesAerolinea = sel => ['nacional', 'internacional'].map(g => `<optgroup label="${g === 'nacional' ? 'Nacionales' : 'Internacionales'}">${AEROLINEAS.filter(a => a.grupo === g).map(a => `<option value="${a.id}" ${a.id === sel ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</optgroup>`).join('')
     + `<option value="otra" ${sel === 'otra' ? 'selected' : ''}>Otra aerolínea…</option>`;
   const chipLogo = a => (a.logo ? `<span class="be-logo"><img src="${logoDe(a)}" alt="${esc(a.nombre)}"></span>` : `<span class="be-logo"><span>${esc(a.nombre)}</span></span>`);
+  const movil = matchMedia('(max-width:640px)').matches;
   const campo = (lbl, k, v, extra = '', cls = '') => `<div class="field ${cls}"><label class="fl">${lbl}</label><input class="ei" data-k="${k}" value="${esc(v ?? '')}" ${extra}></div>`;
 
   function pintarTramos() {
@@ -610,8 +624,8 @@ export function crearBoletosEmitidos(c) {
           ${t.aerolinea === 'otra' ? campo('Nombre de la aerolínea', 't.aerolinea_nombre', t.aerolinea_nombre) + campo('Código (IATA)', 't.iata', t.iata, 'maxlength="3" style="text-transform:uppercase"') : ''}
           ${campo('N° de vuelo', 't.vuelo', t.vuelo, 'inputmode="numeric" maxlength="5" placeholder="302"')}
           ${campo('Código de reserva', 't.reserva', t.reserva, 'maxlength="8" placeholder="KPAKEE" style="text-transform:uppercase"')}
-          ${campo('Origen', 't.origen', t.origen, 'list="be-aeropuertos" placeholder="CCS o ciudad"', t.origen ? '' : 'be-falta')}
-          ${campo('Destino', 't.destino', t.destino, 'list="be-aeropuertos" placeholder="PMV o ciudad"', t.destino ? '' : 'be-falta')}
+          ${campo('Origen', 't.origen', t.origen, 'list="be-aeropuertos" placeholder="' + (movil ? 'CCS' : 'CCS o ciudad') + '"', t.origen ? '' : 'be-falta')}
+          ${campo('Destino', 't.destino', t.destino, 'list="be-aeropuertos" placeholder="' + (movil ? 'PMV' : 'PMV o ciudad') + '"', t.destino ? '' : 'be-falta')}
           ${campo('Fecha', 't.fecha', t.fecha, 'type="date"', t.fecha ? '' : 'be-falta')}
           ${campo('Sale', 't.sale', t.sale, 'type="time"', t.sale ? '' : 'be-falta')}
           ${campo('Llega', 't.llega', t.llega, 'type="time"')}

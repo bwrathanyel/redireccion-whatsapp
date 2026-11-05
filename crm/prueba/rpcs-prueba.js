@@ -1121,6 +1121,18 @@ const RPCS = {
   voces_catalogo_listar: (m, a) => ({ ok: true, voces: [] }),
   perfiles_voz_listar: (m, a) => ({ ok: true, perfiles: [] }),
   boleteria_bandeja: (m, a) => [],
+  // Pantallas de admin sin datos de práctica: vacías pero con la forma que lee el CRM (con `[]` quedaban en «Cargando…» o fallaban en .filter).
+  boleteria_catalogo: (m, a) => ({ aerolineas: [], rutas: [], ruta_aerolineas: [], temporadas: [], aeropuertos: [], precios: [], requisitos: [] }),
+  boleteria_reservas_listar: (m, a) => ({ ok: true, kpis: { por_emitir: 0, tl_24h: 0, tl_vencidos: 0, vuelan_7d: 0, reembolsos_abiertos: 0 }, items: [] }),
+  margen_real_proveedores: (m, a) => ({ ok: true, proveedores: [], casos: [], grupos: [] }),
+  costos_digitales: (m, a) => { const mes = String(g(a, 'p_mes') || new Date().toISOString().slice(0, 8) + '01');
+    return { mes, totales: { cargado: 125, consumo: 8.4 }, anterior: { total: 131.2 }, consumo: [{ fuente: 'ventas', modelo: 'deepseek-chat', llamadas: 312, usd: 8.4 }],
+      suscripciones: [
+        { id: 1, proveedor: 'Claude', plan: 'Max', grupo: 'ia', ciclo: 'mensual', mes_cobro: null, dia_cobro: 1, monto_usd: 100, activa: true, vigente: true, cargo: { fecha: mes, monto: 100 } },
+        { id: 2, proveedor: 'Zernio', plan: '5 cuentas', grupo: 'automatizacion', ciclo: 'mensual', mes_cobro: null, dia_cobro: 1, monto_usd: 25, activa: true, vigente: true, cargo: { fecha: mes, monto: 25 } },
+        { id: 3, proveedor: 'Supabase', plan: 'Pro', grupo: 'infraestructura', ciclo: 'mensual', mes_cobro: null, dia_cobro: 28, monto_usd: 25, activa: true, vigente: true, cargo: null }] }; },
+  prueba_ia_config: (m, a) => ({ modelo: 'realista', tope: 40, gastado: 3.2, hoy: 0.4, llamadas: 120, llamadas_hoy: 8 }),
+  prueba_ia_config_guardar: (m, a) => OK,
 };
 const LYRA_RESPUESTAS = [
   ['nota', 'Listo, le dejé la nota a la ficha de María González: «Llamar el viernes para cobrar el saldo». ' +
@@ -1155,6 +1167,8 @@ function asistente_admin(m, body) {
 
 const FUNCIONES = { 'repartir-numeros': repartir_numeros, 'voz-ia-referencia': voz_ia_referencia, 'reasignar-lead': reasignar_lead,
   'asistente-admin': asistente_admin, 'crear-personal': crear_personal,
+  // Redes (Zernio): sin cuentas ni marcas conectadas; con `{ ok: true }` a secas el CRM hace `.cuentas.filter` / `.marcas.filter` sobre undefined.
+  'marketing-zernio': (m, a) => ({ ok: true, marcas: [] }), 'redes-facebook-zernio': (m, a) => ({ ok: true, cuentas: [] }),
   // Firma de subida para el recibo y el voucher del abono (abonos.js): sin path, supabase-js revienta en uploadToSignedUrl.
   'reservas-documentos': (m, a) => g(a, 'accion') === 'subir' ? { ok: true, path: `${entero(g(a, 'reserva_id') || 0)}/${g(a, 'tipo') || 'doc'}-${Date.now()}.pdf`, token: 'prueba' } : OK };
 

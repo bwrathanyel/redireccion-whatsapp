@@ -7935,6 +7935,164 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   #leads-cards .lead-card .lc-foot{padding-top:9px}
   #leads-cards .lead-card .lc-fill{flex-basis:9px}
 }
+/* QA móvil 2026-11-06 */
+@media (max-width:760px){
+  /* FABs: nada flotante sobre paneles, hojas de filtros, teclado ni barras fijas */
+  body.lyra-abierta .mfab,body:has(.mfs.open) :is(.mfab,.chat-fab,.lyra-fab),body.teclado :is(.mfab,.chat-fab,.lyra-fab){opacity:0;pointer-events:none;transform:scale(.8)}
+  body:has(#sec-voucher.active) :is(.lyra-fab,.chat-fab){bottom:calc(84px + var(--safe-b))}
+  body:has(#sec-cotizacion-boletos.active) :is(.lyra-fab,.chat-fab){bottom:calc(132px + var(--safe-b))}
+  body.teclado #sec-cotizacion-boletos .cb-resumen-col,body.teclado #sec-voucher .vc-pie{display:none}
+
+  /* Chat abierto a pantalla completa: los FABs, la barra y las pestañas vuelven con ← o Atrás */
+  body:has(.section.active .dm-shell.ver-chat) :is(.chat-fab,.lyra-fab,.chat-globo,.lyra-globo,.mobile-brand,.nav-tabs-sec,.foot-note,#recordatorios-banner-m){display:none!important}
+  body:has(.section.active .dm-shell.ver-chat) .main{padding:0!important}
+  .dm-shell.ver-chat,.dm-shell.wa-shell.ver-chat{height:100vh;height:100dvh;min-height:0;margin:0;padding-top:env(safe-area-inset-top,0px);box-sizing:border-box}
+  body:has(#vista-previa-banner) .dm-shell.ver-chat{height:calc(100dvh - var(--vp-h,56px));padding-top:0}
+  .dm-shell.ver-chat>.dm-chat{border:0;border-radius:0;box-shadow:none}
+  .dm-shell>.dm-chat{padding:8px 8px 0}
+  #sec-wa-bandeja .wb-compose{padding:8px 4px calc(8px + var(--safe-b));gap:6px}
+  #sec-wa-bandeja :is(.wb-ico,.wb-send){width:var(--tap,44px);height:var(--tap,44px);flex:none}
+  #sec-wa-bandeja .wb-compose textarea,body.pc-wa #sec-wa-bandeja .wb-compose textarea{min-width:0;min-height:44px;border-radius:22px;line-height:1.35}
+  #sec-wa-bandeja .wb-plantilla{padding-bottom:calc(10px + var(--safe-b))}
+  .msg-conv-back{width:var(--tap,44px);height:var(--tap,44px)}
+  .chat-tool-btn{min-height:var(--tap,44px)}
+  .dm-filtro{min-height:40px}
+  .tk-compose .tk-input{height:44px}
+  .dm-app-chip{display:none}
+  #wb-ver-lead,#dm-btn-perfil{font-size:0;gap:0;width:44px;height:44px;padding:0;justify-content:center}
+  #wb-ver-lead i,#dm-btn-perfil i{font-size:16px}
+  .msg-doc-nombre{max-width:none;white-space:normal;overflow-wrap:anywhere}
+  .dm-shell[data-canal="whatsapp"] .wa-audio{color-scheme:dark}
+  :root[data-theme="light"] .dm-shell[data-canal="whatsapp"] .wa-audio{color-scheme:light}
+  .nav-tabs-sec .seg{padding:0 11px;min-height:var(--tap,44px)}
+  .nav-tabs-sec .seg:not(.on) i{display:none}
+  body .wc-pasos li{padding:7px 9px;font-size:11.5px}
+
+  /* Avisos: visibles sobre hojas y sin comerse toques */
+  #toasts{pointer-events:none}
+  .toast{pointer-events:auto}
+  body:has(.sheet.open) #toasts{z-index:80;bottom:auto;top:calc(10px + env(safe-area-inset-top,0px))}
+  body:has(.section.active .dm-shell.ver-chat) #toasts{bottom:auto;top:calc(8px + env(safe-area-inset-top,0px))}
+  .toast-undo{min-height:40px;padding:0 14px;font-size:13px}
+
+  /* Vista previa de rol: --vp-h lo mide pintarBannerVistaPrevia */
+  body:has(#vista-previa-banner){padding-top:var(--vp-h,56px)}
+  body:has(#vista-previa-banner) .sidebar{top:calc(var(--vp-h,56px) + 12px)}
+  #vista-previa-banner{padding-top:calc(6px + env(safe-area-inset-top,0px))}
+
+  /* Hojas: botón sin variante, campos sobre la barra sticky, alto con teclado */
+  .dbtn:where(:not(.save,.wa,.gh,.destructivo,.peligro)){background:rgba(255,255,255,.06);color:var(--txt);border:1px solid var(--line2)}
+  :where(:root[data-theme="light"]) .dbtn:where(:not(.save,.wa,.gh,.destructivo,.peligro)){background:rgba(0,0,0,.04)}
+  :is(.sheet-acciones,#confirmar-sheet-acciones) .dbtn{margin-top:0;min-height:var(--tap,44px)}
+  .sheet:has(>.sheet-acciones){scroll-padding-bottom:120px}
+  .sheet:has(>.sheet-acciones) :is(input,select,textarea){scroll-margin-bottom:120px}
+  .sheet{max-height:80dvh}
+  .sel-lotus-hoja{max-height:72dvh}
+  .timeline-list-box{max-height:60dvh}
+  .mfs{padding-bottom:calc(16px + var(--safe-b))}
+  .mfs-done{position:sticky;bottom:0;z-index:2}
+  .lf-listo{display:none}
+  .lf-pie{display:flex;justify-content:flex-start;margin-top:6px}
+  .lf-limpiar{background:none;border:0;color:var(--accent-ink);font:inherit;font-size:14px;font-weight:700;min-height:var(--tap,44px);padding:0 6px}
+  input[type=file].ei::file-selector-button{margin-right:10px;padding:8px 12px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--txt);font:inherit;font-size:13px;cursor:pointer}
+
+  /* iOS hace zoom al enfocar campos de menos de 16px */
+  body :is(.dm-buscar,.tk-input,.tas-search,.dacc-estado select,.pv-selects select.flt,.wc-campo input,.wc-campo select){font-size:16px}
+
+  /* Cascarón */
+  .login-foot{font-size:13.5px;margin-top:6px}
+  .login-foot a{display:inline-block;padding:13px 12px}
+  .login-err{font-size:14px;min-height:20px}
+  .login-card p{font-size:13.5px}
+  .nav-item .nav-fav{width:40px;height:40px;font-size:14px;opacity:.45}
+  .nav-item.nav-favorito .nav-fav{opacity:1}
+  .side-cerrar{flex:none;width:44px}
+  .side-foot-row .side-logout{white-space:nowrap}
+  .tut-modal.movil{background:var(--bg,#0b0f1a)}
+
+  /* Ventas */
+  .dacc{flex-wrap:wrap}
+  .dacc-estado{flex:1 1 100%}
+  .dacc-estado select{width:100%;max-width:none}
+  .dacc-cta{flex:1 1 0;min-width:0}
+  button.pv-falta-i{position:relative}
+  button.pv-falta-i::after{content:'';position:absolute;inset:-12px -4px}
+  .ef-tipo{min-height:44px}
+  .ef-serv-x{min-width:44px;min-height:44px}
+  .ef-cliente{display:block}
+  .ef-cliente i{margin-right:8px}
+  #rv-s-pago-campos .rv-3{grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr)}
+  .entity-card .ec-nombre .badge-st{padding:1px 8px;font-size:11px;vertical-align:1px}
+  #vc-filtros{margin-bottom:0!important}
+
+  /* Producto */
+  .ss-cal{grid-template-columns:repeat(7,minmax(0,1fr));overflow:visible}
+  .ss-dia{min-height:40px}
+  .ss-hotel-chip{min-height:40px;font-size:12.5px;padding:0 12px;margin:0 6px 8px 0}
+  .ss-nav-btn{width:44px;height:44px}
+  .ss-rotulo{font-size:12px}
+  .tar-selbar{background:var(--panel-solid);padding:10px 12px calc(10px + var(--safe-b))}
+  .tar-selbar-btns{width:100%;margin-left:0}
+  .tar-selbtn{min-height:44px;flex:1 1 auto;justify-content:center;font-size:12.5px}
+  .tar-selbar-n{font-size:12.5px}
+  .tg-verfotos{height:40px}
+  .tg-dato{min-height:40px}
+  .ddesc-mas{min-height:44px;padding:0;font-size:13px}
+  .tg-modo-b{height:36px}
+  .tg-modo{padding:4px}
+  .tg-hab label{min-height:44px;display:flex;align-items:center}
+  .tar-ia-go{width:40px;height:40px;right:2px}
+  .tar-ia-cerrar{width:40px;height:40px}
+  .tar-ia-inline{height:36px;font-size:11px}
+  .disp-fila{grid-template-columns:104px repeat(var(--n),34px)}
+  .disp-nom{font-size:12px;padding:6px 8px}
+  .disp-c{width:34px;height:40px}
+  .disp-barra .fl-sub{text-align:left}
+  .disp-barra>div{flex:1 1 calc(50% - 8px)}
+  #disp-f-pers{width:100%!important}
+  .bol-catalogo-busca .flt,#bolr-q{flex:1 1 100%;width:100%}
+  #bolr-chips .seg{font-size:12px;white-space:nowrap}
+  .lb-close{top:calc(12px + env(safe-area-inset-top,0px))}
+
+  /* Oficina */
+  .apto-tabs{overflow-x:auto;scrollbar-width:none;margin-inline:-2px;padding-bottom:2px}
+  .apto-tab{min-height:var(--tap,44px);padding:0 12px}
+  .ind-card{content-visibility:auto;contain-intrinsic-size:auto 168px}
+  .act-item{content-visibility:auto;contain-intrinsic-size:auto 32px}
+  .prv-editar,.prv-usar{min-height:40px;padding:0 14px;font-size:13px}
+  .prv-seg button{min-height:40px;font-size:13px}
+  .prv-chip{min-height:38px;font-size:13px}
+  .prv-card a[href]{display:inline-flex;align-items:center;min-height:40px}
+  .lyra-cta{flex-wrap:wrap}
+  .lyra-cta .lyra-cta-t{flex:1 1 150px}
+  .lyra-cta .btn-sm{flex:1 1 100%;min-height:var(--tap,44px)}
+  .lt-card-cab{flex-wrap:wrap}
+  .lt-card-tit{white-space:normal;flex:1 1 100%}
+  .vt-acciones{gap:9px}
+  .vt-accion{flex:1 1 auto;white-space:nowrap}
+  .vt-accion.anular{flex:0 0 100%}
+  #pn-copiar{margin-top:12px}
+  .pn-cred{flex-wrap:wrap}
+  .pn-cred b{overflow-wrap:anywhere}
+  summary{padding-block:9px}
+  .fe-agregar,.cd-chip{min-height:40px}
+  a.ia-dato{min-height:40px;display:inline-flex;align-items:center}
+  .exp-fila .btn-sm{flex:1 1 140px}
+  .fact-barra .export-dd{flex:0 0 auto}
+  .lt-cifras{grid-template-columns:repeat(auto-fit,minmax(112px,1fr))}
+
+  /* Letra mínima: 12px para texto, 11-11.5px solo en etiquetas */
+  .mobile-brand .mb-s,.ria-db-m,.csub,.ria-sub,.foot-note,.act-fecha,.bt-tag,.pc-rol,.vt-estado,.msg-inbox-hora,.msg-date-chip,.wa-lead-linea,.wb-ventana,#wb-sub,.lc-tiempo,.entity-card .chip,.pv-chip,.pv-stage,.pv-rap,.tc-precio-foto .tcp-d,.tc-precio-foto .tcp-u,#tar-count{font-size:12px}
+  .dm-log .msg-meta,.nav-label,.pc-cifra-t,.cm-etq,.pc-asist,.tk-group-h,.tk-est{font-size:11.5px}
+  .dm-vivo{font-size:11px}
+}
+@media (max-width:760px) and (hover:none){
+  .entity-card:hover,.pv-card:hover,.lt-card:hover{transform:none}
+}
+@media (pointer:coarse) and (min-width:761px){
+  .topbar-help-btn,.seg,.modo-seg,.side-logout,.inbox-btn,.nav-buscar{min-height:40px}
+  .nav-item .nav-fav{width:36px;height:36px}
+}
 </style>
 </head>
 <body>
@@ -8929,19 +9087,19 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div class="card dm-chat" id="wb-conv">
           <div class="dm-vacio" id="wb-vacio"><i class="fa-brands fa-whatsapp"></i><div>Elija un chat</div><div class="dm-vacio-sub">Los clientes que respondieron al número de la empresa. Contesta desde aquí.</div></div>
           <div class="dm-chat-head" id="wb-head" hidden>
-            <button class="msg-conv-back" id="wb-back" type="button" aria-label="Volver a la lista"><i class="fas fa-arrow-left"></i></button>
+            <button class="msg-conv-back dm-solo-movil" id="wb-back" type="button" aria-label="Volver a la lista"><i class="fas fa-arrow-left"></i></button>
             <div class="msg-avatar dm-avatar" id="wb-avatar" data-canal="whatsapp"></div>
             <div class="dm-chat-titulos">
               <div class="msg-conv-titulo" id="wb-titulo"></div>
               <div class="msg-conv-sub" id="wb-sub"></div>
             </div>
-            <button class="chat-tool-btn" id="wb-ver-lead" type="button"><i class="fas fa-user"></i> Ver lead</button>
+            <button class="chat-tool-btn" id="wb-ver-lead" type="button" aria-label="Ver lead"><i class="fas fa-user"></i> Ver lead</button>
           </div>
           <div class="msg-conv-log dm-log" id="wb-log" role="log" aria-live="polite" hidden></div>
           <div class="wb-compose" id="wb-compose" hidden>
             <button class="wb-ico" id="wb-adjuntar" type="button" title="Adjuntar foto o documento" aria-label="Adjuntar"><i class="fas fa-paperclip"></i></button>
             <input type="file" id="wb-archivo" accept="image/jpeg,image/png,application/pdf,.doc,.docx,.xls,.xlsx" hidden>
-            <textarea id="wb-texto" rows="1" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" enterkeyhint="send" maxlength="4096"></textarea>
+            <textarea id="wb-texto" rows="1" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" enterkeyhint="enter" maxlength="4096"></textarea>
             <button class="wb-send" id="wb-enviar" type="button" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
           </div>
           <div class="wb-plantilla" id="wb-plantilla" hidden>
@@ -8985,7 +9143,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
               <div class="msg-conv-sub" id="dm-chat-sub"></div>
             </div>
             <span class="dm-app-chip" id="dm-app-chip"></span>
-            <button class="chat-tool-btn dm-btn-perfil" id="dm-btn-perfil" type="button"><i class="fas fa-id-card"></i> Perfil</button>
+            <button class="chat-tool-btn dm-btn-perfil" id="dm-btn-perfil" type="button" aria-label="Perfil"><i class="fas fa-id-card"></i> Perfil</button>
           </div>
           <div class="msg-conv-log dm-log" id="dm-log" hidden></div>
           <div class="msg-readonly-note" id="dm-nota" hidden><i class="fas fa-robot"></i> Solo lectura — responde el bot de ventas</div>
@@ -9928,7 +10086,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div class="ef-fila">
           <div style="flex:1"><label class="fl" for="prov-moneda">Moneda habitual</label>
             <select id="prov-moneda" class="ei"><option>USD</option><option>VES</option><option>EUR</option><option>USDT</option><option>COP</option></select></div>
-          <div style="flex:1"><label class="fl" for="prov-dias">Días de crédito</label><input id="prov-dias" class="ei" type="number" min="0" max="365" step="1" placeholder="0"></div>
+          <div style="flex:1"><label class="fl" for="prov-dias">Días de crédito</label><input id="prov-dias" class="ei" type="number" inputmode="numeric" min="0" max="365" step="1" placeholder="0"></div>
           <div style="flex:1"><label class="fl" for="prov-activo">Estado</label>
             <select id="prov-activo" class="ei"><option value="1">Activo</option><option value="0">Inactivo</option></select></div>
         </div>
@@ -10157,7 +10315,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <label class="fl" for="emp-direccion">Dirección fiscal <span class="ef-opc">(sale en sus facturas)</span></label>
         <input id="emp-direccion" class="ei" maxlength="300" placeholder="Av. Principal, Edif. Ejemplo, piso 2, Valencia, Carabobo" autocomplete="off">
         <div class="ef-fila">
-          <div style="flex:1"><label class="fl" for="emp-dias">Días de crédito</label><input id="emp-dias" class="ei" type="number" min="0" max="365" step="1" placeholder="0"></div>
+          <div style="flex:1"><label class="fl" for="emp-dias">Días de crédito</label><input id="emp-dias" class="ei" type="number" inputmode="numeric" min="0" max="365" step="1" placeholder="0"></div>
           <div style="flex:1"><label class="fl" for="emp-fijo">Cliente fijo</label>
             <select id="emp-fijo" class="ei"><option value="0">No</option><option value="1">Sí</option></select></div>
           <div style="flex:1"><label class="fl" for="emp-activo">Estado</label>
@@ -11596,7 +11754,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-bol-solicitudes"><div id="bol-cola-host-sec"></div></section>
 
     <section class="section" id="sec-boleteria">
-      <div class="seg-group" id="bol-tabs">
+      <div class="seg-group chips-scroll" id="bol-tabs">
         <button class="seg bol-solo-agente" data-bol-tab="reservas">Reservas</button>
         <button class="seg on" data-bol-tab="rutas">Rutas</button>
         <button class="seg" data-bol-tab="precios">Precios</button>
@@ -11795,7 +11953,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <label class="fl">Nombre</label>
     <input id="nl-nombre" class="ei" type="text">
     <label class="fl">Teléfono</label>
-    <input id="nl-telefono" class="ei" type="text">
+    <input id="nl-telefono" class="ei" type="tel" inputmode="tel" autocomplete="off">
     <label class="fl">Destino de interés</label>
     <input id="nl-destino" class="ei" type="text">
     <label class="fl">Origen del lead <span style="font-weight:400;color:var(--muted2)">— vacío = Manual CRM</span></label>
@@ -11819,9 +11977,9 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <div id="nl-fact-box" style="display:none">
       <div class="eb-title" style="margin-top:16px"><i class="fas fa-file-invoice-dollar"></i> Datos de facturación</div>
       <label class="fl">Precio de venta (USD)</label>
-      <input id="nl-precio-venta" class="ei" type="number" min="0" step="0.01" placeholder="0">
+      <input id="nl-precio-venta" class="ei" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0">
       <label class="fl">Costo neto (USD) <span style="font-weight:400;color:var(--muted2)">— lo que le pagamos al proveedor</span></label>
-      <input id="nl-costo-neto" class="ei" type="number" min="0" step="0.01" placeholder="Sin definir">
+      <input id="nl-costo-neto" class="ei" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Sin definir">
       <label class="fl">Proveedor</label>
       <input id="nl-proveedor" class="ei" type="text" placeholder="Hotel, aerolínea u operador">
     </div>
@@ -12209,7 +12367,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <div class="ef-fila">
       <div style="flex:1">
         <label class="fl" id="rpa-monto-l">Monto</label>
-        <input id="rpa-monto" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
+        <input id="rpa-monto" class="ei" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
       </div>
       <div style="flex:1">
         <label class="fl">Referencia</label>

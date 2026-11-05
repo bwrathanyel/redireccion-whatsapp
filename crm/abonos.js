@@ -86,6 +86,7 @@ const CSS = `
 .ab-docs{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;border-radius:6px;background:#fdf3e6;color:#a56a12}
 .ab-docs.fallo{background:#fdeceb;color:#a72b1f}
 @media (max-width:420px){.ab-grid{grid-template-columns:1fr}}
+@media (max-width:760px){.ab-fila-acc{gap:12px}.ab-mini,.ab-anular{min-height:44px;padding:0 14px;font-size:13px;display:inline-flex;align-items:center}.ab-anular{border:1px solid color-mix(in srgb,var(--danger) 45%,transparent);border-radius:7px}}
 `;
 
 export function crearAbonos(c) {

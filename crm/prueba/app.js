@@ -410,7 +410,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://fn.demo.invalid/reset-password';
 const CLAIM_FN_URL = 'https://fn.demo.invalid/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false, MI_ES_BOLETERIA = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false, MI_ES_BOLETERIA = false, MI_ASESOR_INTEGRAL = false;
 // Rol REAL del usuario logueado -- distinto de ROL cuando hay una vista
 // previa activa (ver "Vista previa de rol" más abajo). ROL_REAL nunca
 // cambia con la vista previa: el switcher lo usa para decidir si mostrarse
@@ -512,7 +512,7 @@ async function cargarUsuario(intento = 0) {
     if (er) eu = er; else ({ data: { user }, error: eu } = await sb.auth.getUser());
   }
   if (!user && !esErrorRed(eu)) return sesionInvalida('Tu sesión expiró, vuelve a entrar');
-  const { data, error } = user ? await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin,es_boleteria').eq('id', user.id).single() : { data: null, error: eu };
+  const { data, error } = user ? await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin,es_boleteria,asesor_integral').eq('id', user.id).single() : { data: null, error: eu };
   if (error?.code === 'PGRST116') return sesionInvalida('Cuenta sin configurar, contacta a un administrador');
   if (error || !data) {
     if (intento < 3) { await new Promise(r => setTimeout(r, 1500 * (intento + 1))); return cargarUsuario(intento + 1); }
@@ -552,10 +552,13 @@ function salirVistaPreviaRol() {
   sessionStorage.removeItem(VISTA_ROL_KEY);
   location.reload();
 }
+let vpObserver = null;
 function pintarBannerVistaPrevia() {
   let banner = document.getElementById('vista-previa-banner');
   if (ROL_REAL !== 'admin' || !VISTA_SIM) {
     banner?.remove();
+    vpObserver?.disconnect(); vpObserver = null;
+    document.documentElement.style.removeProperty('--vp-h');
     return;
   }
   if (!banner) {
@@ -563,8 +566,12 @@ function pintarBannerVistaPrevia() {
     banner.id = 'vista-previa-banner';
     document.body.appendChild(banner);
   }
-  banner.innerHTML = `<i class="fas fa-eye"></i> Viendo el CRM como <b>${esc(VISTA_ROL_LABEL[VISTA_SIM] || ROL)}</b> -- las acciones que hagas se ejecutan igual con tus permisos reales de admin. <button type="button" id="vista-previa-salir">Volver a mi vista</button>`;
+  banner.innerHTML = `<i class="fas fa-eye"></i> Viendo el CRM como <b>${esc(VISTA_ROL_LABEL[VISTA_SIM] || ROL)}</b> — las acciones que hagas se ejecutan igual con tus permisos reales de admin. <button type="button" id="vista-previa-salir">Volver a mi vista</button>`;
   document.getElementById('vista-previa-salir').onclick = salirVistaPreviaRol;
+  const medirVp = () => document.documentElement.style.setProperty('--vp-h', banner.offsetHeight + 'px');
+  vpObserver?.disconnect();
+  if (window.ResizeObserver) { vpObserver = new ResizeObserver(medirVp); vpObserver.observe(banner); }
+  medirVp();
 }
 
 async function afterLogin() {
@@ -583,6 +590,7 @@ async function afterLogin() {
   MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin; MI_ES_BOLETERIA = VISTA_SIM ? VISTA_SIM === 'asesor_boleteria' : !!u.es_boleteria;
+  MI_ASESOR_INTEGRAL = ROL === 'asesor' && !!u.asesor_integral;
   // Asesor + Boletería: Solicitudes y Boletería van en el menú normal, sin modo aparte (dueño 2026-10-15).
   document.body.classList.toggle('asesor-boleteria', ROL === 'asesor' && MI_ES_BOLETERIA);
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
@@ -2104,7 +2112,7 @@ async function guardarLoteDiario(activo) {
   const cantidad = parseInt(document.getElementById('ld-cantidad').value, 10);
   if (isNaN(cantidad) || cantidad < 1 || cantidad > 50) { err.textContent = 'Cantidad entre 1 y 50.'; return; }
   const { data, error } = await sb.rpc('lote_diario_guardar', { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, p_activo: activo });
-  if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo guardar.'; return; }
+  if (error || !data?.ok) { err.textContent = data?.error === 'no_integral' ? 'Solo para asesores integrales: actívalo en Personal › Permisos.' : (error?.message || data?.error || 'No se pudo guardar.'); return; }
   okToast(activo ? `Lote diario activo: ${cantidad} por día` : 'Lote diario en pausa');
   await cargarLotesDiarios();
 }
@@ -2465,6 +2473,7 @@ function abrirFichaPersona(usuarioId, sinPush) {
   const permisos = [
     [u.es_freelancer, 'fa-user-clock', 'Freelancer'],
     [u.es_boleteria, 'fa-ticket', 'Boletería'],
+    [u.asesor_integral, 'fa-snowflake', 'Integral'],
     [u.ve_voucher, 'fa-file-invoice', 'Vouchers'],
     [u.ve_informe_diario, 'fa-file-lines', 'Informe diario'],
   ].map(([on, i, t]) => '<span class="gpf-perm-chip' + (on ? ' on' : '') + '"><i class="fas ' + (on ? i : 'fa-minus') + '"></i> ' + t + '</span>').join('');
@@ -2593,6 +2602,7 @@ function abrirEditorPersona(usuarioId, desdeFicha) {
       <div class="gpf-sec-t"><i class="fas fa-key"></i> Permisos</div>
       ${permiso('pe-freelancer', u.es_freelancer, 'Freelancer', 'Se bloquea a los 15 min sin actividad.')}
       ${permiso('pe-boleteria', u.es_boleteria, 'Agente de boletería', 'Atiende la cola de solicitudes de vuelos. Para un asesor, elige el rol «Asesor + Boletería».')}
+      ${u.rol === 'asesor' ? permiso('pe-integral', u.asesor_integral, 'Asesor integral', 'Además de lo suyo, recibe cada mañana el lote de clientes fríos (pestaña Clientes Fríos en Leads).') : ''}
       ${permiso('pe-voucher', u.ve_voucher, 'Ve vouchers', 'Accede a la sección de vouchers.')}
       ${permiso('pe-informe', u.ve_informe_diario, 'Ve informe diario', 'Recibe y consulta el informe del día.')}
     </section>
@@ -2602,7 +2612,7 @@ function abrirEditorPersona(usuarioId, desdeFicha) {
     <section class="gpf-sec">
       <div class="gpf-sec-t"><i class="fas fa-lock"></i> Contraseña</div>
       <label class="fl" for="pe-password">Nueva contraseña</label>
-      <div class="ei-clave"><input id="pe-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres"></div>
+      <div class="ei-clave"><input id="pe-password" class="ei" type="password" autocomplete="new-password" name="clave-nueva" minlength="8" placeholder="Mínimo 8 caracteres"></div>
       <div class="form-hint">Queda activa de inmediato, sin pedirle cambiarla al entrar.</div>
       <div class="gpf-fila">
         <button class="dbtn gh" id="pe-guardar-clave" type="button"><i class="fas fa-check"></i> Guardar contraseña</button>
@@ -2713,6 +2723,12 @@ async function guardarPersona(usuarioId) {
       p_telegram_chat_id: val('pe-telegram').trim() || null,
     });
   }
+  const integralEl = document.getElementById('pe-integral');
+  const previo = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
+  if (integralEl && rol === 'asesor' && integralEl.checked !== !!previo?.asesor_integral) {
+    const ig = await sb.rpc('admin_marcar_asesor_integral', { p_usuario_id: usuarioId, p_valor: integralEl.checked });
+    if (ig.error || !ig.data?.ok) { btn.disabled = false; err.textContent = 'Se guardaron los datos pero no el permiso «Asesor integral».'; return; }
+  }
   const generoEl = document.getElementById('pe-genero');
   if (generoEl) {
     const gen = await sb.rpc('admin_guardar_genero_asesor', { p_usuario_id: usuarioId, p_genero: generoEl.value || null });
@@ -2769,9 +2785,9 @@ function abrirAltaPersona(comoFreelancer) {
     <div class="dhead"><div><div class="dn">${comoFreelancer ? 'Nuevo freelancer' : 'Nuevo miembro del equipo'}</div><div class="dm">Se crea su cuenta de acceso al CRM</div></div></div>
     <div class="edit-box" style="margin-top:16px">
       <label class="fl">Nombre y apellido</label>
-      <input id="pn-nombre" class="ei" type="text" placeholder="Ej: María Pérez">
+      <input id="pn-nombre" class="ei" type="text" autocomplete="off" placeholder="Ej: María Pérez">
       <label class="fl">Usuario (con el que inicia sesión)</label>
-      <input id="pn-username" class="ei" type="text" placeholder="Ej: maria" autocapitalize="off" autocorrect="off">
+      <input id="pn-username" class="ei" type="text" autocomplete="off" placeholder="Ej: maria" autocapitalize="off" autocorrect="off">
       <label class="fl">Cargo (opcional)</label>
       <input id="pn-cargo" class="ei" type="text" placeholder="Ej: Ejecutiva de Boletería">
       <label class="fl">Rol</label>
@@ -2788,7 +2804,7 @@ function abrirAltaPersona(comoFreelancer) {
         <label class="fl">Grupo de Telegram</label>
         <input id="pn-telegram" class="ei" type="text" placeholder="ID del grupo o chat">
         <label class="fl">Contraseña</label>
-        <div class="ei-clave"><input id="pn-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres"></div>
+        <div class="ei-clave"><input id="pn-password" class="ei" type="password" autocomplete="new-password" name="clave-nueva" minlength="8" placeholder="Mínimo 8 caracteres"></div>
         <div class="form-hint">Si la dejas vacía se genera una temporal y se pide cambiarla al entrar.</div>
       </div>
       <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pn-freelancer"${comoFreelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
@@ -2843,17 +2859,18 @@ async function crearPersona() {
   // ningún lado en texto plano, así que si se cierra sin copiarla hay que
   // resetearla.
   btn.style.display = 'none';
+  const etiquetaClave = val('pn-password') ? 'Contraseña' : 'Contraseña temporal';
   document.getElementById('pn-listo').innerHTML = `
     <div class="edit-box" style="margin-top:14px;border-color:rgba(34,197,94,.4)">
       <div class="eb-title" style="color:var(--green)"><i class="fas fa-circle-check"></i> Cuenta creada</div>
       <div style="font-size:13px;line-height:1.6">Pásale estos datos por WhatsApp o Telegram. <b>La contraseña se muestra una sola vez</b> — si cierras esta ventana sin copiarla, hay que resetearla.</div>
       <div class="pn-cred"><span>Usuario</span><b>${esc(data.username)}</b></div>
-      <div class="pn-cred"><span>Contraseña temporal</span><b>${esc(data.password_temporal)}</b></div>
+      <div class="pn-cred"><span>${etiquetaClave}</span><b>${esc(data.password_temporal)}</b></div>
       <div style="font-size:11.5px;color:var(--muted);margin-top:8px">${val('pn-password') ? 'La contraseña fue definida por el administrador.' : 'Se la va a pedir cambiar en el primer ingreso.'}</div>
       <button class="dbtn gh" id="pn-copiar" type="button"><i class="fas fa-copy"></i> Copiar</button>
     </div>`;
   document.getElementById('pn-copiar').onclick = () => {
-    navigator.clipboard.writeText(`Usuario: ${data.username}\nContraseña temporal: ${data.password_temporal}`)
+    navigator.clipboard.writeText(`Usuario: ${data.username}\n${etiquetaClave}: ${data.password_temporal}`)
       .then(() => okToast('Copiado')).catch(() => errToast('No se pudo copiar'));
   };
   loadPersonalTiempo(personalSoloFreelancers);
@@ -3229,7 +3246,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
-    setupTareasV2,
+    setupTareasV2, setupTecladoMovil,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -3475,7 +3492,7 @@ function renderCanal() {
   const e = sortEntries(STATS.by_canal); canalKeys = e.map(x => x[0]);
   const tot = e.reduce((s, x) => s + x[1], 0) || 1, cols = ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'];
   // Barras con número y % en la etiqueta: la dona no dejaba leer las porciones chicas.
-  mk('chCanal', { type: 'bar', data: { labels: e.map(x => `${x[0]} · ${fmt(x[1])} (${Math.round(x[1] / tot * 100)}%)`), datasets: [{ data: e.map(x => x[1]), backgroundColor: e.map((x, i) => cols[i % cols.length]), borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (ev, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => canalKeys[it[0].dataIndex], label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true, ticks: { maxTicksLimit: 4 } }, y: { grid: { display: false } } } } });
+  mk('chCanal', { type: 'bar', data: { labels: e.map(x => `${x[0]} · ${fmt(x[1])} (${Math.round(x[1] / tot * 100)}%)`), datasets: [{ data: e.map(x => x[1]), backgroundColor: e.map((x, i) => cols[i % cols.length]), borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (ev, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => canalKeys[it[0].dataIndex], label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true, ticks: { maxTicksLimit: 4 } }, y: { grid: { display: false }, ticks: { callback(v) { const s = this.getLabelForValue(v); const i = s.lastIndexOf(' · '); return innerWidth <= 760 && i > 14 ? s.slice(0, 13) + '…' + s.slice(i) : s; } } } } } });
 }
 function renderDest(datosPeriodo) {
   const src = datosPeriodo || STATS.top_destinos;
@@ -5306,12 +5323,12 @@ function rvFormServicio(p) {
     <div id="rv-s-tramos-ayuda" class="csub" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>Al guardar se cargan los tramos con la ruta, las fechas y las horas.</div>
     <div id="rv-s-tramos-existe" class="csub" ${esBoleto && tramosPrevios.length ? '' : 'hidden'}>Este boleto ya tiene ${tramosPrevios.length} tramo(s) cargado(s). Las fechas y horas se editan en Tramos.</div>
     <div id="rv-s-apto"></div>
-    <div class="rv-3"><div id="rv-s-hora-box"><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
+    <div class="rv-3"><div id="rv-s-hora-box"><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
     <div class="rv-2"><div><label class="fl">Localizador <span style="font-weight:400">(opcional)</span></label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
     ${s?.tipo === 'boleto_aereo' && rvAgente() ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
     <div id="rv-s-detalle"></div>
     <div class="eb-title" style="margin-top:14px"><i class="fas fa-tag"></i> Precio al cliente</div>
-    <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
+    <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" inputmode="decimal" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
     ${rvPagoHtml(s)}
     ${rvBotones('guardar-servicio')}</div>`;
   rvPagoInit(p, s);
@@ -7648,6 +7665,9 @@ document.getElementById('leads-reload-btn')?.addEventListener('click', async () 
 const SERVICIO_POSADA_IA = 'Asistente IA (posada)';
 const PARA_CERRAR_DIAS = { abierto: 14, cotizado: 21, ventana: 90 };
 let PARA_CERRAR_PAGINA = [];
+// Mismos estados que lote_estado_regestionable() + el POR ATENDER que deja el lote.
+const FRIOS_ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'Sin gestionar'];
+const FRIOS_ESTADOS_PG = FRIOS_ESTADOS.map(e => `"${e}"`).join(',');
 
 function buildQuery(forCount) {
   let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {})
@@ -7655,6 +7675,8 @@ function buildQuery(forCount) {
     // PostgREST usa como sintaxis dentro de un `or`. La rama `is.null` hace
     // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
     .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
+  // Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más).
+  if (MI_ASESOR_INTEGRAL) q = q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
   if (fst === 'sin') q = q.is('telefono', null);
   else if (fst === 'con') q = q.not('telefono', 'is', null);
@@ -8784,6 +8806,7 @@ async function registrarCotizacionEnviada(l) {
   // tarjeta se registra igual, sin botón que animar.
   const btn = document.getElementById('e-a-cotizacion');
   if (btn?.disabled || !l?.id) return;
+  if (matchMedia('(max-width:760px)').matches && !(await confirmarSheet({ titulo: '¿Registrar cotización enviada?', detalle: `Se marcará que ya le enviaste la cotización${l.nombre ? ' a ' + l.nombre : ''}.`, textoOk: 'Registrar' }))) return;
   if (btn) btn.disabled = true;
   const anterior = btn?.innerHTML;
   if (btn) btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i><span>Registrando...</span>';
@@ -10941,6 +10964,7 @@ function indChatAbre(id) {
   IND_CHAT = id; IND_CHAT_VER = null;
   const box = document.getElementById(IND_CHAT_BOX);
   box.hidden = !id;
+  if (id && innerWidth <= 900) box.scrollIntoView({ block: 'start', behavior: 'smooth' });
   document.querySelectorAll('#ind-vivo-lista .ind-sim, #ind-res-lista .ind-res-sim').forEach(c => { c.classList.toggle('on', c.dataset.sim === id); c.setAttribute('aria-pressed', String(c.dataset.sim === id)); });
   if (!id) { box.innerHTML = ''; return; }
   box.innerHTML = '<div class="tbl-state skel show" style="padding:16px"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
@@ -11063,7 +11087,7 @@ let WB = null;
 function loadWaBandeja() {
   if (!WB) {
     WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
-      abrirLead: id => abrirLeadDesdeMisVentas(id), ok: okToast, error: errToast });
+      abrirLead: id => abrirLeadDesdeMisVentas(id), ok: okToast, error: errToast, navPush, navConsume });
     WB.enlazar();
   }
   return WB.abrirSeccion();
@@ -21044,7 +21068,7 @@ const pdfSlug = s => pdfSinEmojis(s).replace(/\*/g, '').normalize('NFD').replace
 async function pdfEntregar(blob, nombre) {
   const file = new File([blob], nombre, { type: 'application/pdf' });
   if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) { if (e.name === 'AbortError') return; if (e.name === 'NotAllowedError') { docToastCompartir(file); return; } }
   }
   cbDescargar(blob, nombre);
 }
@@ -21074,7 +21098,7 @@ async function docEntregarBlob(blob, nombre, mime = 'application/pdf') {
 function docToastCompartir(file) {
   const t = document.createElement('div'); t.className = 'toast';
   t.innerHTML = `<i class="fas fa-share-nodes"></i> <div><button class="btn-sm lt-primario" type="button">Compartir ${esc(file.name)}</button></div>`;
-  t.querySelector('button').onclick = () => { navigator.share({ files: [file], title: file.name }).catch(() => {}); t.remove(); };
+  t.querySelector('button').onclick = () => { navigator.share({ files: [file], title: file.name }).catch(e => { if (e.name !== 'AbortError') { cbDescargar(file, file.name); okToast('Se descargó el PDF'); } }); t.remove(); };
   document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30);
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 15000);
 }
@@ -24667,7 +24691,7 @@ function undoToast(msg, onUndo) {
   document.getElementById('toasts').appendChild(t);
   setTimeout(() => t.classList.add('show'), 30);
   const cerrar = () => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); };
-  const timer = setTimeout(cerrar, 6000);
+  const timer = setTimeout(cerrar, 8000);
   t.querySelector('.toast-undo').onclick = () => { clearTimeout(timer); cerrar(); onUndo(); };
 }
 // Ocultar desde la tarjeta (2026-08-27): mismo update de tabla/campo que
@@ -33627,20 +33651,20 @@ const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c))
 async function cbCompartir(blob, nombre) {
   const file = new File([blob], nombre, { type: 'application/pdf' });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) { if (e.name === 'AbortError') return; if (e.name === 'NotAllowedError') { docToastCompartir(file); return; } }
   }
   cbDescargar(blob, nombre);
-  okToast('Este navegador no deja compartir archivos: se descargó el PDF');
+  okToast('Se descargó el PDF');
 }
 // WhatsApp (2026-10-20): en escritorio abre la app de WhatsApp Desktop (protocolo
 // whatsapp://), que si ya está abierta solo se trae al frente con el mensaje listo;
-// si no hay app instalada, a los 1,6 s cae a WhatsApp Web. En móvil abre la app.
+// si no hay app instalada, a los 1,6 s cae a WhatsApp Web. En móvil, wa.me en pestaña nueva: el sistema pasa a la app.
 function cbAbrirWhatsapp(tel, texto) {
   const q = `${tel ? `phone=${tel}&` : ''}${texto ? `text=${encodeURIComponent(texto)}` : ''}`;
   const web = `https://wa.me/${tel || ''}?text=${encodeURIComponent(texto)}`;
   if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    location.href = `whatsapp://send?${q}`;
-    setTimeout(() => { if (!document.hidden) location.href = web; }, 900);
+    const w = window.open(web, '_blank');
+    if (w) w.opener = null; else location.href = web;
     return;
   }
   let abrio = false;
@@ -34657,6 +34681,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'chat-panel') chatAtrasSistema();
   else if (top.type === 'wa-conv') waCerrarChat(true);
   else if (top.type === 'dm-conv') dmCerrarChat(true);
+  else if (top.type === 'wb-conv') WB?.cerrar(true);
   else if (top.type === 'section') activateSection(top.prevSec, true);
   else if (top.type === 'tour') volverAlMenuTutorial(true);
   else if (top.type === 'menu') cerrarMenuMovil('fromNav');
@@ -35737,7 +35762,12 @@ function setupLeadsTabs() {
     if (leadsTab === 'facturacion') loadLeadsEnFacturacion();
     if (leadsTab === 'boleteria') { bolMoverCola('bol-cola-host-leads'); loadColaBoleteria(); }
     if (leadsTab === 'lote') loadLeadsAsignadosLote();
+    if (leadsTab === 'frios') loadClientesFrios();
   }));
+  const tabs = document.getElementById('leads-tabs');
+  if (tabs) tabs.hidden = !MI_ASESOR_INTEGRAL;
+  document.getElementById('cf-refrescar')?.addEventListener('click', () => loadClientesFrios());
+  if (MI_ASESOR_INTEGRAL) loadClientesFrios();
   document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
   document.getElementById('ll-refrescar')?.addEventListener('click', () => loadLeadsAsignadosLote());
   loadLeadsAsignadosLote(); // idem: el badge de "Asignados en lote" cuenta pendientes
@@ -36719,6 +36749,8 @@ const bolEsAgente = () => ROL === 'admin' || ROL === 'boleteria' || MI_ES_AGENTE
 function bolActivarTab(tab) {
   bolTab = tab;
   document.querySelectorAll('#bol-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.bolTab === tab));
+  const tira = document.getElementById('bol-tabs'), segOn = tira?.querySelector('.seg.on');
+  if (segOn && tira.scrollWidth > tira.clientWidth) tira.scrollTo({ left: tira.scrollLeft + segOn.getBoundingClientRect().left - tira.getBoundingClientRect().left - (tira.clientWidth - segOn.offsetWidth) / 2, behavior: 'smooth' });
   document.querySelectorAll('#sec-boleteria .bol-tab-panel').forEach(p => p.style.display = p.dataset.bolPanel === tab ? '' : 'none');
   const busca = document.querySelector('#sec-boleteria .bol-catalogo-busca');
   if (busca) busca.style.display = BOL_WRAP[tab] ? '' : 'none';
@@ -37126,6 +37158,31 @@ async function loadLeadsAsignadosLote() {
   wireLeadCards(grid, filas);
 }
 
+/* ---------- Clientes Fríos (sub-pestaña de Leads, solo asesor integral) ----------
+   Leads viejos sin cotizar que repartir_lotes_diarios le asigna cada mañana
+   (lote_origen = 'diario'). Se quedan acá mientras sigan en un estado de
+   regestión; al cotizar pasan al pipeline normal (buildQuery los excluye). */
+async function loadClientesFrios() {
+  const grid = document.getElementById('cf-grid');
+  if (!grid || !MI_ASESOR_INTEGRAL) return;
+  const loading = document.getElementById('cf-loading'), empty = document.getElementById('cf-empty');
+  loading?.classList.add('show');
+  const { data, error } = await sb.from('leads').select('*')
+    .is('eliminado_at', null).eq('lote_origen', 'diario').eq('asesor', MI_NOMBRE)
+    .in('estado', FRIOS_ESTADOS)
+    .order('lote_asignado_at', { ascending: false })
+    .limit(300);
+  loading?.classList.remove('show');
+  if (error) { console.error('clientes_frios', error); errToast('No se pudieron cargar los clientes fríos'); return; }
+  const filas = data || [];
+  const pendientes = filas.filter(l => l.estado === 'POR ATENDER').length;
+  const badge = document.getElementById('leads-frios-count');
+  if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
+  empty?.classList.toggle('show', filas.length === 0);
+  grid.innerHTML = filas.map(leadCardHtml).join('');
+  wireLeadCards(grid, filas);
+}
+
 /* ---------- Tarifario: buscador con IA ----------
    Reemplaza la sección "Buscar Tarifario". El #tar-search de la barra sigue
    siendo un filtro de texto sobre lo que ya está en pantalla; esto manda la
@@ -37394,6 +37451,26 @@ function sincronizarFAB(sec) {
   montarFAB(sec, def);
 }
 MENU_MQ.addEventListener('change', () => { sincronizarFAB(currentSec); sincronizarPopoverSheets(); });
+
+/* body.teclado: lo consumen CSS y modo prueba para apartar FABs/paneles con el
+   teclado abierto. Solo ≤760; visualViewport cubre el teclado cerrado sin blur. */
+const TECLADO_TIPOS_NO = new Set(['checkbox', 'radio', 'file', 'button', 'submit', 'reset', 'image', 'range', 'color', 'hidden', 'date', 'time', 'datetime-local', 'month', 'week']);
+function setupTecladoMovil() {
+  const escribible = el => !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !TECLADO_TIPOS_NO.has((el.type || 'text').toLowerCase())));
+  const esMovil = () => matchMedia('(max-width:760px)').matches;
+  document.addEventListener('focusin', e => { if (esMovil() && escribible(e.target)) document.body.classList.add('teclado'); });
+  document.addEventListener('focusout', () => document.body.classList.remove('teclado'));
+  const vv = window.visualViewport;
+  if (!vv) return;
+  // Con el foco puesto, el teclado cierra y reabre sin focusin (Atrás de Android). Por scale: el pellizco de zoom achica vv.height sin teclado.
+  let altoBase = vv.height * vv.scale, anchoBase = vv.width * vv.scale;
+  vv.addEventListener('resize', () => {
+    const alto = vv.height * vv.scale, ancho = vv.width * vv.scale;
+    if (Math.abs(ancho - anchoBase) > 1) { anchoBase = ancho; altoBase = alto; return; }
+    altoBase = Math.max(altoBase, alto);
+    if (esMovil() && escribible(document.activeElement)) document.body.classList.toggle('teclado', alto < altoBase * .85);
+  });
+}
 
 /* P1-2: al bajar, los FABs (Lyra y "+") se apartan para no tapar lo que se
    está leyendo; vuelven al subir o al llegar al final, donde .main ya les

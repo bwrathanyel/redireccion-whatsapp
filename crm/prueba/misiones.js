@@ -233,15 +233,23 @@ body.prueba-guiada #prueba-candado{display:block}
   #prueba-panel button,#prueba-modal button{min-height:44px;padding:8px 14px;font-size:14px}
   #prueba-panel .pp-fila button.pp-info{width:44px;height:44px}
   #prueba-panel .pp-detalle{bottom:calc(100% + 6px);padding:10px 12px 6px;border-radius:14px;max-height:min(46vh,320px);overflow:auto;overscroll-behavior:contain}
-  #prueba-panel .pp-detalle h4{margin-bottom:3px;font-size:11.5px;font-weight:600;letter-spacing:.02em;color:var(--muted,#aaa)}
+  #prueba-panel .pp-detalle h4{margin-bottom:3px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--muted,#aaa)}
   #prueba-panel .pp-detalle p{font-size:13.5px;line-height:1.4;margin-bottom:6px;color:var(--txt,#eee)}
   #prueba-panel .pp-detalle .pp-acc{gap:2px;margin:0 -6px}
   #prueba-panel .pp-detalle button{min-height:38px;padding:6px 10px;font-size:13px;border-color:transparent;color:#ffb020}
   #prueba-panel .pp-detalle button.pp-reini{color:var(--muted,#aaa)}
+  #prueba-panel .pp-anillo b{font-size:11.5px}
+  #prueba-panel .pp-fila button.pp-ir{animation-iteration-count:3}
+  #prueba-panel.pp-hecho .pp-fila{flex-wrap:wrap}
+  #prueba-panel.pp-hecho .pp-tit{flex:1 1 110px;white-space:normal;line-height:1.25}
+  #prueba-panel.pp-hecho .pp-fila button.pp-ir{animation:none;background:transparent;color:var(--muted,#aaa);border-color:var(--line2,rgba(255,255,255,.14));font-size:13px;padding:8px 12px}
+  #prueba-inicio input{font-size:16px}
 }
 @media (prefers-reduced-motion:reduce){${QUIETO('')}}
 ${QUIETO(':root[data-paleta="sereno"]')}`;
   document.head.appendChild(css);
+  // El pie fijo del CRM dice «Datos reales»: en la práctica todo es inventado.
+  document.querySelectorAll('.foot-note').forEach(el => { el.textContent = 'Datos ficticios · modo prueba · Destino y Eventos Lotus 360 CRM'; });
 
   /* ---------- Pantalla de inicio: nombre y cargo ---------- */
   // El nombre entra en los datos de ejemplo (datos-prueba.js lo lee al cargar), por eso se recarga antes de entrar.
@@ -340,14 +348,16 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     document.body.classList.toggle('prueba-guiada', guiada);
     // Los grupos del menú (Inicio, Leads, Reservas...) se midieron con todo oculto: al abrirse el menú se vuelven a medir.
     if (eraGuiada !== guiada) window.__navRefrescar?.();
+    const ok = new Set(estado.vistas);
+    // Sin guía (práctica terminada) el FAB de Lyra está a la vista: el panel se corre igual para no taparlo.
+    document.body.classList.toggle('prueba-lyra', ok.has('lyra') || !guiada);
     if (!guiada) return;
     const nav = document.getElementById('sidebar-nav'); if (!nav) return;
-    const ok = new Set(estado.vistas), antes = new Set([...nav.querySelectorAll('[data-prueba-ok]')]);
+    const antes = new Set([...nav.querySelectorAll('[data-prueba-ok]')]);
     nav.querySelectorAll('[data-sec]').forEach(el => el.toggleAttribute('data-prueba-ok', ok.has(el.dataset.sec)));
     nav.querySelectorAll('.nav-padre').forEach(el => { if (nav.querySelector(`[data-padre="${el.dataset.sec}"][data-prueba-ok]`)) el.setAttribute('data-prueba-ok', ''); });
     // La entrada recién desbloqueada aparece deslizándose (solo si de verdad no estaba a la vista).
     if (antes.size) nav.querySelectorAll('[data-prueba-ok]').forEach(el => { if (!antes.has(el) && el.getClientRects().length) { el.classList.add('pp-nuevo-item'); setTimeout(() => el.classList.remove('pp-nuevo-item'), 700); } });
-    document.body.classList.toggle('prueba-lyra', ok.has('lyra'));
     if (!document.getElementById('prueba-candado')) nav.insertAdjacentHTML('beforeend', '<div id="prueba-candado">🔒 Se abren más secciones a medida que avanzas.</div>');
   }
   /* ---------- Guía: foco que se desliza, flecha y scroll suave ---------- */

@@ -87,6 +87,7 @@ const CSS = `
   .be-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .be-fila{grid-template-columns:1fr auto}
   .be-fila .det:nth-child(3){display:none}
+  .be-grid .field:has(input[type=date]){grid-column:1/-1}
 }
 `;
 
@@ -568,7 +569,7 @@ export function crearBoletosEmitidos(c) {
       </div>
       <div data-panel="editor"><div class="be-layout">
         <div class="be-form">
-          <label class="be-drop" id="be-drop"><i class="fas fa-file-arrow-up"></i><span><b>Suelta aquí el PDF del boleto</b><small>o tócalo para elegirlo · puedes subir varios (uno por pasajero o por aerolínea)</small></span>
+          <label class="be-drop" id="be-drop"><i class="fas fa-file-arrow-up"></i><span>${matchMedia('(pointer:coarse)').matches ? '<b>Toca para subir el PDF del boleto</b><small>Puedes subir varios (uno por pasajero o por aerolínea)</small>' : '<b>Suelta aquí el PDF del boleto</b><small>o tócalo para elegirlo · puedes subir varios (uno por pasajero o por aerolínea)</small>'}</span>
             <input type="file" id="be-archivo" accept="application/pdf,.pdf" multiple></label>
           <div id="be-aviso"></div>
           <div class="card be-bloque"><h3><i class="fas fa-plane"></i> Vuelos</h3><div id="be-tramos"></div>
@@ -610,6 +611,7 @@ export function crearBoletosEmitidos(c) {
   const opcionesAerolinea = sel => ['nacional', 'internacional'].map(g => `<optgroup label="${g === 'nacional' ? 'Nacionales' : 'Internacionales'}">${AEROLINEAS.filter(a => a.grupo === g).map(a => `<option value="${a.id}" ${a.id === sel ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}</optgroup>`).join('')
     + `<option value="otra" ${sel === 'otra' ? 'selected' : ''}>Otra aerolínea…</option>`;
   const chipLogo = a => (a.logo ? `<span class="be-logo"><img src="${logoDe(a)}" alt="${esc(a.nombre)}"></span>` : `<span class="be-logo"><span>${esc(a.nombre)}</span></span>`);
+  const movil = matchMedia('(max-width:640px)').matches;
   const campo = (lbl, k, v, extra = '', cls = '') => `<div class="field ${cls}"><label class="fl">${lbl}</label><input class="ei" data-k="${k}" value="${esc(v ?? '')}" ${extra}></div>`;
 
   function pintarTramos() {
@@ -622,8 +624,8 @@ export function crearBoletosEmitidos(c) {
           ${t.aerolinea === 'otra' ? campo('Nombre de la aerolínea', 't.aerolinea_nombre', t.aerolinea_nombre) + campo('Código (IATA)', 't.iata', t.iata, 'maxlength="3" style="text-transform:uppercase"') : ''}
           ${campo('N° de vuelo', 't.vuelo', t.vuelo, 'inputmode="numeric" maxlength="5" placeholder="302"')}
           ${campo('Código de reserva', 't.reserva', t.reserva, 'maxlength="8" placeholder="KPAKEE" style="text-transform:uppercase"')}
-          ${campo('Origen', 't.origen', t.origen, 'list="be-aeropuertos" placeholder="CCS o ciudad"', t.origen ? '' : 'be-falta')}
-          ${campo('Destino', 't.destino', t.destino, 'list="be-aeropuertos" placeholder="PMV o ciudad"', t.destino ? '' : 'be-falta')}
+          ${campo('Origen', 't.origen', t.origen, 'list="be-aeropuertos" placeholder="' + (movil ? 'CCS' : 'CCS o ciudad') + '"', t.origen ? '' : 'be-falta')}
+          ${campo('Destino', 't.destino', t.destino, 'list="be-aeropuertos" placeholder="' + (movil ? 'PMV' : 'PMV o ciudad') + '"', t.destino ? '' : 'be-falta')}
           ${campo('Fecha', 't.fecha', t.fecha, 'type="date"', t.fecha ? '' : 'be-falta')}
           ${campo('Sale', 't.sale', t.sale, 'type="time"', t.sale ? '' : 'be-falta')}
           ${campo('Llega', 't.llega', t.llega, 'type="time"')}
