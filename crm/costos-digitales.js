@@ -23,6 +23,11 @@ button.cd-chip{cursor:pointer}
 button.cd-chip:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
 .cd-desc{font-size:12px;color:var(--muted)}
 .cd-vacio{padding:18px 0;text-align:center;color:var(--muted);font-size:12px}
+.cd-barra{height:8px;border-radius:999px;background:var(--line);overflow:hidden;margin:10px 0 6px}
+.cd-barra i{display:block;height:100%;background:var(--accent)}
+.cd-barra.alto i{background:var(--amber)}
+.cd-modelo{display:flex;gap:6px;margin-top:10px}
+.cd-modelo button[aria-pressed="true"]{border-color:var(--accent-ink);color:var(--accent-ink);font-weight:700}
 `;
 const GRUPOS = [
   ['ia', 'IA y modelos', 'fa-brain'],
@@ -41,8 +46,9 @@ const DESC_FUENTE = {
   ventas: 'la IA que atiende a los clientes por chat y les pide sus datos',
   tarifario: 'la IA que lee y carga los precios de hoteles y paquetes',
   habitaciones: 'la IA que ordena las fotos de las habitaciones',
+  induccion: 'los clientes simulados con los que practican los asesores nuevos',
 };
-const FUENTES = { ventas: 'Bot de ventas (DeepSeek)',tarifario: 'Carga del tarifario', habitaciones: 'Fotos de habitaciones' };
+const FUENTES = { ventas: 'Bot de ventas (DeepSeek)',tarifario: 'Carga del tarifario', habitaciones: 'Fotos de habitaciones', induccion: 'Inducción (clientes IA)' };
 const ERRORES = {
   falta_proveedor: 'Falta el proveedor.', grupo_invalido: 'Elegí un grupo.', monto_invalido: 'El monto tiene que ser mayor a 0.',
   ciclo_invalido: 'Ciclo inválido.', dia_invalido: 'El día de cobro va del 1 al 28.', mes_invalido: 'Un plan anual necesita el mes de cobro.',
@@ -52,7 +58,7 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 
 export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs, hoy, rol = 'admin', raiz }) {
   const admin = rol === 'admin';
-  let montado = false, off = 0, datos = null, pedido = 0;
+  let montado = false, off = 0, datos = null, pedido = 0, ind = null, reloj = null;
   const $ = sel => raiz.querySelector(sel);
   const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const mesIso = () => { const [y, m] = hoy().split('-').map(Number), d = new Date(Date.UTC(y, m - 1 + off, 1)); return d.toISOString().slice(0, 10); };
@@ -87,6 +93,35 @@ export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs
     else if (a === 'sig' && off < 0) { off++; cargar(); }
     else if (a === 'nueva') editar(null);
     else if (a === 'editar') editar((datos?.suscripciones || []).find(s => String(s.id) === b.dataset.id));
+    else if (a === 'modelo') modelo(b.dataset.v);
+  }
+
+  // Práctica con clientes IA del modo prueba (inducción): gasto contra el tope y modelo en uso.
+  // El tope (US$40) se cambia solo en app_config, con el dueño: acá no se edita.
+  function tarjetaInd() {
+    if (!ind) return '';
+    const pct = Math.min(100, Number(ind.tope) ? Number(ind.gastado) / Number(ind.tope) * 100 : 0);
+    const btn = (v, t) => `<button class="btn-sm" type="button" data-cd="modelo" data-v="${v}" aria-pressed="${ind.modelo === v}"${admin ? '' : ' disabled'}>${t}</button>`;
+    return `<div class="ria-card" id="cd-ind"><h2><i class="fas fa-user-graduate"></i> Inducción IA</h2>
+      <div class="ria-sub">Clientes simulados de la práctica de los asesores nuevos. Al llegar al tope la práctica se pausa sola.</div>
+      <div class="cd-barra${pct >= 80 ? ' alto' : ''}"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="cd-tot" style="border:0;margin:0;padding:0"><span>${usd(ind.gastado)} de ${usd(ind.tope)}</span><span>${pct.toFixed(1)}%</span></div>
+      <div class="cd-fila"><div><span class="cd-prov">Hoy</span><small>${Number(ind.llamadas_hoy || 0).toLocaleString('es-VE')} llamadas · ${Number(ind.llamadas || 0).toLocaleString('es-VE')} en total</small></div><b>${usd(ind.hoy)}</b></div>
+      <div class="cd-modelo">${btn('realista', 'Modelo realista')}${btn('economico', 'Modelo económico')}</div></div>`;
+  }
+  async function cargarInd() {
+    const { data, error: e } = await sb.rpc('prueba_ia_config');
+    if (e || !data) return;
+    ind = data;
+    const el = $('#cd-ind');
+    if (el) el.outerHTML = tarjetaInd(); else if (datos) render();
+  }
+  async function modelo(v) {
+    if (!admin || !ind || ind.modelo === v) return;
+    const { data, error: e } = await sb.rpc('prueba_ia_config_guardar', { p_modelo: v });
+    if (e || !data?.ok) { error('No se pudo cambiar el modelo'); return; }
+    ok(v === 'economico' ? 'La práctica usa el modelo económico' : 'La práctica usa el modelo realista');
+    cargarInd();
   }
 
   // Una suscripción cuenta en el mes solo cuando ya se cobró (pedido del dueño 2026-11-02);
@@ -125,6 +160,7 @@ export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs
         const nombre = sub ? `Tareas · ${sub}` : (FUENTES[base] || base);
         return `<div class="cd-fila"><div><span class="cd-prov">${esc(nombre)}</span>${DESC_FUENTE[base] ? `<span class="cd-desc"> — ${DESC_FUENTE[base]}</span>` : ""}<small>${[c.modelo, `${Number(c.llamadas || 0).toLocaleString('es-VE')} llamadas`].filter(Boolean).map(esc).join(' · ')}</small></div><b>${usd(c.usd)}</b></div>`;
       }).join('') + `<div class="cd-tot"><span>Total</span><span>${usd(t.consumo)}</span></div>` : '<div class="cd-vacio">Sin consumo registrado este mes.</div>'}</div>`);
+    if (off === 0) tarjetas.push(tarjetaInd());
     $('#cd-cuerpo').innerHTML = tarjetas.join('');
   }
 
@@ -136,6 +172,9 @@ export function crearCostosDigitales({ sb, esc, ok, error, confirmar, pintarKPIs
     if (n !== pedido) return;
     if (e || !data) { error('No se pudieron cargar los costos digitales'); return; }
     datos = data; render();
+    cargarInd();
+    // Refresco cada 15 s solo con la sección a la vista y en el mes actual.
+    reloj ||= setInterval(() => { if (off === 0 && raiz.offsetParent && !document.hidden) cargarInd(); }, 15000);
   }
 
   async function editar(s) {
