@@ -4755,6 +4755,8 @@ function rvTrasCambio() {
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
   if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
   if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
+  // El abono desde «Mis ventas» abre la reserva encima: la tarjeta tiene que reflejar el pago al momento.
+  if (currentSec === 'mis-ventas') loadMisVentasSeccion();
 }
 // Lote 3 (2026-10-31): cuántas veces se usa cada botón de Reservas, para decidir qué UI sobra (tabla uso_botones).
 const RV_SIN_MEDIR = new Set(['menu', 'cancelar', 'elegir-archivo', 'tramo-mas', 'tramo-menos']);
