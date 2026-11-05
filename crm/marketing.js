@@ -127,26 +127,26 @@ const COLORES = { accent: 'Lotus', blue: 'Azul', green: 'Verde', amber: 'Ámbar'
 const PLATAFORMAS = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', whatsapp: 'WhatsApp' };
 const ERRORES = {
   no_autorizado: 'Solo administración puede agregar marcas o sacar links de conexión.',
-  nombre_invalido: 'Poné un nombre de hasta 80 letras.',
+  nombre_invalido: 'Pon un nombre de hasta 80 letras.',
   marca_repetida: 'Ya hay una marca con ese nombre.',
   marca_lotus: 'Las cuentas de Lotus no se conectan desde acá.',
   marca_inactiva: 'La marca está desactivada.',
-  zernio_no_responde: 'Zernio no respondió. Probá de nuevo en un minuto.',
+  zernio_no_responde: 'Zernio no respondió. Prueba de nuevo en un minuto.',
   texto_largo: 'El texto pasa de 2.200 caracteres (límite de Instagram).',
-  medios_invalidos: 'Subí entre 1 y 10 fotos o videos.',
-  cuentas_invalidas: 'Elegí al menos una cuenta.',
+  medios_invalidos: 'Sube entre 1 y 10 fotos o videos.',
+  cuentas_invalidas: 'Elige al menos una cuenta.',
   cuenta_ajena: 'Esa cuenta no es de la marca elegida.',
   fecha_invalida: 'Falta el día o la hora.',
   fecha_pasada: 'La hora tiene que ser al menos 10 minutos después de ahora.',
   post_invalido: 'Instagram no lo aceptaría:',
   post_ajeno: 'Esa publicación no es de la marca elegida.',
-  post_no_existe: 'Esa publicación ya no existe en Zernio. Recargá el calendario.',
+  post_no_existe: 'Esa publicación ya no existe en Zernio. Recarga el calendario.',
   post_no_editable: 'Ya se publicó o se está publicando: no se puede cambiar.',
   post_publicado: 'Ya está publicada: no se puede borrar desde acá.',
   post_duplicado: 'Ya hay una publicación igual en las últimas 24 horas.',
   medio_no_soportado: 'Solo fotos JPG, PNG o WEBP y videos MP4 o MOV.',
   medio_pesado: 'Muy pesado: fotos hasta 8 MB, videos hasta 300 MB.',
-  parametros_invalidos: 'Faltan datos: escribí la respuesta.',
+  parametros_invalidos: 'Faltan datos: escribe la respuesta.',
 };
 const ESTADOS = { scheduled: 'Programada', publishing: 'Publicando', published: 'Publicada', partial: 'Publicada a medias', failed: 'Falló', draft: 'Borrador', cancelled: 'Cancelada' };
 const DIAS_SEM = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
@@ -190,8 +190,8 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
       <div id="mk-p-comentarios" hidden>
         <div class="mk-filtro mk-barra" id="mk-cfiltro" aria-label="Marca"></div>
         <div class="mk-com" id="mk-com">
-          <div class="mk-cpubs" id="mk-cpubs"><div class="mk-vacio">Elegí una marca.</div></div>
-          <div class="mk-chilo" id="mk-chilo"><div class="mk-vacio">Elegí una publicación.</div></div>
+          <div class="mk-cpubs" id="mk-cpubs"><div class="mk-vacio">Elige una marca.</div></div>
+          <div class="mk-chilo" id="mk-chilo"><div class="mk-vacio">Elige una publicación.</div></div>
         </div>
       </div>
       <div id="mk-p-calendario">
@@ -341,7 +341,7 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
     }
     const opciones = (ed.id ? [m] : publicables()).map(x => `<option value="${x.id}"${x.id === ed.marca ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('');
     caja.innerHTML = `<h3>${ed.id ? 'Editar publicación' : 'Nueva publicación'}</h3>
-      ${ed.estado === 'failed' ? '<div class="mk-est">Falló al publicar: corregila y volvé a programarla.</div>' : ''}
+      ${ed.estado === 'failed' ? '<div class="mk-est">Falló al publicar: corrígela y vuelve a programarla.</div>' : ''}
       <form id="mk-post" novalidate>
         <label class="fl" for="mk-marca">Marca</label>
         <select class="ei" id="mk-marca"${ed.id ? ' disabled' : ''}>${opciones}</select>
@@ -461,7 +461,7 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
     com.pub = null; com.hilo = null; com.objetivo = null;
     $('#mk-com').classList.remove('con-hilo');
     $('#mk-cpubs').innerHTML = '<div class="mk-vacio">Cargando…</div>';
-    $('#mk-chilo').innerHTML = '<div class="mk-vacio">Elegí una publicación.</div>';
+    $('#mk-chilo').innerHTML = '<div class="mk-vacio">Elige una publicación.</div>';
     try {
       const d = await invocar({ accion: 'comentarios', marca_id: m.id });
       if (n !== com.n) return;
@@ -571,7 +571,7 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
   }
 
   function cuentas(m) {
-    if (m.cuentas === null) return `<div class="mk-est">Zernio no respondió (${esc(String(errores[m.id] || 'error'))}). Recargá en un minuto.</div>`;
+    if (m.cuentas === null) return `<div class="mk-est">Zernio no respondió (${esc(String(errores[m.id] || 'error'))}). Recarga en un minuto.</div>`;
     if (!m.zernio_perfil_id) return '<div class="mk-est">Todavía sin perfil en Zernio: se crea al sacar el link de conexión.</div>';
     if (!m.cuentas.length) return '<div class="mk-est">Sin cuentas conectadas.</div>';
     return `<div class="mk-cuentas">${m.cuentas.map(c => `<div class="mk-cuenta">
@@ -733,9 +733,9 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
       const d = await invocar({ accion: 'conectar', marca_id: m.id });
       links.set(m.id, { url: d.authUrl, vence: d.vence });
       if (!m.zernio_perfil_id) m.zernio_perfil_id = d.perfil;
-      const texto = `Hola, para que podamos publicar en el Instagram de ${m.nombre}, abrí este link e iniciá sesión con tu Instagram. Vence el ${horaCaracas(d.vence)} (hora de Caracas):\n${d.authUrl}`;
-      try { await navigator.clipboard.writeText(texto); ok('Link copiado: pegalo en el WhatsApp del cliente'); }
-      catch { ok('Link listo: copialo de la tarjeta'); }
+      const texto = `Hola, para que podamos publicar en el Instagram de ${m.nombre}, abre este link e inicia sesión con tu Instagram. Vence el ${horaCaracas(d.vence)} (hora de Caracas):\n${d.authUrl}`;
+      try { await navigator.clipboard.writeText(texto); ok('Link copiado: pégalo en el WhatsApp del cliente'); }
+      catch { ok('Link listo: cópialo de la tarjeta'); }
       pintar();
     } catch (e) {
       error(e.message);

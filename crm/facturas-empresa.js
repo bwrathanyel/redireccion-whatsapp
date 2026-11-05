@@ -88,11 +88,11 @@ export const CONDICIONES_DEFECTO = [
 ].join('\n');
 const ATAJOS = [['Boleto aéreo', 'fa-plane'], ['Hospedaje', 'fa-bed'], ['Alquiler de vehículo', 'fa-car'], ['Traslado', 'fa-van-shuttle'], ['Tour', 'fa-map-location-dot']];
 const ERRORES = {
-  empresa_requerida: 'Elegí la empresa a la que va la factura.',
+  empresa_requerida: 'Elige la empresa a la que va la factura.',
   empresa_inactiva: 'Esa empresa está inactiva: reactivala en su ficha para facturarle.',
-  items_requeridos: 'Agregá al menos un concepto.',
+  items_requeridos: 'Agrega al menos un concepto.',
   item_sin_descripcion: 'Hay un concepto sin descripción.',
-  item_monto_invalido: 'Revisá la cantidad y la tarifa de los conceptos.',
+  item_monto_invalido: 'Revisa la cantidad y la tarifa de los conceptos.',
   total_cero: 'El total no puede ser $0.',
   porcentaje_invalido: 'El descuento y el IVA van de 0 a 100%.',
   fecha_fuera_de_rango: 'La fecha de la factura tiene que estar dentro del último mes o el próximo.',
@@ -101,9 +101,9 @@ const ERRORES = {
   no_editable: 'Solo se editan facturas pendientes.',
   no_existe: 'Esa factura ya no existe: se recargó la lista.',
   ya_anulada: 'La factura ya estaba anulada.',
-  pagada_no_anulable: 'Una factura pagada no se anula: primero marcala como pendiente.',
-  motivo_requerido: 'Escribí el motivo de la anulación.',
-  numero_duplicado: 'Choque de numeración: intentá de nuevo.',
+  pagada_no_anulable: 'Una factura pagada no se anula: primero márcala como pendiente.',
+  motivo_requerido: 'Escribe el motivo de la anulación.',
+  numero_duplicado: 'Choque de numeración: intenta de nuevo.',
   dato_invalido: 'Algún dato no es válido o es demasiado largo.',
 };
 
@@ -336,7 +336,7 @@ export function crearFacturasEmpresa(c) {
     raiz.innerHTML = `<div class="fe-root">
       <div class="fe-cab">
         <div><h2><i class="fas fa-file-invoice"></i> Facturas</h2>
-          <div class="csub">Facturas a las empresas a las que les vendemos · elegí la empresa, cargá los conceptos y sale el PDF con el membrete de Lotus.</div></div>
+          <div class="csub">Facturas a las empresas a las que les vendemos · elige la empresa, carga los conceptos y sale el PDF con el membrete de Lotus.</div></div>
         <div class="fe-tabs" role="tablist"><button type="button" role="tab" data-vista="lista">Facturas</button><button type="button" role="tab" data-vista="editor">Nueva factura</button></div>
       </div>
       <div data-panel="lista"><div class="card">
@@ -353,7 +353,7 @@ export function crearFacturasEmpresa(c) {
             <div class="fe-atajos">${ATAJOS.map(([t, i]) => `<button type="button" data-acc="atajo" data-t="${esc(t)}"><i class="fas ${i}"></i> ${esc(t)}</button>`).join('')}
               <button type="button" class="fe-agregar" data-acc="item"><i class="fas fa-plus"></i> Otro concepto</button></div></div>
           <div class="card fe-bloque"><h3><i class="fas fa-percent"></i> Descuento e impuestos</h3><div class="fe-grid" id="fe-totales"></div>
-            <div class="fe-ayuda"><i class="fas fa-circle-info"></i> Son opcionales: si los dejás en 0, no aparecen en la factura.</div></div>
+            <div class="fe-ayuda"><i class="fas fa-circle-info"></i> Son opcionales: si los dejas en 0, no aparecen en la factura.</div></div>
           <div class="card fe-bloque"><h3><i class="fas fa-note-sticky"></i> Notas y condiciones</h3><div class="fe-grid" id="fe-notas"></div></div>
         </div>
         <aside class="card fe-lateral" aria-label="Resumen de la factura">
@@ -421,7 +421,7 @@ export function crearFacturasEmpresa(c) {
           ${f.estado === 'pagada' ? `<button class="btn-sm" type="button" data-acc="pendiente" data-id="${f.id}"><i class="fas fa-rotate-left"></i> Pendiente</button>` : ''}
         </div>
       </article>`;
-    }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${lista.length ? 'Ninguna factura coincide con el filtro' : 'Todavía no hay facturas: creá la primera con «Nueva factura»'}</div>`;
+    }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${lista.length ? 'Ninguna factura coincide con el filtro' : 'Todavía no hay facturas: crea la primera con «Nueva factura»'}</div>`;
   }
 
   // ---------- Editor ----------
@@ -443,10 +443,10 @@ export function crearFacturasEmpresa(c) {
   function pintarEmpresa() {
     const e = empresa(d.empresa_id), box = $('#fe-empresa');
     if (!e) {
-      box.innerHTML = `<div class="fe-buscador"><label class="fl" for="fe-emp-q">¿A qué empresa le facturás?</label>
-        <input class="ei" id="fe-emp-q" type="search" placeholder="Escribí el nombre o el RIF…" autocomplete="off" role="combobox" aria-expanded="${empAbierta}" aria-controls="fe-emp-lista" value="${esc(empQ)}">
+      box.innerHTML = `<div class="fe-buscador"><label class="fl" for="fe-emp-q">¿A qué empresa le facturas?</label>
+        <input class="ei" id="fe-emp-q" type="search" placeholder="Escribe el nombre o el RIF…" autocomplete="off" role="combobox" aria-expanded="${empAbierta}" aria-controls="fe-emp-lista" value="${esc(empQ)}">
         <div class="fe-lista" id="fe-emp-lista" role="listbox" hidden></div></div>
-        <div class="fe-ayuda">¿No está? Escribí su nombre y tocá «Crear empresa»: cargás su ficha y volvés acá con ella elegida.</div>`;
+        <div class="fe-ayuda">¿No está? Escribe su nombre y toca «Crear empresa»: cargas su ficha y vuelves acá con ella elegida.</div>`;
       pintarListaEmpresas();
       return;
     }
@@ -468,7 +468,7 @@ export function crearFacturasEmpresa(c) {
       + `<div class="field fe-2"><label class="fl">Condición</label><div class="ei" style="background:transparent;border-style:dashed" id="fe-condicion">${esc(condicionTxt(d.fecha, d.vence))}</div></div>`
       + campo('Referencia o pasajeros <span class="ef-opc">(opcional)</span>', 'referencia', d.referencia, 'maxlength="200" placeholder="Ej. PAX GODOY Y CAMPOS"', 'fe-2')
       + `<div class="field fe-2"><label class="fl" for="fe-reserva_id">Reserva <span class="ef-opc">(opcional)</span></label><select class="ei" id="fe-reserva_id" data-k="reserva_id" ${reservas.length ? '' : 'disabled'}>
-          <option value="">${reservas.length ? 'Sin reserva enlazada' : e ? 'La empresa no tiene reservas' : 'Elegí primero la empresa'}</option>
+          <option value="">${reservas.length ? 'Sin reserva enlazada' : e ? 'La empresa no tiene reservas' : 'Elige primero la empresa'}</option>
           ${reservas.map(r => `<option value="${r.id}" ${Number(d.reserva_id) === r.id ? 'selected' : ''}>${esc(r.codigo || '#' + r.id)}${r.referencia ? ' · ' + esc(r.referencia) : ''}${r.fecha_viaje_inicio ? ' · ' + esc(fechaTxt(r.fecha_viaje_inicio)) : ''}</option>`).join('')}</select></div>`;
   }
   function pintarItems() {
@@ -495,9 +495,9 @@ export function crearFacturasEmpresa(c) {
   }
   function faltan() {
     const xs = [];
-    if (!empresa(d.empresa_id)) xs.push('Elegí la empresa');
+    if (!empresa(d.empresa_id)) xs.push('Elige la empresa');
     if (d.items.some(it => !it.descripcion.trim())) xs.push('Hay conceptos sin descripción');
-    if (d.items.some(it => !(Number(it.cantidad) > 0) || !(Number(it.tarifa) >= 0) || it.tarifa === '')) xs.push('Revisá cantidad y tarifa');
+    if (d.items.some(it => !(Number(it.cantidad) > 0) || !(Number(it.tarifa) >= 0) || it.tarifa === '')) xs.push('Revisa cantidad y tarifa');
     if (calcular(d).subtotal <= 0) xs.push('El total está en $0');
     if (!d.vence || d.vence < d.fecha) xs.push('El vencimiento es antes de la fecha');
     return xs;
@@ -621,14 +621,14 @@ export function crearFacturasEmpresa(c) {
     try {
       const blob = await construirPdf(f, c);
       await c.entregar(blob, nombreArchivo(f, c.slug));
-    } catch (err) { console.error('facturas-empresa pdf', err); c.error('No se pudo armar el PDF. Revisá la conexión e intentá de nuevo.'); }
+    } catch (err) { console.error('facturas-empresa pdf', err); c.error('No se pudo armar el PDF. Revisa la conexión e intenta de nuevo.'); }
   }
 
   async function guardar() {
     if (ocupado || faltan().length) return;
     const e = empresa(d.empresa_id);
     // Sin RIF o dirección la factura no sirve al cliente: se completa la ficha antes de emitir.
-    if (!e.rif || !e.direccion) { c.error('Completá el RIF y la dirección fiscal de la empresa antes de emitir.'); abrirFicha(e.id); return; }
+    if (!e.rif || !e.direccion) { c.error('Completa el RIF y la dirección fiscal de la empresa antes de emitir.'); abrirFicha(e.id); return; }
     ocupado = true; aviso = ''; pintarPrevia();
     const datos = {
       empresa_id: d.empresa_id, fecha: d.fecha, vence: d.vence, referencia: d.referencia, reserva_id: d.reserva_id,

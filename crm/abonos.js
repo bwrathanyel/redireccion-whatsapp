@@ -10,35 +10,35 @@ const ERRORES = {
   moneda_invalida: 'Elige la moneda del pago.',
   metodo_invalido: 'Elige el método de pago.',
   referencia_requerida: 'Escribe la referencia o sube la captura del comprobante.',
-  captura_requerida: 'Subí la captura del comprobante del pago (o elegí Efectivo si no hay comprobante).',
+  captura_requerida: 'Sube la captura del comprobante del pago (o elige Efectivo si no hay comprobante).',
   referencia_invalida: 'La referencia es demasiado larga.',
   nota_demasiado_larga: 'La nota es demasiado larga.',
-  tasa_no_disponible: 'No hay tasa cargada para esa opción: elegí otra tasa o registrá el abono en dólares.',
-  tasa_tipo_invalida: 'Elegí la tasa del cobro: BCV dólar, BCV euro o USDT.',
+  tasa_no_disponible: 'No hay tasa cargada para esa opción: elige otra tasa o registra el abono en dólares.',
+  tasa_tipo_invalida: 'Elige la tasa del cobro: BCV dólar, BCV euro o USDT.',
   comprobante_path_invalido: 'La captura no quedó guardada en tu carpeta. Vuelve a subirla.',
   solicitud_requerida: 'No se pudo identificar la operación. Cierra el formulario y reintenta.',
   solicitud_con_otros_datos: 'Esa operación ya se registró con otros datos. Recarga la reserva y verifica.',
   abono_anulado: 'Ese abono está anulado: no se edita, se elimina.',
   fecha_invalida: 'La fecha del abono no puede ser futura.',
-  tasa_invalida: 'Escribí una tasa mayor a cero.',
-  abono_respaldo_no_anulable: 'El saldo anterior es el acumulado que ya tenía la reserva: no se elimina, editalo con los datos del pago.',
+  tasa_invalida: 'Escribe una tasa mayor a cero.',
+  abono_respaldo_no_anulable: 'El saldo anterior es el acumulado que ya tenía la reserva: no se elimina, edítalo con los datos del pago.',
   abono_no_encontrado: 'El abono no existe.',
   motivo_requerido: 'Explica el motivo con al menos 4 caracteres.',
   motivo_demasiado_largo: 'El motivo es demasiado largo.',
   saldo_incompatible: 'Anular dejaría el acumulado en negativo.',
   conflicto_revision: 'Otro usuario guardó una revisión del voucher. Recarga la reserva y reintenta.',
   documento_anulado: 'El voucher está anulado: no se le puede agregar el abono.',
-  sincronizar_solo_pago: 'El voucher cambió de total: esto es una corrección, no un abono. Revisalo desde Voucher.',
-  sincronizar_baja_pago: 'El voucher ya declara más cobrado que la reserva. Revisalo desde Voucher.',
-  montos_invalidos: 'El voucher quedaría con más pagado que su total. Revisalo desde Voucher.',
-  fechas_invalidas: 'El voucher tiene la salida antes de la entrada. Corregilo desde Voucher.',
-  nombre_requerido: 'El voucher no tiene nombre de cliente. Corregilo desde Voucher.',
-  selecciona_servicio: 'La reserva tiene varios servicios y ninguno es hospedaje: actualizá el voucher desde Voucher.',
+  sincronizar_solo_pago: 'El voucher cambió de total: esto es una corrección, no un abono. Revísalo desde Voucher.',
+  sincronizar_baja_pago: 'El voucher ya declara más cobrado que la reserva. Revísalo desde Voucher.',
+  montos_invalidos: 'El voucher quedaría con más pagado que su total. Revísalo desde Voucher.',
+  fechas_invalidas: 'El voucher tiene la salida antes de la entrada. Corrígelo desde Voucher.',
+  nombre_requerido: 'El voucher no tiene nombre de cliente. Corrígelo desde Voucher.',
+  selecciona_servicio: 'La reserva tiene varios servicios y ninguno es hospedaje: actualiza el voucher desde Voucher.',
   voucher_pendiente_confirmacion: 'El voucher todavía no está confirmado como venta.',
-  pago_movil_en_bs: 'El Pago móvil se registra en bolívares: elegí VES y escribí el monto en Bs.',
-  sin_librerias: 'No cargaron las herramientas de PDF. Recargá la página y tocá «Reintentar documentos».',
-  voucher_no_leido: 'No se pudo leer el voucher de la reserva. Tocá «Reintentar documentos».',
-  servicio_invalido: 'Ese servicio ya no está en la reserva. Recargá la reserva y elegí otro.',
+  pago_movil_en_bs: 'El Pago móvil se registra en bolívares: elige VES y escribe el monto en Bs.',
+  sin_librerias: 'No cargaron las herramientas de PDF. Recarga la página y toca «Reintentar documentos».',
+  voucher_no_leido: 'No se pudo leer el voucher de la reserva. Toca «Reintentar documentos».',
+  servicio_invalido: 'Ese servicio ya no está en la reserva. Recarga la reserva y elige otro.',
   posible_duplicado: 'Ya hay un pago con ese monto y esa referencia en las últimas 48 horas.',
 };
 const TIPO_SERV = { hospedaje: 'Hospedaje', boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', full_day: 'Full day', seguro: 'Seguro', otro: 'Otro' };
@@ -247,7 +247,7 @@ export function crearAbonos(c) {
     aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
     const d = await analizarCaptura(archivo);
     if (token !== est.tokenIA || !document.getElementById('ab-ia')) return;
-    if (!d) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
+    if (!d) { aviso.textContent = 'No se pudo leer: completa los datos a mano.'; return; }
     const puestos = [];
     const monto = document.getElementById('ab-monto'), moneda = document.getElementById('ab-moneda'), ref = document.getElementById('ab-ref');
     if (d.moneda && moneda && !monto.value) { moneda.value = d.moneda; est.moneda = d.moneda; puestos.push('moneda'); }
@@ -258,7 +258,7 @@ export function crearAbonos(c) {
       panel()?.querySelectorAll('[data-ab-accion="metodo"]').forEach(x => x.classList.toggle('on', x.dataset.metodo === est.metodo));
     }
     actualizarTasa();
-    aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revisalo antes de registrar.` : 'No se encontraron datos en la captura.';
+    aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revísalo antes de registrar.` : 'No se encontraron datos en la captura.';
   }
   // null = no se pudo leer. También la usa el pago del formulario de servicio.
   async function analizarCaptura(archivo) {
@@ -354,7 +354,7 @@ export function crearAbonos(c) {
       est.datos.tasas = est.datos.tasas || {};
       (est.datos.tasas[data.tasa_tipo] ||= {}).tasa = data.tasa;
       actualizarTasa();
-      poner(`La tasa ${nombreTasa(data.tasa_tipo)} cambió a ${num(data.tasa, 4)}. Revisá el equivalente y registrá de nuevo.`);
+      poner(`La tasa ${nombreTasa(data.tasa_tipo)} cambió a ${num(data.tasa, 4)}. Revisa el equivalente y registra de nuevo.`);
       return false;
     }
     if (error) throw new Error(error.code === '42501' ? 'Tu usuario no puede registrar abonos en esta reserva.' : error.message);
@@ -368,7 +368,7 @@ export function crearAbonos(c) {
       referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: new Date().toISOString(),
     }, data.monto_pagado, data.saldo_pendiente);
     // El pago quedó guardado: nunca un toast de error, o lo vuelven a cargar (R-000133, abonos 66-68).
-    if (docs.fallo) c.ok(`Abono registrado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): no lo cargues de nuevo, usá «Reintentar documentos».`);
+    if (docs.fallo) c.ok(`Abono registrado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): no lo cargues de nuevo, usa «Reintentar documentos».`);
     else c.ok(`Abono registrado · ${docs.voucherInfo ? `Voucher ${docs.voucherInfo.numero}${docs.voucherInfo.revision ? ` rev. ${docs.voucherInfo.revision}` : ''}` : 'sin voucher'}${docs.reciboId ? ' · Recibo' : ''} · saldo ${usd(data.saldo_pendiente)}`);
     est.datos = null;
     await cargar(est.reservaId);
@@ -387,7 +387,7 @@ export function crearAbonos(c) {
   // Pago cargado desde el formulario del servicio (recién guardado: se relee la reserva para que esté su
   // precio). `p.completo`: el monto es lo que le falta al servicio, sin pasar el saldo de la reserva.
   async function pagarServicio(reservaId, p, poner) {
-    if (est.guardando) { poner('Ya hay un abono registrándose: esperá a que termine.'); return false; }
+    if (est.guardando) { poner('Ya hay un abono registrándose: espera a que termine.'); return false; }
     est.guardando = true;
     try {
       if (reservaId !== est.reservaId) throw new Error('reserva_no_disponible');
@@ -436,7 +436,7 @@ export function crearAbonos(c) {
         moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
         referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: data.fecha,
       }, data.monto_pagado, data.saldo_pendiente);
-      if (docs.fallo) c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): usá «Reintentar documentos».`);
+      if (docs.fallo) c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): usa «Reintentar documentos».`);
       else c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}${docs.reciboId ? ' · Recibo nuevo' : ''}`);
       est.datos = null;
       await cargar(est.reservaId);
@@ -472,7 +472,7 @@ export function crearAbonos(c) {
         // El abono ya no existe: sin abono_id, documento_preparar no lo busca.
         const v = await revisarVoucher({ ...a, id: null }, data.monto_pagado, actual, true);
         if (v) aviso = ` · voucher ${v.numero} rev. ${v.revision}`;
-      } catch (e) { aviso = `. El voucher no se actualizó (${mensaje(e)}): revisalo desde Voucher`; }
+      } catch (e) { aviso = `. El voucher no se actualizó (${mensaje(e)}): revísalo desde Voucher`; }
     }
     c.ok(`Abono eliminado · saldo ${usd(data.saldo_pendiente)}${aviso}`);
     if (aviso.startsWith(' ·')) { est.datos = null; await cargar(est.reservaId); }
