@@ -334,7 +334,10 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   /* ---------- Menú que se abre de a poco ---------- */
   function aplicaGuia() {
     const guiada = !enLogin() && !presentando() && (!!actual() || !!estado.pausa);
+    const eraGuiada = document.body.classList.contains('prueba-guiada');
     document.body.classList.toggle('prueba-guiada', guiada);
+    // Los grupos del menú (Inicio, Leads, Reservas...) se midieron con todo oculto: al abrirse el menú se vuelven a medir.
+    if (eraGuiada !== guiada) window.__navRefrescar?.();
     if (!guiada) return;
     const nav = document.getElementById('sidebar-nav'); if (!nav) return;
     const ok = new Set(estado.vistas), antes = new Set([...nav.querySelectorAll('[data-prueba-ok]')]);

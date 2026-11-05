@@ -35017,6 +35017,8 @@ function ocultarHeadersVaciosMenu() {
   actualizarPadresNav();
   ocultarHeadersVacios('sidebar-nav', '.nav-item', '.nav-label');
 }
+// El modo prueba (misiones.js) oculta el menú por CSS y lo abre al terminar: necesita volver a medir los grupos.
+window.__navRefrescar = ocultarHeadersVaciosMenu;
 
 /* ---------- Menú agrupado: padres, hijas y pestañas ----------
    Las hijas (.nav-hijo) están ocultas por CSS salvo con body.nav-sondeo o
