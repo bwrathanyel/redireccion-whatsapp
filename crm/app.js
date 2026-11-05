@@ -410,7 +410,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false, MI_ES_BOLETERIA = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false, MI_ES_BOLETERIA = false, MI_ASESOR_INTEGRAL = false;
 // Rol REAL del usuario logueado -- distinto de ROL cuando hay una vista
 // previa activa (ver "Vista previa de rol" más abajo). ROL_REAL nunca
 // cambia con la vista previa: el switcher lo usa para decidir si mostrarse
@@ -512,7 +512,7 @@ async function cargarUsuario(intento = 0) {
     if (er) eu = er; else ({ data: { user }, error: eu } = await sb.auth.getUser());
   }
   if (!user && !esErrorRed(eu)) return sesionInvalida('Tu sesión expiró, vuelve a entrar');
-  const { data, error } = user ? await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin,es_boleteria').eq('id', user.id).single() : { data: null, error: eu };
+  const { data, error } = user ? await sb.from('usuarios').select('id,username,nombre,rol,debe_cambiar_password,avatar_url,preferencias,ve_informe_diario,es_freelancer,bloqueado,es_superadmin,es_boleteria,asesor_integral').eq('id', user.id).single() : { data: null, error: eu };
   if (error?.code === 'PGRST116') return sesionInvalida('Cuenta sin configurar, contacta a un administrador');
   if (error || !data) {
     if (intento < 3) { await new Promise(r => setTimeout(r, 1500 * (intento + 1))); return cargarUsuario(intento + 1); }
@@ -583,6 +583,7 @@ async function afterLogin() {
   MI_USERNAME = u.username; MI_USUARIO_ID = u.id;
   MI_AVATAR_URL = u.avatar_url; MI_PREFERENCIAS = u.preferencias || {}; MI_VE_INFORME_DIARIO = !!u.ve_informe_diario;
   MI_ES_FREELANCER = !!u.es_freelancer; MI_BLOQUEADO = !!u.bloqueado; MI_ES_SUPERADMIN = !!u.es_superadmin; MI_ES_BOLETERIA = VISTA_SIM ? VISTA_SIM === 'asesor_boleteria' : !!u.es_boleteria;
+  MI_ASESOR_INTEGRAL = ROL === 'asesor' && !!u.asesor_integral;
   // Asesor + Boletería: Solicitudes y Boletería van en el menú normal, sin modo aparte (dueño 2026-10-15).
   document.body.classList.toggle('asesor-boleteria', ROL === 'asesor' && MI_ES_BOLETERIA);
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
@@ -2046,6 +2047,9 @@ function setupAsesoresPrueba() {
   document.getElementById('ap-contar')?.addEventListener('click', contarLotePrueba);
   document.getElementById('ap-preview-btn')?.addEventListener('click', previewLotePrueba);
   document.getElementById('ap-asignar')?.addEventListener('click', asignarLotePrueba);
+  document.getElementById('ld-activar')?.addEventListener('click', () => guardarLoteDiario(true));
+  document.getElementById('ld-pausar')?.addEventListener('click', () => guardarLoteDiario(false));
+  document.getElementById('ld-ahora')?.addEventListener('click', repartirLoteDiarioAhora);
   ['ap-antiguedad', 'ap-desde', 'ap-hasta', 'ap-cantidad'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', apInvalidar);
   });
@@ -2082,7 +2086,36 @@ async function loadAsesoresPruebaTab() {
     }
   }
   await cargarDestinosLotePrueba();
-  await cargarProgresoLotesPrueba();
+  await Promise.all([cargarProgresoLotesPrueba(), cargarLotesDiarios()]);
+}
+async function cargarLotesDiarios() {
+  const wrap = document.getElementById('ld-wrap');
+  const { data, error } = await sb.rpc('lotes_diarios_listar');
+  if (error || !wrap) return;
+  const filas = data?.asesores || [];
+  wrap.innerHTML = `<div style="font-size:12px;color:var(--muted2);margin-bottom:6px">${fmt(data?.disponibles || 0)} cliente(s) disponibles para recontactar.</div>` +
+    (filas.length ? `<table><thead><tr><th>Asesor</th><th>Por día</th><th>Pendientes</th><th>Estado</th></tr></thead><tbody>${filas.map(r => `<tr>
+      <td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${r.pendientes}</td><td>${r.activo ? 'Activo' : 'Pausado'}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="pc-vacio">Ningún asesor recibe lote diario todavía.</div>');
+}
+async function guardarLoteDiario(activo) {
+  const err = document.getElementById('ld-err'); err.textContent = '';
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor arriba.'; return; }
+  const cantidad = parseInt(document.getElementById('ld-cantidad').value, 10);
+  if (isNaN(cantidad) || cantidad < 1 || cantidad > 50) { err.textContent = 'Cantidad entre 1 y 50.'; return; }
+  const { data, error } = await sb.rpc('lote_diario_guardar', { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, p_activo: activo });
+  if (error || !data?.ok) { err.textContent = data?.error === 'no_integral' ? 'Solo para asesores integrales: actívalo en Personal › Permisos.' : (error?.message || data?.error || 'No se pudo guardar.'); return; }
+  okToast(activo ? `Lote diario activo: ${cantidad} por día` : 'Lote diario en pausa');
+  await cargarLotesDiarios();
+}
+async function repartirLoteDiarioAhora() {
+  const err = document.getElementById('ld-err'); err.textContent = '';
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor arriba.'; return; }
+  if (!(await confirmarSheet({ titulo: '¿Repartir el lote de hoy ya?', detalle: 'Se le completa la cola al asesor elegido sin esperar a la mañana. Los leads pasan a ser suyos, con tarea de contacto.', textoOk: 'Repartir' }))) return;
+  const { data, error } = await sb.rpc('lote_diario_repartir_ahora', { p_usuario_id: asesorPruebaSeleccionado });
+  if (error || !data?.ok) { err.textContent = data?.error === 'no_habilitado' ? 'Primero activa el lote diario para este asesor.' : (error?.message || 'No se pudo repartir.'); return; }
+  okToast(`Repartidos: ${data.asignados} lead(s)`);
+  await Promise.all([cargarLotesDiarios(), cargarProgresoLotesPrueba()]);
 }
 async function contarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
@@ -2432,6 +2465,7 @@ function abrirFichaPersona(usuarioId, sinPush) {
   const permisos = [
     [u.es_freelancer, 'fa-user-clock', 'Freelancer'],
     [u.es_boleteria, 'fa-ticket', 'Boletería'],
+    [u.asesor_integral, 'fa-snowflake', 'Integral'],
     [u.ve_voucher, 'fa-file-invoice', 'Vouchers'],
     [u.ve_informe_diario, 'fa-file-lines', 'Informe diario'],
   ].map(([on, i, t]) => '<span class="gpf-perm-chip' + (on ? ' on' : '') + '"><i class="fas ' + (on ? i : 'fa-minus') + '"></i> ' + t + '</span>').join('');
@@ -2560,6 +2594,7 @@ function abrirEditorPersona(usuarioId, desdeFicha) {
       <div class="gpf-sec-t"><i class="fas fa-key"></i> Permisos</div>
       ${permiso('pe-freelancer', u.es_freelancer, 'Freelancer', 'Se bloquea a los 15 min sin actividad.')}
       ${permiso('pe-boleteria', u.es_boleteria, 'Agente de boletería', 'Atiende la cola de solicitudes de vuelos. Para un asesor, elige el rol «Asesor + Boletería».')}
+      ${u.rol === 'asesor' ? permiso('pe-integral', u.asesor_integral, 'Asesor integral', 'Además de lo suyo, recibe cada mañana el lote de clientes fríos (pestaña Clientes Fríos en Leads).') : ''}
       ${permiso('pe-voucher', u.ve_voucher, 'Ve vouchers', 'Accede a la sección de vouchers.')}
       ${permiso('pe-informe', u.ve_informe_diario, 'Ve informe diario', 'Recibe y consulta el informe del día.')}
     </section>
@@ -2679,6 +2714,12 @@ async function guardarPersona(usuarioId) {
       p_whatsapp: val('pe-whatsapp').trim() || null,
       p_telegram_chat_id: val('pe-telegram').trim() || null,
     });
+  }
+  const integralEl = document.getElementById('pe-integral');
+  const previo = personalCache.find(x => String(x.usuario_id) === String(usuarioId));
+  if (integralEl && rol === 'asesor' && integralEl.checked !== !!previo?.asesor_integral) {
+    const ig = await sb.rpc('admin_marcar_asesor_integral', { p_usuario_id: usuarioId, p_valor: integralEl.checked });
+    if (ig.error || !ig.data?.ok) { btn.disabled = false; err.textContent = 'Se guardaron los datos pero no el permiso «Asesor integral».'; return; }
   }
   const generoEl = document.getElementById('pe-genero');
   if (generoEl) {
@@ -7615,6 +7656,9 @@ document.getElementById('leads-reload-btn')?.addEventListener('click', async () 
 const SERVICIO_POSADA_IA = 'Asistente IA (posada)';
 const PARA_CERRAR_DIAS = { abierto: 14, cotizado: 21, ventana: 90 };
 let PARA_CERRAR_PAGINA = [];
+// Mismos estados que lote_estado_regestionable() + el POR ATENDER que deja el lote.
+const FRIOS_ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'Sin gestionar'];
+const FRIOS_ESTADOS_PG = FRIOS_ESTADOS.map(e => `"${e}"`).join(',');
 
 function buildQuery(forCount) {
   let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {})
@@ -7622,6 +7666,8 @@ function buildQuery(forCount) {
     // PostgREST usa como sintaxis dentro de un `or`. La rama `is.null` hace
     // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
     .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
+  // Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más).
+  if (MI_ASESOR_INTEGRAL) q = q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
   if (fst === 'sin') q = q.is('telefono', null);
   else if (fst === 'con') q = q.not('telefono', 'is', null);
@@ -35703,7 +35749,12 @@ function setupLeadsTabs() {
     if (leadsTab === 'facturacion') loadLeadsEnFacturacion();
     if (leadsTab === 'boleteria') { bolMoverCola('bol-cola-host-leads'); loadColaBoleteria(); }
     if (leadsTab === 'lote') loadLeadsAsignadosLote();
+    if (leadsTab === 'frios') loadClientesFrios();
   }));
+  const tabs = document.getElementById('leads-tabs');
+  if (tabs) tabs.hidden = !MI_ASESOR_INTEGRAL;
+  document.getElementById('cf-refrescar')?.addEventListener('click', () => loadClientesFrios());
+  if (MI_ASESOR_INTEGRAL) loadClientesFrios();
   document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
   document.getElementById('ll-refrescar')?.addEventListener('click', () => loadLeadsAsignadosLote());
   loadLeadsAsignadosLote(); // idem: el badge de "Asignados en lote" cuenta pendientes
@@ -37086,6 +37137,31 @@ async function loadLeadsAsignadosLote() {
   // lote viejo ya trabajado no es trabajo por hacer.
   const pendientes = filas.filter(l => l.estado === 'POR ATENDER').length;
   const badge = document.getElementById('leads-lote-count');
+  if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
+  empty?.classList.toggle('show', filas.length === 0);
+  grid.innerHTML = filas.map(leadCardHtml).join('');
+  wireLeadCards(grid, filas);
+}
+
+/* ---------- Clientes Fríos (sub-pestaña de Leads, solo asesor integral) ----------
+   Leads viejos sin cotizar que repartir_lotes_diarios le asigna cada mañana
+   (lote_origen = 'diario'). Se quedan acá mientras sigan en un estado de
+   regestión; al cotizar pasan al pipeline normal (buildQuery los excluye). */
+async function loadClientesFrios() {
+  const grid = document.getElementById('cf-grid');
+  if (!grid || !MI_ASESOR_INTEGRAL) return;
+  const loading = document.getElementById('cf-loading'), empty = document.getElementById('cf-empty');
+  loading?.classList.add('show');
+  const { data, error } = await sb.from('leads').select('*')
+    .is('eliminado_at', null).eq('lote_origen', 'diario').eq('asesor', MI_NOMBRE)
+    .in('estado', FRIOS_ESTADOS)
+    .order('lote_asignado_at', { ascending: false })
+    .limit(300);
+  loading?.classList.remove('show');
+  if (error) { console.error('clientes_frios', error); errToast('No se pudieron cargar los clientes fríos'); return; }
+  const filas = data || [];
+  const pendientes = filas.filter(l => l.estado === 'POR ATENDER').length;
+  const badge = document.getElementById('leads-frios-count');
   if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
   empty?.classList.toggle('show', filas.length === 0);
   grid.innerHTML = filas.map(leadCardHtml).join('');

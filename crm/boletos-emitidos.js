@@ -342,7 +342,19 @@ export async function construirPdf(d, numero, c) {
   const P = c.paleta, limpiar = c.limpiar || (s => String(s ?? '').trim());
   const tinte = (col, k) => col.map(v => Math.round(v + (255 - v) * k));
   const imagen = async src => { try { const u = await c.imagen(src); return String(u).startsWith('data:image/png') ? u : null; } catch (_e) { return null; } };
-  const logo = await imagen('logo-color.png');
+  // Logo en negro: se tiñe el de color (mismas proporciones que espera el membrete).
+  const enNegro = u => new Promise(ok => {
+    if (!u) return ok(null);
+    const im = new Image();
+    im.onload = () => {
+      const cv = Object.assign(document.createElement('canvas'), { width: im.naturalWidth, height: im.naturalHeight }), g = cv.getContext('2d');
+      g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+      ok(cv.toDataURL('image/png'));
+    };
+    im.onerror = () => ok(u);
+    im.src = u;
+  });
+  const logo = await enNegro(await imagen('logo-color.png'));
   const logos = {};
   for (const t of d.tramos) { const a = aerolineaDe(t); if (a.logo && !(a.id in logos)) logos[a.id] = await imagen(logoDe(a)); }
   const font = (s, size, col) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...col); };

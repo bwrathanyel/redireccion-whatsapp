@@ -2047,6 +2047,9 @@ function setupAsesoresPrueba() {
   document.getElementById('ap-contar')?.addEventListener('click', contarLotePrueba);
   document.getElementById('ap-preview-btn')?.addEventListener('click', previewLotePrueba);
   document.getElementById('ap-asignar')?.addEventListener('click', asignarLotePrueba);
+  document.getElementById('ld-activar')?.addEventListener('click', () => guardarLoteDiario(true));
+  document.getElementById('ld-pausar')?.addEventListener('click', () => guardarLoteDiario(false));
+  document.getElementById('ld-ahora')?.addEventListener('click', repartirLoteDiarioAhora);
   ['ap-antiguedad', 'ap-desde', 'ap-hasta', 'ap-cantidad'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', apInvalidar);
   });
@@ -2083,7 +2086,36 @@ async function loadAsesoresPruebaTab() {
     }
   }
   await cargarDestinosLotePrueba();
-  await cargarProgresoLotesPrueba();
+  await Promise.all([cargarProgresoLotesPrueba(), cargarLotesDiarios()]);
+}
+async function cargarLotesDiarios() {
+  const wrap = document.getElementById('ld-wrap');
+  const { data, error } = await sb.rpc('lotes_diarios_listar');
+  if (error || !wrap) return;
+  const filas = data?.asesores || [];
+  wrap.innerHTML = `<div style="font-size:12px;color:var(--muted2);margin-bottom:6px">${fmt(data?.disponibles || 0)} cliente(s) disponibles para recontactar.</div>` +
+    (filas.length ? `<table><thead><tr><th>Asesor</th><th>Por día</th><th>Pendientes</th><th>Estado</th></tr></thead><tbody>${filas.map(r => `<tr>
+      <td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${r.pendientes}</td><td>${r.activo ? 'Activo' : 'Pausado'}</td></tr>`).join('')}</tbody></table>`
+    : '<div class="pc-vacio">Ningún asesor recibe lote diario todavía.</div>');
+}
+async function guardarLoteDiario(activo) {
+  const err = document.getElementById('ld-err'); err.textContent = '';
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor arriba.'; return; }
+  const cantidad = parseInt(document.getElementById('ld-cantidad').value, 10);
+  if (isNaN(cantidad) || cantidad < 1 || cantidad > 50) { err.textContent = 'Cantidad entre 1 y 50.'; return; }
+  const { data, error } = await sb.rpc('lote_diario_guardar', { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, p_activo: activo });
+  if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo guardar.'; return; }
+  okToast(activo ? `Lote diario activo: ${cantidad} por día` : 'Lote diario en pausa');
+  await cargarLotesDiarios();
+}
+async function repartirLoteDiarioAhora() {
+  const err = document.getElementById('ld-err'); err.textContent = '';
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor arriba.'; return; }
+  if (!(await confirmarSheet({ titulo: '¿Repartir el lote de hoy ya?', detalle: 'Se le completa la cola al asesor elegido sin esperar a la mañana. Los leads pasan a ser suyos, con tarea de contacto.', textoOk: 'Repartir' }))) return;
+  const { data, error } = await sb.rpc('lote_diario_repartir_ahora', { p_usuario_id: asesorPruebaSeleccionado });
+  if (error || !data?.ok) { err.textContent = data?.error === 'no_habilitado' ? 'Primero activa el lote diario para este asesor.' : (error?.message || 'No se pudo repartir.'); return; }
+  okToast(`Repartidos: ${data.asignados} lead(s)`);
+  await Promise.all([cargarLotesDiarios(), cargarProgresoLotesPrueba()]);
 }
 async function contarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';

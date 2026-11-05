@@ -1765,6 +1765,7 @@ body.cb-editando-rev :is(#cb-enviar-btn,#cb-lead-btn,#cb-compartir-btn,#cb-whats
 body.arrastrando-lead #leads-tabs .seg[data-leads-tab="boleteria"],
 body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   outline:2px dashed rgba(var(--accent-rgb),.6);outline-offset:2px}
+#leads-tabs[hidden]{display:none!important}
 #leads-tabs .seg.drop-ok{background:var(--accent);color:var(--on-accent);outline-style:solid}
 .venta-box.show{display:block;animation:fadeSlide .25s ease}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
@@ -8484,7 +8485,12 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     </section>
 
     <section class="section" id="sec-leads">
-      <!-- Sub-pestañas En facturación / Colaboraciones quitadas (pedido del dueño 2026-10-29): ocupaban una fila entera en móvil. -->
+      <!-- Sub-pestañas En facturación / Colaboraciones quitadas (pedido del dueño 2026-10-29): ocupaban una fila entera en móvil.
+           La fila vuelve solo para el asesor integral (Clientes Fríos, 2026-11-05); el resto no la ve. -->
+      <div class="seg-group chips-scroll" id="leads-tabs" hidden>
+        <button class="seg on" data-leads-tab="pipeline" type="button">Leads</button>
+        <button class="seg" data-leads-tab="frios" type="button"><i class="fas fa-snowflake"></i> Clientes Fríos <span class="lih-count" id="leads-frios-count" style="display:none">0</span></button>
+      </div>
       <div class="leads-tab-panel" data-leads-panel="pipeline">
         <div class="leads-pipeline-head" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
           <div class="live-indicator" id="leads-live-indicator">
@@ -8636,6 +8642,18 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="tbl-state skel" id="ll-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div class="tbl-state" id="ll-empty"><i class="fas fa-layer-group"></i><div class="es-t">Sin leads asignados en lote</div><div class="es-s">Cuando el admin te reparta un lote, los clientes aparecen acá listos para contactar</div></div>
           <div id="ll-grid" class="card-grid show"></div>
+        </div>
+      </div>
+      <div class="leads-tab-panel" data-leads-panel="frios" style="display:none">
+        <div class="card">
+          <div class="chead-row">
+            <h2><i class="fas fa-snowflake"></i> Clientes Fríos</h2>
+            <button class="btn-sm" id="cf-refrescar" type="button"><i class="fas fa-rotate"></i> Actualizar</button>
+          </div>
+          <div class="csub">Clientes que escribieron hace 1 a 12 semanas y nunca cotizaron. Te llegan cada mañana: contáctalos y registra el resultado en la tarea. Al cotizar pasan a tu lista normal.</div>
+          <div class="tbl-state skel" id="cf-loading"><div class="skel-bar"></div><div class="skel-bar"></div></div>
+          <div class="tbl-state" id="cf-empty"><i class="fas fa-snowflake"></i><div class="es-t">Sin clientes fríos por ahora</div><div class="es-s">El lote de recontacto llega cada mañana a las 7:30</div></div>
+          <div id="cf-grid" class="card-grid show"></div>
         </div>
       </div>
     </section>
@@ -9174,6 +9192,20 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           </div>
           <div id="ap-preview-wrap"></div>
           <button class="dbtn save" id="ap-asignar" type="button" style="margin-top:12px" disabled><i class="fas fa-check"></i> Asignar lote</button>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2><i class="fas fa-sun"></i> Lote diario automático</h2>
+          <p style="color:var(--muted);font-size:12px;margin:4px 0 10px">Cada mañana (7:30) se le completa al asesor la cola de recontacto hasta la cantidad elegida: leads de los últimos 90 días sin cotizar, con teléfono, los más recientes primero. Lo que no trabajó ayer no se acumula.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:12px;color:var(--muted)">Para el asesor elegido arriba:</span>
+            <input type="number" id="ld-cantidad" min="1" max="50" value="15" style="width:72px" aria-label="Leads por día">
+            <span style="font-size:12px;color:var(--muted)">por día</span>
+            <button class="dbtn save" id="ld-activar" type="button"><i class="fas fa-play"></i> Activar</button>
+            <button class="dbtn" id="ld-pausar" type="button"><i class="fas fa-pause"></i> Pausar</button>
+            <button class="dbtn" id="ld-ahora" type="button"><i class="fas fa-bolt"></i> Repartir ahora</button>
+          </div>
+          <div id="ld-err" style="color:#ef4444;font-size:12px;margin-top:6px"></div>
+          <div id="ld-wrap" style="margin-top:10px"></div>
         </div>
         <div class="card" style="margin-top:16px">
           <h2><i class="fas fa-chart-simple"></i> Progreso por asesor</h2>
