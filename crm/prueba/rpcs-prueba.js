@@ -725,6 +725,55 @@ function registrar_abono_venta(m, a) {
 }
 
 
+// La pestaña Abonos de la reserva (abonos.js). Lo cobrado antes de la prueba sale como el abono inicial.
+const TASA_VES = 36.5;
+function _abonos_reserva(m, r) {
+  const filas = setdefault(m.tablas, '_abonos_reserva', {});
+  if (!filas[r.id]) {
+    const l = _fila_lead(m, r.lead_id), ini = flotante(g(l, 'monto_inicial') || 0);
+    filas[r.id] = ini > 0 ? [{ id: r.id * 100, reserva_id: r.id, servicio_id: null, monto_usd: ini, monto_original: ini, moneda: 'USD',
+      tasa_usd_ves: null, tasa_tipo: null, metodo: 'Zelle', referencia: 'ZL-' + r.id, nota: 'Inicial reserva', fecha: r.fecha_cierre,
+      asesor: r.asesor, comprobante_path: null, anulado_en: null, documentos_estado: 'listo', recibo_documento_id: null }] : [];
+  }
+  return filas[r.id];
+}
+
+
+function reserva_abonos_lista(m, a) {
+  const r = _reservas(m).find(x => x.id === entero(g(a, 'p_reserva_id') || 0));
+  if (!r) return { ok: false, error: 'Reserva no encontrada' };
+  const abonos = _abonos_reserva(m, r), det = reserva_detalle(m, a);
+  const servicios = det.servicios.map(s => ({ id: s.id, tipo: s.tipo, descripcion: s.descripcion, precio_usd: s.precio_usd_centavos / 100 }))
+    .sort((x, y) => (x.tipo !== 'hospedaje') - (y.tipo !== 'hospedaje') || x.id - y.id);
+  return { ok: true, reserva_id: r.id, codigo: r.codigo, monto_total: r.monto_total, monto_pagado: r.monto_pagado,
+    saldo_pendiente: r.saldo_pendiente, pagado_con_detalle: rd(abonos.filter(x => !x.anulado_en).reduce((s, x) => s + x.monto_usd, 0), 2),
+    tasa_ves: TASA_VES, tasas: { USD: { tasa: TASA_VES, actualizado_en: hace(3) } }, voucher: {}, voucher_importado: {},
+    abonos: [...abonos].reverse(), servicios };
+}
+
+
+function registrar_abono_reserva_v2(m, a) {
+  const r = _reservas(m).find(x => x.id === entero(g(a, 'p_reserva_id') || 0));
+  if (!r) return { ok: false, error: 'Reserva no encontrada' };
+  const l = _fila_lead(m, r.lead_id), orig = flotante(g(a, 'p_monto_original') || 0), ves = g(a, 'p_moneda') === 'VES';
+  if (!(orig > 0)) return { ok: false, error: 'monto_invalido' };
+  const usd = rd(ves ? orig / TASA_VES : orig, 2);
+  if (usd > r.saldo_pendiente + 0.005) return { ok: false, error: 'monto_supera_saldo' };
+  const abonos = _abonos_reserva(m, r);
+  const ab = { id: r.id * 100 + abonos.length + 1, reserva_id: r.id, servicio_id: g(a, 'p_servicio_id') ?? null, monto_usd: usd, monto_original: orig,
+    moneda: ves ? 'VES' : 'USD', tasa_usd_ves: ves ? TASA_VES : null, tasa_tipo: ves ? g(a, 'p_tasa_tipo') || 'USD' : null,
+    metodo: g(a, 'p_metodo'), referencia: g(a, 'p_referencia'), nota: g(a, 'p_nota'), fecha: iso(AHORA), asesor: r.asesor,
+    comprobante_path: g(a, 'p_comprobante_path'), anulado_en: null, documentos_estado: 'listo', recibo_documento_id: null };
+  abonos.push(ab);
+  l.monto_inicial = rd(flotante(g(l, 'monto_inicial') || 0) + usd, 2);
+  l.restante_pago = Math.max(flotante(g(l, 'total') || g(l, 'monto') || 0) - l.monto_inicial, 0);
+  if (l.restante_pago === 0) l.monto_completo = flotante(g(l, 'total') || 0);
+  return { ok: true, abono_id: ab.id, monto_usd: usd, monto_original: orig, moneda: ab.moneda, tasa_usd_ves: ab.tasa_usd_ves,
+    tasa_tipo: ab.tasa_tipo, metodo: ab.metodo, referencia: ab.referencia, servicio_id: ab.servicio_id,
+    monto_pagado: l.monto_inicial, saldo_pendiente: rd(r.monto_total - l.monto_inicial, 2) };
+}
+
+
 function estadisticas_asesor(m, a) {
   const leads = m.tablas.leads;
   const atendidos = leads.filter(l => !['POR ATENDER', 'NUMERO INVALIDO'].includes(l.estado));
@@ -996,7 +1045,8 @@ const RPCS_ASESOR = {
   actualizar_lead, reportar_telefono_incorrecto,
   fijar_proxima_accion, guardar_notas_lead,
   registrar_cotizacion_enviada, enviar_a_facturacion, emitir_pago,
-  registrar_abono_venta, estadisticas_asesor,
+  registrar_abono_venta, reserva_abonos_lista, registrar_abono_reserva_v2, estadisticas_asesor,
+  abono_documentos_registrar: (m, a) => OK, registrar_documento: (m, a) => ({ ok: true, documento_id: null }),
   usuarios_chat: (m, a) => [{ id: USUARIOS.admin.id, nombre: 'Admin Demo', rol: 'admin' }],
   mis_ventas, postventa_bandeja, postventa_resumen,
   reserva_detalle, reserva_checklist, comision_ventas_listar, comision_contexto,
@@ -1103,7 +1153,9 @@ function asistente_admin(m, body) {
 
 
 const FUNCIONES = { 'repartir-numeros': repartir_numeros, 'voz-ia-referencia': voz_ia_referencia, 'reasignar-lead': reasignar_lead,
-  'asistente-admin': asistente_admin, 'crear-personal': crear_personal };
+  'asistente-admin': asistente_admin, 'crear-personal': crear_personal,
+  // Firma de subida para el recibo y el voucher del abono (abonos.js): sin path, supabase-js revienta en uploadToSignedUrl.
+  'reservas-documentos': (m, a) => g(a, 'accion') === 'subir' ? { ok: true, path: `${entero(g(a, 'reserva_id') || 0)}/${g(a, 'tipo') || 'doc'}-${Date.now()}.pdf`, token: 'prueba' } : OK };
 
 window.PRUEBA_RPCS = { RPCS, FUNCIONES };
 })();
