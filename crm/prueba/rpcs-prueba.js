@@ -1054,11 +1054,11 @@ const RPCS_ASESOR = {
   listar_mis_clientes_asignados, listar_leads_en_facturacion,
   listar_destinos, stop_sales_vigentes,
   stop_sales_pdf_actual: (m, a) => [{ storage_path: `stop-sales/${dia()}.pdf`, creado_en: hace(5), creado_por: 'Admin Demo' }],
-  hot_sales_publicas: (m, a) => [[514, 'Margarita'], [509, 'Los Roques'], [504, 'Coche']].map(([t, d], j) => { const i = j + 1;
+  hot_sales_publicas: (m, a) => m.real ? window.PRUEBA_TARIFARIO_REAL.hotSales : [[514, 'Margarita'], [509, 'Los Roques'], [504, 'Coche']].map(([t, d], j) => { const i = j + 1;
     return { id: t, posicion: i, manual: i === 1, destino: d, nino_gratis: t === 514 }; }),
   notas_para_repasar_hoy: (m, a) => [
-    { id: '0de00000-0000-4000-8000-0000000a07e1', titulo: 'Cotizá con fotos', nivel: 1, etiquetas: ['ventas'],
-      cuerpo: 'Las cotizaciones que van con fotos del hotel se responden más rápido. Usá la Galería antes de mandar el precio.' }],
+    { id: '0de00000-0000-4000-8000-0000000a07e1', titulo: 'Cotiza con fotos', nivel: 1, etiquetas: ['ventas'],
+      cuerpo: 'Las cotizaciones que van con fotos del hotel se responden más rápido. Usa la Galería antes de mandar el precio.' }],
   asistente_mi_vinculo: (m, a) => ({ vinculado: true, vinculado_en: hace({ dias: 20 }) }),
   asistente_acciones_listar,
   lyra_memoria_listar: (m, a) => [

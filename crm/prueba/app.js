@@ -36,7 +36,7 @@ const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
 // espejado (ver workers/fotos). La query no toca la clave de R2 -- el Worker
 // solo mira el pathname -- así que no invalida la caché del servidor.
 const FOTOS_VERSION = '?v=2';
-const fotoMini = (storagePath, ancho) => /^h\//.test(storagePath) ? 'prueba-fotos/' + storagePath : 'prueba-fotos/f' + (String(storagePath).split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % 6 + 1) + '.jpg';
+const fotoMini = (storagePath, ancho) => window.__pruebaFotoReal?.(storagePath, ancho) || (/^h\//.test(storagePath) ? 'prueba-fotos/' + storagePath : 'prueba-fotos/f' + (String(storagePath).split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 0) % 6 + 1) + '.jpg');
 // Lightbox y galerías: resolución original (q86) servida por R2 en vez del
 // original de Supabase. Casi ningún original pasa de 2048 de ancho.
 const fotoGrande = storagePath => fotoMini(storagePath, 2048);
@@ -300,7 +300,7 @@ const CLIENT_ICONS = ['fa-umbrella-beach', 'fa-plane-departure', 'fa-suitcase-ro
 const CLIENT_COLORS = ['#ff9100', '#4a9eff', '#10b981', '#a06bff', '#f5b544', '#ff5c8a', '#22c1c3', '#7c93ff'];
 const seedHash = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 const clientAvatar = l => { const h = seedHash(l.id ?? l.telefono ?? l.nombre); return { icon: CLIENT_ICONS[h % CLIENT_ICONS.length], color: CLIENT_COLORS[(h >> 3) % CLIENT_COLORS.length] }; };
-const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], ads: ['Anuncios Meta', 'Gasto de Meta cruzado con leads y ventas del CRM'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Generá el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
+const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', 'Resumen general · Destino y Eventos Lotus 360'], leads: ['Leads', 'Base de datos de clientes y prospectos'], 'mis-notas': ['Mis Notas', 'Tu libreta: lo que te cuesta, para repasarlo'], 'clientes-asignados': ['Clientes Asignados', 'Los clientes que te asignaron para atender'], ranking: ['Ranking de asesores', 'Desempeño del equipo comercial'], pipeline: ['Pipeline', 'Ciclo de vida del lead'], postventa: ['Reservas', 'Servicios, pasajeros, documentos, cobros y seguimiento del viaje'], balance: ['Balance', 'Ventas, costos, gastos y utilidad por periodo'], facturacion: ['Facturación', 'Facturas, comisiones y % por asesor'], 'informe-diario': ['Informe Diario', 'Resumen de cierre de jornada de cada asesor'], tarifario: ['Tarifario', 'Hoteles, paquetes, excursiones, traslados y promociones vigentes'], galeria: ['Galería', 'Fotos de promociones, hoteles, paquetes y excursiones'], redes: ['Redes', 'Métricas de Instagram y análisis con IA'], ads: ['Anuncios Meta', 'Gasto de Meta cruzado con leads y ventas del CRM'], mensajes: ['Mensajes', 'Chat interno del equipo — individual y grupo Comunidad'], whatsapp: ['WhatsApp', 'Chats del bot de ventas, por número'], voucher: ['Voucher', 'Genera el voucher de servicio (hospedaje, excursiones, traslados) en PDF para el cliente'], 'cotizacion-boletos': ['Cotizaciones', 'Hospedaje, paquetes, tours y boletos en un PDF'],
   tareas: ['Tareas', 'Tu día: lo asignado y tus recordatorios'],
   comisiones: ['Comisiones', 'Se calculan solas al pagarse la reserva · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
@@ -317,15 +317,15 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   apartamentos: ['Apartamentos', 'Casas y posadas con apartamentos propios: unidades, habitaciones y fotos'],
   proveedores: ['Proveedores','A quién le compra Lotus y cuánto margen deja cada uno'],
   asistente: ['Asistente', 'Revisa reservas, carga servicios y pasajeros, deja notas y escribe a proveedores -- con tus permisos'],
-  'consultor-ia': ['Consultor IA', 'Preguntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
-  'voz-ia': ['Voz IA', 'Probá la voz clonada de la jefa y controlá la muestra de referencia que usa la IA'],
-  'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobrás comisión'],
+  'consultor-ia': ['Consultor IA', 'Pregúntale sobre arquitectura, decisiones y el estado del CRM ahora mismo -- sin gastar Claude Code'],
+  'voz-ia': ['Voz IA', 'Prueba la voz clonada de la jefa y controla la muestra de referencia que usa la IA'],
+  'web-reasignados': ['Web y Reasignados', 'Los leads que entraron por la página o se reasignaron -- los dos orígenes por los que cobras comisión'],
   'contactos-directos': ['Contactos directos', 'Escribieron directo por WhatsApp (bio-redes, IA) -- registro, no se gestionan desde acá'],
-  repartir: ['Repartir números', 'Pegá números o capturas de clientes que te escribieron directo y repartilos entre los asesores'],
+  repartir: ['Repartir números', 'Pega números o capturas de clientes que te escribieron directo y repártelos entre los asesores'],
   'stop-sales': ['Stop Sales', 'Disponibilidad de hoteles por destino: noches sin cupo o pendientes de confirmar'],
   manual: ['Videotutoriales', 'Lyra te explica cada parte del CRM, paso a paso'],
   actualizaciones: ['Actualizaciones', 'Todo lo que se agregó y mejoró en el CRM, con fecha'],
-  pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verificá el comprobante antes de aprobar'] };
+  pagos: ['Pagos por verificar', 'Links de pago que un cliente declaró como pagados -- verifica el comprobante antes de aprobar'] };
 // Sección sin entrada en TITLES: usa label/sub de NAV_ITEMS antes de caer en Dashboard.
 const tituloSeccion = sec => { if (TITLES[sec]) return TITLES[sec]; const n = NAV_ITEMS.find(it => it.sec === sec); return n ? [n.label, n.sub || ''] : TITLES.dashboard; };
 const initials =s => (s || '?').split(' ').filter(Boolean).slice(0, 2).map(w => [...w][0]).join('').toUpperCase();
@@ -688,7 +688,7 @@ function openPerfilDrawer() {
     ${ROL_REAL === 'admin' ? `
     <div class="edit-box" style="margin-top:16px" id="perfil-gp-tabs">
       <div class="eb-title"><i class="fas fa-people-group"></i> Secciones de Gestión de Personal</div>
-      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Por defecto quedan ocultas. Activá las pestañas que quieras ver en Equipo → Gestión de Personal.</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Por defecto quedan ocultas. Activa las pestañas que quieras ver en Equipo → Gestión de Personal.</div>
       ${GP_TABS_OPCIONALES.map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
         <span style="font-size:13px">${o.label}<small style="display:block;color:var(--muted);margin-top:2px">${o.desc}</small></span>
         <button type="button" class="tas-toggle" data-gp-extra="${o.tab}" aria-label="Mostrar ${o.label}"></button>
@@ -697,7 +697,7 @@ function openPerfilDrawer() {
     ${ROL_REAL === 'admin' ? `
     <div class="edit-box" style="margin-top:16px">
       <div class="eb-title"><i class="fas fa-eye"></i> Vista previa de rol</div>
-      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Ver el CRM como lo ve otro rol, para revisar y corregir errores. No cambia tus permisos reales -- seguís pudiendo hacer todo como admin mientras la usás.</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Ver el CRM como lo ve otro rol, para revisar y corregir errores. No cambia tus permisos reales -- sigues pudiendo hacer todo como admin mientras la usas.</div>
       <div class="seg-group" id="perfil-vista-rol" style="margin-bottom:0;flex-wrap:wrap">
         ${VISTA_ROL_OPCIONES.map(r => `<button type="button" data-v="${r}" class="seg${(VISTA_SIM || ROL_REAL) === r ? ' on' : ''}">${esc(VISTA_ROL_LABEL[r])}</button>`).join('')}
       </div>
@@ -710,7 +710,7 @@ function openPerfilDrawer() {
         <button type="button" class="tas-toggle" id="perfil-notif-leads"></button>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
-        <span style="font-size:13px">Correo<small style="display:block;color:var(--muted);margin-top:2px">Correo nuevo de un cliente (si tenés Gmail conectado)</small></span>
+        <span style="font-size:13px">Correo<small style="display:block;color:var(--muted);margin-top:2px">Correo nuevo de un cliente (si tienes Gmail conectado)</small></span>
         <button type="button" class="tas-toggle" id="perfil-notif-correo"></button>
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -900,7 +900,7 @@ async function actualizarTogglesNotif() {
     const bloqueado = estado.soportado && estado.permiso === 'denied';
     btn.disabled = bloqueado;
     btn.title = bloqueado
-      ? 'Bloqueado en el navegador: tocá el candado junto a la dirección y permití las notificaciones.'
+      ? 'Bloqueado en el navegador: toca el candado junto a la dirección y permite las notificaciones.'
       : '';
     btn.onclick = async () => {
       btn.disabled = true;
@@ -1299,7 +1299,7 @@ async function confirmarNuevaTarea() {
   const titulo = val('nt-titulo');
   if (!titulo || !titulo.trim()) { err.textContent = 'El título es obligatorio.'; return; }
   const asesorId = val('nt-freelancer');
-  if (!asesorId) { err.textContent = 'Elegí a quién asignarla.'; return; }
+  if (!asesorId) { err.textContent = 'Elige a quién asignarla.'; return; }
   const venceInput = val('nt-vence');
   const btn = document.getElementById('nt-confirmar');
   btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creando...';
@@ -1551,7 +1551,7 @@ async function activarNotificaciones(nombre) {
     // nadie: hay que nombrar el ajuste exacto.
     const crudo = `${(e && e.name) || ''} ${(e && e.message) || e || ''}`.trim();
     errToast(/push service error/i.test(crudo)
-      ? 'Tu navegador tiene bloqueado el servicio de push. En Brave: abrí brave://settings/privacy, activá "Usar los servicios de Google para la mensajería push" y reiniciá el navegador.'
+      ? 'Tu navegador tiene bloqueado el servicio de push. En Brave: abre brave://settings/privacy, activa "Usar los servicios de Google para la mensajería push" y reinicia el navegador.'
       : `No se pudieron activar ${nombre.toLowerCase()}: ${crudo}`);
     return false;
   }
@@ -1652,9 +1652,9 @@ async function renderAvisosPushUI() {
   const faltaInstalar = esIOS() && !pwaInstalada();
   const mostrar = (estado.soportado || faltaInstalar) && !estado.activo && !MI_PREFERENCIAS.push_rechazado;
   const texto = faltaInstalar
-    ? 'En iPhone: tocá Compartir y "Agregar a inicio"; activalos desde ese ícono.'
+    ? 'En iPhone: toca Compartir y "Agregar a inicio"; actívalos desde ese ícono.'
     : (bloqueado
-      ? 'Avisos bloqueados: permitilos desde el candado junto a la dirección.'
+      ? 'Avisos bloqueados: permítelos desde el candado junto a la dirección.'
       : (puedeRecibirAsistencia()
         ? 'Activa los avisos de leads, tareas y asistencia.'
         : (vende ? 'Activa los avisos de leads nuevos y tareas.' : 'Activa los avisos de tus tareas.')));
@@ -2087,9 +2087,9 @@ async function loadAsesoresPruebaTab() {
 }
 async function contarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor.'; return; }
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor.'; return; }
   const f = apFiltros();
-  if (!f.p_estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
+  if (!f.p_estados.length) { err.textContent = 'Elige al menos un estado.'; return; }
   const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: asesorPruebaSeleccionado, ...f, p_estados: f.p_estados, p_destinos: f.p_destinos.length ? f.p_destinos : null });
   if (error || !data?.ok) { err.textContent = error?.message || 'No se pudo contar.'; return; }
   document.getElementById('ap-conteo').textContent = `${data.cantidad} lead(s) matchean el filtro.`;
@@ -2098,7 +2098,7 @@ async function contarLotePrueba() {
 async function previewLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
   const f = apFiltros();
-  if (!f.p_estados.length) { err.textContent = 'Elegí al menos un estado.'; return; }
+  if (!f.p_estados.length) { err.textContent = 'Elige al menos un estado.'; return; }
   const { data, error } = await sb.rpc('listar_candidatos_lote_prueba', { ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null });
   const wrap = document.getElementById('ap-preview-wrap');
   if (error) { err.textContent = error.message || 'No se pudo listar.'; return; }
@@ -2112,17 +2112,17 @@ async function previewLotePrueba() {
       <td>${esc((l.fecha_creacion || '').slice(0, 10))}</td>
     </tr>`).join('')}</tbody></table></div>`;
   AP_CANDIDATOS_SEL = leads.map(l => l.id);
-  document.getElementById('ap-conteo').textContent = `${leads.length} lead(s) en la lista (destildá los que no querés incluir).`;
+  document.getElementById('ap-conteo').textContent = `${leads.length} lead(s) en la lista (desmarca los que no quieras incluir).`;
   document.getElementById('ap-asignar').disabled = false;
 }
 async function asignarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elegí un asesor.'; return; }
+  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor.'; return; }
   const venceAt = apVenceAt();
-  if (venceAt === undefined) { err.textContent = 'Elegí el plazo para contactarlos.'; return; }
+  if (venceAt === undefined) { err.textContent = 'Elige el plazo para contactarlos.'; return; }
   const f = apFiltros();
   const cantidad = parseInt(document.getElementById('ap-cantidad').value, 10);
-  if (isNaN(cantidad) || cantidad < 1) { err.textContent = 'Elegí una cantidad válida (mínimo 1).'; return; }
+  if (isNaN(cantidad) || cantidad < 1) { err.textContent = 'Elige una cantidad válida (mínimo 1).'; return; }
   // Los destildados de la vista previa viajan como p_lead_ids: sin esto la
   // selección manual no salía del navegador y el RPC repartía los primeros
   // `cantidad` del filtro, no los que quedaron tildados.
@@ -2560,7 +2560,7 @@ function abrirEditorPersona(usuarioId, desdeFicha) {
     <section class="gpf-sec">
       <div class="gpf-sec-t"><i class="fas fa-key"></i> Permisos</div>
       ${permiso('pe-freelancer', u.es_freelancer, 'Freelancer', 'Se bloquea a los 15 min sin actividad.')}
-      ${permiso('pe-boleteria', u.es_boleteria, 'Agente de boletería', 'Atiende la cola de solicitudes de vuelos. Para un asesor, elegí el rol «Asesor + Boletería».')}
+      ${permiso('pe-boleteria', u.es_boleteria, 'Agente de boletería', 'Atiende la cola de solicitudes de vuelos. Para un asesor, elige el rol «Asesor + Boletería».')}
       ${permiso('pe-voucher', u.ve_voucher, 'Ve vouchers', 'Accede a la sección de vouchers.')}
       ${permiso('pe-informe', u.ve_informe_diario, 'Ve informe diario', 'Recibe y consulta el informe del día.')}
     </section>
@@ -2622,7 +2622,7 @@ async function restablecerAcceso(usuarioId) {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div><div class="dn">Acceso restablecido</div><div class="dm">${esc(u.nombre)}</div></div></div>
     <div class="edit-box" style="margin-top:16px;border-color:rgba(34,197,94,.4)">
-      <div style="font-size:13px;line-height:1.6">Pasale esta contraseña por un canal privado.${password ? ' Fue definida por el administrador.' : ' <b>Se muestra una sola vez</b> y deberá cambiarla al iniciar sesión.'}</div>
+      <div style="font-size:13px;line-height:1.6">Pásale esta contraseña por un canal privado.${password ? ' Fue definida por el administrador.' : ' <b>Se muestra una sola vez</b> y deberá cambiarla al iniciar sesión.'}</div>
       <div class="pn-cred"><span>Usuario</span><b>${esc(data.username)}</b></div>
       <div class="pn-cred"><span>Contraseña temporal</span><b>${esc(data.password_temporal)}</b></div>
       <button class="dbtn gh" id="pe-copiar-reset" type="button"><i class="fas fa-copy"></i> Copiar</button>
@@ -2702,28 +2702,28 @@ async function guardarPersona(usuarioId) {
 
 const ERR_PERSONAL = {
   correo_invalido: 'El correo no es válido.',
-  no_podes_cambiar_tu_propio_rol: 'No podés cambiarte el rol a vos mismo — pedíselo a otro admin.',
-  no_podes_darte_de_baja_a_vos_mismo: 'No podés darte de baja a vos mismo.',
-  es_el_ultimo_admin: 'Es el único admin que queda. Nombrá otro antes de darlo de baja.',
+  no_podes_cambiar_tu_propio_rol: 'No puedes cambiarte el rol a ti mismo — pídeselo a otro admin.',
+  no_podes_darte_de_baja_a_vos_mismo: 'No puedes darte de baja a ti mismo.',
+  es_el_ultimo_admin: 'Es el único admin que queda. Nombra otro antes de darlo de baja.',
   rol_invalido: 'Ese rol no existe.',
   no_existe: 'Esa persona ya no está en el sistema.',
   username_ocupado: 'Ese usuario ya está en uso.',
   username_invalido: 'El usuario solo puede tener letras, números, punto, guion y guion bajo (3 a 32).',
   nombre_invalido: 'El nombre es muy corto.',
   password_invalido: 'La contraseña debe tener al menos 8 caracteres.',
-  no_autorizado: 'Tu sesión expiró. Recargá la página y volvé a entrar.',
-  no_se_pudo_crear_la_cuenta: 'No se pudo crear la cuenta de acceso. Reintentá en unos segundos.',
-  no_se_pudo_registrar_en_el_crm: 'La cuenta se creó pero no se pudo guardar en el CRM. Avisale a Sistemas.',
-  password_requerido: 'Escribí una contraseña antes de guardarla.',
-  no_se_pudo_restablecer: 'No se pudo aplicar la contraseña. Reintentá en unos segundos.',
+  no_autorizado: 'Tu sesión expiró. Recarga la página y vuelve a entrar.',
+  no_se_pudo_crear_la_cuenta: 'No se pudo crear la cuenta de acceso. Reintenta en unos segundos.',
+  no_se_pudo_registrar_en_el_crm: 'La cuenta se creó pero no se pudo guardar en el CRM. Avísale a Sistemas.',
+  password_requerido: 'Escribe una contraseña antes de guardarla.',
+  no_se_pudo_restablecer: 'No se pudo aplicar la contraseña. Reintenta en unos segundos.',
 };
 
 async function bajaPersonal(usuarioId, reactivar) {
   const u = [...personalCache, ...personalBaja].find(x => String(x.usuario_id) === String(usuarioId));
   const esYoMismo = String(usuarioId) === String(MI_USUARIO_ID);
   const detalleBaja = esYoMismo
-    ? 'Te estás dando de baja a vos mismo: perdés el acceso al CRM al instante y solo se puede reponer por SQL, no desde acá. Tu historial no se borra.'
-    : 'Pierde el acceso al CRM al instante. Su historial de asistencia, leads y comisiones NO se borra, y podés reactivarla cuando quieras.';
+    ? 'Te estás dando de baja a ti mismo: pierdes el acceso al CRM al instante y solo se puede reponer por SQL, no desde acá. Tu historial no se borra.'
+    : 'Pierde el acceso al CRM al instante. Su historial de asistencia, leads y comisiones NO se borra, y puedes reactivarla cuando quieras.';
   if (!reactivar && !(await confirmarSheet({ titulo: `¿Dar de baja a ${u?.nombre || 'esta persona'}?`, detalle: detalleBaja, textoOk: 'Dar de baja', destructivo: true }))) return;
   const { data, error } = await sb.rpc('admin_baja_personal', { p_usuario_id: usuarioId, p_reactivar: !!reactivar });
   if (error || !data?.ok) { errToast(ERR_PERSONAL[data?.error] || error?.message || 'No se pudo aplicar'); return; }
@@ -2757,7 +2757,7 @@ function abrirAltaPersona(comoFreelancer) {
         <input id="pn-telegram" class="ei" type="text" placeholder="ID del grupo o chat">
         <label class="fl">Contraseña</label>
         <div class="ei-clave"><input id="pn-password" class="ei" type="password" minlength="8" placeholder="Mínimo 8 caracteres"></div>
-        <div class="form-hint">Si la dejás vacía se genera una temporal y se pide cambiarla al entrar.</div>
+        <div class="form-hint">Si la dejas vacía se genera una temporal y se pide cambiarla al entrar.</div>
       </div>
       <label class="pe-check" style="margin-top:12px"><input type="checkbox" id="pn-freelancer"${comoFreelancer ? ' checked' : ''}> Es freelancer (se bloquea a los 15 min sin actividad)</label>
       <div class="edit-err" id="pn-err"></div>
@@ -2814,7 +2814,7 @@ async function crearPersona() {
   document.getElementById('pn-listo').innerHTML = `
     <div class="edit-box" style="margin-top:14px;border-color:rgba(34,197,94,.4)">
       <div class="eb-title" style="color:var(--green)"><i class="fas fa-circle-check"></i> Cuenta creada</div>
-      <div style="font-size:13px;line-height:1.6">Pasale estos datos por WhatsApp o Telegram. <b>La contraseña se muestra una sola vez</b> — si cerrás esta ventana sin copiarla, hay que resetearla.</div>
+      <div style="font-size:13px;line-height:1.6">Pásale estos datos por WhatsApp o Telegram. <b>La contraseña se muestra una sola vez</b> — si cierras esta ventana sin copiarla, hay que resetearla.</div>
       <div class="pn-cred"><span>Usuario</span><b>${esc(data.username)}</b></div>
       <div class="pn-cred"><span>Contraseña temporal</span><b>${esc(data.password_temporal)}</b></div>
       <div style="font-size:11.5px;color:var(--muted);margin-top:8px">${val('pn-password') ? 'La contraseña fue definida por el administrador.' : 'Se la va a pedir cambiar en el primer ingreso.'}</div>
@@ -3699,19 +3699,19 @@ function pvWhatsappLista() {
       <div>${accion}</div></div>`;
   };
   const tabla = filas => `<div class="pv-wa-th"><span>Cliente</span><span>Asesor</span><span>Fecha</span><span>Estado</span><span>Teléfono</span><span></span></div>
-    ${filas.slice(0, MAX).map(fila).join('')}${filas.length > MAX ? `<div class="ria-sub" style="margin:9px 0 0">Mostrando ${MAX} de ${fmt(filas.length)}. Usá el buscador para acotar.</div>` : ''}`;
+    ${filas.slice(0, MAX).map(fila).join('')}${filas.length > MAX ? `<div class="ria-sub" style="margin:9px 0 0">Mostrando ${MAX} de ${fmt(filas.length)}. Usa el buscador para acotar.</div>` : ''}`;
   if (!(PV_WA_DATA.lista || []).length) { cont.innerHTML = '<div class="ria-vacio">No hay clientes con venta cerrada.</div>'; return; }
   if (!lista.length) { cont.innerHTML = '<div class="ria-vacio">Ningún cliente coincide con la búsqueda.</div>'; return; }
   if (PV_WA_FILTRO !== 'todos') {
     const sel = lista.filter(c => PV_WA_FILTRO === 'elegibles' ? !c.motivo_exclusion : c.motivo_exclusion === PV_WA_FILTRO);
-    cont.innerHTML = sel.length ? tabla(sel) : `<div class="ria-vacio">${PV_WA_FILTRO === 'elegibles' ? `Nadie es elegible con ${PV_WA_DIAS} días. Probá con menos días o revisá los motivos de exclusión.` : 'Ningún cliente en este grupo.'}</div>`;
+    cont.innerHTML = sel.length ? tabla(sel) : `<div class="ria-vacio">${PV_WA_FILTRO === 'elegibles' ? `Nadie es elegible con ${PV_WA_DIAS} días. Prueba con menos días o revisa los motivos de exclusión.` : 'Ningún cliente en este grupo.'}</div>`;
     return;
   }
   const eleg = lista.filter(c => !c.motivo_exclusion);
   const grupos = {};
   lista.filter(c => c.motivo_exclusion).forEach(c => (grupos[c.motivo_exclusion] ||= []).push(c));
   cont.innerHTML = `<div class="pv-wa-sec">Elegibles · ${fmt(eleg.length)}</div>
-    ${eleg.length ? tabla(eleg) : `<div class="ria-vacio">Nadie es elegible con ${PV_WA_DIAS} días. Probá con menos días o abrí los grupos de abajo.</div>`}
+    ${eleg.length ? tabla(eleg) : `<div class="ria-vacio">Nadie es elegible con ${PV_WA_DIAS} días. Prueba con menos días o abre los grupos de abajo.</div>`}
     ${Object.keys(grupos).length ? `<div class="pv-wa-sec">No elegibles · ${fmt(lista.length - eleg.length)}</div>` : ''}
     ${Object.entries(grupos).sort((a, b) => b[1].length - a[1].length).map(([k, fs]) => { const [t, ic, col] = pvWaMotivo(k); return `<details class="pv-wa-grupo" style="--tc:${col}"${q ? ' open' : ''}>
       <summary><i class="fas fa-chevron-right flecha"></i><i class="fas ${ic}"></i>${esc(t)}<small>${fmt(fs.length)} ${fs.length === 1 ? 'cliente' : 'clientes'}</small></summary>
@@ -4477,7 +4477,7 @@ async function pvHabPintar() {
   if (id !== RV_RESERVA_ID || box !== document.getElementById('pv-e-habs')) return;
   box.innerHTML = filas.length ? `<div class="rs-grid2">${filas.map(({ s, d, ops, actual }) => `<div><label class="rs-lbl" for="pv-e-hab-${s.id}">Habitación${filas.length > 1 ? ' · ' + esc(d.hotel) : ''}</label>
     <select class="ei" id="pv-e-hab-${s.id}" data-pv-hab="${s.id}" title="${esc(d.hotel)}">${ops.map(o => `<option value="${esc(o)}"${o === actual ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`).join('')}</div>
-    <div class="csub">Habitaciones del tarifario${filas.length > 1 ? '' : ' de ' + esc(filas[0].d.hotel)}; si no la cambiás, queda la marcada.</div>` : '';
+    <div class="csub">Habitaciones del tarifario${filas.length > 1 ? '' : ' de ' + esc(filas[0].d.hotel)}; si no la cambias, queda la marcada.</div>` : '';
 }
 async function pvGuardarHabitaciones() {
   for (const sel of document.querySelectorAll('#pv-e-habs [data-pv-hab]')) {
@@ -4564,27 +4564,27 @@ const RV_TK_URLS = new Map();
 const RV_TK_LEYENDO = new Set();
 let RV_DOC_IA = {}, RV_TK_IA_CARGANDO = false;
 const RV_ERR = {
-  'no autorizado': 'No tenés permiso sobre esta reserva', no_autorizado: 'No tenés permiso sobre esta reserva',
+  'no autorizado': 'No tienes permiso sobre esta reserva', no_autorizado: 'No tienes permiso sobre esta reserva',
   reserva_no_existe: 'La reserva no existe', servicio_no_existe: 'El servicio ya no existe', servicio_anulado: 'El servicio está anulado',
   ya_anulado: 'Ya estaba anulado', campo_no_permitido: 'Boletería solo cambia localizador y estado',
   tipo_invalido: 'Tipo de servicio inválido', estado_invalido: 'Estado inválido', emision_solo_boleteria: 'Solo boletería marca un boleto como emitido',
   detalle_invalido: 'El detalle del servicio tiene campos inválidos', destino_invalido: 'Destino inválido', rango_invalido: 'La fecha de fin es anterior al inicio',
-  moneda_invalida: 'Moneda inválida', precio_invalido: 'Precio inválido', falta_tasa: 'Esa moneda no tiene tasa cargada: escribila a mano',
+  moneda_invalida: 'Moneda inválida', precio_invalido: 'Precio inválido', falta_tasa: 'Esa moneda no tiene tasa cargada: escríbela a mano',
   total_menor_que_pagado: 'El total quedaría por debajo de lo ya pagado', dato_invalido: 'Algún dato tiene un formato inválido',
-  proveedor_invalido: 'Elegí un proveedor', costo_invalido: 'El costo no puede ser negativo',
+  proveedor_invalido: 'Elige un proveedor', costo_invalido: 'El costo no puede ser negativo',
   porcentaje_invalido: 'El porcentaje va de 0 a 99,99', tarifa_invalida: 'La tarifa no puede ser negativa',
   pasajero_no_existe: 'El pasajero ya no existe', nombre_requerido: 'El nombre es obligatorio', tipo_documento_invalido: 'Tipo de documento inválido',
   fecha_nacimiento_invalida: 'La fecha de nacimiento no puede ser futura', dato_demasiado_largo: 'Algún dato es demasiado largo', datos_invalidos: 'Datos inválidos',
   nombre_invalido: 'Nombre de archivo inválido', formato_invalido: 'Solo PDF, JPG, PNG o WEBP',
   tamano_invalido: 'El archivo supera los 10 MB', ruta_invalida: 'Ruta de archivo inválida', archivo_no_subido: 'El archivo no terminó de subir',
-  ya_registrado: 'Ese archivo ya estaba registrado', documento_no_existe: 'El documento ya no existe', firma_fallida: 'No se pudo firmar el archivo, probá de nuevo',
+  ya_registrado: 'Ese archivo ya estaba registrado', documento_no_existe: 'El documento ya no existe', firma_fallida: 'No se pudo firmar el archivo, prueba de nuevo',
   usar_registrar_evento: 'Cambios y reembolsos se registran con sus botones, no desde el estado', transicion_invalida: 'Ese paso no corresponde al estado actual del boleto',
-  tramo_invalido: 'Revisá las horas: la llegada no cuadra con la salida', aeropuerto_o_aerolinea_invalido: 'Algún código IATA o aerolínea no está en el catálogo',
+  tramo_invalido: 'Revisa las horas: la llegada no cuadra con la salida', aeropuerto_o_aerolinea_invalido: 'Algún código IATA o aerolínea no está en el catálogo',
   demasiados_tramos: 'Máximo 12 tramos por boleto', ticket_duplicado: 'Ese número de ticket ya está cargado en otro boleto', ticket_invalido: 'Número de ticket inválido',
-  pasajero_no_pertenece: 'Ese pasajero no es de esta reserva', monto_invalido: 'Monto inválido', motivo_largo: 'El motivo supera los 300 caracteres', falta_motivo: 'Escribí la nota',
+  pasajero_no_pertenece: 'Ese pasajero no es de esta reserva', monto_invalido: 'Monto inválido', motivo_largo: 'El motivo supera los 300 caracteres', falta_motivo: 'Escribe la nota',
   lead_fuera_de_postventa: 'El cliente todavía no está EN ESPERA DE PAGO ni PAGO REALIZADO: su asesor tiene que moverlo antes de crear la reserva',
   lead_no_coincide: 'La solicitud es de otro cliente', reserva_no_disponible: 'Esa reserva ya no está abierta', solicitud_cerrada: 'La solicitud ya está cerrada',
-  solicitud_no_existe: 'La solicitud ya no existe', falta_lead: 'Elegí el cliente', lead_no_disponible: 'Ese cliente no existe o fue eliminado',
+  solicitud_no_existe: 'La solicitud ya no existe', falta_lead: 'Elige el cliente', lead_no_disponible: 'Ese cliente no existe o fue eliminado',
   tiene_factura: 'Tiene factura registrada: no se puede eliminar', tiene_abonos: 'Tiene abonos vigentes: anúlalos primero',
   tiene_comision: 'Tiene una comisión cargada: recházala o elimínala primero', tiene_pagos_proveedor: 'Ya tiene pagos a proveedor registrados',
   comision_pagada: 'La comisión de esta reserva ya se le pagó al asesor: no se puede eliminar',
@@ -4858,7 +4858,7 @@ function rvDetalleTexto(s) {  return (RV_DETALLE[s.tipo] || []).filter(([k]) => 
 // venta ni tocar facturación. Queda descargado y adjunto a la ficha del servicio.
 async function rvGenerarVoucher(servicioId, btn) {
   const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {}, s0 = (det.servicios || []).find(x => x.id === servicioId);
-  if (!c || !s0) return errToast('No pude leer el servicio. Reabrí la reserva e intentá de nuevo.');
+  if (!c || !s0) return errToast('No pude leer el servicio. Reabre la reserva e intenta de nuevo.');
   const pax = (det.pasajeros || []).filter(p => !p.anulado_en);
   const titular = pax.find(p => p.titular) || pax[0] || null;
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
@@ -4866,7 +4866,7 @@ async function rvGenerarVoucher(servicioId, btn) {
   const hosp = s0.tipo === 'hospedaje' ? s0 : null;
   // El voucher de un hotel lleva su check-in y check-out, no las fechas de todo el viaje.
   const fv = rvVoucherFechasViaje(hosp ? null : c, hosp ? {} : r, hosp);
-  if (s0.precio_usd_centavos == null) return errToast('Cargá el precio del servicio antes de generar su voucher.');
+  if (s0.precio_usd_centavos == null) return errToast('Carga el precio del servicio antes de generar su voucher.');
   const total = Number(s0.precio_usd_centavos) / 100;
   const previo = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Voucher...'; }
@@ -5004,7 +5004,7 @@ function rvVoucherConAbonos(v, servs, abonos, formaPago = '') {
   const totalHosp = servs.reduce((t, s) => t + (Number(s.precio_usd_centavos) || 0), 0) || cent(v.total_general);
   const cobrado = resto.reduce((t, a) => t + cent(a.monto_usd), 0);
   // M4: nunca pagado > total; si pasa, hay un abono mal asignado a un servicio.
-  if (cobrado > totalHosp) errToast('Los abonos suman más que el total de la reserva: revisá los abonos.');
+  if (cobrado > totalHosp) errToast('Los abonos suman más que el total de la reserva: revisa los abonos.');
   const pagado = Math.min(cobrado, totalHosp);
   const dia = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
   const bs = n => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -5063,7 +5063,7 @@ async function rvGenerarVoucherReserva(btn) {
         { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
         { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
         { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
-        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elegí una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
+        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elige una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
         { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
       ],
     });
@@ -5352,7 +5352,7 @@ function rvPagoInit(p, s) {
     const tasa = ab.tasa(val('rv-s-pago-tasa')), monto = Number(val('rv-s-pago-monto') || 0), falta = rvPagoFalta(s);
     document.getElementById('rv-s-pago-eq').textContent = m === 'completo'
       ? (falta == null ? 'Se cobra lo que le falte al servicio (se calcula al guardar).' : `Se cobra lo que le falta al servicio: ${rvUsd(falta)}${ves && tasa ? ` ≈ Bs ${(falta * tasa).toLocaleString('es-VE', { maximumFractionDigits: 2 })}` : ''}.`)
-      : ves && monto ? (tasa ? `Equivale a ${rvUsd(monto / tasa)}` : 'No hay tasa cargada: elegí otra o cobrá en dólares.') : '';
+      : ves && monto ? (tasa ? `Equivale a ${rvUsd(monto / tasa)}` : 'No hay tasa cargada: elige otra o cobra en dólares.') : '';
   };
   p.querySelectorAll('[data-rv-pago-modo]').forEach(b => b.onclick = () => { p.querySelectorAll('[data-rv-pago-modo]').forEach(x => x.classList.toggle('on', x === b)); pintar(); });
   p.querySelectorAll('[data-rv-pago-metodo]').forEach(b => b.onclick = () => {
@@ -5368,14 +5368,14 @@ function rvPagoInit(p, s) {
     aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
     const d = await abonosModulo().analizarCaptura(archivo);
     if (!aviso.isConnected || e.target.files?.[0] !== archivo) return;
-    if (!d) { aviso.textContent = 'No se pudo leer: completá los datos a mano.'; return; }
+    if (!d) { aviso.textContent = 'No se pudo leer: completa los datos a mano.'; return; }
     const puestos = [], monto = document.getElementById('rv-s-pago-monto'), ref = document.getElementById('rv-s-pago-ref');
     if (d.moneda && ['USD', 'VES'].includes(d.moneda) && !monto.value) { document.getElementById('rv-s-pago-moneda').value = d.moneda; puestos.push('moneda'); }
     if (d.monto != null && modo() === 'abono' && !monto.value) { monto.value = d.monto; puestos.push('monto'); }
     if (d.referencia && !ref.value) { ref.value = d.referencia; puestos.push('referencia'); }
     const chip = d.metodo && p.querySelector(`[data-rv-pago-metodo="${CSS.escape(d.metodo)}"]`);
     if (chip) { p.querySelectorAll('[data-rv-pago-metodo]').forEach(x => x.classList.toggle('on', x === chip)); puestos.push('método'); }
-    aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revisalo antes de guardar.` : 'No se encontraron datos en la captura.';
+    aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revísalo antes de guardar.` : 'No se encontraron datos en la captura.';
     pintar();
   };
   pintar();
@@ -5386,10 +5386,10 @@ function rvPagoLeer() {
   if (!m || m === 'no') return null;
   const moneda = val('rv-s-pago-moneda'), metodo = document.querySelector('#rv-s-pago-metodos [data-rv-pago-metodo].on')?.dataset.rvPagoMetodo || '';
   const monto = Number(val('rv-s-pago-monto') || 0);
-  if (m === 'abono' && !(monto > 0)) return { error: 'Escribí el monto del abono (mayor a cero) o elegí «Sin pago ahora».' };
-  if (!metodo) return { error: 'Elegí el método de pago.' };
-  if (metodo === 'Pago móvil' && moneda !== 'VES') return { error: 'El Pago móvil se registra en bolívares: elegí VES.' };
-  if (moneda === 'VES' && !abonosModulo().tasa(val('rv-s-pago-tasa'))) return { error: 'No hay tasa cargada para esa opción: elegí otra o cobrá en dólares.' };
+  if (m === 'abono' && !(monto > 0)) return { error: 'Escribe el monto del abono (mayor a cero) o elige «Sin pago ahora».' };
+  if (!metodo) return { error: 'Elige el método de pago.' };
+  if (metodo === 'Pago móvil' && moneda !== 'VES') return { error: 'El Pago móvil se registra en bolívares: elige VES.' };
+  if (moneda === 'VES' && !abonosModulo().tasa(val('rv-s-pago-tasa'))) return { error: 'No hay tasa cargada para esa opción: elige otra o cobra en dólares.' };
   return { completo: m === 'completo', monto, moneda, metodo, tasaTipo: moneda === 'VES' ? val('rv-s-pago-tasa') : 'USD',
     referencia: val('rv-s-pago-ref').trim(), nota: val('rv-s-pago-nota').trim(), archivo: document.getElementById('rv-s-pago-file')?.files?.[0] || null };
 }
@@ -5406,7 +5406,7 @@ async function rvAptoCampo() {
   const actual = RV_FORM?.id ? RV_APTOS[RV_FORM.id] : null, propio = RV_FORM?.id || null;
   const previo = document.getElementById('rv-s-apto-sel')?.value ?? (actual ? String(actual.apartamento_id) : '');
   const ini = val('rv-s-inicio'), fin = val('rv-s-fin');
-  if (!ini || !fin || fin <= ini) { RV_APTO_UNI = []; box.innerHTML = titulo + '<div class="csub">Elegí llegada y salida para ver qué apartamentos están libres.</div>'; return; }
+  if (!ini || !fin || fin <= ini) { RV_APTO_UNI = []; box.innerHTML = titulo + '<div class="csub">Elige llegada y salida para ver qué apartamentos están libres.</div>'; return; }
   const req = ++RV_APTO_REQ;
   box.innerHTML = titulo + '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Buscando apartamentos libres...</div>';
   const { data, error } = await sb.rpc('apto_disponibilidad', { p_desde: ini, p_hasta: fin });
@@ -5435,7 +5435,7 @@ function rvAptoAviso() {
   const el = document.getElementById('rv-s-apto-aviso'), sel = document.getElementById('rv-s-apto-sel'); if (!el || !sel) return;
   const u = RV_APTO_UNI.find(x => String(x.id) === sel.value), pax = Number(val('rv-s-adultos') || 0) + Number(val('rv-s-ninos') || 0);
   const choca = u && !u.libre;
-  el.textContent = choca ? 'Ese apartamento está ocupado en estas fechas: al guardar se rechaza. Elegí otras fechas u otro apartamento.'
+  el.textContent = choca ? 'Ese apartamento está ocupado en estas fechas: al guardar se rechaza. Elige otras fechas u otro apartamento.'
     : u && u.capacidad_max && pax > u.capacidad_max ? `Ojo: son ${pax} personas y este apartamento admite ${u.capacidad_max}. Se puede guardar igual.` : '';
 }
 // La tasa solo aplica a monedas distintas de USD; vacía = la del día (tasa_por_usd en la base).
@@ -5688,7 +5688,7 @@ async function rvGuardarServicio(btn) {
       if (!String(datos.detalle.ruta || datos.descripcion || '').trim()) { err.textContent = 'Falta la ruta del boleto (ej.: Valencia - Porlamar - Valencia).'; return; }
       if (!String(datos.descripcion || '').trim()) datos.descripcion = String(datos.detalle.ruta).trim();
       if (!tramosPrevios.length && !datos.fecha_inicio) { err.textContent = 'Falta la fecha de ida.'; return; }
-      if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_fin) { err.textContent = 'Para ida y vuelta cargá la fecha de vuelta.'; return; }
+      if (!tramosPrevios.length && datos.detalle.ida_vuelta && !datos.fecha_fin) { err.textContent = 'Para ida y vuelta carga la fecha de vuelta.'; return; }
     }
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
     if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
@@ -5732,7 +5732,7 @@ async function rvGuardarServicio(btn) {
   else okToast((id ? 'Servicio actualizado' : 'Servicio agregado') + aviso);
   if (pago && sid) {
     // El servicio ya quedó: si el pago falla se avisa y se lleva a Abonos (no se vuelve a guardar el servicio).
-    const ok = await abonosModulo().pagarServicio(RV_RESERVA_ID, { ...pago, servicio: sid }, m => { if (m) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}, pero el pago no se registró: ${m}. Cargalo desde Abonos.`); });
+    const ok = await abonosModulo().pagarServicio(RV_RESERVA_ID, { ...pago, servicio: sid }, m => { if (m) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}, pero el pago no se registró: ${m}. Cárgalo desde Abonos.`); });
     if (!ok) rvTab('abonos');
   }
 }
@@ -5745,7 +5745,7 @@ function rvFormCosto(p) {
   const auto = s.costo_centavos == null || s.costo_auto !== false;
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-lock"></i> Neto y proveedor · ${esc(rvServicioNombre(s))}</div>
     <div class="csub">Solo lo ven admin y administración. Venta: ${rvMonto(s.precio_usd_centavos, 'USD')}</div>
-    <label class="fl">Proveedor</label><select class="ei" id="rv-c-prov"><option value="">Elegí un proveedor</option>${provs}</select>
+    <label class="fl">Proveedor</label><select class="ei" id="rv-c-prov"><option value="">Elige un proveedor</option>${provs}</select>
     <div class="rv-modo seg-group seg-group-sm"><button class="seg${auto ? ' on' : ''}" type="button" data-rv-modo="auto">Neto automático</button><button class="seg${auto ? '' : ' on'}" type="button" data-rv-modo="manual">Neto manual</button></div>
     <div id="rv-c-auto" ${auto ? '' : 'hidden'}><div class="csub" id="rv-c-auto-txt"></div></div>
     <div id="rv-c-manual" ${auto ? 'hidden' : ''}><div class="rv-3"><div><label class="fl">Neto</label><input class="ei" id="rv-c-costo" type="number" min="0" step="0.01" value="${s.costo_centavos != null ? s.costo_centavos / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-c-moneda">${rvMonedaOpts(s.costo_moneda || 'USD')}</select></div><div id="rv-c-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-c-tasa" type="number" min="0" step="any" value="${s.costo_moneda && s.costo_moneda !== 'USD' ? esc(s.costo_tasa) : ''}" placeholder="Automática"></div></div></div>
@@ -5761,8 +5761,8 @@ function rvFormCosto(p) {
     document.getElementById('rv-c-auto-txt').textContent = traslado && prov?.tarifa_base_centavos != null
       ? `Neto = tarifa base de ${prov.nombre}: ${rvMonto(prov.tarifa_base_centavos, 'USD')}`
       : pct != null ? `Neto = venta − ${Number(pct).toLocaleString('es-VE')}% de margen: ${rvMonto(Math.round(venta * (1 - pct / 100)), 'USD')}`
-      : traslado ? 'Este proveedor no tiene tarifa base: cargala en Proveedores → Márgenes o usá neto manual.'
-      : 'Este tipo de servicio no tiene % cargado: configuralo en Proveedores → Márgenes o usá neto manual.';
+      : traslado ? 'Este proveedor no tiene tarifa base: cárgala en Proveedores → Márgenes o usa neto manual.'
+      : 'Este tipo de servicio no tiene % cargado: configúralo en Proveedores → Márgenes o usa neto manual.';
   };
   document.getElementById('rv-c-prov').onchange = pista; pista();
 }
@@ -5781,7 +5781,7 @@ async function rvGuardarCosto(btn, quitar) {
     if (!(await confirmarSheet({ titulo: '¿Quitar costo y proveedor?', detalle: 'El servicio queda sin costo cargado.', textoOk: 'Quitar', destructivo: true }))) return;
   } else {
     if (!val('rv-c-prov')) { err.textContent = RV_ERR.proveedor_invalido; return; }
-    if (costo === '' || !(Number(costo) >= 0)) { err.textContent = 'Escribí el costo (0 o más)'; return; }
+    if (costo === '' || !(Number(costo) >= 0)) { err.textContent = 'Escribe el costo (0 o más)'; return; }
     Object.assign(args, { p_proveedor_id: Number(val('rv-c-prov')), p_costo: Number(costo), p_moneda: moneda, p_tasa: moneda !== 'USD' && val('rv-c-tasa') !== '' ? Number(val('rv-c-tasa')) : null });
   }
   if (!(await rvEnviar(btn, sb.rpc('guardar_costo_servicio', args)))) return;
@@ -5913,8 +5913,8 @@ async function rvGuardarTramos(btn) {
 async function rvCrearTramosBoleto(servicioId, datos) {
   if (!bolCatalogo) await bolAsegurarCatalogo();
   const iatas = rvRutaIatas(datos.detalle?.ruta || datos.descripcion || '');
-  if (iatas.length < 2) return { aviso: 'No reconocí los aeropuertos en la ruta: cargá los tramos a mano.' };
-  if (iatas.length > 2 && !(iatas.length === 3 && iatas[0] === iatas[2])) return { aviso: 'La ruta tiene varias escalas: completá los tramos a mano.' };
+  if (iatas.length < 2) return { aviso: 'No reconocí los aeropuertos en la ruta: carga los tramos a mano.' };
+  if (iatas.length > 2 && !(iatas.length === 3 && iatas[0] === iatas[2])) return { aviso: 'La ruta tiene varias escalas: completa los tramos a mano.' };
   const ida = String(datos.fecha_inicio || '').slice(0, 10), vuelta = String(datos.fecha_fin || '').slice(0, 10);
   const hIda = String(datos.hora_ida || '').slice(0, 5), hVuelta = String(datos.hora_vuelta || '').slice(0, 5);
   if (!ida) return { aviso: 'Falta la fecha de ida para armar los tramos.' };
@@ -5968,7 +5968,7 @@ function rvTicketsDocsHtml(s) {
         <div class="rv-meta"><span>${rvPeso(Number(d.tamano_bytes || 0))}</span><span>${pvFecha(d.created_at)}${d.subido_por ? ' · ' + esc(d.subido_por) : ''}</span></div>
         ${pas.length ? `<div class="rv-tk-pas">${pas.map(p => `<span class="rv-tk-chip"><i class="fas fa-user"></i>${esc([p.nombre, p.apellido].filter(Boolean).join(' '))}${p.numero_ticket ? ' · <b>' + esc(p.numero_ticket) + '</b>' : ''}</span>`).join('')}</div>`
           : leyendo ? '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Leyendo el ticket…</div>'
-          : `<div class="csub">${ia ? 'No detecté pasajeros en este ticket' : 'Sin lectura: probá Releer'}</div>`}
+          : `<div class="csub">${ia ? 'No detecté pasajeros en este ticket' : 'Sin lectura: prueba Releer'}</div>`}
         ${det ? `<div class="rv-tk-det">${esc(det)}</div>` : ''}
         <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}">${docBotonVer()}</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
       </div>
@@ -6009,7 +6009,7 @@ function rvFormTickets(p) {
   p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-ticket"></i> Tickets · ${esc(s.detalle?.ruta || s.descripcion || 'Boleto aéreo')}</div>
     ${pax.length ? pax.map(x => `<label class="fl">${esc([x.nombre, x.apellido].filter(Boolean).join(' '))}</label><input class="ei" data-pax="${x.id}" data-antes="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" maxlength="30" value="${esc(tk.find(b => b.pasajero_id === x.id)?.numero_ticket || '')}" placeholder="Número de ticket (vacío = sin ticket)">`).join('') : ''}
     <div class="rv-bol-t"><i class="fas fa-cloud-arrow-up"></i> Subir tickets</div>
-    <div class="rv-tk-drop" id="rv-tk-drop" role="button" tabindex="0"><i class="fas fa-file-circle-plus"></i><div><span id="rv-tk-txt">Arrastrá las fotos, pegá con Ctrl+V o hacé clic</span><small>PDF, JPG, PNG o WEBP · hasta 10 MB · podés subir varios</small></div></div>
+    <div class="rv-tk-drop" id="rv-tk-drop" role="button" tabindex="0"><i class="fas fa-file-circle-plus"></i><div><span id="rv-tk-txt">Arrastra las fotos, pega con Ctrl+V o haz clic</span><small>PDF, JPG, PNG o WEBP · hasta 10 MB · puedes subir varios</small></div></div>
     <input class="rv-tk-file" id="rv-tk-file" type="file" accept="${RV_DOC_MIMES.join(',')}" multiple>
     <div class="rv-tk-estado" id="rv-tk-estado"></div>
     <div id="rv-tk-lista">${rvTicketsDocsHtml(s)}</div>
@@ -6345,7 +6345,7 @@ async function rvLeerDocumento(p, archivo, aplicar) {
   const { data, error } = imagen ? await sb.functions.invoke('analizar-documento-identidad', { body: { reserva_id: RV_RESERVA_ID, mime: archivo.type || 'image/jpeg', imagen } }) : { data: null };
   if (!p.isConnected) return;
   txt.textContent = 'Leer cédula o pasaporte';
-  if (error || !data?.ok) { msg.textContent = data?.error === 'no_es_documento' ? 'Esa foto no parece un documento de identidad.' : 'No se pudo leer: completá a mano.'; return; }
+  if (error || !data?.ok) { msg.textContent = data?.error === 'no_es_documento' ? 'Esa foto no parece un documento de identidad.' : 'No se pudo leer: completa a mano.'; return; }
   const d = data.datos, poner = (id, v) => { const el = p.querySelector('#rv-p-' + id); if (el && v) el.value = v; };
   poner('nombre', d.nombre); poner('apellido', d.apellido); poner('nacionalidad', d.nacionalidad);
   if (RV_TIPO_DOC[d.tipo_documento]) p.querySelector('#rv-p-tipodoc').value = d.tipo_documento;
@@ -6353,12 +6353,12 @@ async function rvLeerDocumento(p, archivo, aplicar) {
   registrarUsoHerramienta(null, 'leer_documento', RV_RESERVA_ID);
   if (d.nacionalidad) p.querySelector('details.rs-mas')?.setAttribute('open', '');
   const vence = d.vencimiento && new Date(d.vencimiento) < new Date(Date.now() + 180 * 864e5) ? ` Ojo: vence el ${d.vencimiento}.` : '';
-  msg.textContent = `Datos leídos del documento${d.confianza < 0.6 ? ' (foto poco clara)' : ''}: revisalos y guardá.${vence}`;
+  msg.textContent = `Datos leídos del documento${d.confianza < 0.6 ? ' (foto poco clara)' : ''}: revísalos y guarda.${vence}`;
 }
 async function rvPasajeroRapido(btn) {
   const err = document.getElementById('rv-q-err') || document.getElementById('rv-f-err');
   const nom = val('rv-p-q-nombre').trim().replace(/\s+/g, ' '), ced = val('rv-p-q-cedula').trim();
-  if (!nom) { err.textContent = 'Escribí el nombre del acompañante'; document.getElementById('rv-p-q-nombre')?.focus(); return; }
+  if (!nom) { err.textContent = 'Escribe el nombre del acompañante'; document.getElementById('rv-p-q-nombre')?.focus(); return; }
   const i = nom.indexOf(' ');
   const datos = {
     nombre: i < 0 ? nom : nom.slice(0, i), apellido: i < 0 ? '' : nom.slice(i + 1).trim(),
@@ -6437,7 +6437,7 @@ function rvDocRefrescar(tipo, preferido) {
     if (sel) sel.onchange = () => { RV_DOC_DESTINO = Number(sel.value) || null; };
   }
   const hint = document.getElementById('rv-d-hint');
-  if (hint) hint.textContent = (tipo === rvDocTipoSugerido() ? `Se sugiere «${RV_DOC_TIPOS[tipo] || tipo}» porque es lo que falta. ` : '') + 'También podés arrastrar un archivo a esta sección.';
+  if (hint) hint.textContent = (tipo === rvDocTipoSugerido() ? `Se sugiere «${RV_DOC_TIPOS[tipo] || tipo}» porque es lo que falta. ` : '') + 'También puedes arrastrar un archivo a esta sección.';
 }
 function rvDocAbrir(tipo, servicioId) {
   rvTab('documentos');
@@ -6486,7 +6486,7 @@ async function rvSubirDocumento(btn) {
   const file = RV_DOC_FILE || inp?.files?.[0];
   const tipo = val('rv-d-tipo'), servicio = RV_DOC_DESTINO ?? null, reservaId = RV_RESERVA_ID;
   if (!btn) btn = document.querySelector('[data-rv-accion="elegir-archivo"]');
-  if (!file) { err.textContent = 'Elegí un archivo'; return; }
+  if (!file) { err.textContent = 'Elige un archivo'; return; }
   if (!RV_DOC_MIMES.includes(file.type)) { err.textContent = RV_ERR.formato_invalido; return; }
   if (file.size > 10485760) { err.textContent = RV_ERR.tamano_invalido; return; }
   const nombre = file.name.slice(0, 150), previo = btn.innerHTML;
@@ -6730,7 +6730,7 @@ function renderRendimiento(datos) {
       <div class="rend-kpi mal"><b>${fmtN(mal)}</b><span>Perdidos por no responder</span></div>
       <div class="rend-kpi"><b style="color:${colorPctPerdido(pctTxt(mal, tot))}">${pctTxt(mal, tot)}%</b><span>Se pierde en el equipo</span></div>
     </div>
-    <div class="rend-ley"><span><i style="background:var(--green)"></i>Atendidos a tiempo</span><span><i style="background:var(--danger)"></i>Perdidos: no respondió y pasaron a otro asesor</span><span class="d">% = perdidos sobre recibidos · pasá el mouse para ver detalle</span></div>`;
+    <div class="rend-ley"><span><i style="background:var(--green)"></i>Atendidos a tiempo</span><span><i style="background:var(--danger)"></i>Perdidos: no respondió y pasaron a otro asesor</span><span class="d">% = perdidos sobre recibidos · pasa el mouse para ver detalle</span></div>`;
   box.innerHTML = resumen + entries.map(([nombre, v]) => {
     const total = v.asignados + v.perdidos, [estado, c] = estadoRendimiento(v.pct_perdido);
     const dest = (v.top_destinos_perdidos || []).map(d => `${d.destino} (${d.c})`).join(', ');
@@ -6781,7 +6781,7 @@ async function loadMisVentasVentas() {
   const cards = document.getElementById('mv-cards');
   if (esOficina() && !p_asesor_id) {
     document.getElementById('mv-kpis').innerHTML = '';
-    if (cards) cards.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus ventas.</div>';
+    if (cards) cards.innerHTML = '<div class="muted" style="font-size:12.5px">Elige un asesor para ver sus ventas.</div>';
     MV_DATA = [];
     return;
   }
@@ -6801,8 +6801,8 @@ async function mvAbrirAbono(fila, btn) {
   const conSaldo = reservas.filter(x => Number(x.saldo_pendiente) > 0);
   const c = conSaldo.length === 1 ? conSaldo[0] : reservas.length === 1 ? reservas[0] : null;
   if (c) return abrirPostventa(c, 'abonos');
-  if (error || !reservas.length) return errToast(error ? 'No se pudo abrir la reserva' : 'Esta venta no tiene una reserva activa: creala desde el lead.');
-  okToast(`Tiene ${reservas.length} reservas: elegí en cuál cargar el abono.`);
+  if (error || !reservas.length) return errToast(error ? 'No se pudo abrir la reserva' : 'Esta venta no tiene una reserva activa: créala desde el lead.');
+  okToast(`Tiene ${reservas.length} reservas: elige en cuál cargar el abono.`);
   abrirLeadDesdeMisVentas(fila.lead_id);
 }
 function renderMisVentasKPIs() {
@@ -6905,7 +6905,7 @@ function setupEstadisticas() {
     const sel = document.getElementById('est-asesor');
     sb.rpc('estadisticas_asesores_lista').then(({ data, error }) => {
       if (error || !Array.isArray(data) || !sel) return;
-      sel.innerHTML = '<option value="">Elegí un asesor…</option>' +
+      sel.innerHTML = '<option value="">Elige un asesor…</option>' +
         data.map(a => `<option value="${a.asesor_id}">${esc(a.nombre)}${a.activo ? '' : ' (inactivo)'}</option>`).join('');
     });
     sel?.addEventListener('change', loadMisVentasSeccion);
@@ -6922,7 +6922,7 @@ async function loadEstadisticas() {
   if (esOficina() && !p_asesor_id) {
     document.getElementById('est-kpis').innerHTML = '';
     const destinos = document.getElementById('est-destinos');
-    if (destinos) destinos.innerHTML = '<div class="muted" style="font-size:12.5px">Elegí un asesor para ver sus estadísticas.</div>';
+    if (destinos) destinos.innerHTML = '<div class="muted" style="font-size:12.5px">Elige un asesor para ver sus estadísticas.</div>';
     EST_DATA = null;
     return;
   }
@@ -7668,7 +7668,7 @@ async function cerrarLeadsQuietos() {
   const leads = PARA_CERRAR_PAGINA.slice();
   const ok = await confirmarSheet({
     titulo: `¿Marcar ${leads.length} leads como PERDIDO?`,
-    detalle: `Son los que ves en esta página: sin movimiento hace más de ${PARA_CERRAR_DIAS.abierto} días (o ${PARA_CERRAR_DIAS.cotizado} si ya tenían cotización) y sin seguimiento agendado.\nSi alguno sigue vivo, abrilo antes y tocá «Recordar mañana».`,
+    detalle: `Son los que ves en esta página: sin movimiento hace más de ${PARA_CERRAR_DIAS.abierto} días (o ${PARA_CERRAR_DIAS.cotizado} si ya tenían cotización) y sin seguimiento agendado.\nSi alguno sigue vivo, ábrelo antes y toca «Recordar mañana».`,
     textoOk: 'Marcar PERDIDO', destructivo: true,
   });
   if (!ok) return;
@@ -8206,7 +8206,7 @@ function renderHoyAsesor() {
   const box = document.getElementById('hoy-urgent');
   const top = INBOX_LEADS.slice(0, 4);
   box.innerHTML = top.length ? top.map(inboxCardHtml).join('')
-    : '<div class="tbl-state show"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tenés leads nuevos esperando respuesta</div></div>';
+    : '<div class="tbl-state show"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tienes leads nuevos esperando respuesta</div></div>';
   [...box.querySelectorAll('.inbox-card')].forEach((el, i) => {
     const l = top[i];
     el.addEventListener('click', () => openDrawer(l));
@@ -8353,7 +8353,7 @@ function abrirAvisarTelefono(l) {
 document.getElementById('inbox-telefono-invalido')?.addEventListener('click', () => guardarTelefonoIncorrecto(null));
 document.getElementById('inbox-telefono-guardar')?.addEventListener('click', () => {
   const v = document.getElementById('inbox-telefono-input').value.trim();
-  if (!v) { errToast('Escribí el número corregido, o usá "Marcar inválido"'); return; }
+  if (!v) { errToast('Escribe el número corregido, o usa "Marcar inválido"'); return; }
   guardarTelefonoIncorrecto(v);
 });
 async function guardarTelefonoIncorrecto(telefonoCorregido) {
@@ -8675,8 +8675,8 @@ const RES_ERRORES = {
   reserva_principal_se_cierra_con_el_lead: 'La reserva principal se cierra con el lead',
   monto_invalido: 'El monto tiene que ser mayor a cero',
   ya_facturada: 'Esa reserva ya está facturada',
-  lead_sin_asesor: 'Asigná un asesor al lead antes de facturar',
-  factura_anulada: 'La factura de esta reserva está anulada: emití una factura manual desde Facturación',
+  lead_sin_asesor: 'Asigna un asesor al lead antes de facturar',
+  factura_anulada: 'La factura de esta reserva está anulada: emite una factura manual desde Facturación',
   reserva_inactiva: 'La reserva no está activa: el lead salió de espera de pago / pago realizado',
   'pago incompleto': 'El pagado no cubre el total. Registra el saldo en la pestaña Abonos.',
 };
@@ -8802,11 +8802,11 @@ function abrirPegarChat(l) {
 async function leerChatPegado(l) {
   const texto = document.getElementById('pc-texto').value.trim(), btn = document.getElementById('pc-leer'), err = document.getElementById('pc-err');
   err.textContent = '';
-  if (texto.length < 20) { err.textContent = 'Pegá al menos un par de mensajes.'; return; }
+  if (texto.length < 20) { err.textContent = 'Pega al menos un par de mensajes.'; return; }
   btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Leyendo…';
   const { data, error } = await sb.functions.invoke('parse-chat-lead', { body: { chat_text: texto } });
   btn.disabled = false; btn.innerHTML = previo;
-  if (error || !data?.ok) { err.textContent = 'No se pudo leer el chat. Probá de nuevo en un momento.'; return; }
+  if (error || !data?.ok) { err.textContent = 'No se pudo leer el chat. Prueba de nuevo en un momento.'; return; }
   const filas = PC_CAMPOS.map(([k, id, et]) => {
     const nuevo = data.datos?.[k], actual = document.getElementById(id)?.value.trim() || '';
     if (nuevo == null || String(nuevo) === actual) return '';
@@ -8870,7 +8870,7 @@ async function abrirTextoIA(l) {
   openSheet('texto-ia-sheet');
   const { data, error } = await sb.functions.invoke('sugerir-respuesta', { body: { p_lead_id: l.id } });
   txt.disabled = false;
-  if (error || !data?.ok) { txt.value = ''; err.textContent = data?.error === 'lead_no_encontrado' ? 'No tenés acceso a ese lead.' : 'No se pudo armar la respuesta. Probá de nuevo en un momento.'; return; }
+  if (error || !data?.ok) { txt.value = ''; err.textContent = data?.error === 'lead_no_encontrado' ? 'No tienes acceso a ese lead.' : 'No se pudo armar la respuesta. Prueba de nuevo en un momento.'; return; }
   txt.value = data.mensaje || '';
   registrarUsoHerramienta(l.id, 'texto_ia');
 }
@@ -9049,12 +9049,12 @@ window.enviarRespuestaCorreo = async (correoId) => {
   if (!correo || !bodyEl) return;
   const html = bodyEl.innerHTML.trim();
   const texto = bodyEl.innerText.trim();
-  if (!texto) { errToast('Escribí una respuesta antes de enviar'); return; }
+  if (!texto) { errToast('Escribe una respuesta antes de enviar'); return; }
   const archivos = ADJUNTOS_PENDIENTES.get(correoId) || [];
   try {
     const adjuntos = await Promise.all(archivos.map(async (f) => ({ filename: f.name, mime_type: f.type || 'application/octet-stream', contenido_base64: await fileABase64(f) })));
     const { data: { session } } = await sb.auth.getSession();
-    if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
+    if (!session?.access_token) { errToast('Sesión expirada, recarga la página'); return; }
     const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-enviar`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
@@ -9102,7 +9102,7 @@ function renderAdjuntosCorreo(correoId, adjuntos) {
 // (sb.functions.invoke parsea JSON por default).
 window.descargarAdjuntoCorreo = async (correoId, adjuntoId, filename) => {
   const { data: { session } } = await sb.auth.getSession();
-  if (!session?.access_token) { errToast('Sesión expirada, recargá la página'); return; }
+  if (!session?.access_token) { errToast('Sesión expirada, recarga la página'); return; }
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-adjunto-descargar?correo_id=${correoId}&adjunto_id=${adjuntoId}`, {
       headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY },
@@ -9449,11 +9449,11 @@ const VIG_GRUPOS = [
   { k: 'vencida', t: 'Vencidas', grave: true,
     d: 'La fecha de fin ya pasó y siguen apareciendo en el catálogo.' },
   { k: 'venta_cierra_pronto', t: 'La venta cierra esta semana', grave: false,
-    d: 'Todavía se venden, pero quedan pocos días. Avisale al equipo antes de que se caigan solas.' },
+    d: 'Todavía se venden, pero quedan pocos días. Avísale al equipo antes de que se caigan solas.' },
   { k: 'vence_pronto', t: 'Vencen esta semana', grave: false,
     d: 'Fecha de fin dentro de los próximos 7 días.' },
   { k: 'sin_fecha_con_pista', t: 'Sin fecha de fin, pero el texto la tiene', grave: false,
-    d: 'El campo de fecha está vacío, así que se ofrecen para siempre — pero la vigencia está escrita en el texto. Poné la fecha y el filtro vuelve a funcionar solo.' },
+    d: 'El campo de fecha está vacío, así que se ofrecen para siempre — pero la vigencia está escrita en el texto. Pon la fecha y el filtro vuelve a funcionar solo.' },
   { k: 'dos_ventanas', t: 'Dos temporadas en la misma vigencia', grave: false,
     d: 'El texto declara dos rangos y el campo guarda solo el último: el hueco del medio no lo filtra nadie.' },
   { k: 'sin_fecha', t: 'Sin fecha de fin', grave: false,
@@ -9656,7 +9656,7 @@ async function cargarSinHotel() {
 }
 
 function shMotivo(cands) {
-  if (!cands.length) return 'sin candidato — elegilo vos';
+  if (!cands.length) return 'sin candidato — elígelo tú';
   if (cands.length === 1 && cands[0].confianza === 'alta') return 'coincide el nombre';
   return `${cands.length} candidatos posibles`;
 }
@@ -9673,7 +9673,7 @@ function renderSinHotel(hoteles) {
   const opcionesHtml = cands => {
     const idsC = new Set(cands.map(c => c.producto_id));
     return [
-      '<option value="">— elegí un hotel —</option>',
+      '<option value="">— elige un hotel —</option>',
       ...cands.map(c => `<option value="${c.producto_id}">★ ${esc(c.nombre)}${c.destino ? ` (${esc(c.destino)})` : ''}</option>`),
       cands.length ? '<option disabled>──────────</option>' : '',
       ...hoteles.filter(h => !idsC.has(h.id)).map(h => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`),
@@ -9695,7 +9695,7 @@ function renderSinHotel(hoteles) {
   cuerpo.innerHTML = `
     ${seguras.length ? `<div class="vig-grupo" style="margin-top:4px">
       <div class="vig-grupo-t">Listas para vincular <span class="vig-tipo">${seguras.length}</span></div>
-      <div class="vig-grupo-d">Un solo hotel coincide con el nombre. Revisá y confirmá en bloque, o ajustá alguna antes.</div>
+      <div class="vig-grupo-d">Un solo hotel coincide con el nombre. Revisa y confirma en bloque, o ajusta alguna antes.</div>
       <button class="dbtn" id="sh-vincular-seguras" type="button" style="width:100%;margin:8px 0"><i class="fas fa-link"></i> Vincular las ${seguras.length} seguras</button>
       ${seguras.map(fila).join('')}
     </div>` : ''}
@@ -9709,7 +9709,7 @@ function renderSinHotel(hoteles) {
 async function vincularPromoHotel(promoId, btn) {
   const wrap = document.querySelector(`[data-sh-fila="${promoId}"]`);
   const productoId = Number(wrap?.querySelector('.sh-sel')?.value || 0);
-  if (!productoId) { errToast('Elegí un hotel primero'); return; }
+  if (!productoId) { errToast('Elige un hotel primero'); return; }
   const guardarAlias = !!wrap?.querySelector('.sh-alias')?.checked;
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.rpc('vincular_promocion_producto', {
@@ -9794,7 +9794,7 @@ function renderRevisionVigencias() {
       ${f.precio_texto ? `<div class="vig-texto">${esc(f.precio_texto)}</div>` : ''}
       ${f.vigencia_texto ? `<div class="vig-texto">${esc(f.vigencia_texto)}</div>` : ''}
       ${cuando.length ? `<div class="vig-fechas">${cuando.join(' · ')}</div>` : ''}
-      ${f.deja_sin_precio ? '<div class="vig-huerfano"><i class="fas fa-triangle-exclamation"></i> Es el único precio de este hotel: si lo retirás queda incotizable. Cargá el precio nuevo antes.</div>' : ''}
+      ${f.deja_sin_precio ? '<div class="vig-huerfano"><i class="fas fa-triangle-exclamation"></i> Es el único precio de este hotel: si lo retiras queda incotizable. Carga el precio nuevo antes.</div>' : ''}
       <div class="vig-acc">
         ${grave ? '' : `<input type="date" class="ei" value="${esc(sugerida)}" data-vig-fecha="${f.tipo}:${f.item_id}">
         <button class="dbtn gh" data-vig-fijar="${f.tipo}:${f.item_id}"><i class="fas fa-calendar-day"></i> Poner fecha</button>`}
@@ -9812,7 +9812,7 @@ function renderRevisionVigencias() {
     </div>
     ${masiva.length ? `<div class="vig-grupo" style="margin-bottom:16px">
       <div class="vig-grupo-t">Ponerle fecha a un proveedor entero</div>
-      <div class="vig-grupo-d">Las ${sinFecha} sin fecha son de ${masiva.length} proveedor(es): casi siempre el mismo PDF partido en varios tramos. Elegí el hotel y la fecha una sola vez.</div>
+      <div class="vig-grupo-d">Las ${sinFecha} sin fecha son de ${masiva.length} proveedor(es): casi siempre el mismo PDF partido en varios tramos. Elige el hotel y la fecha una sola vez.</div>
       <div class="vig-acc" style="margin-top:8px">
         <select class="ei" id="vig-masiva-prod" style="flex:1;min-width:160px">
           ${masiva.map(p => `<option value="${p.id}">${esc(p.nombre)} (${p.n})</option>`).join('')}
@@ -9822,7 +9822,7 @@ function renderRevisionVigencias() {
       </div>
     </div>` : ''}
     ${paraRetirar.length ? `<button class="dbtn peligro" id="vig-retirar-todo" type="button" style="width:100%;margin-bottom:${huerfanos ? '6' : '16'}px"><i class="fas fa-eye-slash"></i> Retirar los ${paraRetirar.length} que ya no se venden</button>` : ''}
-    ${huerfanos ? `<div class="vig-grupo-d" style="margin-bottom:16px"><i class="fas fa-triangle-exclamation" style="color:var(--accent-ink)"></i> ${huerfanos} quedan afuera del retiro masivo porque son el único precio de su hotel — revisalos uno por uno más abajo.</div>` : ''}
+    ${huerfanos ? `<div class="vig-grupo-d" style="margin-bottom:16px"><i class="fas fa-triangle-exclamation" style="color:var(--accent-ink)"></i> ${huerfanos} quedan afuera del retiro masivo porque son el único precio de su hotel — revísalos uno por uno más abajo.</div>` : ''}
     ${VIG_GRUPOS.map(g => {
       const filas = porGrupo(g.k);
       if (!filas.length) return '';
@@ -9858,7 +9858,7 @@ async function fijarFechaProducto() {
   const sel = document.getElementById('vig-masiva-prod');
   const fecha = document.getElementById('vig-masiva-fecha')?.value;
   const id = Number(sel?.value);
-  if (!fecha) { errToast('Elegí la fecha de fin primero'); return; }
+  if (!fecha) { errToast('Elige la fecha de fin primero'); return; }
   if (!id) return;
   const nombre = sel.options[sel.selectedIndex].text;
   // El RPC toca TODOS los tramos vigentes del hotel, no solo los que están sin
@@ -9911,7 +9911,7 @@ async function fijarFechaVigencia(clave, btn) {
   const { tipo, id } = vigPartes(clave);
   const input = btn.parentElement.querySelector('[data-vig-fecha]');
   const fecha = input?.value;
-  if (!fecha) { errToast('Elegí la fecha de fin primero'); return; }
+  if (!fecha) { errToast('Elige la fecha de fin primero'); return; }
   btn.disabled = true;
   const { data, error } = await sb.rpc('fijar_fecha_fin_tarifario', { p_tipo: tipo, p_id: id, p_fecha: fecha });
   btn.disabled = false;
@@ -10035,7 +10035,7 @@ async function actGuardarPrecio(clave, btn) {
   const { tipo, id } = actPartes(clave);
   const input = document.querySelector(`[data-act-editrow="${clave}"] [data-act-precio]`);
   const precio = input?.value?.trim();
-  if (!precio) { errToast('Escribí el precio corregido'); return; }
+  if (!precio) { errToast('Escribe el precio corregido'); return; }
   btn.disabled = true;
   const { data, error } = await sb.rpc('corregir_precio_tarifario', { p_tipo: tipo, p_id: id, p_precio_texto: precio });
   if (error || !data?.ok) { btn.disabled = false; errToast('No se pudo guardar: ' + (error?.message || data?.error || '')); return; }
@@ -11131,7 +11131,7 @@ async function iaConvertir(leadId, btn) {
     { p_nombre: nombre, p_slug: slug, p_padre_id: null, p_lead_id: Number(leadId) });
   btn.disabled = false;
   if (error || !data?.ok) { errToast(data?.error || error?.message || 'No se pudo crear'); return; }
-  okToast(`Rama de "${nombre}" creada. Cargale el plan en la pestaña Clientes.`);
+  okToast(`Rama de "${nombre}" creada. Cárgale el plan en la pestaña Clientes.`);
   await loadIaAtencion();
 }
 
@@ -11312,7 +11312,7 @@ async function clMarcarCobro(id, pagado, btn) {
   // El monto se congela con el cobro: si mañana le cambiás el precio, los meses
   // ya cobrados tienen que seguir diciendo lo que se cobró de verdad.
   const monto = c?.cobro_monto ?? c?.precio_mensual;
-  if (monto == null) { errToast('Ponele primero un precio mensual en Plan'); return; }
+  if (monto == null) { errToast('Ponle primero un precio mensual en Plan'); return; }
   btn.disabled = true;
   const { data, error } = await sb.rpc('marcar_cobro_cliente', {
     p_cliente_id: Number(id), p_periodo: clPeriodo(), p_monto: Number(monto), p_pagado: pagado,
@@ -11400,7 +11400,7 @@ function actBannerHtml(d) {
     return parado || s.resultado_ok === false;
   });
   if (cronMal) {
-    return `<div class="act-banner mal"><i class="fas fa-triangle-exclamation"></i><div><b>Un proceso dejó de correr</b><div>Mirá "Procesos automáticos" abajo: hay algo en rojo.</div></div></div>`;
+    return `<div class="act-banner mal"><i class="fas fa-triangle-exclamation"></i><div><b>Un proceso dejó de correr</b><div>Mira "Procesos automáticos" abajo: hay algo en rojo.</div></div></div>`;
   }
   if (carga && ['extrayendo', 'verificando', 'lista'].includes(carga.estado)) {
     return `<div class="act-banner curso"><i class="fas fa-arrows-rotate"></i><div><b>Actualizando el tarifario</b><div>${esc(carga.archivo)} — se publica solo al terminar.</div></div></div>`;
@@ -11413,7 +11413,7 @@ function actBannerHtml(d) {
     return `<div class="act-banner aviso"><i class="fas fa-hand"></i><div><b>Frenado por tope de gasto</b><div>${esc(d.publicacion.motivo_freno || 'La carga superó el límite de gasto del día.')}</div></div></div>`;
   }
   if (carga && carga.estado === 'borrador' && d.publicacion?.auto_activar === false) {
-    return `<div class="act-banner aviso"><i class="fas fa-hand"></i><div><b>Publicación automática apagada</b><div>El borrador está listo pero alguien apagó el interruptor. Usá "Publicar ahora" o volvé a prenderlo.</div></div></div>`;
+    return `<div class="act-banner aviso"><i class="fas fa-hand"></i><div><b>Publicación automática apagada</b><div>El borrador está listo pero alguien apagó el interruptor. Usa "Publicar ahora" o vuelve a prenderlo.</div></div></div>`;
   }
   if (carga && carga.estado === 'borrador') {
     return `<div class="act-banner ok"><i class="fas fa-rocket"></i><div><b>Tarifario nuevo listo</b><div>Pasó la verificación y se publica solo.</div></div></div>`;
@@ -11697,7 +11697,7 @@ async function cargarPanelCorrer() {
     </div>
     <div class="act-run">
       <h4>Buscar y actualizar</h4>
-      <p>Revisa las carpetas de Drive, extrae los archivos nuevos y los publica en el catálogo.<br>Tarda unos minutos; podés cerrar esta pantalla mientras corre.</p>
+      <p>Revisa las carpetas de Drive, extrae los archivos nuevos y los publica en el catálogo.<br>Tarda unos minutos; puedes cerrar esta pantalla mientras corre.</p>
       <button class="dbtn primary" id="act-correr-btn"><i class="fas fa-arrows-rotate"></i> Actualizar ahora</button>
       <div class="act-estado" id="act-correr-estado">
         ${e.ultima_corrida ? `Última actualización: <b>${esc(fmtFechaHoraCaracas(e.ultima_corrida))}</b>` : 'Sin corridas registradas todavía.'}
@@ -11780,7 +11780,7 @@ async function detectarServicioDelLead() {
   if (res.error) { razon.textContent = 'No se pudo analizar: ' + res.error; return; }
   const r = res.resultados?.[0];
   if (!r?.servicio) {
-    razon.innerHTML = '<i class="fas fa-circle-question"></i> La IA no encontró datos suficientes para decidir el servicio. Podés elegirlo a mano.';
+    razon.innerHTML = '<i class="fas fa-circle-question"></i> La IA no encontró datos suficientes para decidir el servicio. Puedes elegirlo a mano.';
     return;
   }
   document.getElementById('e-servicio').value = r.servicio;
@@ -11876,8 +11876,8 @@ const EF_ERRORES = {
   falta_metodo_pago: 'Falta el método de pago',
   falta_monto_pagado: 'Falta el monto que pagó',
   pagado_mayor_que_total: 'El monto pagado es mayor que el total de la venta',
-  posible_duplicado: 'Ese pago (mismo monto y referencia) ya se cargó en las últimas 48 horas. Revisá la reserva antes de repetirlo',
-  solicitud_con_otros_datos: 'Ese envío ya se registró con otros datos. Recargá y revisá la reserva',
+  posible_duplicado: 'Ese pago (mismo monto y referencia) ya se cargó en las últimas 48 horas. Revisa la reserva antes de repetirlo',
+  solicitud_con_otros_datos: 'Ese envío ya se registró con otros datos. Recarga y revisa la reserva',
   lead_no_disponible: 'Este lead ya no está disponible',
   otro_no_combina: 'No se puede combinar "Otro" con otro tipo de venta',
 };
@@ -12653,7 +12653,7 @@ const MSG_EMITIR_PAGO = {
   lead_no_disponible: 'El lead no está disponible.',
   monto_invalido: 'El monto no es válido.',
   falta_tasa: 'Para cobrar en Bs necesitas la tasa Bs/USD del día.',
-  monto_ves_muy_bajo: 'Ese monto en Bs equivale a menos de un centavo de dólar. Revisalo.',
+  monto_ves_muy_bajo: 'Ese monto en Bs equivale a menos de un centavo de dólar. Revísalo.',
 };
 const MSG_VERIFICAR_PAGO = {
   pago_no_existe: 'El pago ya no existe.',
@@ -12938,7 +12938,7 @@ async function verificarPagoAccion(id, aprobar, btn) {
   if (!p) return;
   let motivo = null;
   if (aprobar) {
-    if (!(await confirmarSheet({ titulo: `¿Aprobar este pago de ${pagoMontoTexto(p)}?`, detalle: 'Confirmá solo si ya comprobaste el monto y la referencia contra el banco.', textoOk: 'Aprobar' }))) return;
+    if (!(await confirmarSheet({ titulo: `¿Aprobar este pago de ${pagoMontoTexto(p)}?`, detalle: 'Confirma solo si ya comprobaste el monto y la referencia contra el banco.', textoOk: 'Aprobar' }))) return;
   } else {
     motivo = await pedirTexto({ titulo: 'Rechazar pago', detalle: `Pago de ${pagoMontoTexto(p)}. El motivo queda registrado.`, label: 'Motivo del rechazo', tipo: 'textarea', requerido: true, textoOk: 'Rechazar', destructivo: true });
     if (motivo === null) return;
@@ -13569,7 +13569,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   // vivid-bubbling-bachman.md. Genera factura+comisión+cuenta por pagar
   // automáticamente vía los triggers ya existentes, sin RPC nuevo. ----------
   const precioVenta = Number(val('nl-precio-venta') || 0);
-  if (precioVenta <= 0) { err.textContent = 'Definí un precio de venta mayor a cero'; return; }
+  if (precioVenta <= 0) { err.textContent = 'Define un precio de venta mayor a cero'; return; }
   const costoNetoRaw = val('nl-costo-neto');
   const costoNeto = costoNetoRaw === '' ? null : Number(costoNetoRaw);
   if (costoNeto !== null && costoNeto < 0) { err.textContent = 'El costo neto no puede ser negativo'; return; }
@@ -13809,7 +13809,7 @@ function repRenderRevision() {
 
 async function repDetectar() {
   const texto = repEl('rep-texto').value;
-  if (!texto.trim() && !REP_IMGS.length) { errToast('Pegá números o subí una captura'); return; }
+  if (!texto.trim() && !REP_IMGS.length) { errToast('Pega números o sube una captura'); return; }
   const btn = repEl('rep-detectar');
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Leyendo…';
   const { data, error } = await sb.functions.invoke('repartir-numeros', {
@@ -14202,7 +14202,7 @@ function analisisPanelHtml(a) {
     ${a.fortalezas?.length ? `<div class="pf-bloque"><label class="fl">Dónde destaca</label>${listaHtml(a.fortalezas, '#22c55e')}</div>` : ''}
     ${a.debilidades?.length ? `<div class="pf-bloque"><label class="fl">Dónde flojea o falta preguntar</label>${listaHtml(a.debilidades, '#e0a030')}</div>` : ''}
     ${a.banderas?.length ? `<div class="pf-bloque"><label class="fl">Para mirar con lupa</label>${listaHtml(a.banderas, '#ef4444')}</div>` : ''}
-    <div class="muted" style="font-size:11.5px;margin-top:6px">Generado por IA a partir del CV. Revisá antes de decidir.</div>`;
+    <div class="muted" style="font-size:11.5px;margin-top:6px">Generado por IA a partir del CV. Revisa antes de decidir.</div>`;
 }
 // Lo primero que se lee al abrir la ficha: nivel + por qué, en 10 segundos.
 // El informe entero sigue en la pestaña Análisis IA.
@@ -14521,9 +14521,9 @@ async function cargarCVPostulacion(file) {
     });
     const out = await res.json().catch(() => null);
     if (!res.ok || !out?.ok) {
-      const msg = out?.error === 'cv_sin_texto' ? 'No se pudo leer ese PDF. Probá con otro archivo.'
+      const msg = out?.error === 'cv_sin_texto' ? 'No se pudo leer ese PDF. Prueba con otro archivo.'
         : out?.error === 'no_autorizado' ? 'Solo un administrador puede analizar CVs.'
-        : 'No se pudo analizar el CV. Intentá de nuevo en un momento.';
+        : 'No se pudo analizar el CV. Intenta de nuevo en un momento.';
       document.getElementById('post-cv-body').innerHTML = `<div class="edit-err" style="display:block">${esc(msg)}</div>`;
       document.getElementById('post-cv-title').textContent = 'No se pudo analizar';
       return;
@@ -14538,7 +14538,7 @@ async function cargarCVPostulacion(file) {
   } catch (e) {
     console.error('analisis de CV', e);
     document.getElementById('post-cv-title').textContent = 'No se pudo analizar';
-    document.getElementById('post-cv-body').innerHTML = '<div class="edit-err" style="display:block">Falló la lectura del PDF. Probá con otro archivo.</div>';
+    document.getElementById('post-cv-body').innerHTML = '<div class="edit-err" style="display:block">Falló la lectura del PDF. Prueba con otro archivo.</div>';
   }
 }
 
@@ -14622,7 +14622,7 @@ async function reanalizarUnaPostulacion(p) {
     if (fresco) abrirPostulacionDrawer(fresco, 'perfil');
   } catch (e) {
     console.error('re-analisis de CV', e);
-    errToast('Falló el re-análisis. Revisá la consola.');
+    errToast('Falló el re-análisis. Revisa la consola.');
   } finally {
     if (btn && document.body.contains(btn)) {
       btn.disabled = false;
@@ -14730,7 +14730,7 @@ async function revisarCVAnalizado() {
     <label class="fl">Nombre</label>
     <input class="ei" id="cv-nombre" value="${esc(a.nombre || '')}" placeholder="Nombre y apellido">
     <label class="fl" style="margin-top:8px">Teléfono</label>
-    <input class="ei" id="cv-telefono" value="${esc(a.telefono || '')}" placeholder="Si el CV no lo trae, completalo a mano">
+    <input class="ei" id="cv-telefono" value="${esc(a.telefono || '')}" placeholder="Si el CV no lo trae, complétalo a mano">
     <label class="fl" style="margin-top:8px">Email</label>
     <input class="ei" id="cv-email" value="${esc(a.email || '')}" placeholder="Opcional">
     <label class="fl" style="margin-top:8px">Modalidad</label>
@@ -14774,7 +14774,7 @@ async function revisarCVAnalizado() {
 async function guardarCVAnalizado(actualizar) {
   const err = document.getElementById('cv-err');
   const nombre = val('cv-nombre').trim(), telefono = val('cv-telefono').trim();
-  if (!nombre || !telefono) { err.textContent = 'Nombre y teléfono son obligatorios — completalos si el CV no los traía.'; err.style.display = 'block'; return; }
+  if (!nombre || !telefono) { err.textContent = 'Nombre y teléfono son obligatorios — complétalos si el CV no los traía.'; err.style.display = 'block'; return; }
 
   const a = cvAnalizado.analisis;
   const fila = {
@@ -15013,7 +15013,7 @@ async function refrescarEstadoGmail() {
     syncBtn.style.display = 'none';
     syncTime.style.display = 'none';
     CORREO_CUENTA_ACTIVA = null;
-    document.getElementById('correo-lista').innerHTML = '<div class="correo-empty"><i class="fas fa-envelope"></i><p>Conectá tu Gmail para ver y enviar correo desde el CRM.</p><button type="button" class="dbtn save" onclick="conectarGmail()"><i class="fas fa-plug"></i> Conectar Gmail</button></div>';
+    document.getElementById('correo-lista').innerHTML = '<div class="correo-empty"><i class="fas fa-envelope"></i><p>Conecta tu Gmail para ver y enviar correo desde el CRM.</p><button type="button" class="dbtn save" onclick="conectarGmail()"><i class="fas fa-plug"></i> Conectar Gmail</button></div>';
     return;
   }
 
@@ -15027,7 +15027,7 @@ async function refrescarEstadoGmail() {
     banner.style.display = 'flex';
     banner.style.background = 'rgba(239,68,68,.1)';
     banner.style.borderColor = 'rgba(239,68,68,.35)';
-    txt.textContent = `${activa.email_conectado} se desconectó — reautorizá el acceso, dejaste de recibir correo nuevo.`;
+    txt.textContent = `${activa.email_conectado} se desconectó — reautoriza el acceso, dejaste de recibir correo nuevo.`;
     btn.textContent = 'Reconectar Gmail';
     btn.style.display = '';
   } else {
@@ -15074,7 +15074,7 @@ window.elegirCuentaCorreo = (credencialId) => {
   refrescarEstadoGmail();
 };
 window.desconectarCuentaCorreo = async (credencialId, email) => {
-  if (!(await confirmarSheet({ titulo: `¿Desconectar ${email}?`, detalle: 'Dejás de recibir correo nuevo de esa cuenta en el CRM.', textoOk: 'Desconectar', destructivo: true }))) return;
+  if (!(await confirmarSheet({ titulo: `¿Desconectar ${email}?`, detalle: 'Dejas de recibir correo nuevo de esa cuenta en el CRM.', textoOk: 'Desconectar', destructivo: true }))) return;
   const { error } = await sb.rpc('gmail_desconectar', { p_credencial_id: Number(credencialId) });
   if (error) { errToast('No se pudo desconectar la cuenta'); return; }
   if (String(credencialId) === CORREO_CUENTA_ACTIVA) { CORREO_CUENTA_ACTIVA = null; localStorage.removeItem('correo_cuenta_activa'); }
@@ -15085,7 +15085,7 @@ window.editarFirmaCorreo = async () => {
   document.getElementById('correo-cuenta-menu').style.display = 'none';
   const c = cuentaCorreoActiva();
   if (!c) return;
-  const v = await pedirTexto({ titulo: 'Firma de ' + c.email_conectado, detalle: 'Se agrega al final de cada correo que escribas desde esta cuenta. Si la dejás vacía se usa la firma que tenés en Gmail.', label: 'Firma', tipo: 'textarea', valor: c.firma_texto || '', placeholder: 'Tu nombre\nDestino y Eventos Lotus 360\nWhatsApp +58 ...', textoOk: 'Guardar' });
+  const v = await pedirTexto({ titulo: 'Firma de ' + c.email_conectado, detalle: 'Se agrega al final de cada correo que escribas desde esta cuenta. Si la dejas vacía se usa la firma que tienes en Gmail.', label: 'Firma', tipo: 'textarea', valor: c.firma_texto || '', placeholder: 'Tu nombre\nDestino y Eventos Lotus 360\nWhatsApp +58 ...', textoOk: 'Guardar' });
   if (v === null) return;
   const { error } = await sb.rpc('gmail_guardar_firma', { p_credencial_id: Number(c.credencial_id), p_firma: v });
   if (error) { errToast('No se pudo guardar la firma'); return; }
@@ -15117,7 +15117,7 @@ async function sincronizarCorreoAhora() {
     okToast(data.nuevos > 0 ? `${data.nuevos} correo${data.nuevos > 1 ? 's' : ''} nuevo${data.nuevos > 1 ? 's' : ''}` : 'Ya estás al día');
     await refrescarEstadoGmail();
   } catch (e) {
-    errToast(e.message === 'sesion' ? 'Sesión expirada, recargá la página' : e.message === 'gmail_revocado' ? 'Tu Gmail se desconectó, reautorizá el acceso' : 'No se pudo sincronizar ahora, se reintenta solo cada 20 min');
+    errToast(e.message === 'sesion' ? 'Sesión expirada, recarga la página' : e.message === 'gmail_revocado' ? 'Tu Gmail se desconectó, reautoriza el acceso' : 'No se pudo sincronizar ahora, se reintenta solo cada 20 min');
   } finally {
     btn.disabled = false;
     icon.classList.remove('girando');
@@ -15129,7 +15129,7 @@ async function sincronizarCorreoAhora() {
 // ~80 s y devuelve page_token; se repite hasta terminar.
 window.traerCorreosAnteriores = async (dias) => {
   document.getElementById('correo-cuenta-menu').style.display = 'none';
-  if (CORREO_BACKFILL) { errToast('Ya se están trayendo correos, esperá a que termine'); return; }
+  if (CORREO_BACKFILL) { errToast('Ya se están trayendo correos, espera a que termine'); return; }
   const cred = CORREO_CUENTA_ACTIVA;
   if (!cred) return;
   CORREO_BACKFILL = cred;
@@ -15262,7 +15262,7 @@ function guardarBorradorCompose() {
   try { localStorage.setItem(claveBorradorCorreo(), JSON.stringify({ para: val('compose-para'), cc: val('compose-cc'), cco: val('compose-cco'), asunto: val('compose-asunto'), de: COMPOSE.credencialId, cuerpo: document.getElementById('compose-body').innerHTML })); } catch { /* sin storage */ }
 }
 function abrirCompose({ modo = 'nuevo', correoId = null, para = '' } = {}) {
-  if (!CORREO_CUENTA_ACTIVA) { errToast('Conectá un Gmail antes de redactar'); return; }
+  if (!CORREO_CUENTA_ACTIVA) { errToast('Conecta un Gmail antes de redactar'); return; }
   const c = correoId ? CORREOS_DATA.get(correoId) : null;
   const yo = (cuentaCorreoActiva()?.email_conectado || '').toLowerCase();
   const emailDe = d => extraerEmailDeCabecera(d).toLowerCase();
@@ -15356,11 +15356,11 @@ async function enviarCompose() {
   const html = bodyEl.innerHTML.trim();
   const sinFirma = bodyEl.cloneNode(true);
   sinFirma.querySelectorAll('.correo-firma').forEach(n => n.remove());
-  if (!para.length) { errToast('Ingresá al menos un destinatario'); return; }
+  if (!para.length) { errToast('Ingresa al menos un destinatario'); return; }
   const mala = [...para, ...cc, ...bcc].find(d => !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(extraerEmailDeCabecera(d)));
-  if (mala) { errToast(`Revisá esta dirección: ${mala}`); return; }
-  if (!asunto) { errToast('Ingresá un asunto'); return; }
-  if (!sinFirma.textContent.trim()) { errToast('Escribí el cuerpo del correo'); return; }
+  if (mala) { errToast(`Revisa esta dirección: ${mala}`); return; }
+  if (!asunto) { errToast('Ingresa un asunto'); return; }
+  if (!sinFirma.textContent.trim()) { errToast('Escribe el cuerpo del correo'); return; }
   const btn = document.getElementById('compose-enviar');
   btn.disabled = true;
   const original = COMPOSE.correoId ? CORREOS_DATA.get(COMPOSE.correoId) : null;
@@ -15378,7 +15378,7 @@ async function enviarCompose() {
     if (CORREO_CARPETA !== 'contactos') cargarBandejaCorreo('refrescar');
     if (original && CORREO_HILO_ABIERTO === idHiloSeguro(original.gmail_thread_id)) abrirHiloCorreo(CORREO_HILO_ABIERTO);
   } catch (e) {
-    errToast(e.message === 'adjuntos_exceden_25mb' ? 'Los adjuntos superan 25 MB' : e.message === 'sesion' ? 'Sesión expirada, recargá la página' : 'No se pudo enviar el correo');
+    errToast(e.message === 'adjuntos_exceden_25mb' ? 'Los adjuntos superan 25 MB' : e.message === 'sesion' ? 'Sesión expirada, recarga la página' : 'No se pudo enviar el correo');
   } finally {
     btn.disabled = false;
   }
@@ -15594,7 +15594,7 @@ async function cargarContactosCorreo() {
         <button type="button" class="correo-accion" title="Ver correos" aria-label="Ver correos con ${esc(c.email)}" data-email="${esc(c.email)}" onclick="verCorreosDeContacto(this.dataset.email)"><i class="fas fa-envelope-open-text"></i></button>
       </div>
     </div>`;
-  }).join('') : `<div class="correo-empty"><i class="fas fa-address-book"></i><p>${t ? 'Ningún contacto coincide.' : 'Tus contactos aparecen acá a medida que escribís y recibís correo.'}</p></div>`;
+  }).join('') : `<div class="correo-empty"><i class="fas fa-address-book"></i><p>${t ? 'Ningún contacto coincide.' : 'Tus contactos aparecen acá a medida que escribes y recibes correo.'}</p></div>`;
 }
 window.verCorreosDeContacto = (email) => {
   document.getElementById('correo-search').value = email;
@@ -15629,7 +15629,7 @@ window.cerrarHiloCorreo = () => {
   CORREO_HILO_ABIERTO = null;
   document.querySelectorAll('#correo-lista .correo-row.active').forEach(r => r.classList.remove('active'));
   document.getElementById('correo-detalle').classList.remove('open');
-  document.getElementById('correo-detalle-body').innerHTML = '<div class="correo-detalle-empty"><i class="fas fa-envelope-open-text"></i><p>Elegí un correo para leerlo.</p></div>';
+  document.getElementById('correo-detalle-body').innerHTML = '<div class="correo-detalle-empty"><i class="fas fa-envelope-open-text"></i><p>Elige un correo para leerlo.</p></div>';
 };
 function accionesHiloHtml(threadId) {
   const msgs = HILOS_DATA.get(threadId) || [];
@@ -15781,7 +15781,7 @@ window.accionCorreo = async (threadId, accion, { silencioso = false } = {}) => {
     cargarContadoresCorreo();
     refrescarBadgeCorreo();
   } catch (e) {
-    errToast(e.message === 'gmail_revocado' ? 'Tu Gmail se desconectó, reconectalo' : 'No se pudo aplicar el cambio en Gmail');
+    errToast(e.message === 'gmail_revocado' ? 'Tu Gmail se desconectó, reconéctalo' : 'No se pudo aplicar el cambio en Gmail');
     cargarBandejaCorreo('refrescar');
   }
 };
@@ -15827,7 +15827,7 @@ function setupRedes() {
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatRedes(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
   setupOfertasPosts();
-  addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Preguntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
+  addChatBubbleRedes('bot', 'Hola, soy el analista de redes. Pregúntame sobre el alcance, los posts con mejor desempeño o las historias del período seleccionado.');
 }
 function cargarRedActual() { redesRed === 'ofertas' ? cargarOfertasPosts() : loadRedesZernio(redesRed); }
 // Con todo en 0 Chart.js dibuja un eje 0,0–1,0 sin sentido: se cambia por un aviso.
@@ -16338,7 +16338,7 @@ function setupConsultorIA() {
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatConsultor(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
   if (!consultorChatHistory.length) {
-    addChatBubbleConsultor('bot', 'Hola, soy el consultor técnico del proyecto. Preguntame cómo está armado algo, qué se decidió y por qué, o cómo va el CRM ahora mismo (leads de hoy, quién va atrasado).');
+    addChatBubbleConsultor('bot', 'Hola, soy el consultor técnico del proyecto. Pregúntame cómo está armado algo, qué se decidió y por qué, o cómo va el CRM ahora mismo (leads de hoy, quién va atrasado).');
   }
 }
 async function enviarChatConsultor() {
@@ -16433,16 +16433,16 @@ async function cargarVinculoAsistente() {
   const { data, error } = await sb.rpc('asistente_mi_vinculo');
   if (error) { box.textContent = 'No se pudo consultar el vínculo con Telegram.'; return; }
   box.innerHTML = data?.vinculado
-    ? `<span><i class="fas fa-circle-check" style="color:var(--green)"></i> Tu Telegram está vinculado desde el <b>${esc(new Date(data.vinculado_en).toLocaleDateString('es-VE'))}</b>. Escribile al bot por privado.</span>`
-    : '<span>Para usarlo desde Telegram: tocá <b>Generar código</b> y mandale al bot, por privado, <b>/vincular CÓDIGO</b>. El código vence en 10 minutos.</span>';
+    ? `<span><i class="fas fa-circle-check" style="color:var(--green)"></i> Tu Telegram está vinculado desde el <b>${esc(new Date(data.vinculado_en).toLocaleDateString('es-VE'))}</b>. Escríbele al bot por privado.</span>`
+    : '<span>Para usarlo desde Telegram: toca <b>Generar código</b> y mándale al bot, por privado, <b>/vincular CÓDIGO</b>. El código vence en 10 minutos.</span>';
 }
 async function generarCodigoAsistente() {
   const btn = document.getElementById('asis-codigo-btn'), box = document.getElementById('asis-vinc');
   btn.disabled = true;
   const { data, error } = await sb.rpc('asistente_generar_codigo');
   btn.disabled = false;
-  if (error || !data?.codigo) { box.textContent = 'No se pudo generar el código, probá de nuevo.'; return; }
-  box.innerHTML = `<span class="asis-codigo">${esc(data.codigo)}</span><span>Mandale al bot, por privado: <b>/vincular ${esc(data.codigo)}</b> · vence a las ${esc(new Date(data.expira_en).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }))}</span>`;
+  if (error || !data?.codigo) { box.textContent = 'No se pudo generar el código, prueba de nuevo.'; return; }
+  box.innerHTML = `<span class="asis-codigo">${esc(data.codigo)}</span><span>Mándale al bot, por privado: <b>/vincular ${esc(data.codigo)}</b> · vence a las ${esc(new Date(data.expira_en).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }))}</span>`;
 }
 async function cargarAccionesAsistente() {
   const cont = document.getElementById('asis-acc-lista');
@@ -16469,7 +16469,7 @@ async function deshacerAccionAsistente(id, btn) {
   const { data, error } = await sb.functions.invoke('asistente-admin', { body: { deshacer_accion_id: id } });
   if (error || !data?.ok) {
     btn.disabled = false;
-    document.getElementById('asis-acc-sub').textContent = ASIS_ERRORES[data?.error] || 'No se pudo deshacer, probá de nuevo.';
+    document.getElementById('asis-acc-sub').textContent = ASIS_ERRORES[data?.error] || 'No se pudo deshacer, prueba de nuevo.';
     return;
   }
   document.getElementById('asis-acc-sub').textContent = 'Acción deshecha.';
@@ -16513,7 +16513,7 @@ async function borrarMemoriaLyra(id, btn) {
   if (!ok) return;
   btn.disabled = true;
   const { data, error } = await sb.rpc('lyra_memoria_borrar', { p_id: id });
-  document.getElementById('asis-mem-sub').textContent = error || !data ? 'No se pudo borrar, probá de nuevo.' : 'Listo, lo olvidó.';
+  document.getElementById('asis-mem-sub').textContent = error || !data ? 'No se pudo borrar, prueba de nuevo.' : 'Listo, lo olvidó.';
   cargarMemoriaLyra();
 }
 function editarMemoriaLyra(fila, id) {
@@ -18229,7 +18229,7 @@ async function viGuardarProsodia() {
 async function viGenerar() {
   const btn = document.getElementById('vi-generar');
   const texto = document.getElementById('vi-texto').value.trim();
-  if (!texto) { errToast('Escribí un texto primero'); return; }
+  if (!texto) { errToast('Escribe un texto primero'); return; }
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.functions.invoke('voz-ia-probar', { body: { texto, modo: viModo, ...viLeerSliders() } });
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Generar audio';
@@ -18286,14 +18286,14 @@ async function viMedirAudio(file) {
   }
 }
 async function viSubirReferencia(file) {
-  if (!VI_TIPOS_OK.includes(file.type)) { errToast('Formato no soportado. Usá MP3, OGG, WAV, M4A o WebM.'); return; }
+  if (!VI_TIPOS_OK.includes(file.type)) { errToast('Formato no soportado. Usa MP3, OGG, WAV, M4A o WebM.'); return; }
   if (file.size > VI_MAX_BYTES) { errToast(`El archivo pesa ${(file.size / 1e6).toFixed(1)} MB. Máximo 20 MB.`); return; }
 
   let duracion, bitrateKbps;
   try {
     ({ duracion, bitrateKbps } = await viMedirAudio(file));
   } catch (e) {
-    errToast('No se pudo leer el archivo de audio -- probá con otro formato.');
+    errToast('No se pudo leer el archivo de audio -- prueba con otro formato.');
     return;
   }
 
@@ -18301,7 +18301,7 @@ async function viSubirReferencia(file) {
     errToast(
       `No se puede usar: ${duracion.toFixed(1)}s a ${bitrateKbps.toFixed(0)} kbps. ` +
       `Es calidad de nota de WhatsApp, la voz clonada va a sonar metálica. ` +
-      `Grabá con la app de notas de voz del teléfono (nunca por WhatsApp), 30-60s, en un cuarto silencioso.`
+      `Graba con la app de notas de voz del teléfono (nunca por WhatsApp), 30-60s, en un cuarto silencioso.`
     );
     return;
   }
@@ -18330,7 +18330,7 @@ async function viSubirReferencia(file) {
     });
     const out = await res.json().catch(() => null);
     if (!res.ok || !out?.ok) { errToast('No se pudo subir la muestra: ' + (out?.error || res.status)); return; }
-    okToast('Muestra agregada -- apretá "Entrenar voz" para que afecte lo que suena');
+    okToast('Muestra agregada -- aprieta "Entrenar voz" para que afecte lo que suena');
     viCargarReferencia();
   } catch (e) {
     errToast('No se pudo subir la muestra: ' + e.message);
@@ -18366,7 +18366,7 @@ async function viGuardarTranscripcion(id) {
     });
     const out = await res.json().catch(() => null);
     if (!res.ok || !out?.ok) { errToast('No se pudo guardar: ' + (out?.error || res.status)); return; }
-    okToast('Transcripción guardada -- entrená de nuevo para que la use el modelo');
+    okToast('Transcripción guardada -- entrena de nuevo para que la use el modelo');
   } catch (e) {
     errToast('No se pudo guardar: ' + e.message);
   }
@@ -18585,7 +18585,7 @@ async function vrGuardarVoz(id) {
   const suf = id || 'nueva';
   const nombre = document.getElementById(`vr-voz-nombre-${suf}`)?.value.trim();
   const fishId = document.getElementById(`vr-voz-fishid-${suf}`)?.value.trim();
-  if (!nombre) { errToast('Ponele un nombre a la voz'); return; }
+  if (!nombre) { errToast('Ponle un nombre a la voz'); return; }
   if (!fishId) { errToast('Falta el ID de voz de Fish'); return; }
   const payload = {
     p_id: id ? Number(id) : null,
@@ -18661,7 +18661,7 @@ async function vrProbarVoz(id) {
   vrPresetProbar[vozId] = vrPresetProbar[vozId] ?? null;
   cont.innerHTML = `
     <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
-      <textarea class="ei" id="vr-probar-texto-${id}" rows="2" style="width:100%;resize:vertical" placeholder="Escribí un texto corto para escuchar esta voz..."></textarea>
+      <textarea class="ei" id="vr-probar-texto-${id}" rows="2" style="width:100%;resize:vertical" placeholder="Escribe un texto corto para escuchar esta voz..."></textarea>
       <div id="vr-probar-presets-${id}" style="margin-top:8px" data-vr-probar-presets="${id}">${vrChipsPresets(vozId, vrPresetProbar[vozId], 'data-vr-probar-preset-el')}</div>
       <button class="dbtn gh" style="margin-top:8px;padding:6px 10px;font-size:12.5px" data-vr-probar-generar="${id}"><i class="fas fa-wand-magic-sparkles"></i> Generar</button>
       <div id="vr-probar-resultado-${id}" style="margin-top:8px"></div>
@@ -18679,7 +18679,7 @@ async function vrProbarVoz(id) {
 
 async function vrGenerarPrueba(id) {
   const texto = document.getElementById(`vr-probar-texto-${id}`)?.value.trim();
-  if (!texto) { errToast('Escribí un texto primero'); return; }
+  if (!texto) { errToast('Escribe un texto primero'); return; }
   const btn = document.querySelector(`[data-vr-probar-generar="${id}"]`);
   const out = document.getElementById(`vr-probar-resultado-${id}`);
   btn.disabled = true; btn.innerHTML = `<span class="vr-wave"><span></span><span></span><span></span><span></span></span> Generando...`;
@@ -18823,7 +18823,7 @@ function vrPintarPresets() {
 async function vrGuardarPreset(id) {
   const suf = id || 'nueva';
   const nombre = document.getElementById(`vr-preset-nombre-${suf}`)?.value.trim();
-  if (!nombre) { errToast('Ponele un nombre al preset'); return; }
+  if (!nombre) { errToast('Ponle un nombre al preset'); return; }
   const payload = {
     p_id: id ? Number(id) : null,
     p_nombre: nombre,
@@ -18871,7 +18871,7 @@ async function vrFishBuscar() {
           ${v.muestra_url ? `<audio controls style="width:100%;height:32px" src="${esc(v.muestra_url)}"></audio>` : '<div class="muted" style="font-size:11px">Sin muestra disponible</div>'}
           <button class="dbtn gh" style="font-size:11.5px;padding:5px 9px" data-vr-fish-agregar="${i}"><i class="fas fa-plus"></i> Agregar al catálogo</button>
         </div>`).join('')
-    : '<div class="muted" style="font-size:12.5px">Sin resultados -- probá con otro término.</div>';
+    : '<div class="muted" style="font-size:12.5px">Sin resultados -- prueba con otro término.</div>';
 }
 
 function vrFishAgregar(indice) {
@@ -18888,7 +18888,7 @@ function vrFishAgregar(indice) {
   if (fishInput) fishInput.value = v.fish_model_id;
   if (descInput) descInput.value = v.descripcion || '';
   document.getElementById('vr-voz-nueva')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-  okToast('Precargado -- revisá color/emoji y guardá para agregarla al catálogo');
+  okToast('Precargado -- revisa color/emoji y guarda para agregarla al catálogo');
 }
 
 async function vrCargarPerfiles() {
@@ -18928,7 +18928,7 @@ function vrPintarPerfiles() {
   const cont = document.getElementById('vr-perfiles-lista');
   if (!cont) return;
   cont.innerHTML = VR_PERFILES.map(vrTarjetaPerfil).join('') ||
-    '<div class="muted" style="font-size:12.5px">Todavía no hay perfiles -- creá el primero con "Nuevo perfil".</div>';
+    '<div class="muted" style="font-size:12.5px">Todavía no hay perfiles -- crea el primero con "Nuevo perfil".</div>';
 }
 
 // ---- Vista de detalle: entrar a un perfil ------------------------------
@@ -18990,8 +18990,8 @@ function vrPintarDetalle() {
 
     <div class="card" style="padding:18px;margin-top:14px">
       <b style="font-size:14px"><i class="fas fa-wand-magic-sparkles"></i> Generar voz en off</b>
-      <div class="muted" style="font-size:12px;margin-top:4px">Sintetiza con la voz elegida arriba (guardada o no) -- probá antes de confirmar si querés.</div>
-      <textarea class="ei" id="vr-detalle-texto" rows="3" style="width:100%;resize:vertical;margin-top:10px" placeholder="Escribí el guion del video..."></textarea>
+      <div class="muted" style="font-size:12px;margin-top:4px">Sintetiza con la voz elegida arriba (guardada o no) -- prueba antes de confirmar si quieres.</div>
+      <textarea class="ei" id="vr-detalle-texto" rows="3" style="width:100%;resize:vertical;margin-top:10px" placeholder="Escribe el guion del video..."></textarea>
       <div id="vr-detalle-presets" style="margin-top:10px"></div>
       <div class="vr-accion-bar" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="dbtn gh" id="vr-detalle-puntuar" style="min-height:44px"><i class="fas fa-quote-right"></i> Arreglar puntuación</button>
@@ -19003,8 +19003,8 @@ function vrPintarDetalle() {
 
     <div class="card" style="padding:18px;margin-top:14px">
       <b style="font-size:14px"><i class="fas fa-clock-rotate-left"></i> Historial de audios</b>
-      <div class="muted" style="font-size:12px;margin-top:4px">Lo que ya generaste para este perfil -- reescuchá o descargá sin volver a generar.</div>
-      <div id="vr-detalle-historial" style="margin-top:10px">${esNuevo ? '<div class="muted" style="font-size:12.5px">Guardá el perfil primero para que quede historial.</div>' : '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>'}</div>
+      <div class="muted" style="font-size:12px;margin-top:4px">Lo que ya generaste para este perfil -- reescucha o descarga sin volver a generar.</div>
+      <div id="vr-detalle-historial" style="margin-top:10px">${esNuevo ? '<div class="muted" style="font-size:12.5px">Guarda el perfil primero para que quede historial.</div>' : '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>'}</div>
     </div>`;
   vrPintarChipsDetalle();
 }
@@ -19065,7 +19065,7 @@ async function vrBorrarHistorial(id) {
 async function vrArreglarPuntuacion() {
   const textarea = document.getElementById('vr-detalle-texto');
   const texto = textarea?.value.trim();
-  if (!texto) { errToast('Escribí un texto primero'); return; }
+  if (!texto) { errToast('Escribe un texto primero'); return; }
   const btn = document.getElementById('vr-detalle-puntuar');
   btn.disabled = true; btn.innerHTML = 'Arreglando... <i class="fas fa-spinner fa-spin"></i>';
   const { data, error } = await sb.functions.invoke('voz-texto-puntuar', { body: { texto } });
@@ -19112,7 +19112,7 @@ function vrElegirEmoji(emoji) {
 
 async function vrGuardarDetalle() {
   const nombre = document.getElementById('vr-detalle-nombre')?.value.trim();
-  if (!nombre) { errToast('Ponele un nombre al perfil'); return; }
+  if (!nombre) { errToast('Ponle un nombre al perfil'); return; }
   const vozSel = document.getElementById('vr-detalle-voz').value;
   const btn = document.getElementById('vr-detalle-guardar');
   btn.disabled = true;
@@ -19151,9 +19151,9 @@ async function vrEliminarPerfil(id) {
 
 async function vrGenerarDetalle() {
   const vozId = document.getElementById('vr-detalle-voz')?.value;
-  if (!vozId) { errToast('Elegí una voz primero'); return; }
+  if (!vozId) { errToast('Elige una voz primero'); return; }
   const texto = document.getElementById('vr-detalle-texto')?.value.trim();
-  if (!texto) { errToast('Escribí un texto primero'); return; }
+  if (!texto) { errToast('Escribe un texto primero'); return; }
   const btn = document.getElementById('vr-detalle-generar');
   const out = document.getElementById('vr-detalle-audio');
   btn.disabled = true; btn.innerHTML = `<span class="vr-wave"><span></span><span></span><span></span><span></span></span> Generando...`;
@@ -19467,7 +19467,7 @@ async function ssCargarPdfActual() {
   caja?.classList.toggle('viejo', viejo);
   meta.innerHTML = `Datos del PDF de BT cargado el <b>${fmtDiaCorto(dia)}</b> (${dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`})`
     + `${SS_PDF_ACTUAL.creado_por ? ` por ${esc(SS_PDF_ACTUAL.creado_por)}` : ''}.`
-    + (viejo ? ' <b>Puede estar desactualizado:</b> pedile a oficina el PDF nuevo.' : '');
+    + (viejo ? ' <b>Puede estar desactualizado:</b> pídele a oficina el PDF nuevo.' : '');
   if (ultima) ultima.textContent = `· última carga ${fmtDiaCorto(dia)}`;
   ssVerificar();
 }
@@ -19589,7 +19589,7 @@ async function ssPintarMapeo() {
   const box = document.getElementById('ss-mapeo');
   const hoteles = await ssProductosHotel();
   box.innerHTML = `<div class="card" style="margin-top:12px">
-    <h2><i class="fas fa-link"></i> Hoteles nuevos -- confirmá a qué hotel del tarifario corresponde cada uno</h2>
+    <h2><i class="fas fa-link"></i> Hoteles nuevos -- confirma a qué hotel del tarifario corresponde cada uno</h2>
     <div class="csub">Se recuerda para la próxima carga. "No lo tengo" también se recuerda, así no se vuelve a preguntar por un hotel que no vendemos.</div>
     <div id="ss-mapeo-filas" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
   </div>`;
@@ -19598,7 +19598,7 @@ async function ssPintarMapeo() {
     const candidatos = SS_DATA.candidatos[bt] || [];
     const idsCandidatos = new Set(candidatos.map((c) => c.producto_id));
     const opciones = [
-      `<option value="">— elegí un hotel —</option>`,
+      `<option value="">— elige un hotel —</option>`,
       ...candidatos.map((c) => `<option value="${c.producto_id}">★ ${esc(c.nombre)}${c.destino ? ` (${esc(c.destino)})` : ''}</option>`),
       candidatos.length ? `<option disabled>──────────</option>` : '',
       ...hoteles.filter((h) => !idsCandidatos.has(h.id)).map((h) => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`),
@@ -19675,7 +19675,7 @@ function ssPintarPreview() {
 
   box.innerHTML = `<div class="card" style="margin-top:12px">
     <h2><i class="fas fa-table-cells"></i> Lo que se leyó del PDF</h2>
-    <div class="csub">Compará contra el PDF original antes de confirmar. Tocá un hotel para ver sus fechas.</div>
+    <div class="csub">Compara contra el PDF original antes de confirmar. Toca un hotel para ver sus fechas.</div>
     <div class="csub"><b>Meses leídos:</b> ${esc(meses)}</div>
     <div class="vig-resumen" style="margin-top:12px">
       <div class="vig-kpi"><b>${filas.length}</b><span>Bloqueo(s)</span></div>
@@ -19894,7 +19894,7 @@ function ssPintarDetalleDia() {
   const box = document.getElementById('ss-detalle');
   if (!box) return;
   if (!SS_DIA_ABIERTO) {
-    box.innerHTML = '<div class="ss-detalle"><div class="ss-detalle-sub" style="margin:0">Tocá un día marcado para ver qué hoteles están bloqueados y qué hacer.</div></div>';
+    box.innerHTML = '<div class="ss-detalle"><div class="ss-detalle-sub" style="margin:0">Toca un día marcado para ver qué hoteles están bloqueados y qué hacer.</div></div>';
     return;
   }
   // Un hotel una sola vez por día; si ese día tiene stop sale y on request, manda el peor.
@@ -19978,7 +19978,7 @@ async function ssPintarHotelesVerif() {
   if (destino !== ssDestino) return;
   const conBloqueo = new Map(ssDelDestino(SS_VIGENTES_DATA).map((f) => [String(f.producto_id), f.nombre]));
   const resto = ssDelDestino(hoteles).filter((h) => !conBloqueo.has(String(h.id)));
-  sel.innerHTML = `<option value="">— elegí un hotel —</option>
+  sel.innerHTML = `<option value="">— elige un hotel —</option>
     ${conBloqueo.size ? `<optgroup label="Con bloqueos publicados">${[...conBloqueo].sort((a, b) => a[1].localeCompare(b[1])).map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('')}</optgroup>` : ''}
     ${resto.length ? `<optgroup label="Resto del tarifario (sin bloqueos)">${resto.map((h) => `<option value="${h.id}">${esc(h.nombre)}${h.destino ? ` (${esc(h.destino)})` : ''}</option>`).join('')}</optgroup>` : ''}`;
   sel.value = actual;
@@ -19989,7 +19989,7 @@ function ssVerificar() {
   if (!box || !SS_VIGENTES_DATA) return;
   const aviso = (t, cls = 'ss-v-hint') => { box.innerHTML = `<div class="${cls}">${t}</div>`; };
   const pid = val('ss-v-hotel'), ent = val('ss-v-entrada'), sal = val('ss-v-salida');
-  if (!pid || !ent || !sal) return aviso('Completá los tres datos y aparece la respuesta acá.');
+  if (!pid || !ent || !sal) return aviso('Completa los tres datos y aparece la respuesta acá.');
   if (ent < ssISO(new Date())) return aviso('La entrada no puede ser antes de hoy.', 'ss-v-error');
   if (sal <= ent) return aviso('La salida tiene que ser al menos un día después de la entrada.', 'ss-v-error');
 
@@ -20000,7 +20000,7 @@ function ssVerificar() {
     const aca = rangos.filter((r) => r.fecha_desde <= iso && iso <= r.fecha_hasta);
     noches.push({ iso, dow: d.getDay(), estado: aca.some((r) => r.estado === 'stop_sale') ? 'stop_sale' : aca.length ? 'on_request' : 'libre' });
   }
-  if (noches.length > 60) return aviso('Son más de 60 noches: acortá el rango.', 'ss-v-error');
+  if (noches.length > 60) return aviso('Son más de 60 noches: acorta el rango.', 'ss-v-error');
 
   const n = noches.length;
   const nStop = noches.filter((x) => x.estado === 'stop_sale').length;
@@ -20015,7 +20015,7 @@ function ssVerificar() {
     texto = `${cuantas(nStop, 'sin cupo')} ${segun}. Propón otras fechas u otro hotel del mismo destino.${libre ? ` Disponible desde el ${ssFechaCompleta(libre)}; confirma cupo y tarifa para viajar desde esa fecha.` : ''}`;
   } else if (nReq) {
     c = 'var(--amber)'; ic = 'fa-clock'; titulo = 'Consultar a BT antes de confirmar';
-    texto = `${cuantas(nReq, 'a confirmar')} ${segun}. Pedile a BT que confirme el cupo: no cobres ni le confirmes al cliente hasta tener la respuesta.`;
+    texto = `${cuantas(nReq, 'a confirmar')} ${segun}. Pídele a BT que confirme el cupo: no cobres ni le confirmes al cliente hasta tener la respuesta.`;
   } else {
     c = 'var(--green)'; ic = 'fa-circle-check'; titulo = 'Se puede vender';
     texto = `${n === 1 ? 'La noche no figura bloqueada' : `Ninguna de las ${n} noches figura bloqueada`} ${segun}.`
@@ -20135,7 +20135,7 @@ function ssRenderVigentes() {
     ${ssFiltroActivoHtml()}
     <div id="ss-calendario" class="${ssView === 'calendario' ? 'show' : ''}"></div>
     <div id="ss-hoteles" class="${ssView === 'hoteles' ? 'show' : ''}"></div>
-    <div class="ss-rotulo" style="margin-top:16px">Resumen<span>tocá una tarjeta para filtrar; otra vez para ver todo</span></div>
+    <div class="ss-rotulo" style="margin-top:16px">Resumen<span>toca una tarjeta para filtrar; otra vez para ver todo</span></div>
     <div id="ss-kpis" class="kpis kpis-3"></div>`;
 
   pintarKPIs('ss-kpis', [
@@ -20154,7 +20154,7 @@ function ssRenderVigentes() {
 
   if (!filas.length) {
     const donde = ssView === 'calendario' ? 'ss-calendario' : 'ss-hoteles';
-    document.getElementById(donde).innerHTML = '<div class="vig-vacio">Ningún bloqueo coincide con lo que buscás.</div>';
+    document.getElementById(donde).innerHTML = '<div class="vig-vacio">Ningún bloqueo coincide con lo que buscas.</div>';
     return;
   }
 
@@ -20371,7 +20371,7 @@ async function datosExport(tabla, formato) {
   let filas;
   try { filas = await def.filas(formato); } catch (e) { console.error(e); errToast('No se pudieron preparar los datos para exportar'); return null; }
   if (!filas) return null;
-  if (formato === 'pdf' && filas.length > TOPE_PDF_EXPORT) { errToast(`Son ${fmt(filas.length)} filas: para más de ${fmt(TOPE_PDF_EXPORT)} usá CSV o XLSX`); return null; }
+  if (formato === 'pdf' && filas.length > TOPE_PDF_EXPORT) { errToast(`Son ${fmt(filas.length)} filas: para más de ${fmt(TOPE_PDF_EXPORT)} usa CSV o XLSX`); return null; }
   const celda = def.celda || ((c, r) => r[c] == null ? '' : String(r[c]));
   return { cols: def.cols, aoa: [def.cols.map(c => c[1]), ...filas.map(f => def.cols.map(c => celda(c[0], f)))] };
 }
@@ -20407,7 +20407,7 @@ function ensureXLSX() {
   });
 }
 window.exportarXLSX = async (tabla, titulo) => {
-  try { await ensureXLSX(); } catch { errToast('No se pudo cargar la librería de Excel, revisá la conexión'); return; }
+  try { await ensureXLSX(); } catch { errToast('No se pudo cargar la librería de Excel, revisa la conexión'); return; }
   const d = await datosExport(tabla, 'xlsx');
   if (!d) return;
   const ws = XLSX.utils.aoa_to_sheet(d.aoa);
@@ -20449,7 +20449,7 @@ async function filasExportLeads() {
   const { count: n, error: errCount } = await buildQuery(true).limit(1);
   if (errCount) throw errCount;
   if (!n) { errToast('No hay leads con estos filtros'); return null; }
-  if (n > TOPE_EXPORT_LEADS) { errToast(`Son ${fmt(n)} leads: el máximo por archivo es ${fmt(TOPE_EXPORT_LEADS)}. Acotá con filtros o fechas.`); return null; }
+  if (n > TOPE_EXPORT_LEADS) { errToast(`Son ${fmt(n)} leads: el máximo por archivo es ${fmt(TOPE_EXPORT_LEADS)}. Acota con filtros o fechas.`); return null; }
   const ok = await confirmarSheet({ titulo: `¿Exportar ${fmt(n)} leads?`, detalle: 'Se descargan con los filtros activos, con nombre y teléfono. Es información de clientes: no la compartas fuera de la empresa.', textoOk: 'Exportar' });
   if (!ok) return null;
   const filas = [];
@@ -20786,7 +20786,7 @@ function renderVentas() {
    mano (guardar_gasto) y el de IA entra solo desde las tablas *_ia_gasto. */
 const BAL_CATS = [['nomina', 'Nómina'], ['publicidad', 'Publicidad'], ['alquiler', 'Alquiler'], ['servicios', 'Servicios'], ['software', 'Software'], ['impuestos', 'Impuestos'], ['comisiones_bancarias', 'Comisiones bancarias'], ['otros', 'Otros']];
 const BAL_CAT_LBL = { ...Object.fromEntries(BAL_CATS), ia: 'Inteligencia artificial' };
-const BAL_ERR = { fecha_invalida: 'La fecha no es válida', categoria_invalida: 'Elegí una categoría', falta_concepto: 'Falta el concepto', moneda_invalida: 'Moneda inválida', monto_invalido: 'El monto tiene que ser mayor que 0', falta_tasa: 'En bolívares hace falta la tasa', tasa_invalida: 'La tasa no es válida', falta_motivo: 'Falta el motivo', gasto_no_encontrado: 'Ese gasto ya no existe' };
+const BAL_ERR = { fecha_invalida: 'La fecha no es válida', categoria_invalida: 'Elige una categoría', falta_concepto: 'Falta el concepto', moneda_invalida: 'Moneda inválida', monto_invalido: 'El monto tiene que ser mayor que 0', falta_tasa: 'En bolívares hace falta la tasa', tasa_invalida: 'La tasa no es válida', falta_motivo: 'Falta el motivo', gasto_no_encontrado: 'Ese gasto ya no existe' };
 const BAL = { tipo: 'mes', off: 0, rango: null, gen: 0, data: null, prev: null, p: null };
 const balMoney = n => { const v = Number(n) || 0; return (v < 0 ? '−' : '') + '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v)); };
 const balMoney0 = n => { const v = Number(n) || 0; return (v < 0 ? '−' : '') + money(Math.abs(v)); };
@@ -21555,7 +21555,7 @@ async function confirmarMontoSheet() {
   const err = document.getElementById('monto-sheet-error');
   err.classList.remove('info');
   const valor = Number(document.getElementById('monto-sheet-input').value);
-  if (!Number.isFinite(valor) || valor <= 0) { err.textContent = 'Ingresá un monto válido.'; return; }
+  if (!Number.isFinite(valor) || valor <= 0) { err.textContent = 'Ingresa un monto válido.'; return; }
   const btn = document.getElementById('monto-sheet-confirmar');
   btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
   let resultado;
@@ -21618,7 +21618,7 @@ const PROV_TIPO_LABEL = Object.fromEntries(PROV_TIPOS.map(([k, l]) => [k, l]));
 const PROV_PAGO_CAMPOS = { banco: 'prov-pago-banco', cuenta: 'prov-pago-cuenta', titular: 'prov-pago-titular', pago_movil: 'prov-pago-movil', zelle: 'prov-pago-zelle', binance: 'prov-pago-binance', otros: 'prov-pago-otros' };
 // guardar_proveedor devuelve los errores de negocio como {ok:false,error}, no como excepción.
 const PROV_ERRORES = {
-  nombre_requerido: 'Poné el nombre del proveedor.',
+  nombre_requerido: 'Pon el nombre del proveedor.',
   nombre_duplicado: 'Ya hay un proveedor con ese nombre.',
   tipos_invalidos: 'Algún servicio marcado no es válido.',
   moneda_invalida: 'La moneda no es válida.',
@@ -21651,7 +21651,7 @@ const PRV_SECCION = { hotel: ['Hotel', 'hospedaje', 'fa-bed'], boleteria: ['Bole
 const PRV_MOTIVO = {
   neto_incluye_otros: 'El neto es igual o mayor que lo que vendió este proveedor: seguramente suma el boleto u otro servicio.',
   margen_alto: 'Más de 40%: el total parece traer servicios de otro proveedor.',
-  margen_bajo: 'Menos de 5%: revisá el neto cargado.',
+  margen_bajo: 'Menos de 5%: revisa el neto cargado.',
   proveedor_sin_ficha: 'El proveedor escrito en la ficha no coincide con ninguno de la lista.',
 };
 const PRV_TIPO_COLOR = { hospedaje: 'var(--accent)', boleto_aereo: 'var(--blue)', traslado_terrestre: 'var(--purple)', traslado_maritimo: 'var(--purple)', full_day: 'var(--amber)', seguro: 'var(--green)', otro: 'var(--muted)' };
@@ -21780,7 +21780,7 @@ function prvPintarRevisar() {
   box.hidden = !PRV.revisar;
   if (!PRV.revisar) return;
   box.innerHTML = `<h3><i class="fas fa-magnifying-glass-chart"></i> Ventas a revisar (${fmt(malos.length)})</h3>
-    <p>No entran en el margen hasta que se corrijan. Tocá una para abrir al cliente y revisar el total o el costo neto en su ficha de Postventa. <button class="mg-link" type="button" data-prv-cerrar>Cerrar</button></p>
+    <p>No entran en el margen hasta que se corrijan. Toca una para abrir al cliente y revisar el total o el costo neto en su ficha de Postventa. <button class="mg-link" type="button" data-prv-cerrar>Cerrar</button></p>
     <div class="prv-casos">${malos.map(prvCasoFila).join('') || '<div class="pv-empty">Todo cuadra: no hay ventas para revisar.</div>'}</div>`;
 }
 async function prvUsarMargen(id, tipo, pct) {
@@ -21815,7 +21815,7 @@ const mgPropio = (el, sel) => [...el.querySelectorAll(sel)].find(x => x.closest(
 function mgEjemplo(k, v) {
   if (k.startsWith('t:')) return v === '' ? 'Sin tarifa: en cada reserva el neto de este traslado se carga a mano.'
     : `Cada traslado con este proveedor toma <b>${mgUsd(Math.round(Number(v) * 100))}</b> de neto solo. En la reserva se puede cambiar.`;
-  if (!mgPctOk(v)) return '<span class="mg-ej-vacio">Escribí un % entre 0 y 99,99</span>';
+  if (!mgPctOk(v)) return '<span class="mg-ej-vacio">Escribe un % entre 0 y 99,99</span>';
   const venta = Math.round(MG.ejemplo * 100), neto = Math.round(venta * (1 - Number(v) / 100));
   return `Venta ${mgUsd(venta)}<i class="fas fa-arrow-right"></i>neto proveedor <b>${mgUsd(neto)}</b> · gana Lotus <b class="mg-gana">${mgUsd(venta - neto)}</b>`;
 }
@@ -21831,7 +21831,7 @@ function mgTarjetaTipo(tipo) {
     return `<div class="mg-exc${ve !== o ? ' sucio' : ''}" data-k="${ke}" data-orig="${o}"><span title="${esc(m.proveedor || '')}">${esc(m.proveedor || 'Proveedor')}</span><input class="ei" data-mg-in type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(ve)}" aria-label="Margen de ${esc(m.proveedor || '')}"><span class="mg-suf">%</span><button class="btn-sm" type="button" data-mg-guardar ${ve !== o ? '' : 'disabled'}>Guardar</button><button class="mg-x" type="button" data-mg-quitar aria-label="Quitar excepción de ${esc(m.proveedor || '')}"><i class="fas fa-xmark"></i></button></div>`; };
   const nueva = MG.nuevaExc !== tipo ? '' : candidatos.length
     ? `<div class="mg-exc mg-exc-nueva" data-nx="${tipo}"><select class="ei" data-nx-prov aria-label="Proveedor">${candidatos.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select><input class="ei" data-nx-pct type="number" inputmode="decimal" min="0" max="99.99" step="0.01" placeholder="%" aria-label="Margen"><button class="btn-sm" type="button" data-mg-exc-crear>Guardar</button><button class="mg-x" type="button" data-mg-exc-cancelar aria-label="Cancelar"><i class="fas fa-xmark"></i></button></div>`
-    : `<div class="mg-nota">No hay más proveedores activos de este tipo. Marcá el tipo en la ficha del proveedor. <button class="mg-link" type="button" data-mg-exc-cancelar>Cerrar</button></div>`;
+    : `<div class="mg-nota">No hay más proveedores activos de este tipo. Marca el tipo en la ficha del proveedor. <button class="mg-link" type="button" data-mg-exc-cancelar>Cerrar</button></div>`;
   const quitar = !MG_FIJOS.includes(tipo) ? `<button class="mg-link mg-quitar" type="button" data-mg-quitar>Quitar margen</button>` : '';
   return `<div class="mg-card mg-tipo${v !== orig ? ' sucio' : ''}${orig === '' ? ' mg-sin' : ''}" data-k="${k}" data-orig="${orig}">
     <div class="mg-head"><i class="fas ${ico}"></i><div><b>${esc(lbl)}</b><span>${esc(secLbl)}${orig === '' ? ' · sin margen todavía' : ''}</span></div></div>
@@ -21863,7 +21863,7 @@ function mgRender() {
     <div class="mg-grid">${visibles.map(mgTarjetaTipo).join('')}</div>
     ${resto.length ? `<div class="mg-agregar"><span>Agregar margen a:</span>${resto.map(t => `<button class="mg-chip" type="button" data-mg-agregar="${t}"><i class="fas ${(RV_TIPOS[t] || [])[1] || 'fa-circle-dot'}"></i>${esc((RV_TIPOS[t] || [t])[0])}</button>`).join('')}</div>` : ''}
     <h3 class="mg-sub"><i class="fas fa-van-shuttle"></i> Tarifa base de traslados</h3>
-    ${MG.traslados.length ? `<div class="mg-grid">${MG.traslados.map(mgTarjetaTraslado).join('')}</div>` : '<div class="pv-empty">No hay proveedores de traslado activos. Marcá "Traslado terrestre" en la ficha del proveedor.</div>'}
+    ${MG.traslados.length ? `<div class="mg-grid">${MG.traslados.map(mgTarjetaTraslado).join('')}</div>` : '<div class="pv-empty">No hay proveedores de traslado activos. Marca "Traslado terrestre" en la ficha del proveedor.</div>'}
     <div class="mg-pie"><i class="fas fa-circle-info"></i><span>Los cambios valen para los servicios que se carguen de ahora en adelante. Para recalcular uno ya cargado: en la reserva, <b>Neto y proveedor</b> → <b>Neto automático</b> → Guardar.</span></div>`;
 }
 async function mgCargar() {
@@ -21972,7 +21972,7 @@ function renderProveedores() {
     { key: 'activos', t: 'Proveedores activos', v: fmt(activos.length), d: `${fmt(PROV_CACHE.length - activos.length)} inactivos`, i: 'fa-truck-field', c: 'var(--blue)' },
     { key: 'margen', t: 'Margen promedio', v: prom != null ? prvPct(prom) : '—', d: prom != null ? `${money(venta - neto)} ganados sobre ${money(venta)}` : 'sin ventas medidas', i: 'fa-chart-line', c: prvColor(prom), tt: 'Ordenar por mayor margen', go: () => { document.getElementById('prov-orden').value = 'margen'; renderProveedores(); } },
     { key: 'medidos', t: 'Con margen medido', v: `${fmt(conDato)} de ${fmt(activos.length)}`, d: `${fmt(casos)} ventas con neto en Postventa`, i: 'fa-scale-balanced', c: 'var(--green)' },
-    { key: 'revisar', t: 'Ventas a revisar', v: fmt(nRevisar), d: nRevisar ? 'no cuadran: tocá para verlas' : 'todo cuadra', i: 'fa-triangle-exclamation', c: nRevisar ? 'var(--amber)' : 'var(--green)', on: PRV.revisar, tt: 'Ver las ventas que no cuadran', go: () => { PRV.revisar = !PRV.revisar; renderProveedores(); if (PRV.revisar) document.getElementById('prov-revisar').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } },
+    { key: 'revisar', t: 'Ventas a revisar', v: fmt(nRevisar), d: nRevisar ? 'no cuadran: toca para verlas' : 'todo cuadra', i: 'fa-triangle-exclamation', c: nRevisar ? 'var(--amber)' : 'var(--green)', on: PRV.revisar, tt: 'Ver las ventas que no cuadran', go: () => { PRV.revisar = !PRV.revisar; renderProveedores(); if (PRV.revisar) document.getElementById('prov-revisar').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } },
   ]);
   const nEst = { activos: buscadas.filter(p => p.activo).length, inactivos: buscadas.filter(p => !p.activo).length, todos: buscadas.length };
   document.getElementById('prov-estado').innerHTML = [['activos', 'Activos'], ['inactivos', 'Inactivos'], ['todos', 'Todos']]
@@ -22303,7 +22303,7 @@ const APTO_TIPOS = { habitacion: 'Habitación', estudio: 'Estudio', apartamento:
 const APTO_HAB_TIPOS = { dormitorio: 'Dormitorio', sala: 'Sala', cocina: 'Cocina', bano: 'Baño', exterior: 'Exterior', otro: 'Otro' };
 const APTO_PAGO_CAMPOS = { banco: 'apv-pago-banco', cuenta: 'apv-pago-cuenta', titular: 'apv-pago-titular', pago_movil: 'apv-pago-movil', zelle: 'apv-pago-zelle', binance: 'apv-pago-binance', otros: 'apv-pago-otros' };
 const APTO_ERRORES = {
-  nombre_requerido: 'Poné el nombre.',
+  nombre_requerido: 'Pon el nombre.',
   nombre_duplicado: 'Ya hay uno con ese nombre.',
   producto_ya_vinculado: 'Ese hotel del Tarifario ya está vinculado a otro proveedor de Apartamentos.',
   producto_invalido: 'El hotel del Tarifario elegido ya no existe.',
@@ -22641,7 +22641,7 @@ function aptoModoEditar(si) {
 function aptoCargarFotos() {
   const a = APTO_EDIT;
   if (!a) return;
-  aptoEl('apt-fotos-titulo').textContent = a.tipo === 'areas_comunes' ? 'Fachada, piscina, estacionamiento...' : 'Asigná cada foto a su habitación.';
+  aptoEl('apt-fotos-titulo').textContent = a.tipo === 'areas_comunes' ? 'Fachada, piscina, estacionamiento...' : 'Asigna cada foto a su habitación.';
   const habs = (a.habitaciones || []).filter(h => h.activo).map(h => ({ id: h.id, nombre: h.nombre }));
   cargarFotosAdmin('apto_fotos', 'apartamento_id', a.id, 'apartamentos', 'apto-fotos-admin', habs);
   aptoCargarVideos(a.id);
@@ -22759,7 +22759,7 @@ async function guardarApto() {
   btn.disabled = false;
   if (error) { err.textContent = error.code === '42501' ? 'Solo un admin puede guardar.' : 'No se pudo guardar: ' + (error.message || ''); return; }
   if (!data?.ok) { err.textContent = aptoMsg(data); if (data?.error === 'no_existe') loadApartamentos(); return; }
-  if (datos.tipo !== 'areas_comunes' && !(await aptoGuardarPrecios(editando?.id ?? data.apartamento.id, precios))) errToast('El apartamento se guardó, pero los precios no. Probá de nuevo.');
+  if (datos.tipo !== 'areas_comunes' && !(await aptoGuardarPrecios(editando?.id ?? data.apartamento.id, precios))) errToast('El apartamento se guardó, pero los precios no. Prueba de nuevo.');
   else okToast(editando ? 'Apartamento actualizado' : 'Apartamento creado');
   await loadApartamentos();
   // Recién creado: se reabre en modo edición para cargar de una vez sus espacios y fotos.
@@ -22825,8 +22825,8 @@ const DISP_TIPOS = { ocupado: 'Ocupado', mantenimiento: 'Mantenimiento', uso_pro
 const dispEtiqueta = b => b.tipo === 'reserva' ? (b.estado === 'por_confirmar' ? 'Por confirmar' : 'Reservado') : (DISP_TIPOS[b.tipo] || b.tipo);
 const DISP_ERRORES = {
   ventana_invalida: 'El rango de fechas no es válido (máximo 400 días).',
-  fechas_invalidas: 'Revisá las fechas: la salida tiene que ser después de la llegada.',
-  tipo_invalido: 'Elegí el motivo del bloqueo.',
+  fechas_invalidas: 'Revisa las fechas: la salida tiene que ser después de la llegada.',
+  tipo_invalido: 'Elige el motivo del bloqueo.',
   apartamento_invalido: 'El apartamento ya no existe: se recargó la lista.',
   datos_invalidos: 'Los datos no son válidos.',
   dato_invalido: 'Algún dato no es válido o es demasiado largo.',
@@ -22932,7 +22932,7 @@ async function dispGuardar() {
   btn.disabled = true;
   const { data, error } = await sb.rpc('guardar_apto_bloqueo', { p_id: DISP_EDIT?.id ?? null, p_datos: datos });
   btn.disabled = false;
-  if (error) { console.error('guardar_apto_bloqueo', error); err.textContent = 'No se pudo guardar. Probá de nuevo.'; return; }
+  if (error) { console.error('guardar_apto_bloqueo', error); err.textContent = 'No se pudo guardar. Prueba de nuevo.'; return; }
   if (!data?.ok) { err.textContent = dispMsg(data); if (data?.error === 'no_existe' || data?.error === 'apartamento_invalido') loadDisponibilidad(); return; }
   closeSheet('apto-bloq-sheet');
   okToast('Bloqueo guardado');
@@ -22942,7 +22942,7 @@ async function dispEliminar() {
   if (!DISP_EDIT) return;
   if (!(await confirmarSheet({ titulo: '¿Eliminar este bloqueo?', detalle: 'Las fechas vuelven a quedar libres.', textoOk: 'Eliminar', destructivo: true }))) return;
   const { data, error } = await sb.rpc('eliminar_apto_bloqueo', { p_id: DISP_EDIT.id });
-  if (error || !data?.ok) { console.error('eliminar_apto_bloqueo', error || data); aptoEl('bl-err').textContent = error ? 'No se pudo eliminar. Probá de nuevo.' : dispMsg(data); if (data?.error === 'no_existe') loadDisponibilidad(); return; }
+  if (error || !data?.ok) { console.error('eliminar_apto_bloqueo', error || data); aptoEl('bl-err').textContent = error ? 'No se pudo eliminar. Prueba de nuevo.' : dispMsg(data); if (data?.error === 'no_existe') loadDisponibilidad(); return; }
   closeSheet('apto-bloq-sheet');
   okToast('Bloqueo eliminado');
   loadDisponibilidad();
@@ -22993,9 +22993,9 @@ function setupDisponibilidad() {
    últimas 30 reservas enlazadas (el enlace lo hace el asistente por ahora). */
 const EMP_TIPOS = { agencia: 'Agencia', operador: 'Operador', corporativa: 'Corporativa', alianza: 'Alianza' };
 const EMP_ERRORES = {
-  nombre_requerido: 'Poné el nombre de la empresa.',
+  nombre_requerido: 'Pon el nombre de la empresa.',
   nombre_duplicado: 'Ya hay una empresa con ese nombre.',
-  tipo_invalido: 'Elegí el tipo de empresa.',
+  tipo_invalido: 'Elige el tipo de empresa.',
   modalidad_invalida: 'La modalidad de precio no es válida.',
   comision_requerida: 'Con modalidad "comisión" hay que poner el %.',
   email_invalido: 'El email no es válido.',
@@ -23180,10 +23180,10 @@ function renderReservasEmpresas() {
   const base = RE_VISTA === 'reservas' ? reservas : leads;
   document.getElementById('re-empresas').innerHTML = chip('data-re-empresa', '', 'Todas las empresas', base.length, !RE_EMPRESA)
     + activas.map(e => chip('data-re-empresa', e.id, e.nombre, cuenta(base, e.id), RE_EMPRESA === String(e.id))).join('');
-  if (!activas.length) { grid.innerHTML = '<div class="pv-empty"><i class="fas fa-building"></i><b>Todavía no hay empresas</b><br>Creá una desde Corporativo › Empresas</div>'; return; }
+  if (!activas.length) { grid.innerHTML = '<div class="pv-empty"><i class="fas fa-building"></i><b>Todavía no hay empresas</b><br>Crea una desde Corporativo › Empresas</div>'; return; }
   const lista = RE_VISTA === 'reservas' ? verReservas : verLeads;
   if (!lista.length) {
-    grid.innerHTML = `<div class="pv-empty"><i class="fas fa-inbox"></i><b>${RE_VISTA === 'reservas' ? 'Sin reservas' : 'Sin cotizaciones en curso'}</b><br>${RE_EMPRESA ? 'Esta empresa todavía no tiene ninguna' : 'Creá un lead de empresa con el botón de arriba'}</div>`;
+    grid.innerHTML = `<div class="pv-empty"><i class="fas fa-inbox"></i><b>${RE_VISTA === 'reservas' ? 'Sin reservas' : 'Sin cotizaciones en curso'}</b><br>${RE_EMPRESA ? 'Esta empresa todavía no tiene ninguna' : 'Crea un lead de empresa con el botón de arriba'}</div>`;
     return;
   }
   grid.innerHTML = RE_VISTA === 'reservas'
@@ -23742,7 +23742,7 @@ async function ivBuscarReservas(q) {
 }
 function ivSobResHtml(f) {
   const lista = f.sobRes || ivSobSimilares(f);
-  if (!lista.length) return `<div class="iv-sob-vacio">${(f.sobQ || '').trim().length < 2 ? 'Escribí al menos 2 letras.' : 'Sin reservas con ese dato.'}</div>`;
+  if (!lista.length) return `<div class="iv-sob-vacio">${(f.sobQ || '').trim().length < 2 ? 'Escribe al menos 2 letras.' : 'Sin reservas con ese dato.'}</div>`;
   return lista.map(r => `<button type="button" class="iv-sob-r${f.sobrescribir?.id === r.id ? ' on' : ''}" data-rid="${r.id}" aria-pressed="${f.sobrescribir?.id === r.id}"><b>${esc(r.codigo || '#' + r.id)}</b><span>${esc(r.cliente || 'Sin nombre')}${r.destino ? ' · ' + esc(r.destino) : ''}${r.inicio ? ' · ' + esc(pvFecha(r.inicio)) : ''}</span><em>${ivMoney(r.monto_total)}</em></button>`).join('');
 }
 
@@ -23785,7 +23785,7 @@ function ivRender() {
     const d = f.datos || {};
     const archivo = `<div class="iv-archivo" title="${esc(f.nombre)}"><i class="fas fa-file-pdf" aria-hidden="true"></i>${esc(f.nombre)}</div>`;
     if (f.estado === 'leyendo') return `<article class="iv-card"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio"><i class="fas fa-circle-notch fa-spin"></i> Leyendo voucher…</div>${archivo}</div></div><div class="iv-skel" aria-hidden="true"><span></span><span></span><span></span></div></article>`;
-    if (f.estado === 'error' && !d.numero_voucher) return `<article class="iv-card" data-e="error"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio">No se pudo leer</div>${archivo}</div><span class="iv-estado">Error</span></div>${ivAviso(f.resultado && f.resultado !== 'no se pudo leer' ? ivTexto(f.resultado) : 'Probá con otro PDF o cargá la venta a mano.', 'error')}</article>`;
+    if (f.estado === 'error' && !d.numero_voucher) return `<article class="iv-card" data-e="error"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio">No se pudo leer</div>${archivo}</div><span class="iv-estado">Error</span></div>${ivAviso(f.resultado && f.resultado !== 'no se pudo leer' ? ivTexto(f.resultado) : 'Prueba con otro PDF o carga la venta a mano.', 'error')}</article>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
     const sims = f.similares || [];
     const opciones = [`<option value="" ${f.crear_lead && !f.vincular && !f.modoSob ? 'selected' : ''}>➕ Crear lead nuevo</option>`,
@@ -23803,11 +23803,11 @@ function ivRender() {
     const otras = abierta && f.empresa_id ? abiertas.filter(x => x !== f && x.empresa_id !== f.empresa_id).length : 0;
     const num = d.numero_voucher != null && d.numero_voucher !== '' ? esc(String(d.numero_voucher)) : '';
     const avisos = [
-      abierta && debil && ivAviso('Coincide solo el nombre: revisá que sea el mismo cliente o elegí ➕ Crear lead nuevo.'),
-      abierta && posible && ivAviso(`Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elegí 🔗 para no duplicar la venta.`),
+      abierta && debil && ivAviso('Coincide solo el nombre: revisa que sea el mismo cliente o elige ➕ Crear lead nuevo.'),
+      abierta && posible && ivAviso(`Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elige 🔗 para no duplicar la venta.`),
       abierta && f.modoSob && ivAviso(f.sobrescribir
         ? `Se reemplazan los servicios, el total, las fechas y el hotel de <b>${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)}</b>, y el nombre, teléfono y destino del cliente. Los abonos y una factura que ya exista no se tocan.`
-        : 'Buscá y elegí la reserva que este voucher va a sobrescribir.'),
+        : 'Busca y elige la reserva que este voucher va a sobrescribir.'),
       abierta && f.nueva && ivAviso(`Se crea una reserva aparte para <b>${esc(cand?.nombre || '#' + f.lead_id)}</b>, con su propia factura por lo cobrado. Sus otras reservas no se tocan y cada ficha muestra la otra venta.`),
       abierta && mismatch && ivAviso(`El lead es de ${esc(cand.asesor)}, el voucher dice ${esc(d.asesor_pdf)}.${esAdmin ? ` <label><input type="checkbox" class="iv-reasignar" ${f.reasignar ? 'checked' : ''}> reasignar</label>` : ''}`),
       f.resultado && f.estado !== 'hecho' && ivAviso(ivTexto(f.resultado), ['error', 'duplicado'].includes(f.estado) ? 'error' : ''),
@@ -23880,7 +23880,7 @@ async function ivImportar() {
   const pend = IV_FILAS.filter(f => f.sel && ivAbierta(f));
   if (!pend.length) { errToast('No hay filas para importar'); return; }
   const sinElegir = pend.find(f => f.modoSob && !f.sobrescribir);
-  if (sinElegir) { errToast(`Elegí la reserva a sobrescribir del voucher ${sinElegir.datos.numero_voucher || sinElegir.nombre}`); return; }
+  if (sinElegir) { errToast(`Elige la reserva a sobrescribir del voucher ${sinElegir.datos.numero_voucher || sinElegir.nombre}`); return; }
   const sobs = pend.filter(f => f.modoSob);
   if (sobs.length && !await confirmarSheet({
     titulo: sobs.length === 1 ? `Sobrescribir ${sobs[0].sobrescribir.codigo || 'la reserva'}` : `Sobrescribir ${sobs.length} reservas`,
@@ -24374,7 +24374,7 @@ function renderTarifarioIA() {
   filas.push(`<div class="ia-corte">— corte: de acá para abajo la IA no las ve (tope ${IA_PROMOS_MAX}) —</div>`);
   enBanca.forEach((p, i) => filas.push(iaFilaHtml(p, IA_PROMOS_MAX + i + 1, ponerIds)));
   if (fuera.length || vencidasOcultas) {
-    filas.push(`<div class="ia-sep">La IA no las ofrece hoy (${fuera.length}) — marcá <b>Ofrecer</b> para sumarlas${vencidasOcultas ? ` · ${vencidasOcultas} vencida${vencidasOcultas === 1 ? '' : 's'} oculta${vencidasOcultas === 1 ? '' : 's'}` : ''}</div>`);
+    filas.push(`<div class="ia-sep">La IA no las ofrece hoy (${fuera.length}) — marca <b>Ofrecer</b> para sumarlas${vencidasOcultas ? ` · ${vencidasOcultas} vencida${vencidasOcultas === 1 ? '' : 's'} oculta${vencidasOcultas === 1 ? '' : 's'}` : ''}</div>`);
     fuera.forEach(p => filas.push(iaFilaHtml(p, null, ponerIds)));
   }
   cont.innerHTML = head + `<div class="ia-list">${filas.join('')}</div>`;
@@ -25941,9 +25941,9 @@ async function paqForm(p) {
     campos: [
       { id: 'titulo', label: 'Título', requerido: true, valor: p?.titulo, placeholder: 'Navidad todo incluido en Margarita' },
       { id: 'etiqueta', label: 'Etiqueta', tipo: 'select', valor: p?.etiqueta || '', opciones: etiquetas.map(e => ({ v: e, t: e || 'Sin etiqueta' })) },
-      { id: 'hotel', label: 'Hotel', tipo: 'select', requerido: true, valor: p?.hotel_id || '', opciones: [{ v: '', t: 'Elegí el hotel' }, ...PAQ_HOTELES.map(h => ({ v: h.id, t: `${h.destino || 'Sin destino'} · ${h.nombre}` }))] },
+      { id: 'hotel', label: 'Hotel', tipo: 'select', requerido: true, valor: p?.hotel_id || '', opciones: [{ v: '', t: 'Elige el hotel' }, ...PAQ_HOTELES.map(h => ({ v: h.id, t: `${h.destino || 'Sin destino'} · ${h.nombre}` }))] },
       { id: 'plan', label: 'Plan preferido, vacío = cualquiera', valor: p?.plan, placeholder: 'TODO INCLUIDO' },
-      { id: 'llega', label: 'El vuelo llega a', tipo: 'select', requerido: true, valor: p?.vuelo_destino_iata || '', opciones: [{ v: '', t: 'Elegí el aeropuerto' }, ...destinos.map(([i, n]) => ({ v: i, t: `${n} (${i})` }))] },
+      { id: 'llega', label: 'El vuelo llega a', tipo: 'select', requerido: true, valor: p?.vuelo_destino_iata || '', opciones: [{ v: '', t: 'Elige el aeropuerto' }, ...destinos.map(([i, n]) => ({ v: i, t: `${n} (${i})` }))] },
       { id: 'entrada', label: 'Fecha de ida, solo si es salida fija', tipo: 'date', valor: p?.fecha_entrada },
       { id: 'salida', label: 'Fecha de vuelta, solo si es salida fija', tipo: 'date', valor: p?.fecha_salida },
       { id: 'nmin', label: 'Noches mínimas', requerido: true, tipo: 'number', min: 1, max: 21, step: 1, valor: p?.noches_min ?? 2 },
@@ -25955,21 +25955,21 @@ async function paqForm(p) {
       { id: 'orden', label: 'Orden: menor = primero', tipo: 'number', step: 1, valor: p?.orden ?? (d.paquetes.length + 1) * 10 }] });
   if (!f) return;
   const hotelId = Number(f.hotel);
-  if (!hotelId || !f.llega) { errToast('Elegí el hotel y el aeropuerto de llegada'); return; }
-  if (!!f.entrada !== !!f.salida) { errToast('Para una salida fija cargá las dos fechas; si no, dejalas vacías'); return; }
+  if (!hotelId || !f.llega) { errToast('Elige el hotel y el aeropuerto de llegada'); return; }
+  if (!!f.entrada !== !!f.salida) { errToast('Para una salida fija carga las dos fechas; si no, déjalas vacías'); return; }
   if (f.entrada && f.salida <= f.entrada) { errToast('La vuelta tiene que ser después de la ida'); return; }
   let [nmin, ndef, nmax] = [f.nmin, f.ndef, f.nmax].map(n => Math.round(Number(n)));
   if (f.entrada) nmin = ndef = nmax = Math.round((Date.parse(f.salida) - Date.parse(f.entrada)) / 864e5);
   if (!(nmin >= 1 && nmin <= ndef && ndef <= nmax && nmax <= 21)) { errToast('Noches: mínimas ≤ sugeridas ≤ máximas, hasta 21'); return; }
   const conRuta = d.rutas.filter(r => r.destino_iata === f.llega && PAQ_ORIGENES_WEB.includes(r.origen_iata));
-  if (!conRuta.length) { errToast('No hay rutas publicadas a ese aeropuerto desde Valencia, Caracas, Maracaibo, Barcelona o Margarita: cargala en Boletería'); return; }
+  if (!conRuta.length) { errToast('No hay rutas publicadas a ese aeropuerto desde Valencia, Caracas, Maracaibo, Barcelona o Margarita: cárgala en Boletería'); return; }
   const g = await confirmarSheet({ titulo: '¿Desde dónde sale el vuelo?', textoOk: 'Guardar',
     detalle: 'El boleto usa la tarifa "Desde" publicada en Boletería, con el recargo de la web.',
     campos: conRuta.map(r => ({ id: r.origen_iata, tipo: 'check', valor: p ? (p.vuelo_origenes || []).includes(r.origen_iata) : true,
       label: `${r.origen_nombre} (${r.origen_iata}) · desde $${bolPublico(Number(r.desde_usd))}` })) });
   if (!g) return;
   const origenes = conRuta.map(r => r.origen_iata).filter(i => g[i]);
-  if (!origenes.length) { errToast('Marcá al menos un origen'); return; }
+  if (!origenes.length) { errToast('Marca al menos un origen'); return; }
   const fila = { titulo: f.titulo, etiqueta: f.etiqueta || null, hotel_id: hotelId, plan: f.plan || null, vuelo_destino_iata: f.llega,
     vuelo_origenes: origenes, fecha_entrada: f.entrada || null, fecha_salida: f.salida || null, noches_min: nmin, noches_default: ndef, noches_max: nmax,
     descripcion: f.descripcion || null, incluye: f.incluye.split('\n').map(s => s.trim()).filter(Boolean), notas: f.notas || null, orden: Math.round(Number(f.orden)) || 0 };
@@ -26254,7 +26254,7 @@ function tfRenderTarifas() {
   const vig = tfVigentes();
   box.innerHTML = vig.length
     ? vig.map(tfFilaHtml).join('')
-    : '<div class="muted" style="font-size:12.5px">Sin tarifas vigentes. Agregá una abajo.</div>';
+    : '<div class="muted" style="font-size:12.5px">Sin tarifas vigentes. Agrega una abajo.</div>';
   box.querySelectorAll('.tf-tarifa').forEach(tfBindFila);
   tfRenderUnidad(box);
 }
@@ -26288,7 +26288,7 @@ function tfFilaHtml(t) {
   const nueva = !t || !t.id;
   const mon = (t && t.moneda) || 'USD';
   return `<div class="tf-tarifa" ${nueva ? 'data-nueva' : `data-id="${t.id}"`}>
-    <textarea class="ei tf-t-precio" rows="2" placeholder="Precio, tal cual se lo decís al cliente">${esc((t && t.precio_texto) || '')}</textarea>
+    <textarea class="ei tf-t-precio" rows="2" placeholder="Precio, tal cual se lo dices al cliente">${esc((t && t.precio_texto) || '')}</textarea>
     <div class="tf-tarifa-calc"></div>
     <input class="ei tf-t-vig" type="text" placeholder="Vigencia (texto para el cliente)" value="${esc((t && t.vigencia_texto) || '')}">
     <div class="tf-tarifa-g2">
@@ -28498,7 +28498,7 @@ function cargarVideoAdmin(productoId, videoUrl) {
 const APTO_VIDEO_LIMITE = 50 * 1024 * 1024;
 // Devuelve la respuesta de la función, o null si falló (el toast de error ya se mostró).
 async function enviarVideo(file, cabeceras, limite) {
-  if (!TAR_VIDEO_MIME.includes(file.type)) { errToast('Formato no soportado. Usá MP4, MOV o WebM.'); return null; }
+  if (!TAR_VIDEO_MIME.includes(file.type)) { errToast('Formato no soportado. Usa MP4, MOV o WebM.'); return null; }
   if (file.size > limite) { errToast(`El video pesa ${(file.size / 1e6).toFixed(1)} MB. Máximo ${limite / 1024 / 1024} MB.`); return null; }
   const { data: { session } } = await sb.auth.getSession();
   try {
@@ -28975,9 +28975,9 @@ function attachVoiceInput(btn, campo) {
     };
     rec.onerror = e => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        errToast('Necesitamos permiso de micrófono para dictar — habilitalo en la configuración del navegador');
+        errToast('Necesitamos permiso de micrófono para dictar — habilítalo en la configuración del navegador');
       } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        errToast('No se pudo escuchar — intentá de nuevo');
+        errToast('No se pudo escuchar — intenta de nuevo');
       }
     };
     rec.onend = () => { btn.classList.remove('on'); if (vozActiva?.btn === btn) vozActiva = null; };
@@ -29002,7 +29002,7 @@ function prellenarVoucherDesdeChat(datos) {
   }
   vcDiasManual = !!val('vc-total-dias').trim();
   vcActualizarPreview(); vcProgramarSugerencia();
-  okToast('Voucher prellenado, revisá y completá lo que falte');
+  okToast('Voucher prellenado, revisa y completa lo que falte');
 }
 // Red de seguridad visual: aunque el prompt le pide a Gemini no usar markdown
 // pesado, a veces igual manda **negritas** o encabezados con #. En vez de
@@ -31045,7 +31045,7 @@ function abonosModulo() {
     // con el pagado/saldo que devolvió el abono. Sin la reserva cargada o sin servicios, no hay voucher.
     voucherReserva: ({ reservaId, pagado, saldo, metodo, referencia }) => {
       const det = RV_DET, r = det?.reserva || {}, c = PV_ACTUAL || {};
-      if (Number(RV_RESERVA_ID) !== Number(reservaId) || !det) throw new Error('la ficha de la reserva no está cargada: abrila y tocá Reintentar documentos');
+      if (Number(RV_RESERVA_ID) !== Number(reservaId) || !det) throw new Error('la ficha de la reserva no está cargada: ábrela y toca Reintentar documentos');
       if (!(det.servicios || []).some(s => !s.anulado_en && s.estado !== 'cancelado')) return null;
       const pax = (det.pasajeros || []).filter(p => !p.anulado_en), t = pax.find(p => p.titular) || pax[0] || null;
       const { v } = rvArmarVoucherPaquete({
@@ -31517,10 +31517,10 @@ function vcBolClick(d) {
 // El boleto no se guarda incompleto: aerolínea, cada tramo con origen, destino y fecha, y al menos un pasajero.
 function vcBolFalta(s) {
   if (!String(s.aerolinea || '').trim()) return ['[data-sk="aerolinea"]', 'Falta la aerolínea del boleto'];
-  if (!(s.tramos || []).length) return ['[data-vc-tadd]', 'Agregá al menos un tramo al boleto'];
+  if (!(s.tramos || []).length) return ['[data-vc-tadd]', 'Agrega al menos un tramo al boleto'];
   for (const [j, t] of s.tramos.entries()) {
     const k = ['origen', 'destino', 'fecha'].find(x => !String(t[x] || '').trim());
-    if (k) return [`[data-ti="${j}"] [data-st="${k}"]`, `Completá origen, destino y fecha del tramo ${j + 1} del boleto`];
+    if (k) return [`[data-ti="${j}"] [data-st="${k}"]`, `Completa origen, destino y fecha del tramo ${j + 1} del boleto`];
   }
   if (!(s.pasajeros || []).some(p => String(p.nombre || '').trim())) return [(s.pasajeros || []).length ? '[data-pi="0"] [data-sp="nombre"]' : '[data-vc-padd]', 'Falta al menos un pasajero en el boleto'];
   return null;
@@ -32186,16 +32186,16 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
   const referencia = val('vc-referencia').trim(), pagoMovil = vcEsPagoMovil();
   if (pagoMovil && referencia.replace(/\D/g, '').length < 4) {
     document.getElementById('vc-ref-box').classList.add('falta'); docEnfocar('vc-referencia');
-    errToast('Colocá el número de referencia del pago móvil'); return;
+    errToast('Coloca el número de referencia del pago móvil'); return;
   }
   for (const [i, s] of vcServicios.entries()) {
     const falta = s.tipo === 'boleto' && vcBolFalta(s);
     if (falta) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${i}"] ${falta[0]}`)); errToast(falta[1]); return; }
   }
   const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
-  if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(vcServicios[sinNombre].tipo === 'seguro' ? 'Falta la aseguradora del seguro de viaje (o quitalo)' : `Falta el nombre del servicio adicional ${sinNombre + 1} (o quitalo)`); return; }
+  if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(vcServicios[sinNombre].tipo === 'seguro' ? 'Falta la aseguradora del seguro de viaje (o quítalo)' : `Falta el nombre del servicio adicional ${sinNombre + 1} (o quítalo)`); return; }
   const planInicial = vcPlan();
-  if (planInicial.modo === 'cargando') { errToast('Esperá a que carguen las reservas del cliente'); return; }
+  if (planInicial.modo === 'cargando') { errToast('Espera a que carguen las reservas del cliente'); return; }
   const asesorNombre = esOficina() ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
   const fila = {
     creado_por: MI_USUARIO_ID, asesor_nombre: asesorNombre, cliente_nombre: clienteNombre,
@@ -32253,7 +32253,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
       ? 'Apareció otra venta similar mientras confirmabas. Reintenta y revisa las coincidencias.' : 'La venta no se confirmó: ' + (cierre.error?.message || cierre.data?.error || 'error desconocido'));
     const avisos = [], st = { leadId: cierre.data.lead_id, reservaId: cierre.data.reserva_id, codigo: cierre.data.codigo };
     if (st.reservaId && !cierre.data.reutilizado) { const e = await vcAdjuntarPdf(st.reservaId, cierre.data.servicio_id, blob, nombreArchivo); if (e) avisos.push('El PDF quedó en el historial de vouchers, pero no se pudo adjuntar a la ficha: ' + e); }
-    const resumen = avisos.length ? 'El PDF se descargó, pero revisá lo de abajo'
+    const resumen = avisos.length ? 'El PDF se descargó, pero revisa lo de abajo'
       : { cerrar: pagado > 0 ? `Venta cerrada por ${vcMoney(pagado)}` : 'Reserva creada · cobro pendiente', nueva: `Reserva nueva${pagado > 0 ? ' facturada por ' + vcMoney(pagado) : ''}`, vincular: 'Ficha actualizada con el voucher', solo: 'Solo PDF, sin ficha en Reservas' }[plan.modo]
         + (st.codigo && plan.modo !== 'solo' ? ` · ${st.codigo}` : '');
     vcPintarHecho({ numero: registro.numero_factura, resumen, avisos, reservaId: st.reservaId, codigo: st.codigo, pdfPath });
@@ -34659,11 +34659,11 @@ async function loadClientesAsignados() {
   const { data, error } = await sb.rpc('listar_mis_clientes_asignados');
   if (error) { console.error(error); wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus clientes.</div>'; return; }
   const filas = data || [];
-  if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tenés clientes asignados por ahora.</div>'; return; }
+  if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tienes clientes asignados por ahora.</div>'; return; }
   wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFechaHoraCaracas(l.vence_at)) : 'Sin plazo'}</div>${l.notas ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(l.notas)}</div>` : ''}<div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="¿Qué te dijo el cliente? (obligatorio para registrar el resultado)"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn-sm" data-editar-lead="${l.lead_id}"><i class="fas fa-pen"></i> Editar datos</button><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
   wrap.querySelectorAll('[data-r]').forEach(btn => btn.addEventListener('click', async () => {
     const nota = btn.closest('.entity-card').querySelector('[data-nota]').value.trim();
-    if (!nota) { errToast('Contá qué te dijo el cliente antes de registrar el resultado.'); return; }
+    if (!nota) { errToast('Cuenta qué te dijo el cliente antes de registrar el resultado.'); return; }
     btn.disabled = true;
     const { data: r, error: e } = await sb.rpc('registrar_contacto_lead', { p_task_id: Number(btn.dataset.task), p_resultado: btn.dataset.r, p_nota: nota });
     if (e || !r?.ok) { errToast('No se pudo registrar el contacto.'); btn.disabled = false; return; }
@@ -34743,7 +34743,7 @@ async function cargarListaNotas() {
   if (!notas.length) {
     wrap.innerHTML = (NOTAS_FILTRO_ETIQUETA || NOTAS_BUSQUEDA)
       ? '<div class="es-s">Ninguna nota coincide con ese filtro.</div>'
-      : '<div class="es-s">Todavía no tenés notas. Empezá por eso que siempre se te olvida.</div>';
+      : '<div class="es-s">Todavía no tienes notas. Empieza por eso que siempre se te olvida.</div>';
     return;
   }
   wrap.innerHTML = notas.map(n => `<article class="entity-card">
@@ -34807,8 +34807,8 @@ async function guardarNotaDesdeEditor() {
   const err = document.getElementById('nota-err'); err.textContent = '';
   const titulo = document.getElementById('nota-titulo').value.trim();
   const cuerpo = document.getElementById('nota-cuerpo').value.trim();
-  if (!titulo) { err.textContent = 'Ponele un título.'; return; }
-  if (!cuerpo) { err.textContent = 'Escribí el contenido de la nota.'; return; }
+  if (!titulo) { err.textContent = 'Ponle un título.'; return; }
+  if (!cuerpo) { err.textContent = 'Escribe el contenido de la nota.'; return; }
   const etiquetas = document.getElementById('nota-etiquetas').value.split(',').map(e => e.trim()).filter(Boolean);
   if (etiquetas.length > 8) { err.textContent = 'Máximo 8 etiquetas.'; return; }
   const btn = document.getElementById('nota-guardar'); btn.disabled = true;
@@ -34866,7 +34866,7 @@ const NAV_ITEMS = [
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
-  { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Pegá números o capturas y se reparten entre los asesores' },
+  { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Pega números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
@@ -34889,7 +34889,7 @@ const NAV_ITEMS = [
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   // Boletos emitidos (2026-11-04): solo admin y rol boletería (dueño); asesor+boletería y administrativo no.
   { sec: 'boletos-emitidos', icon: 'fas fa-ticket', label: 'Boletos emitidos', roles: 'nav-admin-only nav-administrativo-no nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Recibo de itinerario con el logo de la aerolínea; se llena solo con el PDF del consolidador' },
-  { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Cargá vouchers PDF como venta' },
+  { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Carga vouchers PDF como venta' },
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
@@ -35112,7 +35112,7 @@ function renderFavoritos() {
 }
 function alternarFavorito(sec) {
   const favs = favoritosActuales();
-  if (!favs.includes(sec) && favs.length >= FAVORITOS_MAX) { errToast(`Podés fijar hasta ${FAVORITOS_MAX} favoritos. Quitá uno primero.`); return; }
+  if (!favs.includes(sec) && favs.length >= FAVORITOS_MAX) { errToast(`Puedes fijar hasta ${FAVORITOS_MAX} favoritos. Quita uno primero.`); return; }
   const nuevos = favs.includes(sec) ? favs.filter(s => s !== sec) : [...favs, sec];
   guardarPreferencia('nav_favoritos', nuevos, 'nav-favoritos');
   renderFavoritos();
@@ -35456,7 +35456,7 @@ async function bgBuscar(q) {
 function bgPintar(r) {
   const box = document.getElementById('bg-res');
   if (!box) return;
-  if (!r) { box.innerHTML = '<div class="bg-vacio">Escribí un nombre, teléfono, código de reserva o el nombre de una sección.</div>'; return; }
+  if (!r) { box.innerHTML = '<div class="bg-vacio">Escribe un nombre, teléfono, código de reserva o el nombre de una sección.</div>'; return; }
   const grupo = (titulo, icono, filas) => filas ? `<div class="bg-grupo"><i class="${icono}"></i> ${titulo}</div>${filas}` : '';
   const fila = (attr, tit, sub) => `<button type="button" class="bg-fila" ${attr}><b>${esc(tit)}</b><span>${esc(sub)}</span></button>`;
   const html = [
@@ -36061,7 +36061,7 @@ function bolCardHtml(s) {
   if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo && s.pausada_en) acc.push(`<button class="btn-sm" type="button" data-bol-card="retomar" data-id="${s.id}"><i class="fas fa-play"></i> Retomar</button>`);
   if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo) acc.push(`<button class="btn-sm" type="button" data-bol-card="resolver" data-id="${s.id}"><i class="fas fa-check"></i> Resolver</button>`);
   if (wa) acc.push(`<a class="btn-sm bol-wa" href="${esc(wa.url)}" target="_blank" rel="noopener" data-bol-wa aria-label="Escribirle a ${esc(wa.nombre)} por WhatsApp" title="Escribirle a ${esc(wa.nombre)} por WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>`);
-  const asignada = s.estado === 'en_cola' && s.asignada_a ? (s.asignada_a_mi ? 'asignada a vos' : 'asignada a ' + esc(bolPrimerNombre(s.asignada_a))) : '';
+  const asignada = s.estado === 'en_cola' && s.asignada_a ? (s.asignada_a_mi ? 'asignada a ti' : 'asignada a ' + esc(bolPrimerNombre(s.asignada_a))) : '';
   const quien = agente
     ? `Pidió ${esc(s.creado_por || '—')}${s.tomada_por && s.estado !== 'en_cola' ? ' · atiende ' + esc(bolPrimerNombre(s.tomada_por)) : ''}${asignada ? ' · ' + asignada : ''}`
     : (s.tomada_por ? `Atiende ${esc(s.tomada_por)}` : asignada ? asignada[0].toUpperCase() + asignada.slice(1) : 'Nadie la tomó todavía');
@@ -36160,7 +36160,7 @@ function bolRenderCola() {
   grid.innerHTML = cols.map(c => `<div class="bol-col">
     <div class="bol-col-h"><i class="fas ${c.ico}"></i> ${c.t}<span class="n">${c.total ?? c.items.length}</span></div>
     <div class="bol-col-lista">${c.items.length ? c.items.map(bolCardHtml).join('') : `<div class="bol-col-vacia">${c.vacia}</div>`}
-    ${c.total > c.items.length ? `<div class="bol-col-vacia">y ${c.total - c.items.length} más: usá los filtros Resueltas / Canceladas</div>` : ''}</div>
+    ${c.total > c.items.length ? `<div class="bol-col-vacia">y ${c.total - c.items.length} más: usa los filtros Resueltas / Canceladas</div>` : ''}</div>
   </div>`).join('');
 }
 
@@ -36175,7 +36175,7 @@ function bolRenderKpis() {
   const prom = tomadasHoy.length ? Math.round(tomadasHoy.reduce((a, s) => a + bolMin(s.creado_en, s.tomada_en), 0) / tomadasHoy.length) : null;
   const mias = aten.filter(s => s.la_atiendo_yo).length, miasCola = cola.filter(s => s.asignada_a_mi).length, pausadas = aten.filter(s => s.pausada_en).length;
   const kpi = (n, t, sub, alerta) => `<div class="bol-kpi${alerta ? ' alerta' : ''}"><b>${n}</b><span>${t}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
-  box.innerHTML = kpi(cola.length, 'En cola', cola.length ? `${miasCola ? `${miasCola} para vos · ` : ''}La más vieja: ${bolDuracion(vieja)}` : 'Nadie esperando', vieja >= 15)
+  box.innerHTML = kpi(cola.length, 'En cola', cola.length ? `${miasCola ? `${miasCola} para ti · ` : ''}La más vieja: ${bolDuracion(vieja)}` : 'Nadie esperando', vieja >= 15)
     + kpi(aten.length, 'Atendiendo', [mias ? `${mias} tuya${mias > 1 ? 's' : ''}` : '', pausadas ? `${pausadas} en stand-by` : ''].filter(Boolean).join(' · '))
     + kpi(resHoy, 'Resueltas hoy', '')
     + kpi(prom == null ? '—' : bolDuracion(prom), 'Espera promedio hoy', 'De que llega a que alguien la toma');
@@ -36208,7 +36208,7 @@ function bolDetalleHtml(s) {
   const f = iso => esc(fmtFechaHoraCaracas(iso));
   const pasos = [{ cls: '', t: 'Enviada a la cola', sub: `${esc(s.creado_por || '—')} · ${f(s.creado_en)}` }];
   if (s.tomada_en) pasos.push({ cls: '', t: `Tomada por ${esc(s.tomada_por || '—')}`, sub: `${f(s.tomada_en)} · esperó ${bolDuracion(bolMin(s.creado_en, s.tomada_en))}` });
-  else if (s.estado === 'en_cola') pasos.push({ cls: 'pend', t: `Esperando${s.puesto ? ` · #${s.puesto} en la cola` : ''}${s.asignada_a ? ` · asignada a ${s.asignada_a_mi ? 'vos' : esc(s.asignada_a)}` : ''}`,
+  else if (s.estado === 'en_cola') pasos.push({ cls: 'pend', t: `Esperando${s.puesto ? ` · #${s.puesto} en la cola` : ''}${s.asignada_a ? ` · asignada a ${s.asignada_a_mi ? 'ti' : esc(s.asignada_a)}` : ''}`,
     sub: `Lleva ${bolDuracion(bolMin(s.creado_en))}${s.reasigna_en ? ` · si no la toma, pasa a otro agente a las ${esc(bolHora(s.reasigna_en))}` : ''}` });
   if (s.estado === 'atendiendo' && s.pausada_en && MI_ES_AGENTE_BOLETERIA) pasos.push({ cls: 'pend', t: 'En stand-by', sub: `Desde ${f(s.pausada_en)}${s.tiene_borrador ? ' · con la cotización a medias guardada' : ''}` });
   else if (s.estado === 'atendiendo') pasos.push({ cls: 'pend', t: 'En revisión', sub: `Hace ${bolDuracion(bolMin(s.tomada_en || s.creado_en))}` });
@@ -36361,7 +36361,7 @@ async function loadColaBoleteria(silencioso) {
   if (mias) mias.style.display = agente ? '' : 'none';
   if (!agente && BOL_FILTRO === 'mias') bolFiltrar('todas');
   document.getElementById('bol-cola-sub').textContent = agente
-    ? 'Vuelos que piden los asesores. Cada una se asigna al agente con menos pendientes; si no la tomás en 30 min (de 9:00 a 21:00) pasa al otro.'
+    ? 'Vuelos que piden los asesores. Cada una se asigna al agente con menos pendientes; si no la tomas en 30 min (de 9:00 a 21:00) pasa al otro.'
     : 'Tus pedidos de vuelos a boletería: en qué puesto están, quién los atiende y cómo quedaron.';
   document.getElementById('bol-empty-s').textContent = agente
     ? 'Cuando un asesor mande una solicitud, aparece acá y te llega por Telegram'
@@ -36391,7 +36391,7 @@ async function bolTomar(id, btn) {
   const { data, error } = await sb.rpc('tomar_solicitud_boleteria', { p_id: id == null ? null : Number(id) });
   if (btn) btn.disabled = false;
   if (error || !data?.ok) {
-    errToast(id == null && data?.error === 'no_disponible' ? 'No hay solicitudes esperando para vos'
+    errToast(id == null && data?.error === 'no_disponible' ? 'No hay solicitudes esperando para ti'
       : data?.error === 'asignada_a_otro' && data?.asignada_a ? `Está asignada a ${data.asignada_a}` : 'No se pudo tomar: ' + (BOL_ERR[data?.error] || error?.message || ''));
     loadColaBoleteria(true); return;
   }
@@ -36543,7 +36543,7 @@ async function bolCrearReserva(solicitudId, leadId, datos, btn) {
 async function bolrCrear(btn) {
   const err = document.getElementById('bolr-err'); err.textContent = '';
   if (!BOLR.lead) { err.textContent = RV_ERR.falta_lead; return; }
-  if (!val('bolr-ruta').trim()) { err.textContent = 'Escribí la ruta'; return; }
+  if (!val('bolr-ruta').trim()) { err.textContent = 'Escribe la ruta'; return; }
   if (val('bolr-ida') && val('bolr-vuelta') && val('bolr-vuelta') < val('bolr-ida')) { err.textContent = RV_ERR.rango_invalido; return; }
   const datos = { ruta: val('bolr-ruta').trim(), ida_vuelta: document.getElementById('bolr-iv').checked, fecha_inicio: val('bolr-ida'), fecha_fin: val('bolr-vuelta'),
     pax_adultos: val('bolr-ad'), pax_ninos: val('bolr-ni'), time_limit: val('bolr-tl') ? new Date(val('bolr-tl')).toISOString() : '' };
@@ -36556,7 +36556,7 @@ async function bolrCrear(btn) {
 async function bolConvertirSolicitud(s, btn) {
   const { data, error } = await bolCrearReserva(s.id, null, {}, btn);
   if (error || !data?.ok) {
-    errToast(data?.error === 'falta_lead' ? 'La solicitud no está enlazada a un lead del CRM: creala a mano desde Boletería > Reservas' : 'No se pudo convertir: ' + rvErr(error, data));
+    errToast(data?.error === 'falta_lead' ? 'La solicitud no está enlazada a un lead del CRM: créala a mano desde Boletería > Reservas' : 'No se pudo convertir: ' + rvErr(error, data));
     return;
   }
   cerrarDetalleBoleteria();
@@ -36826,7 +36826,7 @@ function renderBolCalendario() {
     <div class="card"><h2>${esc(t.nombre)} <span class="chip" style="background:${nivelColor[t.nivel]}22;color:${nivelColor[t.nivel]}">${t.nivel}</span></h2>
       <div class="csub">${esc(fmtFechaSolo(t.fecha_inicio))} – ${esc(fmtFechaSolo(t.fecha_fin))} (${t.anio})</div>
       ${bolAcciones('temporada', t.id)}</div>`).join('')
-    : '<div class="pc-vacio">Sin temporadas cargadas todavía. Carnaval y Semana Santa se mueven cada año -- cargalas por año, no quedan fijas.</div>';
+    : '<div class="pc-vacio">Sin temporadas cargadas todavía. Carnaval y Semana Santa se mueven cada año -- cárgalas por año, no quedan fijas.</div>';
 }
 
 /* Formularios: uno por entidad, con id = editar y sin id = alta. */
@@ -36844,15 +36844,15 @@ const bolNum = v => v === '' || v == null ? null : Number(v);
 async function bolFormRuta(id) {
   const r = id ? bolCatalogo.rutas.find(x => x.id === Number(id)) : null;
   const f = await confirmarSheet({ titulo: r ? 'Editar ruta' : 'Nueva ruta', textoOk: 'Guardar',
-    detalle: '¿Falta un aeropuerto? Cargalo primero en la pestaña Aeropuertos.', campos: [
+    detalle: '¿Falta un aeropuerto? Cárgalo primero en la pestaña Aeropuertos.', campos: [
     { id: 'origen', label: 'Sale de', tipo: 'select', valor: r?.origen_iata || 'CCS', opciones: bolOpcAeropuertos(r?.origen_iata) },
     { id: 'destino', label: 'Llega a', tipo: 'select', valor: r?.destino_iata || '', opciones: bolOpcAeropuertos(r?.destino_iata) },
-    { id: 'natural', label: 'Nombre (si lo dejás vacío: "Caracas – Miami")', valor: r?.nombre_natural || '' },
+    { id: 'natural', label: 'Nombre (si lo dejas vacío: "Caracas – Miami")', valor: r?.nombre_natural || '' },
     { id: 'alias', label: 'Otras formas de nombrarla, separadas por coma (ej: porlamar, isla)', valor: (r?.alias || []).join(', ') }] });
   if (!f) return;
   if (f.origen === f.destino) { errToast('Origen y destino no pueden ser el mismo'); return; }
   const ao = bolCatalogo.aeropuertos.find(a => a.iata_code === f.origen), ad = bolCatalogo.aeropuertos.find(a => a.iata_code === f.destino);
-  if (!ao || !ad) { errToast('Ese aeropuerto fue quitado: reactivalo en Aeropuertos o elegí otro'); return; }
+  if (!ao || !ad) { errToast('Ese aeropuerto fue quitado: reactívalo en Aeropuertos o elige otro'); return; }
   const no = ao.nombre_comercial || ao.ciudad, nd = ad.nombre_comercial || ad.ciudad;
   await bolGuardar('boleteria_guardar_ruta', { p_id: r?.id ?? null, p_origen_iata: f.origen, p_destino_iata: f.destino,
     p_nombre_natural: f.natural || `${no} – ${nd}`, p_nombre_corto: `${no}–${nd}`,
@@ -36893,7 +36893,7 @@ async function bolVerificarAerolinea(id) {
 // historial. Se apaga acá y no solo en boleteria_guardar_precio porque si cambió
 // la ruta, el tipo o la marca de referencia, la RPC no lo reconoce como el mismo.
 async function bolFormPrecio(id) {
-  if (!bolCatalogo.rutas.length) { errToast('Primero cargá al menos una ruta'); return; }
+  if (!bolCatalogo.rutas.length) { errToast('Primero carga al menos una ruta'); return; }
   const p = id ? bolCatalogo.precios.find(x => x.id === Number(id)) : null;
   const f = await confirmarSheet({ titulo: p ? 'Actualizar precio' : 'Cargar precio', textoOk: 'Guardar', campos: [
     { id: 'ruta', label: 'Ruta', tipo: 'select', valor: p?.ruta_id, opciones: bolCatalogo.rutas.map(r => ({ v: r.id, t: r.nombre_natural })) },
@@ -36908,7 +36908,7 @@ async function bolFormPrecio(id) {
   if (!f) return;
   const precio = parseFloat(f.precio);
   if (!(precio > 0)) { errToast('La tarifa tiene que ser mayor a 0'); return; }
-  if (!f.ref && !f.aerolinea) { errToast('Elegí la aerolínea, o marcalo como tarifa "Desde" de la web'); return; }
+  if (!f.ref && !f.aerolinea) { errToast('Elige la aerolínea, o márcalo como tarifa "Desde" de la web'); return; }
   if (f.ref && f.moneda !== 'USD') { errToast('La tarifa de la web y la IA tiene que estar en USD'); return; }
   if (f.ref && f.tipo === 'ida_vuelta' && !(await confirmarSheet({ titulo: '¿Publicar esta tarifa?', textoOk: 'Publicar',
     detalle: `${bolNombreRuta(Number(f.ruta))}: la web y el bot van a ofrecer desde ${money(bolPublico(precio))} ida y vuelta por persona (tarifa ${money(precio)} + 20%). Se ve en unos minutos.` }))) return;
@@ -36967,7 +36967,7 @@ async function bolQuitar(ent, id) {
   await bolGuardar('boleteria_desactivar', { p_entidad: ent, p_id: String(id) }, 'Quitado');
 }
 async function bolAsignarAerolinea(rutaId) {
-  if (!bolCatalogo.aerolineas.length) { errToast('Primero cargá la aerolínea en su pestaña'); return; }
+  if (!bolCatalogo.aerolineas.length) { errToast('Primero carga la aerolínea en su pestaña'); return; }
   const f = await confirmarSheet({ titulo: `Aerolínea en ${bolNombreRuta(rutaId)}`, textoOk: 'Guardar', campos: [
     { id: 'aerolinea', label: 'Aerolínea', tipo: 'select', opciones: bolCatalogo.aerolineas.map(a => ({ v: a.id, t: a.nombre })) },
     { id: 'dias', label: 'Días que opera, separados por coma (ej: lun, mié, vie)' }] });
@@ -37040,7 +37040,7 @@ function lfCardHtml(x) {
       ${lfFila('Notas', esc(x.notas_venta || ''))}
     </div>
     ${saldo != null ? `<div class="lf-falta lf-saldo">Saldo pendiente: ${money(saldo)}</div>` : ''}
-    ${sinDatos ? '<div class="lf-falta">Se envió sin los datos de la venta — mandalo de nuevo desde el lead para completarlos.</div>' : ''}
+    ${sinDatos ? '<div class="lf-falta">Se envió sin los datos de la venta — mándalo de nuevo desde el lead para completarlos.</div>' : ''}
     <div class="lf-pie">
       <span>Por ${esc(x.enviado_por || '—')}${(x.admin_destino && x.admin_destino !== x.enviado_por) ? ' → ' + esc(x.admin_destino) : ''}</span>
       <span>${tiempoRelativo(x.creado_en)}</span>
@@ -37225,7 +37225,7 @@ async function buscarTarifarioIA(consulta) {
   const caja = document.getElementById('tar-ia-box');
   const btn = document.getElementById('tar-ia-btn');
   if (!estado || !caja) return;
-  if (consulta.length < 2) { caja.hidden = false; estado.textContent = 'Escribí qué estás buscando.'; tarIAResultados = []; pintarResultadosIA(); return; }
+  if (consulta.length < 2) { caja.hidden = false; estado.textContent = 'Escribe qué estás buscando.'; tarIAResultados = []; pintarResultadosIA(); return; }
   if (tarIABusy) return;
   tarIABusy = true;
   btn?.classList.add('cargando');
@@ -37238,14 +37238,14 @@ async function buscarTarifarioIA(consulta) {
   btn?.classList.remove('cargando');
   if (error || !data?.ok) {
     console.error('buscar-tarifario-ia:', error || data);
-    estado.textContent = 'No se pudo buscar en este momento. Probá de nuevo.';
+    estado.textContent = 'No se pudo buscar en este momento. Prueba de nuevo.';
     return;
   }
   const res = data.resultados || [];
   if (!res.length) {
     estado.textContent = data.interpretacion
       ? 'Entendí: ' + data.interpretacion + ' — pero no hay nada cargado que coincida.'
-      : 'Sin resultados. Probá con otras palabras.';
+      : 'Sin resultados. Prueba con otras palabras.';
     return;
   }
   estado.innerHTML = (data.interpretacion ? '<b>Entendí:</b> ' + esc(data.interpretacion) + ' · ' : '')
@@ -37573,7 +37573,7 @@ const TOUR_CAPITULOS = [
   ]},
   { id: 'tarifario', titulo: 'Tarifario', icono: 'fa-book-open', roles: ['admin', 'asesor', 'marketing'], seccion: 'tarifario', pasos: [
     { titulo: 'Catálogo de hoteles y paquetes', texto: 'Todos los precios y opciones que le puedes ofrecer a un cliente, con fotos.', selector: '#sec-tarifario' },
-    { titulo: 'Buscador con IA', texto: 'El mismo campo hace dos cosas: mientras escribís filtra lo que ya tenés en pantalla, y si tocás la varita (o Enter) le pasa esa frase a la IA para que busque en todo el tarifario — "playa para una pareja en diciembre". Los precios que ves salen siempre de la ficha real, la IA nunca los inventa.', selector: '#tar-search' },
+    { titulo: 'Buscador con IA', texto: 'El mismo campo hace dos cosas: mientras escribes filtra lo que ya tienes en pantalla, y si tocas la varita (o Enter) le pasa esa frase a la IA para que busque en todo el tarifario — "playa para una pareja en diciembre". Los precios que ves salen siempre de la ficha real, la IA nunca los inventa.', selector: '#tar-search' },
   ]},
   { id: 'galeria', titulo: 'Galería', icono: 'fa-images', roles: ['admin', 'asesor', 'marketing'], seccion: 'galeria', pasos: [
     { titulo: 'Fotos para mandar al cliente', texto: 'Fotos reales de hoteles y paquetes, listas para compartir por WhatsApp.', selector: '#sec-galeria' },
@@ -37779,7 +37779,7 @@ const PROYECTO_CONSTRUCTOR_LOG = [
   { fecha: '2026-08-09', emoji: '🖼️', titulo: 'Día 4 — Vista previa real y botón Publicar arreglado', texto: 'La vista previa del constructor dejó de ser cajas genéricas y ahora muestra una maqueta real del CRM de esa empresa, con su color de marca. Además, el botón "Publicar" -- que llevaba tiempo sin hacer nada -- ya funciona, con avisos claros mientras guarda o publica.', capturas: [] },
   { fecha: '2026-08-10', emoji: '🌐', titulo: 'Día 5 — Dominios propios conectados de verdad', texto: 'Quedó conectada la pieza que hospeda el dominio de cada empresa (ej. crm.empresacliente.com): al registrar uno, el sistema ya devuelve las instrucciones de DNS reales para configurarlo. Falta el último paso -- probarlo con un dominio real de una empresa, no uno de prueba.', capturas: [] },
   { fecha: '2026-08-10', emoji: '📊', titulo: 'Día 6 — Planes con límites reales', texto: 'Cada empresa cliente ahora tiene un plan (Inicio, Taller o Empresa) con topes reales de usuarios, contactos y módulos -- y esos topes se respetan de verdad, no son sólo un cartel. Se ve una barra de uso por empresa y se puede subir de plan con un clic.', capturas: ['dia6-plan-uso.png', 'dia6-modulos-tope.png'] },
-  { fecha: '2026-08-10', emoji: '📅', titulo: 'Día 7 — Módulo de Citas de punta a punta', texto: 'Primer módulo nuevo agregado siguiendo una receta escrita para repetirla con los que faltan. Las empresas que lo contraten ya ven una agenda real (agrupada por día, con la hora de cada quien la mira) para agendar, confirmar y reasignar turnos.', capturas: ['dia7-citas-agenda.png', 'dia7-citas-movil.png'] },
+  { fecha: '2026-08-10', emoji: '📅', titulo: 'Día 7 — Módulo de Citas de punta a punta', texto: 'Primer módulo nuevo agregado siguiendo una receta escrita para repetirla con los que faltan. Las empresas que lo contraten ya ven una agenda real (agrupada por día, con la hora de cada quien la mira) para agendar, confirmar y reasignar citas.', capturas: ['dia7-citas-agenda.png', 'dia7-citas-movil.png'] },
 ];
 function renderProyectoConstructor() {
   const porMes = {};

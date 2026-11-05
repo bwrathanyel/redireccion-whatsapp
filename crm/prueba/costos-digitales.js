@@ -50,7 +50,7 @@ const DESC_FUENTE = {
 };
 const FUENTES = { ventas: 'Bot de ventas (DeepSeek)',tarifario: 'Carga del tarifario', habitaciones: 'Fotos de habitaciones', induccion: 'Inducción (clientes IA)' };
 const ERRORES = {
-  falta_proveedor: 'Falta el proveedor.', grupo_invalido: 'Elegí un grupo.', monto_invalido: 'El monto tiene que ser mayor a 0.',
+  falta_proveedor: 'Falta el proveedor.', grupo_invalido: 'Elige un grupo.', monto_invalido: 'El monto tiene que ser mayor a 0.',
   ciclo_invalido: 'Ciclo inválido.', dia_invalido: 'El día de cobro va del 1 al 28.', mes_invalido: 'Un plan anual necesita el mes de cobro.',
   hasta_invalido: 'La fecha de fin es anterior al inicio.', no_encontrada: 'La suscripción ya no existe.',
 };

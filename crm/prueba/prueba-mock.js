@@ -23,8 +23,36 @@
   const avisa = clave => { if (!avisados.has(clave)) { avisados.add(clave); console.warn('[prueba] sin mock:', clave); } };
   function inicia(rol) {
     if (m.rol === rol) return;
-    m.rol = rol; m.usuario = D.USUARIOS[rol]; m.tablas = clona(D.tablas_para(rol));
+    m.rol = rol; m.usuario = D.USUARIOS[rol]; m.tablas = clona(D.tablas_para(rol)); m.real = false;
   }
+
+  /* ---------- Tarifario real (foto estática) al terminar las misiones ---------- */
+  // Durante las misiones sigue el tarifario simulado (Hesperia $50, etc.): las misiones lo nombran.
+  const TR = g.PRUEBA_TARIFARIO_REAL;
+  const fotosReales = new Set((TR?.fotos || []).concat(TR?.promoFotos || []).map(f => f.storage_path));
+  let armado = null;
+  function arma() {
+    const por = (xs, k) => xs.reduce((a, x) => ((a[x[k]] ||= []).push(x), a), {});
+    const bloque = Object.fromEntries(TR.bloques.map(b => [b.id, b]));
+    const fotoP = por(TR.fotos, 'producto_id'), fotoH = por(TR.fotos.filter(f => f.habitacion_id), 'habitacion_id'), fotoT = por(TR.promoFotos, 'promocion_id');
+    const prod = Object.fromEntries(TR.productos.map(p => [p.id, p]));
+    const tarifa = t => ({ ...t, tarifario_bloques: bloque[t.bloque_id] || null, promocion_fotos: fotoT[t.id] || [] });
+    const tarP = por(TR.tarifas.map(tarifa), 'producto_id');
+    return {
+      productos: TR.productos.map(p => ({ ...p, tarifa_destacada_id: p.tarifa_destacada_manual_id ?? tarP[p.id]?.[0]?.id ?? null, tarifas: tarP[p.id] || [], producto_fotos: fotoP[p.id] || [] })),
+      tarifas: TR.tarifas.map(t => { const p = prod[t.producto_id]; return { ...tarifa(t), destino: p.destino, productos: { id: p.id, nombre: p.nombre, destino: p.destino, producto_fotos: fotoP[p.id] || [] } }; }),
+      tarifario_bloques: TR.bloques,
+      producto_habitaciones: TR.habitaciones.map(h => ({ ...h, producto_fotos: fotoH[h.id] || [] })),
+      promociones: [],
+    };
+  }
+  function usaReal() {
+    if (m.real || !TR || !g.__pruebaMisiones?.terminadas?.()) return;
+    m.real = true; Object.assign(m.tablas, armado ||= arma());
+    emite({ tipo: 'tarifario-real' });
+  }
+  // fotoMini del build pregunta primero acá: una foto del tarifario real va al Worker de fotos.
+  g.__pruebaFotoReal = (ruta, ancho) => fotosReales.has(ruta) ? `${TR.cdn}_d/${ancho}/${ruta}.jpg?v=2` : null;
   const emite = detalle => g.dispatchEvent(new CustomEvent('prueba:accion', { detail: detalle }));
 
   /* ---------- Auth ---------- */
@@ -210,6 +238,7 @@
       if (url.hostname === FN_HOST) return ejecuta('fn', p.replace(/^\/+/, '').split('/')[0], body);
       if (p.startsWith('/auth/v1/')) return auth(p, sp, body, rol);
       if (!m.rol) inicia('asesor');
+      usaReal();
       if (p.startsWith('/rest/v1/rpc/')) return ejecuta('rpc', p.split('/').pop(), method === 'GET' ? Object.fromEntries(sp) : body);
       if (p.startsWith('/rest/v1/')) return rest(method, p.split('/')[3], sp, headers, body);
       if (p.startsWith('/functions/v1/')) return ejecuta('fn', p.split('/')[3], body);

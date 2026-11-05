@@ -108,7 +108,7 @@ const ERRORES = {
   no_autorizado: 'Solo administración puede ver anuncios; solo un admin puede cambiarlos.',
   sobre_tope: 'Supera el tope permitido desde el CRM.',
   meta_ads_sin_conectar: 'La cuenta de Meta Ads no está conectada en Zernio.',
-  zernio_no_responde: 'Zernio no respondió. Probá de nuevo en un minuto.',
+  zernio_no_responde: 'Zernio no respondió. Prueba de nuevo en un minuto.',
 };
 // Nombre que se muestra en el CRM (pedido del dueño 30-oct); en Meta siguen con su nombre original.
 const ALIAS_CUENTAS = {
@@ -493,8 +493,8 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
         <label class="fl">Diario (USD)<input class="ei" id="am-diario" type="number" min="1" max="${tope}" step="0.5" value="3"></label>
         <label class="fl">Días<input class="ei" id="am-dias-boost" type="number" min="1" max="30" value="7"></label>
       </div>
-      <div class="am-det-h">¿Qué buscás con este anuncio?</div>
-      <div class="am-ia"><textarea class="ei" id="am-que" rows="2" maxlength="600" aria-label="Qué buscás con este anuncio" placeholder="Ej.: que me escriban jóvenes de Mérida y Caracas para comprar entradas"></textarea>
+      <div class="am-det-h">¿Qué buscas con este anuncio?</div>
+      <div class="am-ia"><textarea class="ei" id="am-que" rows="2" maxlength="600" aria-label="Qué buscas con este anuncio" placeholder="Ej.: que me escriban jóvenes de Mérida y Caracas para comprar entradas"></textarea>
         <button class="btn-sm" type="button" data-am="sugerir"><i class="fas fa-wand-magic-sparkles"></i> Sugerir con IA</button></div>
       <div class="am-vars" id="am-vars"></div>
       <div class="am-det-h">Público</div>
@@ -519,9 +519,9 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
   async function validarBoost() {
     if (ocupado) return;
     const b = leerBoost();
-    if (!b.post) return error('Elegí una publicación.');
-    if (!b.nombre) return error('Ponele un nombre.');
-    if (!pub.ubicaciones.length) return error('Elegí al menos una ubicación.');
+    if (!b.post) return error('Elige una publicación.');
+    if (!b.nombre) return error('Ponle un nombre.');
+    if (!pub.ubicaciones.length) return error('Elige al menos una ubicación.');
     ocupado = true;
     try {
       ok('Meta lo está revisando: tarda cerca de un minuto…');
@@ -579,12 +579,12 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       </div>
       ${p.advantage ? '<div class="am-aviso">Con Advantage+ la edad es solo una sugerencia: va de 25 o menos hasta 65.</div>' : ''}
       <div class="am-det-h">Ubicaciones</div>
-      ${ne.ubicaciones ? `<div class="am-aviso">Tiene ${ne.ubicaciones} ubicación${ne.ubicaciones > 1 ? 'es' : ''} marcada${ne.ubicaciones > 1 ? 's' : ''} en el mapa que acá no se ve${ne.ubicaciones > 1 ? 'n' : ''}. Si cambiás las ubicaciones, se reemplazan.</div>` : ''}
+      ${ne.ubicaciones ? `<div class="am-aviso">Tiene ${ne.ubicaciones} ubicación${ne.ubicaciones > 1 ? 'es' : ''} marcada${ne.ubicaciones > 1 ? 's' : ''} en el mapa que acá no se ve${ne.ubicaciones > 1 ? 'n' : ''}. Si cambias las ubicaciones, se reemplazan.</div>` : ''}
       <div class="am-chips">${ubic || '<span class="am-aviso">Sin ubicaciones.</span>'}</div>
       <div class="am-fila"><select class="ei" id="am-geo-tipo" aria-label="Tipo de ubicación"><option value="ciudad">Ciudad</option><option value="region">Estado</option><option value="pais">País</option></select>
         <div class="am-auto"><input class="ei" id="am-geo-q" type="search" placeholder="Buscar ciudad, estado o país" autocomplete="off" aria-label="Buscar ubicación"><div class="am-sugs" id="am-geo-sugs" hidden></div></div></div>
       <div class="am-det-h">Intereses</div>
-      ${ne.intereses ? '<div class="am-aviso">Tiene otros grupos de intereses o comportamientos en Ads Manager. Si cambiás los intereses, se reemplazan los de este grupo.</div>' : ''}
+      ${ne.intereses ? '<div class="am-aviso">Tiene otros grupos de intereses o comportamientos en Ads Manager. Si cambias los intereses, se reemplazan los de este grupo.</div>' : ''}
       <div class="am-chips">${ints || '<span class="am-aviso">Sin intereses: Meta busca entre todos.</span>'}</div>
       <div class="am-auto"><input class="ei" id="am-int-q" type="search" placeholder="Buscar interés (ej.: Travel, Parties, Beaches)" autocomplete="off" aria-label="Buscar interés"><div class="am-sugs" id="am-int-sugs" hidden></div></div>
       ${auds ? `<div class="am-det-h">Audiencias guardadas</div><div class="am-form">${auds}</div>` : ''}
@@ -608,7 +608,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     clearTimeout(tAlc);
     const el = () => document.getElementById('am-alc');
     if (!el()) return;
-    if (!pub.ubicaciones.length) { el().innerHTML = '<small>Agregá una ubicación para estimar el alcance.</small>'; return; }
+    if (!pub.ubicaciones.length) { el().innerHTML = '<small>Agrega una ubicación para estimar el alcance.</small>'; return; }
     el().innerHTML = '<small>Calculando alcance…</small>';
     const n = ++nAlc;
     tAlc = setTimeout(async () => {
@@ -699,7 +699,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
   async function sugerir() {
     if (ocupado) return;
     const que = $('#am-que').value.trim();
-    if (que.length < 3) return error('Contá qué buscás con el anuncio.');
+    if (que.length < 3) return error('Cuenta qué buscas con el anuncio.');
     const caja = $('#am-vars'), p = posts.find(x => x.id === postSel);
     caja.innerHTML = '<div class="am-aviso">La IA arma 3 públicos y Meta calcula el alcance de cada uno: tarda cerca de medio minuto…</div>';
     ocupado = true;
@@ -740,7 +740,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
       const p = { ...r.publico, ubicaciones_anuncio: r.publico.ubicaciones_anuncio || [] };
       abrirPublico(p, { modo: 'boost', audiencias: pubCtx.audiencias, noEditable: {} });
       const ne = r.no_editable || {};
-      ok(ne.ubicaciones ? `Público copiado. Tenía ${ne.ubicaciones} ubicación(es) marcada(s) en el mapa que no se copian: revisá Ubicaciones.` : 'Público copiado: podés ajustarlo.');
+      ok(ne.ubicaciones ? `Público copiado. Tenía ${ne.ubicaciones} ubicación(es) marcada(s) en el mapa que no se copian: revisa Ubicaciones.` : 'Público copiado: puedes ajustarlo.');
     } catch (e) { error(e.message); } finally { sel.disabled = false; }
   }
 
@@ -764,7 +764,7 @@ export function crearAdsMeta({ sb, esc, ok, error, confirmar, rol = 'admin', rai
     if (ocupado) return;
     const cambios = [...pubCtx.cambios];
     if (!cambios.length) return error('No cambiaste nada.');
-    if (cambios.includes('ubicaciones') && !pub.ubicaciones.length) return error('Elegí al menos una ubicación.');
+    if (cambios.includes('ubicaciones') && !pub.ubicaciones.length) return error('Elige al menos una ubicación.');
     const si = await confirmar({
       titulo: 'Cambiar el público en Meta', textoOk: 'Guardar',
       detalle: `«${pubCtx.nombre}»\nCambia: ${cambios.map(c => SECCIONES[c]).join(', ')}.\nSi está activo, Meta puede volver a la fase de aprendizaje.`,

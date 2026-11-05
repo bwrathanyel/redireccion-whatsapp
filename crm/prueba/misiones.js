@@ -617,7 +617,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     if (!panel || panel.classList.contains('pp-arrastra')) return null;
     let p = null; try { p = movible() && JSON.parse(ss(POS)); } catch { /* posición corrupta: vuelve a la de siempre */ }
     const s = panel.style, fila = panel.querySelector('.pp-fila');
-    panel.classList.toggle('pp-movido', !!p); fila.title = movible() ? 'Arrastrá para moverla · doble clic para volver a su lugar' : '';
+    panel.classList.toggle('pp-movido', !!p); fila.title = movible() ? 'Arrastra para moverla · doble clic para volver a su lugar' : '';
     if (!p) { s.left = s.top = s.bottom = s.transform = ''; panel.classList.remove('pp-abajo'); return null; }
     // offsetWidth y no el rect: al soltar todavía corre la transición de scale y el rect sale inflado.
     const z = zoomBody(), w = panel.offsetWidth * z, h = panel.offsetHeight * z;
