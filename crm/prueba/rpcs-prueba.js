@@ -726,7 +726,8 @@ function registrar_abono_venta(m, a) {
 
 
 // La pestaña Abonos de la reserva (abonos.js). Lo cobrado antes de la prueba sale como el abono inicial.
-const TASA_VES = 36.5;
+// Bs por unidad, como tasas_cambio de prod al 4-nov-2026 (BCV dólar, BCV euro, USDT).
+const TASAS_VES = { USD: 894.8876, EUR: 1006.0326, USDT: 1011.779 }, TASA_VES = TASAS_VES.USD;
 function _abonos_reserva(m, r) {
   const filas = setdefault(m.tablas, '_abonos_reserva', {});
   if (!filas[r.id]) {
@@ -747,7 +748,7 @@ function reserva_abonos_lista(m, a) {
     .sort((x, y) => (x.tipo !== 'hospedaje') - (y.tipo !== 'hospedaje') || x.id - y.id);
   return { ok: true, reserva_id: r.id, codigo: r.codigo, monto_total: r.monto_total, monto_pagado: r.monto_pagado,
     saldo_pendiente: r.saldo_pendiente, pagado_con_detalle: rd(abonos.filter(x => !x.anulado_en).reduce((s, x) => s + x.monto_usd, 0), 2),
-    tasa_ves: TASA_VES, tasas: { USD: { tasa: TASA_VES, actualizado_en: hace(3) } }, voucher: {}, voucher_importado: {},
+    tasa_ves: TASA_VES, tasas: Object.fromEntries(Object.entries(TASAS_VES).map(([k, t]) => [k, { tasa: t, actualizado_en: iso(AHORA) }])), voucher: {}, voucher_importado: {},
     abonos: [...abonos].reverse(), servicios };
 }
 
@@ -757,11 +758,11 @@ function registrar_abono_reserva_v2(m, a) {
   if (!r) return { ok: false, error: 'Reserva no encontrada' };
   const l = _fila_lead(m, r.lead_id), orig = flotante(g(a, 'p_monto_original') || 0), ves = g(a, 'p_moneda') === 'VES';
   if (!(orig > 0)) return { ok: false, error: 'monto_invalido' };
-  const usd = rd(ves ? orig / TASA_VES : orig, 2);
+  const tasa = TASAS_VES[g(a, 'p_tasa_tipo')] || TASA_VES, usd = rd(ves ? orig / tasa : orig, 2);
   if (usd > r.saldo_pendiente + 0.005) return { ok: false, error: 'monto_supera_saldo' };
   const abonos = _abonos_reserva(m, r);
   const ab = { id: r.id * 100 + abonos.length + 1, reserva_id: r.id, servicio_id: g(a, 'p_servicio_id') ?? null, monto_usd: usd, monto_original: orig,
-    moneda: ves ? 'VES' : 'USD', tasa_usd_ves: ves ? TASA_VES : null, tasa_tipo: ves ? g(a, 'p_tasa_tipo') || 'USD' : null,
+    moneda: ves ? 'VES' : 'USD', tasa_usd_ves: ves ? tasa : null, tasa_tipo: ves ? g(a, 'p_tasa_tipo') || 'USD' : null,
     metodo: g(a, 'p_metodo'), referencia: g(a, 'p_referencia'), nota: g(a, 'p_nota'), fecha: iso(AHORA), asesor: r.asesor,
     comprobante_path: g(a, 'p_comprobante_path'), anulado_en: null, documentos_estado: 'listo', recibo_documento_id: null };
   abonos.push(ab);

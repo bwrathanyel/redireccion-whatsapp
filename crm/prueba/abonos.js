@@ -127,6 +127,8 @@ export function crearAbonos(c) {
         p.querySelectorAll('[data-ab-accion="metodo"]').forEach(x => x.classList.toggle('on', x.dataset.metodo === est.metodo));
         const mon = document.getElementById('ab-moneda');
         if (est.metodo === 'Pago móvil' && mon) { mon.value = 'VES'; est.moneda = 'VES'; actualizarTasa(); }
+        // Los métodos en divisas cobran en dólares: pasar a USD (pedido del dueño 4-nov).
+        else if (['Zelle', 'Binance'].includes(est.metodo) && mon && mon.value !== 'USD') { mon.value = 'USD'; est.moneda = 'USD'; actualizarTasa(); }
       }
       else if (a === 'tasa') {
         est.tasaTipo = b.dataset.tasa;
