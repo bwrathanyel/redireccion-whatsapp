@@ -131,15 +131,17 @@
   const RE_PRESENTA = /(soy|mi nombre|te habla|le habla|te saluda|le saluda|te escribe|le escribe|te atiende|le atiende)/i;
   const RE_FECHAS = /(fecha|cu[aá]ndo|d[ií]as|noches|mes)/i, RE_PERSONAS = /(cu[aá]nt[oa]s|personas|adultos|ni[ñn]os|viajan|acompa)/i;
   const RE_PAGO = /(abono|separ|transfer|pago m[oó]vil|zelle|datos (de|para) (pago|pagar)|cuenta|binance|efectivo)/i;
-  function saliente(sim, fila, archivo) {
+  function saliente(sim, fila, archivo, seg) {
     sim.respondido = true; sim.ultimoAsesor = Date.now(); sim.insistencias = Math.min(sim.insistencias, 1);
-    if (fila.tipo === 'text') {
-      sim.pend.textos.push(fila.texto);
-      sim.textosAsesor = [...(sim.textosAsesor || []), fila.texto];
+    if (fila.tipo === 'audio' && !fila.transcripcion) sim.pend.crm.push(`El asesor te mandó una nota de voz de ${seg} s, pero no se le entiende nada.`);
+    else if (fila.tipo === 'text' || fila.tipo === 'audio') {
+      const texto = fila.tipo === 'audio' ? `[nota de voz de ${seg} s] ${fila.transcripcion}`.slice(0, 990) : fila.texto;
+      sim.pend.textos.push(texto);
+      sim.textosAsesor = [...(sim.textosAsesor || []), texto];
       const todo = sim.textosAsesor.join('\n');
       if (/lotus/i.test(todo) && RE_PRESENTA.test(todo)) marca(sim, 'presentacion');
       if (RE_FECHAS.test(todo) && RE_PERSONAS.test(todo)) marca(sim, 'calificacion');
-      if (RE_PAGO.test(fila.texto)) marca(sim, 'cierre');
+      if (RE_PAGO.test(texto)) marca(sim, 'cierre');
     } else if (fila.tipo === 'image') {
       sim.pend.crm.push(`El asesor te mandó una foto${fila.texto ? ` con el texto «${fila.texto}»` : ''}.`);
       marca(sim, 'opciones');
@@ -159,7 +161,7 @@
     clearTimeout(sim.timer);
     sim.timer = setTimeout(() => {
       const tecleando = chatAbierto() === sim && ($('wb-texto')?.value || '').trim();
-      if (tecleando && extra < 12000) return programa(sim, extra + 3000);
+      if (voz?.sim === sim || (tecleando && extra < 12000)) return programa(sim, extra + 3000);
       contesta(sim);
     }, 5000 + (extra ? 3000 : 0));
   }
@@ -520,6 +522,8 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     const t = !sim ? '' : sim.escribiendo ? 'escribiendo…' : sim.cerrada ? '' : 'en línea';
     if (el.textContent !== t) el.textContent = t;
     el.classList.toggle('pc-esc', !!sim?.escribiendo);
+    const mic = $('pc-mic'), oculto = !sim || sim.cerrada ? 'none' : '';
+    if (mic && mic.style.display !== oculto) mic.style.display = oculto;
   }
   function pintaEscribiendo() {
     const log = $('wb-log'), sim = chatAbierto();
@@ -533,6 +537,78 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
   // Al entrar o salir de WhatsApp empresa la guía se corre para no tapar el botón de enviar.
   const secWa = $('sec-wa-bandeja');
   if (secWa) new MutationObserver(() => S.activo && pinta()).observe(secWa, { attributes: true, attributeFilter: ['class'] });
+
+  /* ---------- Nota de voz: se graba en el navegador y el cliente «escucha» la transcripción (Web Speech, sin costo ni audio a la EF) ---------- */
+  const Reconoce = window.SpeechRecognition || window.webkitSpeechRecognition, VOZ_MAX = 60;
+  const junta = (...xs) => xs.map(x => (x || '').trim()).filter(Boolean).join(' ');
+  let voz = null;
+  if ($('wb-enviar') && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+    $('wb-enviar').insertAdjacentHTML('beforebegin', '<button class="wb-ico" id="pc-mic" type="button" title="Nota de voz" aria-label="Grabar nota de voz" style="display:none"><i class="fas fa-microphone"></i></button>');
+    $('pc-mic').addEventListener('click', grabaVoz);
+  }
+  async function grabaVoz() {
+    const sim = chatAbierto(); if (!sim || sim.cerrada || voz) return;
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { return avisa('Para mandar notas de voz, permite el micrófono en el navegador.'); }
+    const rec = new MediaRecorder(stream);
+    const v = voz = { sim, rec, stream, trozos: [], inicio: Date.now(), base: '', sesion: '', parcial: '' };
+    rec.ondataavailable = e => e.data.size && v.trozos.push(e.data);
+    v.listoRec = new Promise(ok => { rec.onstop = ok; });
+    v.listoReco = new Promise(ok => { v.recoFin = ok; });
+    rec.start();
+    if (Reconoce) {
+      const r = v.reco = new Reconoce();
+      Object.assign(r, { lang: 'es-VE', continuous: true, interimResults: true });
+      r.onresult = e => { const rs = [...e.results]; v.sesion = junta(...rs.filter(x => x.isFinal).map(x => x[0].transcript)); v.parcial = junta(...rs.filter(x => !x.isFinal).map(x => x[0].transcript)); pintaVoz(); };
+      r.onerror = e => { if (e.error !== 'no-speech' && e.error !== 'aborted') v.sinReco = e.error; };
+      // Chrome corta el reconocimiento tras un silencio: mientras se graba se vuelve a arrancar.
+      r.onend = () => {
+        v.base = junta(v.base, v.sesion); v.sesion = v.parcial = ''; v.recoVivo = false;
+        if (voz === v && !v.sinReco) try { r.start(); v.recoVivo = true; } catch {}
+        if (!v.recoVivo) v.recoFin();
+      };
+      try { r.start(); v.recoVivo = true; } catch { v.sinReco = 'start'; }
+    }
+    if (!v.recoVivo) v.recoFin();
+    v.reloj = setInterval(() => { if (chatAbierto() !== v.sim) paraVoz(false); else if (Date.now() - v.inicio >= VOZ_MAX * 1e3) paraVoz(true); else pintaVoz(); }, 250);
+    pintaVoz();
+  }
+  async function paraVoz(enviar) {
+    const v = voz; if (!v) return;
+    voz = null; v.fin = Date.now(); clearInterval(v.reloj); pintaVoz();
+    try { v.reco?.stop(); } catch {}
+    if (v.rec.state !== 'inactive') v.rec.stop();
+    await Promise.all([v.listoRec, Promise.race([v.listoReco, espera(2500)])]);
+    v.stream.getTracks().forEach(t => t.stop());
+    const seg = Math.round((v.fin - v.inicio) / 1000);
+    if (!enviar || v.sim.cerrada) return;
+    if (seg < 1 || !v.trozos.length) return avisa('La nota de voz quedó muy corta.');
+    const tipo = v.rec.mimeType || 'audio/webm', dicho = junta(v.base, v.sesion, v.parcial).slice(0, 900);
+    const archivo = new File(v.trozos, `nota-de-voz.${/mp4/.test(tipo) ? 'm4a' : /ogg/.test(tipo) ? 'ogg' : 'webm'}`, { type: tipo });
+    const fila = guardaMensaje(v.sim, { direccion: 'saliente_api', tipo: 'audio', estado: 'enviado', media_mime: tipo, media_path: P.blob(archivo), transcripcion: dicho || null });
+    setTimeout(() => fila.estado === 'enviado' && tick(fila, 'entregado'), 700);
+    setTimeout(() => { const log = $('wb-log'); if (log) log.scrollTop = log.scrollHeight; }, 60);
+    saliente(v.sim, fila, archivo, seg);
+  }
+  function pintaVoz() {
+    const c = $('wb-compose'); if (!c) return;
+    let b = $('pc-grabando');
+    c.classList.toggle('pc-graba', !!voz);
+    if (!voz) { b?.remove(); return; }
+    if (!b) {
+      c.insertAdjacentHTML('beforeend', `<div id="pc-grabando" role="status"><button class="wb-ico" type="button" data-voz="no" title="Descartar" aria-label="Descartar nota de voz"><i class="fas fa-trash"></i></button>
+        <span class="pc-rec-punto"></span><b class="pc-rec-t"></b><span class="pc-rec-txt"></span>
+        <button class="wb-send" type="button" data-voz="si" aria-label="Enviar nota de voz"><i class="fas fa-paper-plane"></i></button></div>`);
+      b = $('pc-grabando');
+      b.addEventListener('click', e => { const x = e.target.closest('[data-voz]'); if (x) paraVoz(x.dataset.voz === 'si'); });
+    }
+    const t = reloj(Date.now() - voz.inicio), o = junta(voz.base, voz.sesion, voz.parcial);
+    const oido = (o.length > 60 ? '…' + o.slice(-60).replace(/^\S*\s/, '') : o) || (Reconoce && !voz.sinReco ? 'Grabando… habla normal' : 'Grabando…');
+    const el = b.querySelector('.pc-rec-t'), tx = b.querySelector('.pc-rec-txt');
+    if (el.textContent !== t) el.textContent = t;
+    if (tx.textContent !== oido) tx.textContent = oido;
+  }
 
   function sonido() {
     try {
@@ -638,6 +714,13 @@ body.pc-wa #pc-wa-estado{font-size:12px;color:var(--wa-meta,#8696a0)}body.pc-wa 
 body.pc-wa #sec-wa-bandeja .wb-compose{background:var(--wa-cabecera,#202c33);border-top:none;padding:8px 10px}
 body.pc-wa #sec-wa-bandeja .wb-compose textarea{border:none;border-radius:8px;background:var(--wa-entrada,#2a3942);color:var(--wa-ajena-txt,#e9edef)}
 body.pc-wa #sec-wa-bandeja .wb-send{background:#00a884;color:#fff}
+#sec-wa-bandeja .wb-compose.pc-graba>:not(#pc-grabando){display:none!important}
+#pc-grabando{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+#pc-grabando .pc-rec-punto{width:10px;height:10px;border-radius:50%;background:#f15c6d;flex-shrink:0;animation:pc-late 1s infinite}
+#pc-grabando .pc-rec-t{font-variant-numeric:tabular-nums}
+#pc-grabando .pc-rec-txt{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;font-style:italic;color:var(--wa-meta,#8696a0)}
+@keyframes pc-late{50%{opacity:.25}}
+body.pc-wa #sec-wa-bandeja .chat-msg .wa-audio{height:40px}
 body.pc-wa #sec-wa-bandeja .msg-inbox-badge{background:#25d366;color:#05301a;font-weight:700}
 body.pc-wa #sec-wa-bandeja .msg-inbox-row .msg-avatar{border-radius:50%}
 body.pc-wa #sec-wa-bandeja .pc-puntos{display:flex;gap:4px;padding:11px 12px}

@@ -10952,7 +10952,7 @@ async function indResCargar() {
 function indResPintar() {
   const pr = IND_RES || [], todas = pr.flatMap(p => p.simulaciones || []), prom = indProm(todas);
   pintarKPIs('ind-res-kpis', [
-    { t: 'Practicantes', v: fmt(pr.length), d: `${fmt(pr.filter(p => p.nivel >= 6).length)} listos para el examen`, i: 'fa-user-graduate', c: 'var(--blue)' },
+    { t: 'Practicantes', v: fmt(pr.length), d: `${fmt(pr.filter(p => p.nivel >= 6).length)} en el examen · ${fmt(pr.filter(p => p.examen?.aprobado).length)} aprobados`, i: 'fa-user-graduate', c: 'var(--blue)' },
     { t: 'Clientes atendidos', v: fmt(todas.length), d: `${fmt(todas.filter(s => s.estado === 'vendido').length)} ventas cerradas`, i: 'fa-comments', c: 'var(--accent)' },
     { t: 'Puntaje medio', v: prom != null ? fmt(prom) : '—', d: `${fmt(todas.filter(s => s.aprobada).length)} aprobados (70+, venta y total correcto)`, i: 'fa-star', c: 'var(--purple)' },
   ]);
@@ -10964,7 +10964,7 @@ function indResPintar() {
     const sims = p.simulaciones || [], pp = indProm(sims), abierto = IND_RES_ABIERTO === p.nombre;
     const dias = [...new Set(sims.map(s => indDia(s.creado_en)))].sort().map(d => { const x = sims.filter(s => indDia(s.creado_en) === d), n = indProm(x); return `${indDiaTxt(d)}: ${n != null ? n : '—'} (${x.length})`; });
     return `<div class="ce-card ind-prac" data-prac="${esc(p.nombre)}" role="button" tabindex="0" aria-expanded="${abierto}">
-      <div class="cev-top"><div class="cev-nom">${esc(p.nombre)}</div><span class="cev-cod">${p.nivel >= 6 ? 'Examen' : `Nivel ${p.nivel} de 5`}</span></div>
+      <div class="cev-top"><div class="cev-nom">${esc(p.nombre)}</div><span class="cev-cod" title="${p.examen ? `Último examen «hora pico»: promedio ${p.examen.promedio} (${(p.examen.puntajes || []).join(', ')})` : ''}">${p.examen?.aprobado ? `✅ Examen aprobado · ${p.examen.promedio}` : p.examen ? `Examen ${p.examen.promedio} de 75` : p.nivel >= 6 ? 'Examen' : `Nivel ${p.nivel} de 5`}</span></div>
       <div class="ind-niveles" aria-label="Nivel ${p.nivel}">${[1, 2, 3, 4, 5].map(n => `<span class="${n < p.nivel ? 'ok' : n === p.nivel ? 'va' : ''}"></span>`).join('')}</div>
       <div class="ia-datos">
         <span class="ia-dato"><i class="fas fa-comments"></i> ${fmt(sims.length)} clientes · ${fmt(sims.filter(s => s.estado === 'vendido').length)} ventas</span>

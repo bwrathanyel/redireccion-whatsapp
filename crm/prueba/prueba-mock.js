@@ -269,10 +269,10 @@
     const r = /\bh\/\d+-\d+\.jpg/.exec(s); return r ? `prueba-fotos/${r[0]}` : `prueba-fotos/f${hash(s) % NFOTOS + 1}.jpg`;
   };
   const fotoResp = p => origFetch(fotoLocal(p));
-  // Adjuntos del chat (blob del practicante, comprobante del cliente): se cambian apenas se asigna la URL firmada,
+  // Adjuntos del chat (blob del practicante, comprobante del cliente, nota de voz): se cambian apenas se asigna la URL firmada,
   // sin esperar al error de red de demo.invalid (tarda y el chat se repinta en el medio).
   new MutationObserver(ms => {
-    for (const { target: el } of ms) if (el.tagName === 'IMG' && /demo\.invalid\/storage\/.*prueba-(blob|comprobante)\//.test(el.src)) el.src = fotoLocal(el.src);
+    for (const { target: el } of ms) if ((el.tagName === 'IMG' || el.tagName === 'AUDIO') && /demo\.invalid\/storage\/.*prueba-(blob|comprobante)\//.test(el.src)) el.src = fotoLocal(el.src);
   }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['src'] });
   document.addEventListener('error', e => {
     const el = e.target;
