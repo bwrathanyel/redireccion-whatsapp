@@ -471,7 +471,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     S.activo = true; ss('clientes:activo', '1'); pinta();
     if (r.ok && r.frenado) { S.bloqueo = MOTIVOS.tope; return avisa(MOTIVOS.tope); }
     const previas = rehidratar && r.ok ? r.en_curso || [] : [];
-    for (const s of previas) crearSim({ id: s.sim_id, nivel: s.nivel, nivelJuego: s.nivel, titulo: '', guia: s.guia, cliente: s.cliente, paciencia: s.paciencia_min, historial: s.historial, pasos: s.pasos }, true);
+    for (const s of previas) crearSim({ id: s.sim_id, nivel: s.nivel, nivelJuego: s.nivel, titulo: (r.niveles || []).find(n => n.nivel === s.nivel)?.titulo || '', guia: s.guia, cliente: s.cliente, paciencia: s.paciencia_min, historial: s.historial, pasos: s.pasos }, true);
     if (!previas.length) setTimeout(nuevoCliente, rehidratar ? 3000 : 6000);
   }
   function presenta() {

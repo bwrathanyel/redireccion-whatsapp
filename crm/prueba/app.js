@@ -10808,13 +10808,26 @@ function setupInduccion() {
     document.querySelectorAll('#ind-tabs [data-ind-tab]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); });
     document.getElementById('ind-pane-misiones').hidden = IND_TAB !== 'misiones';
     document.getElementById('ind-pane-vivo').hidden = IND_TAB !== 'vivo';
+    document.getElementById('ind-pane-res').hidden = IND_TAB !== 'res';
+    indChatAbre(null);
+    IND_CHAT_BOX = IND_TAB === 'res' ? 'ind-res-chat' : 'ind-chat';
     if (IND_TAB === 'vivo') indVivoArranca();
+    if (IND_TAB === 'res') indResCargar();
   });
   const vivo = document.getElementById('ind-vivo-lista');
   const abreSim = e => { const c = e.target.closest('.ind-sim'); if (c) indChatAbre(IND_CHAT === c.dataset.sim ? null : c.dataset.sim); };
   vivo.addEventListener('click', abreSim);
   vivo.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('ind-sim')) { e.preventDefault(); abreSim(e); } });
-  document.getElementById('ind-chat').addEventListener('click', e => { if (e.target.closest('[data-ind-cerrar]')) indChatAbre(null); });
+  const res = document.getElementById('ind-res-lista');
+  const abreRes = e => {
+    const s = e.target.closest('.ind-res-sim');
+    if (s) return indChatAbre(IND_CHAT === s.dataset.sim ? null : s.dataset.sim);
+    const p = e.target.closest('.ind-prac');
+    if (p && !e.target.closest('.ind-res-sims')) { IND_RES_ABIERTO = IND_RES_ABIERTO === p.dataset.prac ? null : p.dataset.prac; indResPintar(); }
+  };
+  res.addEventListener('click', abreRes);
+  res.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('ind-prac')) { e.preventDefault(); abreRes(e); } });
+  ['ind-chat', 'ind-res-chat'].forEach(id => document.getElementById(id).addEventListener('click', e => { if (e.target.closest('[data-ind-cerrar]')) indChatAbre(null); }));
   document.addEventListener('visibilitychange', () => { if (indVivoVisible()) indVivoArranca(); });
 }
 
@@ -10892,9 +10905,9 @@ function indVivoPintar() {
 }
 function indChatAbre(id) {
   IND_CHAT = id; IND_CHAT_VER = null;
-  const box = document.getElementById('ind-chat');
+  const box = document.getElementById(IND_CHAT_BOX);
   box.hidden = !id;
-  document.querySelectorAll('#ind-vivo-lista .ind-sim').forEach(c => { c.classList.toggle('on', c.dataset.sim === id); c.setAttribute('aria-pressed', String(c.dataset.sim === id)); });
+  document.querySelectorAll('#ind-vivo-lista .ind-sim, #ind-res-lista .ind-res-sim').forEach(c => { c.classList.toggle('on', c.dataset.sim === id); c.setAttribute('aria-pressed', String(c.dataset.sim === id)); });
   if (!id) { box.innerHTML = ''; return; }
   box.innerHTML = '<div class="tbl-state skel show" style="padding:16px"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   indChatCargar(id);
@@ -10902,7 +10915,7 @@ function indChatAbre(id) {
 async function indChatCargar(id) {
   const { data, error } = await sb.rpc('prueba_sim_detalle', { p_id: id });
   if (IND_CHAT !== id) return;
-  const box = document.getElementById('ind-chat');
+  const box = document.getElementById(IND_CHAT_BOX);
   if (error || !data?.ok) { box.innerHTML = `<div class="ind-chat-nota">No se pudo cargar el chat${error ? ': ' + esc(error.message || '') : ''} <button class="ce-mini" type="button" data-ind-cerrar>Cerrar</button></div>`; return; }
   IND_CHAT_VER = data.actualizado_en;
   const viejo = box.querySelector('.ind-chat-log'), alFondo = !viejo || viejo.scrollHeight - viejo.scrollTop - viejo.clientHeight < 60;
@@ -10916,9 +10929,52 @@ async function indChatCargar(id) {
       <button type="button" data-ind-cerrar aria-label="Cerrar el chat"><i class="fas fa-xmark"></i></button></div>
     <div class="ind-chat-pasos">${IND_PASOS.map(([k, t]) => `<span class="${pasos[k] ? 'ok' : ''}">${pasos[k] ? '✓' : '○'} ${esc(t)}</span>`).join('')}</div>
     <div class="ind-chat-log">${(data.historial || []).map(msg).join('')}</div>
-    ${ev && data.puntaje != null ? `<div class="ind-chat-nota"><b>${data.puntaje}/100</b>${data.aprobada ? ' · aprobado' : ''}${ev.mejoras?.length ? `<br>Para mejorar: ${esc(ev.mejoras.join(' · '))}` : ''}</div>` : ''}`;
+    ${ev && data.puntaje != null ? `<div class="ind-chat-nota"><b>${data.puntaje}/100</b>${data.aprobada ? ' · aprobado' : ''}${ev.resumen ? ` · ${esc(ev.resumen)}` : ''}${ev.aciertos?.length ? `<br>Bien: ${esc(ev.aciertos.join(' · '))}` : ''}${ev.mejoras?.length ? `<br>Para mejorar: ${esc(ev.mejoras.join(' · '))}` : ''}${ev.frase_ideal ? `<br>Un asesor top habría dicho: «${esc(ev.frase_ideal)}»` : ''}</div>` : ''}`;
   const log = box.querySelector('.ind-chat-log');
   if (alFondo) log.scrollTop = log.scrollHeight;
+}
+
+/* ---------- Inducción › Resultados: progreso por practicante (prueba_sim_resumen) ----------
+   Nivel alcanzado, cada cliente con su puntaje y la evolución por día (jue 5 / vie 6 / lun 9).
+   Al tocar un cliente se abre su chat completo con la evaluación (mismo panel que En vivo). */
+let IND_RES = null, IND_RES_ABIERTO = null, IND_CHAT_BOX = 'ind-chat';
+const indDia = ts => new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+const indDiaTxt = d => new Date(d + 'T12:00:00Z').toLocaleDateString('es-VE', { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+const indProm = xs => { const n = xs.filter(s => s.puntaje != null); return n.length ? Math.round(n.reduce((a, s) => a + Number(s.puntaje), 0) / n.length) : null; };
+async function indResCargar() {
+  const { data, error } = await sb.rpc('prueba_sim_resumen');
+  const cont = document.getElementById('ind-res-lista');
+  if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver los resultados' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
+  IND_RES = data || []; indResPintar();
+}
+function indResPintar() {
+  const pr = IND_RES || [], todas = pr.flatMap(p => p.simulaciones || []), prom = indProm(todas);
+  pintarKPIs('ind-res-kpis', [
+    { t: 'Practicantes', v: fmt(pr.length), d: `${fmt(pr.filter(p => p.nivel >= 6).length)} listos para el examen`, i: 'fa-user-graduate', c: 'var(--blue)' },
+    { t: 'Clientes atendidos', v: fmt(todas.length), d: `${fmt(todas.filter(s => s.estado === 'vendido').length)} ventas cerradas`, i: 'fa-comments', c: 'var(--accent)' },
+    { t: 'Puntaje medio', v: prom != null ? fmt(prom) : '—', d: `${fmt(todas.filter(s => s.aprobada).length)} aprobados (70+, venta y total correcto)`, i: 'fa-star', c: 'var(--purple)' },
+  ]);
+  const cont = document.getElementById('ind-res-lista');
+  if (!pr.length) { cont.innerHTML = '<div class="vig-vacio"><i class="fas fa-ranking-star"></i><b>Todavía nadie practicó con clientes</b></div>'; return; }
+  const paso = Object.fromEntries(IND_PASOS);
+  const orden = [...pr].sort((a, b) => b.nivel - a.nivel || (indProm(b.simulaciones || []) ?? -1) - (indProm(a.simulaciones || []) ?? -1));
+  cont.innerHTML = `<div class="ce-grupo">${orden.map(p => {
+    const sims = p.simulaciones || [], pp = indProm(sims), abierto = IND_RES_ABIERTO === p.nombre;
+    const dias = [...new Set(sims.map(s => indDia(s.creado_en)))].sort().map(d => { const x = sims.filter(s => indDia(s.creado_en) === d), n = indProm(x); return `${indDiaTxt(d)}: ${n != null ? n : '—'} (${x.length})`; });
+    return `<div class="ce-card ind-prac" data-prac="${esc(p.nombre)}" role="button" tabindex="0" aria-expanded="${abierto}">
+      <div class="cev-top"><div class="cev-nom">${esc(p.nombre)}</div><span class="cev-cod">${p.nivel >= 6 ? 'Examen' : `Nivel ${p.nivel} de 5`}</span></div>
+      <div class="ind-niveles" aria-label="Nivel ${p.nivel}">${[1, 2, 3, 4, 5].map(n => `<span class="${n < p.nivel ? 'ok' : n === p.nivel ? 'va' : ''}"></span>`).join('')}</div>
+      <div class="ia-datos">
+        <span class="ia-dato"><i class="fas fa-comments"></i> ${fmt(sims.length)} clientes · ${fmt(sims.filter(s => s.estado === 'vendido').length)} ventas</span>
+        <span class="ia-dato"><i class="fas fa-star"></i> ${pp != null ? `${pp} de promedio` : 'sin puntaje'} · ${fmt(sims.filter(s => s.aprobada).length)} aprobados</span>
+        ${dias.length ? `<span class="ia-dato" title="Puntaje medio por día (clientes)"><i class="fas fa-chart-line"></i> ${esc(dias.join(' · '))}</span>` : ''}
+      </div>
+      ${(p.debilidades || []).length ? `<div class="ia-datos">${p.debilidades.map(d => `<span class="ind-deb">Flojo en: ${esc(paso[d] || d)}</span>`).join('')}</div>` : ''}
+      ${abierto ? `<div class="ind-res-sims">${sims.length ? sims.map(s => `<button class="ind-res-sim${IND_CHAT === s.id ? ' on' : ''}" type="button" data-sim="${esc(s.id)}" aria-pressed="${IND_CHAT === s.id}">
+          <span>${esc(s.cliente || 'Cliente')}</span><small>${esc(indDiaTxt(indDia(s.creado_en)))} ${new Date(s.creado_en).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })} · nivel ${s.nivel} · ${s.cerrado_en ? indDur((Date.parse(s.cerrado_en) - Date.parse(s.creado_en)) / 1000) : 'en curso'} · ${s.estado === 'en_curso' ? 'atendiendo' : IND_ESTADO[s.estado] || esc(s.estado)}</small>
+          <b>${s.puntaje != null ? `${s.puntaje}/100${s.aprobada ? ' ✓' : ''}` : '—'}</b></button>`).join('') : '<div class="ria-sub">Sin clientes todavía.</div>'}</div>` : ''}
+    </div>`;
+  }).join('')}</div>`;
 }
 
 function setupClientesEventos() {

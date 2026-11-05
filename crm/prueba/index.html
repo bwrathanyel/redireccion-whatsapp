@@ -5500,6 +5500,17 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .ind-msg.sis{align-self:center;max-width:92%;background:transparent;color:var(--wa-meta);font-size:12px;font-style:italic;text-align:center}
 .ind-chat-nota{padding:10px 12px;background:var(--wa-cab);color:var(--wa-ajena-txt);font-size:12.5px;border-top:1px solid rgba(134,150,160,.15)}
 @media(max-width:900px){.ind-vivo:has(.ind-chat:not([hidden])){grid-template-columns:minmax(0,1fr)}.ind-chat{position:static;max-height:70vh}}
+.ind-prac{cursor:pointer}
+.ind-prac:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ind-niveles{display:flex;gap:3px;margin-top:8px}
+.ind-niveles span{flex:1;max-width:44px;height:6px;border-radius:9px;background:var(--line2)}
+.ind-niveles span.ok{background:var(--green)}.ind-niveles span.va{background:var(--accent)}
+.ind-deb{display:inline-flex;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--amber) 14%,transparent);color:var(--amber);font-size:11px;font-weight:700}
+.ind-res-sims{display:flex;flex-direction:column;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);cursor:default}
+.ind-res-sim{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;width:100%;min-height:40px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:none;color:inherit;font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.ind-res-sim:hover,.ind-res-sim.on{border-color:var(--accent)}
+.ind-res-sim small{color:var(--muted);font-size:11.5px}
+.ind-res-sim b{margin-left:auto}
 .ce-card.apagada .ce-texto{text-decoration:line-through;text-decoration-color:var(--muted2)}
 /* Los hoteles que la regla nombra, con su foto: sin esto la tarjeta muestra un
    "[hotel#1086]" crudo, que no le dice nada a quien la está leyendo. */
@@ -10806,6 +10817,15 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <div class="apto-tabs" id="ind-tabs" role="tablist">
         <button class="apto-tab on" type="button" data-ind-tab="misiones" role="tab" aria-selected="true"><i class="fas fa-list-check"></i> Misiones</button>
         <button class="apto-tab" type="button" data-ind-tab="vivo" role="tab" aria-selected="false"><i class="fas fa-tower-broadcast"></i> En vivo <span class="ce-dest" id="ind-vivo-n" hidden></span></button>
+        <button class="apto-tab" type="button" data-ind-tab="res" role="tab" aria-selected="false"><i class="fas fa-ranking-star"></i> Resultados</button>
+      </div>
+      <!-- Resultados: progreso por practicante y cada chat con su evaluación (RPC prueba_sim_resumen / prueba_sim_detalle). -->
+      <div id="ind-pane-res" hidden>
+        <div class="kpis" id="ind-res-kpis"></div>
+        <div class="ind-vivo">
+          <div id="ind-res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
+          <aside class="ind-chat" id="ind-res-chat" hidden aria-live="polite"></aside>
+        </div>
       </div>
       <!-- En vivo: práctica con clientes IA (RPC prueba_sim_vivo, refresco cada 5 s mientras está a la vista). -->
       <div id="ind-pane-vivo" hidden>
@@ -12348,13 +12368,13 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
      tarAbrirComparador() con las tarifas elegidas y se vacía al cerrar. -->
 <div class="tarcmp" id="tarcmp"></div>
 
-<script src="medicion.js?v=8251878"></script>
-<script src="datos-prueba.js?v=8251878"></script>
-<script src="rpcs-prueba.js?v=8251878"></script>
-<script src="prueba-mock.js?v=8251878"></script>
-<script src="misiones.js?v=8251878"></script>
-<script src="presentacion.js?v=8251878"></script>
-<script src="clientes-ia.js?v=8251878"></script>
-<script type="module" src="app.js?v=8251878"></script>
+<script src="medicion.js?v=9055589"></script>
+<script src="datos-prueba.js?v=9055589"></script>
+<script src="rpcs-prueba.js?v=9055589"></script>
+<script src="prueba-mock.js?v=9055589"></script>
+<script src="misiones.js?v=9055589"></script>
+<script src="presentacion.js?v=9055589"></script>
+<script src="clientes-ia.js?v=9055589"></script>
+<script type="module" src="app.js?v=9055589"></script>
 </body>
 </html>
