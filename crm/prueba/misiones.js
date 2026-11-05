@@ -112,7 +112,9 @@
   const guarda = e => { try { sessionStorage.setItem(CLAVE, JSON.stringify(e)); } catch { /* sin storage: el progreso vive solo en esta pestaña */ } };
   let estado = lee(); // { hechas: [ids], vistas: [secciones abiertas], bienvenida, pausa }
   estado.hechas ||= []; estado.vistas ||= [];
-  const lista = () => MISIONES[P.m.rol] || [];
+  // Asesor (pedido del dueño, 5-nov): sin misiones, entra al CRM completo y arrancan los clientes IA (clientes-ia.js).
+  const directo = () => P.m.rol === 'asesor';
+  const lista = () => (directo() ? [] : MISIONES[P.m.rol]) || [];
   const actual = () => lista().find(x => !estado.hechas.includes(x.id));
   const clave = mi => mi.sec || 'lyra';
   // medicion.js escucha estas señales y etiqueta cada evento con la misión en curso (null en pausa).
@@ -566,7 +568,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   let panel = null, abierto = false, detalleDe = null, pintado = '';
   const INFO = '<button class="pp-info" data-acc="info" aria-label="Ver la explicación de la tarea" title="Ver la explicación">i</button>';
   function pinta(festejo) {
-    if (enLogin() || !estado.bienvenida || window.__pruebaClientes?.activo()) { panel?.remove(); panel = null; pintado = ''; return; }
+    if (enLogin() || !estado.bienvenida || directo() || window.__pruebaClientes?.activo()) { panel?.remove(); panel = null; pintado = ''; return; }
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'prueba-panel'; panel.setAttribute('aria-label', 'Tu práctica');
@@ -691,13 +693,14 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     if (document.hidden) return;
     pintaInicio();
     aplicaGuia();
+    if (!enLogin() && !presentando() && !estado.bienvenida && directo()) { estado.bienvenida = true; guarda(estado); }
     if (!enLogin() && !presentando() && !estado.bienvenida && !document.getElementById('prueba-modal'))
       modal(bienvenida(P.m.rol), 'Empezar', () => { estado.bienvenida = true; guarda(estado); const mi = actual(); mi ? presenta(mi) : pinta(); });
     if (document.getElementById('drawer')?.classList.contains('open')) registra({ tipo: 'ficha' });
     const s = visible();
     if (s !== secVisible) { secVisible = s; if (s) { mide('seccion', { seccion: s }); registra({ tipo: 'seccion', sec: s }); } pinta(); }
     // Sección con explicación a la que se llegó sin misión (menú completo, accesos directos): se explica una vez.
-    if (s && INTROS[s] && !estado.vistas.includes(s) && estado.bienvenida && !enLogin() && !presentando() && !document.getElementById('prueba-modal')) {
+    if (s && INTROS[s] && !estado.vistas.includes(s) && estado.bienvenida && !directo() && !enLogin() && !presentando() && !document.getElementById('prueba-modal')) {
       estado.vistas.push(s); guarda(estado); modal([INTROS[s]], 'Entendido', pinta);
     }
   }, 700);

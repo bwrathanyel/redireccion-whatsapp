@@ -26,8 +26,8 @@
     m.rol = rol; m.usuario = D.USUARIOS[rol]; m.tablas = clona(D.tablas_para(rol)); m.real = false;
   }
 
-  /* ---------- Tarifario real (foto estática) al terminar las misiones ---------- */
-  // Durante las misiones sigue el tarifario simulado (Hesperia $50, etc.): las misiones lo nombran.
+  /* ---------- Tarifario real (foto estática): asesor desde el inicio, admin al terminar las misiones ---------- */
+  // Durante las misiones del admin sigue el tarifario simulado (Hesperia $50, etc.): las misiones lo nombran.
   const TR = g.PRUEBA_TARIFARIO_REAL;
   const fotosReales = new Set((TR?.fotos || []).concat(TR?.promoFotos || []).map(f => f.storage_path));
   let armado = null;
@@ -47,7 +47,7 @@
     };
   }
   function usaReal() {
-    if (m.real || !TR || !g.__pruebaMisiones?.terminadas?.()) return;
+    if (m.real || !TR || !(m.rol === 'asesor' || g.__pruebaMisiones?.terminadas?.())) return;
     m.real = true; Object.assign(m.tablas, armado ||= arma());
     emite({ tipo: 'tarifario-real' });
   }
