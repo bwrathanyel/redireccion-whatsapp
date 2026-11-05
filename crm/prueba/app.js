@@ -7831,6 +7831,8 @@ function abrirAccionesLeadSheet(l) {
     (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) && cta !== 'reserva' && { k: 'reserva', t: 'Crear reserva', i: 'fa-plus', go: () => abrirEnviarFacturacionSheet(l) },
     vende && { k: 'boleteria', t: 'Solicitud de boletería', i: 'fa-plane-departure', go: () => abrirSolicitudBoleteria(l) },
     wa && { k: 'avisar', t: 'Avisar número incorrecto', i: 'fa-flag', go: () => abrirAvisarTelefono(l) },
+    // En el teléfono no hay bandeja: sin esto el asesor no puede soltar el lead. Mismas condiciones que reasignar_lead.
+    esMovil() && ROL === 'asesor' && !l.no_reasignar && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto && { k: 'no-puedo', t: 'No puedo: pasar a otro asesor', i: 'fa-xmark', go: async () => { if (await noPuedoInboxLead(l)) loadTable(); } },
   ].filter(Boolean);
   cont.innerHTML = opciones.map(o => `<button type="button" class="estado-opt" data-k="${o.k}"><i class="fas ${o.i} ao-ic"></i><span class="eo-txt">${esc(o.t)}</span></button>`).join('');
   cont.querySelectorAll('.estado-opt').forEach((b, i) => b.addEventListener('click', () => {
@@ -8358,7 +8360,8 @@ function setupHoy() {
 // admin-only en RLS, sin RPC de "mi estado") -- el pill arranca en "En turno"
 // y solo refleja el estado real después de tocar un botón acá.
 function setupPausaAsesor() {
-  document.querySelectorAll('#hoy-pausa-btns [data-pausa]').forEach(btn => btn.onclick = () => pausaAsesorClick(btn.dataset.pausa, btn));
+  document.querySelectorAll('[data-pausa]').forEach(btn => btn.onclick = () => pausaAsesorClick(btn.dataset.pausa, btn));
+  document.getElementById('nav-pausa-turno')?.addEventListener('click', () => { cerrarMenuMovil('silencioso'); openSheet('pausa-turno-sheet'); });
 }
 async function pausaAsesorClick(modo, btn) {
   if (btn) btn.disabled = true;
@@ -8367,13 +8370,18 @@ async function pausaAsesorClick(modo, btn) {
   if (error || !data?.ok) { errToast('No se pudo actualizar: ' + (error?.message || 'error')); return; }
   renderPausaAsesor(data.pausa_hasta);
   okToast(modo === 'volver' ? 'De vuelta en turno' : 'Pausa activada');
+  if (sheetAbierta === 'pausa-turno-sheet') closeSheet('pausa-turno-sheet');
 }
 function renderPausaAsesor(pausaHasta) {
-  const txt = document.getElementById('hoy-pausa-txt');
-  if (!txt) return;
   const enPausa = pausaHasta && new Date(pausaHasta) > new Date();
-  txt.textContent = enPausa ? 'En pausa hasta ' + new Date(pausaHasta).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'En turno';
-  document.getElementById('hoy-pausa-pill')?.querySelector('.dot')?.style.setProperty('background', enPausa ? '#ef4444' : '');
+  const texto = enPausa ? 'En pausa hasta ' + new Date(pausaHasta).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'En turno';
+  ['hoy-pausa', 'menu-pausa'].forEach(p => {
+    const txt = document.getElementById(p + '-txt'), pill = document.getElementById(p + '-pill');
+    if (!txt || !pill) return;
+    txt.textContent = texto;
+    pill.style.display = '';
+    pill.querySelector('.dot')?.style.setProperty('background', enPausa ? '#ef4444' : '');
+  });
   const volverBtn = document.getElementById('hoy-pausa-volver-btn');
   if (volverBtn) volverBtn.style.display = enPausa ? '' : 'none';
 }
@@ -35278,7 +35286,7 @@ function activateSection(sec, fromNav) {
   guardarUltimaSeccion(sec);
   lyraSeccion(sec);
   chatActualizarVisibilidad();
-  document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.dataset.sec === sec || x.dataset.sec === PADRE_DE[sec]));
+  document.querySelectorAll('.nav-item[data-sec]').forEach(x => x.classList.toggle('active', x.dataset.sec === sec || x.dataset.sec === PADRE_DE[sec]));
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active', 'entrando'));
   const secEl = document.getElementById('sec-' + sec);

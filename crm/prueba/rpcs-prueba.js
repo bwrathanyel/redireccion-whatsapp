@@ -860,6 +860,11 @@ function reasignar_lead(m, body) {
   return { ok: true, nuevo_asesor: 'Carlos Demo', pool_agotado: false };
 }
 
+function set_pausa_asesor(m, body) {
+  const min = { '30min': 30, '1h': 60, manana: 14 * 60 }[g(body, 'p_modo')];
+  return { ok: true, pausa_hasta: min ? new Date(Date.now() + min * 60000).toISOString() : null };
+}
+
 
 // ---------- Tareas v2 (tutorial 17): estado propio en el mock, mismas formas que las RPC reales ----------
 const ADMIN_DEMO = { id: USUARIOS.admin.id, nombre: 'Admin Demo' };
@@ -1043,7 +1048,7 @@ const RPCS_TAREAS = {
 
 
 const RPCS_ASESOR = {
-  actualizar_lead, reportar_telefono_incorrecto,
+  actualizar_lead, reportar_telefono_incorrecto, set_pausa_asesor,
   fijar_proxima_accion, guardar_notas_lead,
   registrar_cotizacion_enviada, enviar_a_facturacion, emitir_pago,
   registrar_abono_venta, reserva_abonos_lista, registrar_abono_reserva_v2, estadisticas_asesor,

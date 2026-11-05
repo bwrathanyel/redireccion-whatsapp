@@ -371,6 +371,7 @@ body.menu-arrastrando .side-scrim{transition:none}
 .side-cerrar{display:none;width:38px;height:38px;border-radius:11px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:15px;cursor:pointer;margin-left:auto}
 .brand .refresh-btn+.side-cerrar{margin-left:0}
 .nav-item.nav-solo-movil{display:none}
+.nav-item.nav-pausa-turno{display:none}
 /* Badge de leads sin atender: mismo id/clase que usaba la bottom-nav, ahora
    dibujado sobre el botón de menú (.menu-dot lo acompaña como punto simple). */
 .bn-badge{display:none}
@@ -7937,6 +7938,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 }
 /* QA móvil 2026-11-06 */
 @media (max-width:760px){
+  .rol-asesor .nav-item.nav-pausa-turno{display:flex}
   /* FABs: nada flotante sobre paneles, hojas de filtros, teclado ni barras fijas */
   body.lyra-abierta .mfab,body:has(.mfs.open) :is(.mfab,.chat-fab,.lyra-fab),body.teclado :is(.mfab,.chat-fab,.lyra-fab){opacity:0;pointer-events:none;transform:scale(.8)}
   body:has(#sec-voucher.active) :is(.lyra-fab,.chat-fab){bottom:calc(84px + var(--safe-b))}
@@ -8369,6 +8371,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <nav class="sidebar-nav" id="sidebar-nav">
       <input class="nav-buscar" id="nav-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
       <!-- "Hoy" salió del menú móvil (2026-10-16); la sección y renderHoy siguen en el código. -->
+      <a class="nav-item nav-pausa-turno nav-modo-boleteria-ok" id="nav-pausa-turno" role="button" tabindex="0"><i class="fas fa-mug-hot"></i> Pausa de turno</a>
       <a class="nav-item nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
       <template id="nav-items-anchor"></template>
     </nav>
@@ -12501,6 +12504,20 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   <div class="sheet-handle"></div>
   <div class="sheet-title" id="acciones-lead-titulo">Acciones</div>
   <div id="acciones-lead-opciones" class="estado-lead-opciones"></div>
+</div>
+
+<!-- El estado real no se puede leer al cargar (ver setupPausaAsesor): «Volver a turno» siempre visible y el estado solo después de tocar. -->
+<div class="sheet" id="pausa-turno-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Pausa de turno</div>
+  <div class="confirmar-sheet-detalle">Mientras estés en pausa no te entran leads del reparto de redes y bio.</div>
+  <div class="pill" id="menu-pausa-pill" style="display:none;margin-bottom:10px"><span class="dot"></span><span id="menu-pausa-txt"></span></div>
+  <div class="grid g-2" style="margin-bottom:8px">
+    <button class="btn-sec" type="button" data-pausa="30min">Pausa 30 min</button>
+    <button class="btn-sec" type="button" data-pausa="1h">Pausa 1 h</button>
+    <button class="btn-sec" type="button" data-pausa="manana">Pausa hasta mañana</button>
+    <button class="btn-acc" type="button" data-pausa="volver">Volver a turno</button>
+  </div>
 </div>
 
 <div class="sheet" id="conv-lead-sheet">
