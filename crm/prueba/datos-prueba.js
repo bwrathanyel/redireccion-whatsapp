@@ -218,8 +218,8 @@ function _maria_vendida(tablas) {
 const ESCENARIOS = { 'maria-vendida': _maria_vendida };
 
 // Imita el RLS: el asesor solo ve sus propios leads. Y de esos, solo los que piden sus
-// misiones (atender/cotizar/Lyra = María, abono = Ricardo): con 13 la práctica abrumaba.
-const LEADS_ASESOR = ['María González', 'Ricardo Díaz'];
+// misiones (atender/cotizar/Lyra = María, abono = Ricardo, tareas = Carmen): con 13 la práctica abrumaba.
+const LEADS_ASESOR = ['María González', 'Ricardo Díaz', 'Carmen López'];
 function tablas_para(rol) {
   if (rol !== 'asesor') return TABLAS;
   const leads = LEADS.filter(l => l.asesor === ASESORA && LEADS_ASESOR.includes(l.nombre));
