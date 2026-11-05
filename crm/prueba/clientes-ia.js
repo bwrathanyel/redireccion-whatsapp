@@ -1,4 +1,4 @@
-/* Práctica con clientes IA (inducción): al terminar las misiones llegan a Leads clientes simulados
+/* Práctica con clientes IA (inducción): el asesor entra directo (sin misiones) y llegan a Leads clientes simulados
    por la Edge Function prueba-cliente-ia y se atienden en WhatsApp empresa con piel de WhatsApp.
    La guía tilda el procedimiento con las señales del mock ('prueba:accion') y del chat; al cerrar,
    la EF evalúa y decide si se sube de nivel. Además de la telemetría, la única salida al proyecto
@@ -19,7 +19,12 @@
   const nombre = () => ss('prueba:nombre') || D.ASESORA;
 
   /* ---------- Estado ---------- */
-  const S = { activo: ss('clientes:activo') === '1', nivel: 1, pasos: [], sims: new Map(), llegando: false, aviso: null, nSim: 0 };
+  // Examen «hora pico» (nivel 6 en la EF): 3 clientes casi juntos, 60 min, sin guía; aprueba con promedio 75+.
+  const EXAMEN = { nivel: 6, clientes: 3, min: 60, aprueba: 75, llegadas: [0, 90e3, 240e3] };
+  const leeExamen = () => { try { return JSON.parse(ss('clientes:examen')) || null; } catch { return null; } };
+  const S = { activo: ss('clientes:activo') === '1', nivel: 1, pasos: [], sims: new Map(), llegando: false, aviso: null, nSim: 0, examen: leeExamen() };
+  const guardaExamen = () => ss('clientes:examen', S.examen ? JSON.stringify(S.examen) : null);
+  const enExamen = () => !!S.examen && !S.examen.fin;
   const simDeLead = id => [...S.sims.values()].find(s => s.leadId === Number(id));
   const simDeConv = id => [...S.sims.values()].find(s => s.convId === Number(id));
   const simDeTel = tel => [...S.sims.values()].find(s => s.tel.replace(/\D/g, '') === tel);
@@ -48,13 +53,17 @@
   async function nuevoCliente() {
     if (S.llegando) return;
     S.llegando = true;
-    const r = await ia({ accion: 'iniciar', sesion, nombre: nombre(), nivel: S.nivel });
+    const examen = S.nivel >= EXAMEN.nivel && enExamen() ? S.examen.id : undefined;
+    const r = await ia({ accion: 'iniciar', sesion, nombre: nombre(), nivel: S.nivel, examen });
     S.llegando = false;
     if (!r.ok) {
+      if (r.motivo === 'examen_lleno' && enExamen()) { S.examen.lanzados = EXAMEN.clientes; guardaExamen(); return; }
       if (r.motivo === 'tope' || r.motivo === 'limite_dia') S.bloqueo = MOTIVOS[r.motivo];
-      avisa(MOTIVOS[r.motivo] || 'No se pudo traer al próximo cliente.'); if (r.motivo === 'red' || r.motivo === 'error') setTimeout(nuevoCliente, 15000); return; }
+      // En el examen reintenta el reloj del examen (tickExamen), no este temporizador.
+      avisa(MOTIVOS[r.motivo] || 'No se pudo traer al próximo cliente.'); if ((r.motivo === 'red' || r.motivo === 'error') && !examen) setTimeout(nuevoCliente, 15000); return; }
     S.pasos = r.pasos || S.pasos;
-    crearSim({ id: r.sim_id, nivel: r.nivel, nivelJuego: r.nivel_juego, titulo: r.titulo, guia: r.guia, cliente: r.cliente, paciencia: r.paciencia_min,
+    if (examen) { S.examen.lanzados++; guardaExamen(); }
+    crearSim({ id: r.sim_id, nivel: r.nivel, nivelJuego: r.nivel_juego, titulo: r.titulo, guia: r.guia, cliente: r.cliente, paciencia: r.paciencia_min, examen,
       historial: [{ de: 'cliente', texto: r.primer_mensaje, ts: Date.now() }] });
     sonido();
   }
@@ -294,6 +303,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
         contesta(sim);
       }
     }
+    if (enExamen()) tickExamen();
     pinta();
   }, 5000);
 
@@ -302,12 +312,78 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     if (sim.cerrada) return;
     sim.cerrada = true; clearTimeout(sim.timer);
     pinta();
-    tarjeta(null, sim);
+    // En el examen la tarjeta de cada chat taparía a los otros clientes: se ve todo junto al final.
+    if (sim.examen) avisa(`Se cerró el chat con ${sim.cliente.nombre}. Su puntaje lo ves al terminar el examen.`); else tarjeta(null, sim);
     const pend = sim.pend; sim.pend = nuevoPend();
     let r = await ia({ accion: 'evaluar', sesion, sim_id: sim.id, motivo, pasos: sim.pasos, eventos: pend.eventos });
     for (let i = 0; !r.ok && r.motivo !== 'tope' && r.motivo !== 'sim' && i < 2; i++) { await espera(4000); r = await ia({ accion: 'evaluar', sesion, sim_id: sim.id, motivo, pasos: sim.pasos }); }
     if (r.ok) { if (r.nivel) S.nivel = r.nivel; ss('clientes:nivel', String(S.nivel)); }
+    if (sim.examen) return examenCerrado(sim, r);
     tarjeta(r, sim);
+  }
+
+  /* ---------- Examen «hora pico» ---------- */
+  function presentaExamen() {
+    const M = window.__pruebaMisiones;
+    if (!M || $('prueba-modal')) return;
+    M.modal([
+      { icono: '⏱️', titulo: 'Examen «hora pico»', texto: `Pasaste los 5 niveles. Ahora llegan <b>${EXAMEN.clientes} clientes casi juntos</b> y tienes <b>${EXAMEN.min} minutos</b> para atenderlos a todos, sin guía. Cambias de chat con los nombres del panel o desde WhatsApp empresa.` },
+      { icono: '🎯', titulo: 'Cómo se aprueba', texto: `Con un promedio de <b>${EXAMEN.aprueba} o más</b> entre los ${EXAMEN.clientes} chats. Cada chat que cierras se evalúa, y al final ves el resultado de los ${EXAMEN.clientes}. Al aprobar, administración te asigna clientes reales.` },
+    ], 'Empezar el examen', iniciaExamen);
+  }
+  function iniciaExamen() {
+    S.examen = { id: crypto.randomUUID(), inicio: Date.now(), lanzados: 0 }; guardaExamen();
+    $('pc-nota')?.remove(); tickExamen(); pinta();
+  }
+  function tickExamen() {
+    const E = S.examen, t = Date.now() - E.inicio;
+    if (t >= EXAMEN.min * 60e3) {
+      if (E.lanzados < EXAMEN.clientes) { E.lanzados = EXAMEN.clientes; guardaExamen(); }
+      return abiertas().filter(s => s.examen === E.id).forEach(s => cierra(s, 'tiempo'));
+    }
+    if (E.lanzados < EXAMEN.clientes && t >= EXAMEN.llegadas[E.lanzados] && !S.llegando && !S.bloqueo) nuevoCliente();
+  }
+  async function examenCerrado(sim, r) {
+    sim.eval = r.ok ? r : { puntaje: null };
+    const E = S.examen;
+    if (!E || E.id !== sim.examen || E.fin) return;
+    const delExamen = [...S.sims.values()].filter(s => s.examen === E.id);
+    let ex = r.examen;
+    // Dos chats evaluados a la vez no se ven entre sí en la EF: se vuelve a pedir el último y ahí se cierra.
+    if (!ex && E.lanzados >= EXAMEN.clientes && delExamen.length >= EXAMEN.clientes && delExamen.every(s => s.eval)) ex = (await ia({ accion: 'evaluar', sesion, sim_id: sim.id })).examen;
+    if (ex) finExamen(ex, delExamen);
+  }
+  function finExamen(ex, sims) {
+    S.examen.fin = ex; guardaExamen();
+    for (const s of sims) S.sims.delete(s.id);
+    pinta();
+    $('pc-nota')?.remove();
+    const m = document.createElement('div');
+    m.id = 'pc-nota'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+    const filas = sims.length === ex.puntajes?.length
+      ? sims.map(s => `<div class="pc-paso"><span>${esc(s.cliente.nombre)}${s.eval?.hechos?.resultado === 'vendido' ? ' · ✅ venta' : ''}</span><i style="--v:${s.eval?.puntaje ?? 0}%;--c:${PUNTOS(s.eval?.puntaje ?? 0)}"></i><b>${s.eval?.puntaje ?? '—'}</b></div>`).join('')
+      : (ex.puntajes || []).map((p, i) => `<div class="pc-paso"><span>Cliente ${i + 1}</span><i style="--v:${p}%;--c:${PUNTOS(p)}"></i><b>${p}</b></div>`).join('');
+    const mejoras = sims.flatMap(s => (s.eval?.mejoras || []).slice(0, 1));
+    m.innerHTML = `<div class="pc-caja pc-larga">
+      <div class="pc-cab"><div class="pc-puntaje" style="--c:${PUNTOS(ex.promedio)}"><b>${ex.promedio}</b><small>promedio</small></div>
+        <div><h3>Examen «hora pico»</h3><p class="pc-estado ${ex.aprobado ? 'ok' : ''}">${ex.aprobado ? 'Aprobado' : `No aprobado: hace falta un promedio de ${EXAMEN.aprueba}`}</p></div></div>
+      ${ex.aprobado ? '<div class="pc-subio">🎉 ¡Aprobaste la inducción! Administración ya lo ve y te asigna clientes reales.</div>' : ''}
+      <div class="pc-pasos-fin">${filas}</div>
+      ${mejoras.length ? `<div class="pc-cols"><div><h4>Para mejorar</h4><ul>${mejoras.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></div>` : ''}
+      <div class="pc-acc">${ex.aprobado ? '<button class="pp-ir" data-pc="listo">Listo</button>' : '<button data-pc="listo">Cerrar</button><button class="pp-ir" data-pc="examen">Repetir el examen</button>'}</div></div>`;
+    m.addEventListener('click', e => {
+      const b = e.target.closest('[data-pc]'); if (!b) return;
+      m.remove();
+      if (b.dataset.pc === 'examen') repiteExamen();
+    });
+    document.body.appendChild(m);
+    m.querySelector('[data-pc]')?.focus();
+  }
+  function repiteExamen() { S.examen = null; guardaExamen(); presentaExamen(); pinta(); }
+  // Lo que sigue al cerrar un chat: otro cliente del nivel o, desde el nivel 6, el examen.
+  function siguiente(ms) {
+    if (S.nivel < EXAMEN.nivel) return setTimeout(nuevoCliente, ms);
+    if (!S.examen) setTimeout(presentaExamen, 1500);
   }
   const PUNTOS = n => n >= 85 ? '#25d366' : n >= 70 ? '#53bdeb' : n >= 50 ? '#ffb020' : '#ef4444';
   function tarjeta(r, sim) {
@@ -323,7 +399,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
         <div class="pc-cab"><div class="pc-puntaje" style="--c:${PUNTOS(r.puntaje)}"><b>${r.puntaje}</b><small>de 100</small></div>
           <div><h3>${esc(sim.cliente.nombre)} · Nivel ${sim.nivel}</h3><p>${res}${r.hechos?.cotizacion_ok ? ' · cotización correcta' : r.hechos?.cotizaciones?.length ? ' · <b>el total de la cotización no era el correcto</b>' : ' · sin cotización en PDF'}</p>
           <p class="pc-estado ${r.aprobada ? 'ok' : ''}">${r.aprobada ? `Aprobado · ${r.aprobadas_nivel} de ${r.para_subir} en este nivel` : 'Este no cuenta para subir de nivel (hace falta 70+, venta cerrada y total correcto)'}</p></div></div>
-        ${r.subio ? `<div class="pc-subio">🎉 ¡Subiste al nivel ${r.nivel}! Los próximos clientes son más exigentes.</div>` : ''}
+        ${r.subio ? `<div class="pc-subio">🎉 ${r.nivel >= EXAMEN.nivel ? '¡Pasaste los 5 niveles! Sigue el examen «hora pico».' : `¡Subiste al nivel ${r.nivel}! Los próximos clientes son más exigentes.`}</div>` : ''}
         <div class="pc-cols"><div><h4>Lo hiciste bien</h4><ul>${(r.aciertos || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
           <div><h4>Para mejorar</h4><ul>${(r.mejoras || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></div>
         ${r.frase_ideal ? `<div class="pc-ideal"><h4>Cómo lo diría un asesor top</h4><p>«${esc(r.frase_ideal)}»</p></div>` : ''}
@@ -333,7 +409,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     m.addEventListener('click', e => {
       if (!e.target.closest('[data-pc="sig"]')) return;
       m.remove(); S.sims.delete(sim.id); pinta();
-      if (!abiertas().length) setTimeout(nuevoCliente, 8000 + Math.random() * 7000);
+      if (!abiertas().length) siguiente(8000 + Math.random() * 7000);
     });
     document.body.appendChild(m);
     m.querySelector('[data-pc]')?.focus();
@@ -396,6 +472,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
         const sim = S.sims.get(b.dataset.sim) || foco();
         if (b.dataset.pc === 'plegar') { if (movil()) plegadoMovil = !plegadoMovil; else plegadoGeneral = !plegadoGeneral; }
         if (b.dataset.pc === 'chat' && sim) irAlChat(sim);
+        if (b.dataset.pc === 'examen') return repiteExamen();
         if (b.dataset.pc === 'ir' && sim) { const p = siguientePaso(sim); if (p) llevame(sim, p); }
         if (b.dataset.pc === 'terminar' && sim) { if (b.dataset.seguro) cierra(sim, 'terminar'); else { b.dataset.seguro = '1'; b.textContent = '¿Seguro? Toca otra vez'; return; } }
         pinta();
@@ -404,7 +481,11 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     }
     const sim = foco();
     let html;
-    if (!sim) {
+    const fin = S.examen?.fin;
+    if (!sim && fin) {
+      html = `<div class="pc-fila"><span class="pc-ava">${fin.aprobado ? '🎓' : '⏱️'}</span><div class="pc-tit">Examen ${fin.aprobado ? 'aprobado' : 'no aprobado'}<small>Promedio ${fin.promedio} de 100${fin.aprobado ? ' · administración te asigna clientes reales' : ` · hace falta ${EXAMEN.aprueba}`}</small></div></div>
+        ${fin.aprobado ? '' : '<div class="pc-acc"><button class="pp-ir" data-pc="examen">Repetir el examen</button></div>'}`;
+    } else if (!sim) {
       html = `<div class="pc-fila"><span class="pc-ava">⏳</span><div class="pc-tit">${S.bloqueo ? 'Práctica en pausa' : S.llegando ? 'Llega un cliente…' : 'Esperando al próximo cliente'}<small>${S.bloqueo ? esc(S.bloqueo) : `Nivel ${S.nivel} · los clientes entran por Leads`}</small></div></div>`;
     } else {
       const esperando = !sim.respondido && !sim.escribiendo && !sim.comprobanteEn ? Date.now() - sim.ultimoCliente : 0;
@@ -422,6 +503,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
              ${pistaHtml}`}
         <div class="pc-acc">${S.aviso ? `<span class="pc-aviso">${esc(S.aviso)}</span>` : ''}<button class="pc-terminar" data-pc="terminar" data-sim="${sim.id}">Terminar chat</button></div>`}`;
     }
+    if (enExamen()) html = `<div class="pc-examen">⏱ Examen «hora pico» · quedan <b>${Math.max(0, Math.ceil((EXAMEN.min * 60e3 - (Date.now() - S.examen.inicio)) / 60e3))} min</b> · ${S.examen.lanzados} de ${EXAMEN.clientes} clientes</div>` + html;
     if (panel.dataset.html !== html) { panel.dataset.html = html; panel.innerHTML = html; }
     if (festeja) { panel.classList.remove('pc-festejo'); void panel.offsetWidth; panel.classList.add('pc-festejo'); }
     pintaEstado();
@@ -468,11 +550,12 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
   async function empezar(rehidratar) {
     const r = await ia({ accion: 'estado', sesion, nombre: nombre() });
     if (r.ok) { S.nivel = r.nivel; S.pasos = r.pasos; }
+    if (r.ok && enExamen() && r.examen?.id === S.examen.id) { S.examen.fin = r.examen; guardaExamen(); }
     S.activo = true; ss('clientes:activo', '1'); pinta();
     if (r.ok && r.frenado) { S.bloqueo = MOTIVOS.tope; return avisa(MOTIVOS.tope); }
     const previas = rehidratar && r.ok ? r.en_curso || [] : [];
-    for (const s of previas) crearSim({ id: s.sim_id, nivel: s.nivel, nivelJuego: s.nivel, titulo: (r.niveles || []).find(n => n.nivel === s.nivel)?.titulo || '', guia: s.guia, cliente: s.cliente, paciencia: s.paciencia_min, historial: s.historial, pasos: s.pasos }, true);
-    if (!previas.length) setTimeout(nuevoCliente, rehidratar ? 3000 : 6000);
+    for (const s of previas) crearSim({ id: s.sim_id, nivel: s.nivel, nivelJuego: s.nivel, titulo: (r.niveles || []).find(n => n.nivel === s.nivel)?.titulo || (s.examen ? 'Hora pico' : ''), guia: s.guia, cliente: s.cliente, paciencia: s.paciencia_min, historial: s.historial, pasos: s.pasos, examen: s.examen || undefined }, true);
+    if (!previas.length && !enExamen()) siguiente(rehidratar ? 3000 : 6000);
   }
   function presenta() {
     const M = window.__pruebaMisiones;
@@ -534,7 +617,8 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
 #pc-nota .pc-subio{margin-top:14px;padding:10px 12px;border-radius:12px;background:rgba(37,211,102,.14);border:1px solid rgba(37,211,102,.4);font-weight:600}
 #pc-nota .pc-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 #pc-nota .pc-ideal p{padding:10px 12px;border-radius:10px;background:var(--wa-mia,#005c4b);color:var(--wa-mia-txt,#e9edef);font-style:italic}
-#pc-nota .pc-pasos{margin-top:14px}#pc-nota .pc-pasos summary{cursor:pointer;color:var(--muted,#aaa)}
+#pc-nota .pc-pasos,#pc-nota .pc-pasos-fin{margin-top:14px}#pc-nota .pc-pasos-fin .pc-paso{grid-template-columns:1fr 90px 26px;font-size:13.5px}
+#pc-panel .pc-examen{margin:-2px 0 8px;padding:5px 9px;border-radius:9px;background:rgba(255,176,32,.14);border:1px solid rgba(255,176,32,.35);font-size:12px}#pc-nota .pc-pasos summary{cursor:pointer;color:var(--muted,#aaa)}
 #pc-nota .pc-paso{display:grid;grid-template-columns:1fr 90px 22px;gap:8px;align-items:center;font-size:12.5px;margin-top:6px}
 #pc-nota .pc-paso i{height:6px;border-radius:9px;background:var(--line2,rgba(255,255,255,.12));position:relative;overflow:hidden}
 #pc-nota .pc-paso i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--v);background:var(--c)}
