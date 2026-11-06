@@ -52,12 +52,6 @@ const DESTINOS_TOP = { Margarita: 48, 'Los Roques': 22, Mérida: 17, Canaima: 9,
 
 function _leads(m) { return g(m.tablas, 'leads', []).filter(l => !g(l, 'eliminado_at')); }
 function _es_asesor(m) { return g(m.usuario, 'rol') === 'asesor'; }
-function _lead(nombre) {
-  const l = LEADS.find(x => x.nombre === nombre);
-  if (!l) throw new Error(`StopIteration: ${nombre}`);
-  return l;
-}
-
 
 function _meses(n = 12) {
   let y = anio(AHORA), mo = mes(AHORA);
@@ -121,18 +115,7 @@ function informes_diarios_listado(m, a) {
 
 
 function listar_pagos(m, a) {
-  const pago = (i, nombre, tipo, riel, cent, moneda, usd, tasa, ref, comp, h) => {
-    const l = _lead(nombre);
-    return { id: i, lead_id: l.id, lead_nombre: nombre, lead_telefono: l.telefono, asesor: l.asesor,
-      tipo, riel, estado: 'pendiente_verificacion', monto_centavos: cent, moneda,
-      tasa_usd_ves: tasa, monto_usd_centavos: usd, referencia_declarada: ref,
-      comprobante_path: comp ? `demo/comprobante-${i}.jpg` : null, created_at: hace(h) };
-  };
-  const hechos = setdefault(m.tablas, '_pagos_verificados', []);
-  const pagos = [pago(1, 'Ricardo Díaz', 'abono', 'pago_movil', 1186250, 'VES', 32500, 36.5, '004512', true, 1),
-    pago(2, 'Gabriela Torres', 'total', 'zelle', 98000, 'USD', 98000, null, 'ZL-7781', true, 3),
-    pago(3, 'Andrés Morales', 'abono', 'binance', 19000, 'USDT', 19000, null, null, false, 5)];
-  return { ok: true, pagos: pagos.filter(p => !hechos.includes(p.id)) };
+  return { ok: true, pagos: [] };
 }
 
 
@@ -143,10 +126,7 @@ function verificar_pago(m, a) {
 
 
 function listar_ventas_pendientes_verificar(m, a) {
-  const l = _lead('Andrés Morales');
-  if (g(m.tablas, '_ventas_verificadas', []).includes(l.id)) return [];
-  return [{ lead_id: l.id, nombre: l.nombre, telefono: l.telefono, destino: l.destino, asesor: l.asesor,
-    monto_total: 380, costo_neto: 290, proveedor: 'Posada Demo Mar Azul', actualizado_en: hace(4) }];
+  return [];
 }
 
 
@@ -157,25 +137,11 @@ function confirmar_venta(m, a) {
 
 
 function listar_bandeja_facturacion(m, a) {
-  const fila = (bid, nombre, tipo, hotel, viaje, pagado, total, metodo, h) => {
-    const l = _lead(nombre);
-    return { bandeja_id: bid, lead_id: l.id, nombre, telefono: l.telefono, destino: l.destino,
-      asesor: l.asesor, enviado_por: l.asesor, creado_en: hace(h), cedula: 'V-00.000.000',
-      tipo_venta: [tipo], hotel_posada: hotel, vuelo_origen: null, vuelo_destino: null, fecha_viaje: dia(viaje),
-      fecha_regreso: dia(viaje + 3), personas: 2, adultos: 2, ninos: 0, infantes: 0, metodo_pago: metodo,
-      referencia_pago: '004512', monto_pagado: pagado, monto_total: total, notas_venta: 'Habitación matrimonial' };
-  };
-  const hechos = g(m.tablas, '_bandeja_procesada', []);
-  const filas = [fila(1, 'Ricardo Díaz', 'hospedaje', 'Venetur Mérida', 12, 325, 650, 'Pago móvil', 2),
-    fila(2, 'Camila Rojas', 'paquete', 'Villa Caracol', 20, 600, 1200, 'Zelle', 6)];
-  return filas.filter(f => !hechos.includes(f.lead_id));
+  return [];
 }
 
 
-const FACTURAS = [  // numero, cliente, asesor, monto, estado, días atrás
-  [1021, 'Sofía Ramírez', ASESORA, 540, 'pagada', 9], [1022, 'Camila Rojas', 'Luisa Demo', 1200, 'pagada', 6],
-  [1023, 'Elena Vargas', 'Carlos Demo', 760, 'pagada', 5], [1024, 'Jorge Medina', ASESORA, 430, 'pagada', 3],
-  [1025, 'Patricia Silva', 'Carlos Demo', 890, 'anulada', 2]];
+const FACTURAS = [];  // numero, cliente, asesor, monto, estado, días atrás
 
 
 // FACTURAS fijas + las que el admin genera en pantalla con 'Guardar y facturar' (guardar_postventa con p_marcar_pagado).
@@ -213,12 +179,7 @@ function listar_cuentas_por_pagar(m, a) {
 
 
 function _cxp_fijas() {
-  return [{ id: 1, lead_id: 9122, reserva_id: 9122, reserva_codigo: null, cliente: 'Camila Rojas', destino: 'Los Roques',
-    proveedor: 'Villa Caracol', monto_a_transferir: 900, monto_abonado: 450, saldo_pendiente: 450,
-    estado: 'pendiente', updated_at: hace(5) },
-  { id: 2, lead_id: 9121, reserva_id: 9121, reserva_codigo: null, cliente: 'Sofía Ramírez', destino: 'Margarita',
-    proveedor: 'BT Travel', monto_a_transferir: 410, monto_abonado: 410, saldo_pendiente: 0,
-    estado: 'pagado', updated_at: hace({ dias: 7 }) }];
+  return [];
 }
 
 
@@ -232,27 +193,13 @@ function listar_comisiones(m, a) {
 
 
 function comisiones_origen_panel(m, a) {
-  const filas = [];
-  for (const [l, origen] of [[LEADS[1], 'reasignado'], [LEADS[11], 'web'], [LEADS[13], 'ambos'], [LEADS[5], 'rescatado']]) {
-    const venta = l.estado === 'VENTA COMPLETA';
-    filas.push({ ...pick(l, ['id', 'nombre', 'telefono', 'destino', 'estado', 'asesor', 'canal', 'fecha_creacion']),
-      origen, de_web: ['web', 'ambos'].includes(origen), reasignado: ['reasignado', 'ambos'].includes(origen),
-      rescatado: origen === 'rescatado', en_manual: venta, monto_total: venta ? l.total : null,
-      mi_comision: venta ? rd(l.total * 0.05, 2) : null, numero_factura: venta ? 1022 : null,
-      fecha_emision: venta ? hace({ dias: 6 }) : null, estado_factura: venta ? 'pagada' : null });
-  }
-  return { pct: 5, filas, resumen: { total: 4, web: 1, reasignados: 1, ambos: 1, rescatados: 1, vendidos: 1,
-    comisiones_bwrathanyel: 1, monto_vendido: 1200.0, mi_comision_total: 60.0 } };
+  return { pct: 5, filas: [], resumen: { total: 0, web: 0, reasignados: 0, ambos: 0, rescatados: 0, vendidos: 0,
+    comisiones_bwrathanyel: 0, monto_vendido: 0, mi_comision_total: 0 } };
 }
 
 
 function comision_liquidaciones_listar(m, a) {
-  const liq = (i, num, vend, pago, ventas, total, estado) => ({ id: i, numero: num, vendedor: vend, usuario_id: UUID_ASESOR[vend], pago_el: pago, ventas, total,
-    estado, pdf_path: `demo/liq-${num}.pdf`, creada_en: hace({ dias: 3 }), condiciones: 'Pago por corte', terminos: '',
-    enviada_telegram_en: null, enviada_correo_en: null, pagada_en: estado === 'pagada' ? hace({ dias: 1 }) : null, anulada_en: null });
-  const pagadas = g(m.tablas, '_liq_pagadas', []);
-  return [liq(2, 24, 'Carlos Demo', dia(-1), 2, 38.0, pagadas.includes(2) ? 'pagada' : 'emitida'),
-    liq(1, 23, ASESORA, _corte(mas(AHORA, { dias: -19 })), 1, 54.0, 'pagada')];
+  return [];
 }
 
 
@@ -358,14 +305,7 @@ function repartir_numeros(m, b) {
 // ---------- Asesor: ventas, postventa, comisiones ----------
 const VENDIDOS = ['PAGO REALIZADO', 'VENTA COMPLETA'];
 // Datos de la reserva por cliente: etapa, prioridad, días al viaje, noches, proveedor/hotel, días desde el cierre
-const RESERVA_META = {
-  'María González': ['CONFIRMACION_RESERVA', 'ALTA', 25, 3, 'Hesperia Playa El Agua', 1],
-  'Ricardo Díaz': ['COBRO_PENDIENTE', 'NORMAL', 12, 3, 'Venetur Mérida', 4],
-  'Fernando Blanco': ['DOCUMENTACION', 'NORMAL', 18, 2, 'Villa Caracol', 3],
-  'Sofía Ramírez': ['LISTO_PARA_VIAJAR', 'ALTA', 4, 3, 'Hesperia Playa El Agua', 20],
-  'Isabel Moreno': ['SEGUIMIENTO_POSTVIAJE', 'BAJA', -6, 3, 'Venetur Mérida', 15],
-  'Pedro Martínez': ['COBRO_PENDIENTE', 'NORMAL', 20, 3, 'Hesperia Playa El Agua', 0],
-};
+const RESERVA_META = {};
 // Reservas hechas en la prueba con «Crear reserva» (lead id → meta, servicios y comprobante). Se pierden al recargar, como todo lo demás.
 const CREADAS = new Map();
 const _meta = l => CREADAS.get(l.id)?.meta ?? RESERVA_META[l.nombre];
@@ -473,21 +413,13 @@ function reserva_detalle(m, a) {
   const creada = CREADAS.get(r.lead_id);
   const ini = r.fecha_viaje_inicio, fin = r.fecha_viaje_fin, noches = _meta({ id: r.lead_id, nombre: r.nombre })[3], base = r.id * 10;
   const hosp = { hospedaje: { hotel: r.proveedor, habitacion: 'Doble estándar', plan: 'Todo incluido', noches } };
-  let servicios, pasajeros;
-  if (r.nombre === 'María González') {
-    servicios = [_servicio(r, base + 1, 'boleto_aereo', 'Caracas – Porlamar ida y vuelta', ini, fin, 'solicitado', 180, { hora: '08:30' }),
-      _servicio(r, base + 2, 'traslado_terrestre', 'Aeropuerto – hotel – aeropuerto', ini, fin, 'confirmado', 40, { hora: '10:00' }),
-      _servicio(r, base + 3, 'hospedaje', 'Hesperia Playa El Agua, 3 noches', ini, fin, 'confirmado', 460, { detalle: hosp,
-        loc: 'HCA-7731' })];
-    pasajeros = [['María', 'González', 'V-00.000.001', '1990-05-14', true], ['Juan', 'González', 'V-00.000.002', '1988-11-02', false]];
-  } else {
-    servicios = [_servicio(r, base + 1, 'hospedaje', `${r.proveedor}, ${noches} noches`, ini, fin,
-      r.documentos.voucher_hotel ? 'emitido' : 'confirmado', Math.trunc(r.monto_total), { detalle: hosp,
-        loc: r.localizador_reserva })];
-    const sp = r.nombre.indexOf(' ');
-    const nom = r.nombre.slice(0, sp), ape = r.nombre.slice(sp + 1);
-    pasajeros = [[nom, ape, 'V-00.000.0' + String(r.id).slice(-2), '1985-03-20', true]];
-  }
+  let servicios = null, pasajeros = null;
+  servicios = [_servicio(r, base + 1, 'hospedaje', `${r.proveedor}, ${noches} noches`, ini, fin,
+    r.documentos.voucher_hotel ? 'emitido' : 'confirmado', Math.trunc(r.monto_total), { detalle: hosp,
+      loc: r.localizador_reserva })];
+  const sp = r.nombre.indexOf(' ');
+  const nom = r.nombre.slice(0, sp), ape = r.nombre.slice(sp + 1);
+  pasajeros = [[nom, ape, 'V-00.000.0' + String(r.id).slice(-2), '1985-03-20', true]];
   if (creada) servicios = creada.servicios.map((s, i) => ({ ..._servicio(r, base + 1 + i, s.tipo, s.descripcion, s.fecha_inicio, s.fecha_fin ?? s.fecha_inicio, 'solicitado', flotante(s.precio),
     { pax: s.pax_adultos, hora: s.hora ?? null, detalle: s.detalle }), pax_ninos: s.pax_ninos }));
   const pas = pasajeros.map(([n, ap, doc, fn, tit], i) => ({ id: base + 50 + i, nombre: n, apellido: ap, tipo_documento: 'cedula', numero_documento: doc, fecha_nacimiento: fn,
@@ -561,15 +493,7 @@ function _corte(f) {
 
 
 // cliente, asesor, modalidad, monto, días desde la carga, estado, liquidación, motivo de rechazo
-const COMISIONES_VENTA = [
-  ['Sofía Ramírez', ASESORA, 'paquete', 540, 19, 'liquidada', 23, null],
-  ['Isabel Moreno', ASESORA, 'hospedaje', 480, 14, 'verificada', null, null],
-  ['Ricardo Díaz', ASESORA, 'hospedaje', 650, 4, 'verificada', null, null],
-  ['Fernando Blanco', ASESORA, 'paquete', 1100, 3, 'enviada', null, null],
-  ['Jorge Medina', ASESORA, 'boletos', 430, 2, 'rechazada', null, 'Falta el comprobante del saldo'],
-  ['Camila Rojas', 'Luisa Demo', 'paquete', 1200, 6, 'verificada', null, null],
-  ['Elena Vargas', 'Carlos Demo', 'hospedaje', 760, 5, 'liquidada', 24, null],
-];
+const COMISIONES_VENTA = [];
 
 
 function comision_ventas_listar(m, a) {
@@ -604,15 +528,7 @@ function comision_contexto(m, a) {
 
 
 function listar_mis_clientes_asignados(m, a) {
-  const pend = [['Daniel Herrera', 'Retomar: quería viajar el año que viene', 2], ['Luis Fernández', 'Preguntó por Morrocoy en temporada baja', 5]];
-  const out = [];
-  pend.forEach(([nombre, nota, h], idx) => {
-    const l = _leads(m).find(x => x.nombre === nombre) ?? null;
-    if (l) out.push({ task_id: idx + 1, lead_id: l.id, nombre, telefono: l.telefono, destino: l.destino,
-      // vence_at null: app.js:19998 llama fmtFecha fuera de su alcance y revienta (bug de prod, arreglar en etapa 5)
-      estado: l.estado, notas: nota, vence_at: null, resultado_contacto: null });
-  });
-  return out;
+  return [];
 }
 
 
@@ -641,22 +557,15 @@ function listar_destinos(m, a) {
 
 
 function stop_sales_vigentes(m, a) {
+  // Con el tarifario real van los bloqueos reales: los ids de producto son los mismos. La foto envejece, por eso se vuelve a filtrar.
+  if (m.real && window.PRUEBA_STOP_SALES_REAL) return window.PRUEBA_STOP_SALES_REAL.filas.filter(f => f.fecha_hasta >= dia());
   return [{ producto_id: 102, nombre: 'Sunsol Ecoland', fecha_desde: dia(10), fecha_hasta: dia(14), estado: 'stop_sale' },
     { producto_id: 104, nombre: 'Villa Caracol', fecha_desde: dia(20), fecha_hasta: dia(23), estado: 'on_request' }];
 }
 
 
 function asistente_acciones_listar(m, a) {
-  const maria = _leads(m).find(l => l.nombre === 'María González') ?? null;
-  const rid = maria ? maria.id - 8900 : null;
-  const acc = (i, h, canal, herr, params, res, reserva = null) => ({ id: i, created_at: hace(h), canal, herramienta: herr, parametros: params, resultado: res, ok: true,
-    escritura: true, reserva_id: reserva, deshacible: true, deshecha_en: null, usuario: g(m.usuario, 'nombre') });
-  return [acc(3, 0.5, 'crm', 'nota_lead', { lead: 'María González', nota: 'Prefiere habitación con vista al mar' },
-    { mensaje: 'Nota guardada en la ficha de María González' }),
-  acc(2, 3, 'telegram', 'guardar_pasajero', { nombre: 'Juan González', documento: 'V-00.000.002' },
-    { mensaje: 'Pasajero agregado a la reserva' }, rid),
-  acc(1, 26, 'telegram', 'mover_etapa_lead', { lead: 'Pedro Martínez', estado: 'COTIZACION ENVIADA' },
-    { mensaje: 'Pedro Martínez pasó a COTIZACION ENVIADA' })];
+  return [];
 }
 
 
@@ -665,7 +574,7 @@ function mis_conversaciones(m, a) {
     ultimo_mensaje: { tipo: 'texto', contenido: 'Recuerden cargar los abonos antes del corte 👍', created_at: hace(2), es_mio: false },
     no_leidos: 0 },
   { conversacion_id: 2, tipo: 'directo', nombre: 'Admin Demo', otro_usuario_id: USUARIOS.admin.id,
-    ultimo_mensaje: { tipo: 'texto', contenido: 'Listo, ya verifiqué el pago de Ricardo', created_at: hace(5), es_mio: false },
+    ultimo_mensaje: { tipo: 'texto', contenido: 'Listo, ya verifiqué el pago', created_at: hace(5), es_mio: false },
     no_leidos: 0 }];
 }
 
@@ -930,28 +839,7 @@ function _paso(pid, titulo, detector, { hecho = false, ...extra } = {}) {
 
 function _tk(m) {
   if (m._tareas === undefined) {
-    const maria = _lead('María González'), carmen = _lead('Carmen López');
-    const cli = l => ({ id: l.id, nombre: l.nombre, estado: l.estado, asesor: l.asesor, eliminado: false });
-    const base = (tid, titulo, k = {}) => ({ id: tid, titulo, estado: 'pendiente', prioridad: 'media', vence_at: null,
-      visto_at: hace(2), version: 1, descripcion: null, asesor_id: ID_ASESORA, personal: false,
-      creador: ADMIN_DEMO, lead: null, completada_at: null, comentarios: [],
-      eventos: [{ id: tid * 10, tipo: 'creada', actor: 'Admin Demo', created_at: hace(3) }], ...k });
-    m._tareas = [
-      base(701, 'Cotizar Canaima a Carmen López', { estado: 'en_proceso', prioridad: 'alta', vence_at: _vence_hoy(),
-        descripcion: 'Quiere conocer Canaima con su pareja en diciembre. Mándale la cotización hoy.', lead: cli(carmen),
-        pasos: [_paso(7011, 'Llamarla para saber qué busca', 'llamada', { hecho: true }),
-          _paso(7012, 'Enviarle la cotización', 'cotizacion_enviada', { lead_id: carmen.id }),
-          _paso(7013, 'Agendar el seguimiento', 'proxima_accion', { lead_id: carmen.id })],
-        comentarios: [{ autor: 'Admin Demo', autor_id: ADMIN_DEMO.id, cuerpo: 'Ofrécele el paquete con vuelo incluido, tiene promo esta semana.', created_at: hace(2.5) }] }),
-      base(702, 'Llamar a María González: es nueva', { vence_at: hace(1.5), visto_at: null, lead: cli(maria),
-        pasos: [_paso(7021, 'Llamarla', 'llamada', { lead_id: maria.id })] }),
-      base(703, 'Confirmar habitaciones con la posada de Mérida', { vence_at: _vence_hoy(4),
-        pasos: [_paso(7031, 'Confirmar con la posada', 'manual')] }),
-      base(704, 'Foto del flyer impreso en la oficina', { vence_at: en({ dias: 3 }),
-        pasos: [_paso(7041, 'Tomar la foto', 'evidencia', { params: { tipo: 'foto' } })] }),
-      base(705, 'Revisar el voucher de Sofía Ramírez', { estado: 'completada', completada_at: hace(0.2),
-        pasos: [_paso(7051, 'Revisarlo', 'manual', { hecho: true })] }),
-    ];
+    m._tareas = [];
   }
   return m._tareas;
 }
@@ -1098,7 +986,7 @@ const RPCS_ASESOR = {
   reserva_detalle, reserva_checklist, comision_ventas_listar, comision_contexto,
   listar_mis_clientes_asignados, listar_leads_en_facturacion,
   listar_destinos, stop_sales_vigentes,
-  stop_sales_pdf_actual: (m, a) => [{ storage_path: `stop-sales/${dia()}.pdf`, creado_en: hace(5), creado_por: 'Admin Demo' }],
+  stop_sales_pdf_actual: (m, a) => [{ storage_path: `stop-sales/${dia()}.pdf`, creado_en: (m.real && window.PRUEBA_STOP_SALES_REAL?.pdf_creado_en) || hace(5), creado_por: 'Admin Demo' }],
   hot_sales_publicas: (m, a) => m.real ? window.PRUEBA_TARIFARIO_REAL.hotSales : [[514, 'Margarita'], [509, 'Los Roques'], [504, 'Coche']].map(([t, d], j) => { const i = j + 1;
     return { id: t, posicion: i, manual: i === 1, destino: d, nino_gratis: t === 514 }; }),
   notas_para_repasar_hoy: (m, a) => [
@@ -1110,7 +998,7 @@ const RPCS_ASESOR = {
     { id: 1, tipo: 'habito', texto: 'Le gusta que le recuerde los seguimientos a primera hora', actualizado: hace({ dias: 2 }) },
     { id: 2, tipo: 'dato', texto: 'Vende sobre todo Margarita y Los Roques', actualizado: hace({ dias: 6 }) }],
   mis_conversaciones,
-  listar_proveedores: (m, a) => [...new Set(Object.values(RESERVA_META).map(x => x[4]))].sort().map((n, j) => ({ id: j + 1, nombre: n })),
+  listar_proveedores: (m, a) => ['Hesperia Playa El Agua', 'Venetur Mérida', 'Villa Caracol'].map((n, j) => ({ id: j + 1, nombre: n })),
   // Boletería: la asesora demo no es de boletería; responden vacío sin error.
   agentes_boleteria_estado: (m, a) => [], listar_cola_boleteria: (m, a) => [],
   registrar_contacto_lead: (m, a) => OK,
@@ -1182,23 +1070,16 @@ const RPCS = {
   prueba_ia_config_guardar: (m, a) => OK,
 };
 const LYRA_RESPUESTAS = [
-  ['nota', 'Listo, le dejé la nota a la ficha de María González: «Llamar el viernes para cobrar el saldo». ' +
-    'Si te equivocaste, la deshaces desde Acciones del asistente.'],
-  ['reserva', 'La reserva R-000101 de María González (Margarita, 2 adultos) está en Cobro pendiente. ' +
-    'Falta cobrar $340 del total de $680 y quedan 6 pendientes en el checklist. ' +
-    '¿Quieres que te deje un recordatorio para cobrar el saldo?'],
-  ['llamar', 'Hoy te falta llamar a María González: pidió precio para Margarita y todavía no le mandaste la cotización. ' +
-    '¿Te dejo un recordatorio para mañana a las 10?'],
+  ['nota', 'Listo, le dejé la nota en la ficha de ese cliente. Si te equivocaste, la deshaces desde Acciones del asistente.'],
+  ['reserva', 'Abre Reservas y busca al cliente: ahí ves la etapa, lo que falta cobrar y el checklist.'],
+  ['llamar', 'Revisa en Leads quién sigue POR ATENDER: a esos te falta llamarlos primero.'],
   [['todo incluido', 'todo-incluido', 'all inclusive'], 'Tienes 5 hoteles todo incluido en Margarita. Míralos en Tarifario, pestaña Hoteles, ' +
     'buscando «Margarita»: cada uno muestra su precio por persona en base doble.'],
   [['margarita', 'tarifario', 'hotel', 'playa'], 'En el tarifario tienes hoteles en Margarita, Coche, Los Roques, Canaima y Mérida. ' +
     'Míralos en Tarifario, pestaña Hoteles: cada uno muestra su precio por persona en base doble.'],
-  [['maria', 'gonzalez'], 'María González pidió precio para Margarita y sigue POR ATENDER. ' +
-    'Atiéndela desde Leads y mándale la cotización.'],
-  [['ricardo', 'diaz'], 'Ricardo Díaz ya pagó una parte: está en PAGO REALIZADO. Registra el abono que falte desde Ventas.'],
 ];
 const LYRA_NO_ENTIENDO = 'En modo prueba entiendo pocas cosas. Prueba con: «busca un todo incluido», ' +
-  '«cómo va la reserva de María», «a quién me falta llamar hoy» o «déjale una nota».';
+  '«cómo va una reserva», «a quién me falta llamar hoy» o «déjale una nota».';
 
 
 // Edge Function asistente-admin: respuestas fijas por palabra clave; la voz nunca sale del mock.

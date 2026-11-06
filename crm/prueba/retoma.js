@@ -5,9 +5,11 @@
   'use strict';
   const PFX = 'prueba:', SESION = PFX + 'sb-demo-auth-token';
   try {
-    if (sessionStorage.getItem(PFX + 'prueba:rol')) return;
+    if (sessionStorage.getItem(PFX + 'prueba:rol') === 'asesor' && !sessionStorage.getItem(PFX + 'prueba:modo')) return;
+    // Ya no hay cargos: una pestaña o un avance de administración o de presentación no se retoma.
+    sessionStorage.removeItem(PFX + 'prueba:rol'); sessionStorage.removeItem(PFX + 'prueba:modo');
     const a = JSON.parse(localStorage.getItem(PFX + 'avance')), u = a?.p?.[a.ultimo];
-    if (!u) return;
+    if (u?.rol !== 'asesor') return;
     sessionStorage.setItem(PFX + 'prueba:nombre', u.nombre);
     sessionStorage.setItem(PFX + 'prueba:rol', u.rol);
     for (const [k, v] of Object.entries(u.datos || {})) sessionStorage.setItem(PFX + k, v);

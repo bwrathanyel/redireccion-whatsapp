@@ -203,14 +203,8 @@ body.prueba-guiada #prueba-candado{display:block}
 #prueba-inicio input{width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:14px;border-radius:12px;border:1px solid var(--line2,rgba(255,255,255,.2));background:rgba(255,255,255,.04);color:inherit;font:inherit}
 #prueba-inicio input:focus{outline:2px solid #ffb020;outline-offset:1px}
 #prueba-inicio .pi-ir{width:100%;padding:12px;border:0;border-radius:12px;background:#ffb020;color:#1a1200;font:600 15px system-ui,sans-serif;cursor:pointer}
-#prueba-inicio .pi-error{margin:-6px 0 14px;text-align:left;font-size:13.5px;color:#ff8a7a}
 #prueba-inicio .pi-aviso{margin:12px 0 0;font-size:13px;color:var(--muted,#aaa)}
-#prueba-inicio .pi-real,#prueba-inicio .pi-volver{display:inline-block;margin-top:6px;padding:13px 12px;min-height:44px;box-sizing:border-box;border:0;background:none;color:var(--muted,#aaa);font:14px system-ui,sans-serif;text-decoration:underline;cursor:pointer}
-#prueba-inicio .pi-cargos{display:grid;gap:10px}
-#prueba-inicio .pi-cargo{display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center;padding:14px;border-radius:14px;border:1px solid var(--line2,rgba(255,255,255,.14));background:rgba(255,255,255,.03);color:inherit;font:inherit;text-align:left;cursor:pointer}
-#prueba-inicio .pi-cargo span{grid-row:span 2;font-size:28px}
-#prueba-inicio .pi-cargo small{color:var(--muted,#aaa);font-size:13px}
-#prueba-inicio .pi-cargo:hover,#prueba-inicio .pi-cargo:focus-visible{border-color:#ffb020;background:rgba(255,176,32,.08);outline:none}
+#prueba-inicio .pi-real{display:inline-block;margin-top:6px;padding:13px 12px;min-height:44px;box-sizing:border-box;border:0;background:none;color:var(--muted,#aaa);font:14px system-ui,sans-serif;text-decoration:underline;cursor:pointer}
 #forgotLink,#claimLink,#loginPrueba{display:none!important}
 @media (max-width:760px){
   #prueba-panel{font-size:13px}
@@ -239,15 +233,8 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   // El pie fijo del CRM dice «Datos reales»: en la práctica todo es inventado.
   document.querySelectorAll('.foot-note').forEach(el => { el.textContent = 'Datos ficticios · modo prueba · Destino y Eventos Lotus 360 CRM'; });
 
-  /* ---------- Pantalla de inicio: nombre y cargo ---------- */
+  /* ---------- Pantalla de inicio: solo el nombre, siempre como asesor (pedido del dueño, 6-nov) ---------- */
   // El nombre entra en los datos de ejemplo (datos-prueba.js lo lee al cargar), por eso se recarga antes de entrar.
-  const CARGOS = [
-    { rol: 'asesor', icono: '💬', titulo: 'Asesor de ventas', texto: 'Atiendes a los clientes, les cotizas viajes y cierras ventas.' },
-    { rol: 'admin', icono: '🗂️', titulo: 'Administración', texto: 'Verificas pagos, repartes clientes y ves el trabajo del equipo.' },
-    { rol: 'presentacion', icono: '🎤', titulo: 'Presentación', texto: 'El recorrido para enseñar el CRM: en vivo con proyector o para repasarlo solo.' },
-  ];
-  // PIN blando: el sitio es estático y se lee en el código; solo evita que un asesor entre por error.
-  const PIN_PRESENTACION = '9952';
   function entrar(rol) {
     const u = window.PRUEBA_DATOS.USUARIOS[rol], sel = document.getElementById('loginUser'), pwd = document.getElementById('loginPwd');
     if (!u || !sel || !pwd) return false;
@@ -266,47 +253,19 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     if (c) return;
     c = document.createElement('div');
     c.id = 'prueba-inicio';
-    c.dataset.nombre = ss('prueba:nombre') || '';
-    const A = window.__pruebaAvance;
-    const paso1 = () => {
-      c.innerHTML = `<form class="pi-caja"><div class="pi-ico" aria-hidden="true">🧪</div><h2>Modo de prueba</h2><p>Practica el CRM sin miedo: los clientes, ventas y pagos son inventados.</p>
-        <label for="pi-nombre">¿Cómo te llamas?</label><input id="pi-nombre" maxlength="40" autocomplete="given-name" placeholder="Tu nombre" required value="${escHtml(c.dataset.nombre)}">
-        <button class="pi-ir" type="submit">Continuar</button><p class="pi-aviso">Registramos cómo usas la práctica para ayudarte donde más lo necesites.</p><a class="pi-real" href="../">Volver al CRM real</a></form>`;
-      c.querySelector('input').focus();
-    };
-    const paso2 = () => {
-      c.innerHTML = `<div class="pi-caja"><h2>¡Hola, ${escHtml(c.dataset.nombre)}!</h2><p>¿Qué cargo te interesa practicar?</p>
-        <div class="pi-cargos">${CARGOS.map(x => `<button type="button" class="pi-cargo" data-rol="${x.rol}"><span aria-hidden="true">${x.icono}</span><b>${x.titulo}</b><small>${x.texto}</small></button>`).join('')}</div>
-        <button type="button" class="pi-volver">← Cambiar nombre</button></div>`;
-      c.querySelector('.pi-cargo').focus();
-    };
-    const pasoPin = (error) => {
-      c.innerHTML = `<form class="pi-caja pi-pin"><div class="pi-ico" aria-hidden="true">🎤</div><h2>Presentación</h2><p>Escribe el PIN de 4 números que te dio administración.</p>
-        <label for="pi-pin">PIN</label><input id="pi-pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" required${error ? ' aria-invalid="true" aria-describedby="pi-error"' : ''}>
-        ${error ? '<p class="pi-error" id="pi-error" role="alert">Ese PIN no es. Prueba otra vez.</p>' : ''}<button class="pi-ir" type="submit">Entrar</button>
-        <button type="button" class="pi-volver" data-volver="2">← Elegir otro cargo</button></form>`;
-      c.querySelector('input').focus();
-    };
-    const entra = (rol, modo) => {
-      ss('prueba:nombre', c.dataset.nombre); ss('prueba:rol', rol); ss('prueba:modo', modo);
-      // Practicar retoma lo de esa persona en ese cargo; la presentación arranca limpia.
-      if (modo || !A) ss(CLAVE, null); else A.restaura(c.dataset.nombre, rol);
-      location.reload();
-    };
+    c.innerHTML = `<form class="pi-caja"><div class="pi-ico" aria-hidden="true">🧪</div><h2>Modo de prueba</h2>
+      <label for="pi-nombre">¿Cómo te llamas?</label><input id="pi-nombre" maxlength="40" autocomplete="given-name" placeholder="Tu nombre" required value="${escHtml(ss('prueba:nombre') || '')}">
+      <button class="pi-ir" type="submit">Entrar</button><p class="pi-aviso">Registramos cómo usas la práctica para ayudarte donde más lo necesites.</p><a class="pi-real" href="../">Volver al CRM real</a></form>`;
     c.addEventListener('submit', e => {
       e.preventDefault();
-      if (e.target.classList.contains('pi-pin')) return c.querySelector('input').value.trim() === PIN_PRESENTACION ? entra('asesor', 'presentacion') : pasoPin(true);
-      c.dataset.nombre = c.querySelector('input').value.replace(/[<>]/g, '').trim().slice(0, 40);
-      if (c.dataset.nombre) paso2();
+      const nombre = c.querySelector('input').value.replace(/[<>]/g, '').trim().slice(0, 40), A = window.__pruebaAvance;
+      if (!nombre) return;
+      ss('prueba:nombre', nombre); ss('prueba:rol', 'asesor');
+      // Retoma lo de esa persona; sin avance.js la pestaña arranca limpia.
+      if (A) A.restaura(nombre, 'asesor'); else ss(CLAVE, null);
+      location.reload();
     });
-    c.addEventListener('click', e => {
-      const v = e.target.closest('.pi-volver');
-      if (v) return v.dataset.volver === '2' ? paso2() : paso1();
-      const b = e.target.closest('[data-rol]'); if (!b) return;
-      if (b.dataset.rol === 'presentacion') return pasoPin(false);
-      entra(b.dataset.rol, null);
-    });
-    document.body.appendChild(c); paso1();
+    document.body.appendChild(c); c.querySelector('input').focus();
   }
 
   /* ---------- Ventana de explicación (pasos con Siguiente/Atrás) ---------- */

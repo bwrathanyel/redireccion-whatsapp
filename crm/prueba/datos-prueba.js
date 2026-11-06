@@ -73,58 +73,16 @@ function lead(nombre, estado, destino, extra = {}) {
   return base;
 }
 
-const LEADS = [
-  lead('María González', 'POR ATENDER', 'Margarita', { horas: 0.2, notas: 'Margarita 4D/3N, 2 adultos', personas: 2 }),
-  lead('José Rodríguez', 'POR ATENDER', 'Los Roques', { horas: 0.6 }),
-  lead('Ana Pérez', 'POR ATENDER', 'Mérida', { horas: 1.1, canal: 'facebook' }),
-  lead('Luis Fernández', 'ATENDIDO', 'Morrocoy', { horas: 5 }),
-  lead('Carmen López', 'CLIENTE CONTACTADO', 'Canaima', { horas: 26,
-    proxima_accion_at: en({ horas: 3 }), proxima_accion_nota: 'Llamar para confirmar fechas' }),
-  lead('Pedro Martínez', 'COTIZACION ENVIADA', 'Margarita', { horas: 50, fecha_cotizacion_enviada: hace(30),
-    monto: 420, total: 420, proxima_accion_at: hace({ horas: 1 }), proxima_accion_nota: 'Seguimiento de cotización' }),
-  lead('Gabriela Torres', 'COTIZACION ENVIADA', 'Los Roques', { horas: 72, fecha_cotizacion_enviada: hace(48), monto: 980, total: 980 }),
-  lead('Ricardo Díaz', 'PAGO REALIZADO', 'Mérida', { horas: 120, fecha_cotizacion_enviada: hace(100),
-    monto: 650, total: 650, monto_inicial: 325, restante_pago: 325 }),
-  lead('Sofía Ramírez', 'VENTA COMPLETA', 'Margarita', { horas: 200, fecha_cotizacion_enviada: hace(180),
-    monto: 540, total: 540, monto_inicial: 270, monto_completo: 540, restante_pago: 0 }),
-  lead('Daniel Herrera', 'PERDIDO', 'Choroní', { horas: 96, notas: 'Viaja el año que viene' }),
-  lead('Número equivocado', 'NUMERO INVALIDO', 'Margarita', { horas: 30 }),
-  lead('Valentina Castro', 'POR ATENDER', 'Margarita', { asesor: 'Carlos Demo', horas: 0.4 }),
-  lead('Andrés Morales', 'COTIZACION ENVIADA', 'Puerto La Cruz', { asesor: 'Carlos Demo', horas: 40, monto: 380, total: 380 }),
-  lead('Camila Rojas', 'VENTA COMPLETA', 'Los Roques', { asesor: 'Luisa Demo', horas: 150, monto: 1200, total: 1200,
-    monto_inicial: 600, monto_completo: 1200, restante_pago: 0 }),
-  lead('Miguel Suárez', 'ATENDIDO', 'Mérida', { asesor: 'Luisa Demo', horas: 8 }),
-  lead('Fernando Blanco', 'PAGO REALIZADO', 'Los Roques', { horas: 90, fecha_cotizacion_enviada: hace(80),
-    monto: 1100, total: 1100, monto_inicial: 550, restante_pago: 550, servicio: 'Paquete' }),
-  lead('Isabel Moreno', 'VENTA COMPLETA', 'Mérida', { horas: 400, fecha_cotizacion_enviada: hace(380),
-    monto: 480, total: 480, monto_inicial: 480, monto_completo: 480, restante_pago: 0, servicio: 'Hospedaje' }),
-];
-
-// La bandeja no arranca vacía: el «Compartir» de los PDF necesita clientes a quién mandarles, también con rol admin.
-const CHATS = [
-  ['María González', 'Hola, ¿me pasas la cotización que hablamos?', 1],
-  ['Ricardo Díaz', 'Buenas, quedo atento al PDF con los precios.', 3],
-  ['Carmen López', 'Hola, ¿ya tienen listo mi voucher?', 6],
-].map(([nombre, texto, horas], i) => {
-  const l = LEADS.find(x => x.nombre === nombre), t = hace(horas);
-  return {
-    conv: { id: 500 + i, nombre, wa_id: String(l.telefono).replace(/\D/g, ''), no_leidos: 0, ultimo_mensaje_at: t, ultimo_entrante_at: t, lead_id: l.id, asesor: ASESORA, phone_number_id: 'prueba' },
-    msg: { id: 70000 + i, conversacion_id: 500 + i, wamid: `prueba-semilla-${i}`, direccion: 'entrante', tipo: 'text', texto, enviado_en: t, estado: null, error: null, enviado_por: null, plantilla: null, media_id: null, media_mime: null, media_path: null, transcripcion: null },
-  };
-});
+// Sin clientes de ejemplo (pedido del dueño, 6-nov): todo lead de la práctica lo crea clientes-ia.js.
+const LEADS = [];
 
 const TABLAS = {
   usuarios: [_usuario(USUARIOS.asesor), _usuario(USUARIOS.admin)],
   asesores: ASESORES,
   leads: LEADS,
-  whatsapp_conversaciones: CHATS.map(c => c.conv),
-  whatsapp_mensajes: CHATS.map(c => c.msg),
-  reasignaciones: [
-    { id: 1, lead_id: 9012, asesor_anterior: 'Luisa Demo', asesor_nuevo: 'Carlos Demo', motivo: 'timeout_no_respuesta',
-      minutos_transcurridos: 32, created_at: hace(3), leads: { nombre: 'Valentina Castro', telefono: '+584125550012', destino: 'Margarita' } },
-    { id: 2, lead_id: 9002, asesor_anterior: 'Carlos Demo', asesor_nuevo: ASESORA, motivo: 'manual_no_puedo',
-      minutos_transcurridos: 5, created_at: hace(20), leads: { nombre: 'José Rodríguez', telefono: '+584125550002', destino: 'Los Roques' } },
-  ],
+  whatsapp_conversaciones: [],
+  whatsapp_mensajes: [],
+  reasignaciones: [],
 };
 
 // ---------- Tarifario / Galería ----------
@@ -220,30 +178,10 @@ for (let pid = 101; pid < 114; pid++) {
 Object.assign(TABLAS, { producto_habitaciones: HABITACIONES, productos: PRODUCTOS, tarifas: TARIFAS, promociones: PROMOCIONES, vouchers: [], postulaciones_empleo: [],
   tarifario_config: [{ key: 'tabs_ocultas', value: [] }] });
 
-// Tutoriales 06/07: María ya pagó el 50% de su Margarita 4D/3N (2 adultos).
-function _maria_vendida(tablas) {
-  for (const l of tablas.leads) {
-    if (l.nombre === 'María González') {
-      Object.assign(l, { estado: 'PAGO REALIZADO', fecha_primer_contacto: hace(70), fecha_cotizacion_enviada: hace(50),
-        monto: 680, total: 680, monto_inicial: 340, restante_pago: 340, vence_at: null, servicio: 'Paquete' });
-    }
-  }
-}
-
-const ESCENARIOS = { 'maria-vendida': _maria_vendida };
-
-// Imita el RLS: el asesor solo ve sus propios leads. Y de esos, solo los que piden sus
-// misiones (atender/cotizar/Lyra = María, abono = Ricardo, tareas = Carmen): con 13 la práctica abrumaba.
-const LEADS_ASESOR = ['María González', 'Ricardo Díaz', 'Carmen López'];
-function tablas_para(rol) {
-  if (rol !== 'asesor') return TABLAS;
-  const leads = LEADS.filter(l => l.asesor === ASESORA && LEADS_ASESOR.includes(l.nombre));
-  const ids = new Set(leads.map(l => l.id));
-  return { ...TABLAS, leads, reasignaciones: TABLAS.reasignaciones.filter(r => ids.has(r.lead_id)) };
-}
+const tablas_para = () => TABLAS;
 
 window.PRUEBA_DATOS = { AHORA, hace, en, dia, iso, ymd, ID_ASESORA, ID_ADMIN, ASESORA, USUARIOS, ASESORES, lead, LEADS, DESTINOS, ID_DESTINO,
-  TARIFAS, PRODUCTOS, PROMOCIONES, HABITACIONES, ESCENARIOS, TABLAS, tablas_para };
+  TARIFAS, PRODUCTOS, PROMOCIONES, HABITACIONES, TABLAS, tablas_para };
 })();
 
 window.__PRUEBA_RPC_OK = ["actualizar_lead","admin_baja_personal","admin_configurar_whatsapp_restringido","admin_eliminar_reasignacion","admin_guardar_genero_asesor","admin_marcar_asesor_integral","admin_quitar_reparto_destino","anular_documento","anular_gasto","anular_servicio","aprobar_item_tarifario","apto_asignaciones_reserva","asignar_apartamento","asignar_empresa_lead","asignar_lote_prueba","asistente_reserva_empresa","boleteria_guardar_aeropuerto","boleteria_guardar_boleto","boleteria_guardar_tramos","borrar_pasajero","cambiar_estado_tarea","cancelar_solicitud_boleteria","catalogo_hot_sale_ordenar","catalogo_ia_promo_ordenar","cerrar_reserva","comision_regla_guardar","comision_venta_rechazar","conciliar_pago_factura","confirmar_tarifas_sigue","confirmar_venta","contar_lote_prueba","corregir_precio_tarifario","desbloquear_freelancer","disparar_actualizacion_tarifario","eliminar_apto_bloqueo","eliminar_lead","eliminar_mensaje","enviar_mensaje","establecer_porcentaje_comision","estadisticas_asesor","estado_factura_empresa","fijar_fecha_fin_producto","fijar_proxima_accion","guardar_gasto","guardar_servicio","liberar_apartamento","listar_margenes","listar_pagos","lote_diario_guardar","lote_diario_repartir_ahora","ocultar_vencidos_tarifario","perfiles_voz_eliminar","perfiles_voz_listar","posadas_interesadas","prueba_ia_config_guardar","reanudar_solicitud_boleteria","rechazar_venta","registrar_cotizacion_enviada","registrar_documento","reserva_tickets_ia","reservas_de_lead","resolver_solicitud_boleteria","retirar_item_tarifario","retirar_tarifa","retirar_tarifas_por_confirmar","tarifario_juntar_tarifas","timeline_asesor","verificar_pago","voces_catalogo_eliminar","voces_catalogo_guardar","voces_catalogo_listar","voucher_buscar_lead","voz_preset_override_guardar","voz_presets_eliminar","voz_presets_guardar","voz_presets_listar","voz_redes_historial_eliminar","voz_redes_historial_listar","wa_campana_estado"];

@@ -1,4 +1,4 @@
-// Modo Prueba: presentación interactiva para enseñar el CRM (cargo «Presentación» de la pantalla de inicio).
+// Modo Prueba: presentación interactiva para enseñar el CRM. Sin entrada desde el 6-nov: el inicio ya no ofrece cargos.
 // Cada diapositiva abre la parte real del sandbox y resalta el elemento; sirve en vivo (flechas, PageUp/PageDown de un
 // presentador) y para que un asesor la repase solo. Entra como asesor con los datos de LEADS_ASESOR (María, Ricardo).
 (() => {

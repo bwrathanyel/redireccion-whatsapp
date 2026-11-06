@@ -818,7 +818,7 @@ const cargarMuestrasLetra = () => Object.keys(LETRAS).filter(id => id !== 'inter
 // Marketing las necesita para trabajar: su grupo nace visible. El CSS vive en index.html (nav-ver-<sec>).
 const NAV_OPCIONALES = [
   { sec: 'grp-inicio', label: 'Inicio', desc: 'Dashboard, ventas, ranking e informe diario' },
-  { sec: 'grp-bandeja', label: 'Bandeja', desc: 'Meta DM (Instagram, Facebook y WhatsApp) y Correo' },
+  { sec: 'grp-bandeja', label: 'Bandeja', desc: 'WhatsApp empresa' },
   { sec: 'pipeline', label: 'Pipeline', desc: 'Pestaña en Leads: tablero de leads por estado' },
   { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente, prospectos y costos de IA' },
   { sec: 'grp-marketing', label: 'Marketing', desc: 'Redes y clientes de eventos' },
@@ -1039,7 +1039,7 @@ function tareasV2() {
     abrirLead: id => abrirLeadDesdeMisVentas(id), hayOverlayAbierto, navPush, navConsume, navQuitar });
   return TK;
 }
-function setupTareasV2() { if (MI_USUARIO_ID) tareasV2().enlazar(); }
+function setupTareasV2() {}
 function loadTareasV2() {
   const q = new URLSearchParams(location.search), t = Number(q.get('t'));
   if (t) { q.delete('t'); history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '')); }
@@ -8651,11 +8651,6 @@ function openDrawer(l, opciones = {}) {
           <div id="conv-preview" class="conv-preview"></div>
         </section>
 
-        <section class="dbloque" id="d-tareas">
-          <div class="dbloque-h"><span><i class="fas fa-list-check"></i> Tareas</span></div>
-          <div class="tk-root" id="d-tareas-body"></div>
-        </section>
-
         <section class="dbloque">
           <div class="dbloque-h"><span><i class="fas fa-note-sticky"></i> Nota del equipo</span><span class="dnotas-meta" id="e-notas-meta"></span></div>
           <textarea id="e-notas" class="ei" rows="3" placeholder="Qué se habló, qué quedó pendiente… solo la ve el equipo">${esc(l.notas || '')}</textarea>
@@ -8673,7 +8668,6 @@ function openDrawer(l, opciones = {}) {
 
   const datos = document.getElementById('d-datos');
   pintarLecturaDatos();
-  if (MI_USUARIO_ID) tareasV2().bloqueLead(document.getElementById('d-tareas-body'), { id: l.id, nombre: nombreLead(l), estado: l.estado, asesor: l.asesor });
   document.getElementById('e-estado').addEventListener('change', e => {
     document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
     document.getElementById('dacc-estado').style.setProperty('--est', ESTADO_COLORS[e.target.value] || '#8b93ad');
@@ -15098,6 +15092,7 @@ function textoDeHtml(html) {
 
 /* ---------- Badge del menú y contadores por carpeta ---------- */
 async function refrescarBadgeCorreo() {
+  return;
   const { data } = await sb.rpc('gmail_cuentas');
   if (!data) return;
   CORREO_CUENTAS = data;
@@ -20110,6 +20105,7 @@ async function loadStopSalesVigentes() {
   ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
   ssRenderVigentes();
   await ssPintarHotelesVerif();
+  ssVerifPendiente = null;
   ssVerificar();
 }
 
@@ -20117,10 +20113,12 @@ async function loadStopSalesVigentes() {
    Noches = [entrada, salida): la del día de salida no se duerme. Cruza solo
    contra lo publicado del PDF de BT; si el hotel no figura, se dice tal cual
    (puede ser que BT no lo maneje), no se promete disponibilidad. */
+let ssVerifPendiente = null;
+window.ssCotizarVerif = () => cbDesdeFicha(val('ss-v-hotel'), { ida: val('ss-v-entrada'), vuelta: val('ss-v-salida') });
 async function ssPintarHotelesVerif() {
   const sel = document.getElementById('ss-v-hotel');
   if (!sel || !SS_VIGENTES_DATA) return;
-  const actual = sel.value;
+  const actual = ssVerifPendiente || sel.value;
   const destino = ssDestino;
   const hoteles = await ssProductosHotel();
   if (destino !== ssDestino) return;
@@ -20184,7 +20182,7 @@ function ssVerificar() {
       <div>
         <div class="ss-veredicto-t">${titulo}</div>
         <p><b>${esc(nombre)}</b> · ${n === 1 ? '1 noche' : `${n} noches`}: entrada ${fmtDiaCorto(ent)}, salida ${fmtDiaCorto(sal)}</p>
-        <p>${texto}</p>
+        <p>${texto}</p>${nStop || ROL === 'marketing' ? '' : '<button type="button" class="cb-link" onclick="ssCotizarVerif()">Llevar a Cotizaciones</button>'}
       </div>
     </div>
     ${tramos.length ? `<div class="ss-v-tramos">${tramos.map((t) => `<div><b>${ETIQ[t.estado]}:</b> ${t.desde === t.hasta ? `noche del ${fmtDiaCorto(t.desde)}` : `noches del ${fmtDiaCorto(t.desde)} al ${fmtDiaCorto(t.hasta)}`}</div>`).join('')}</div>` : ''}
@@ -33417,9 +33415,43 @@ function cbPaxHtml(it, i, tipo) {
   }).join('');
   return { cuentas: `<div class="cb-sec cb-full">${cbEmo('👥')}Viajeros</div><div class="cb-cuentas cb-full">${cuentas}</div>`, precios: `<div class="cb-precios cb-full">${precios}</div>` };
 }
+let cbStops = null;
+async function cbCargarStops() {
+  const { data, error } = await sb.rpc('stop_sales_vigentes');
+  if (error) return;
+  cbStops = data || [];
+  document.querySelectorAll('#cb-items .cb-item').forEach(card => { const it = cbItems[+card.dataset.i]; if (it) cbPintarStop(card, it); });
+}
+function cbStopDe(it) {
+  if (it.tipo !== 'hotel' || !cbStops) return null;
+  const id = Number(it.producto_id) || Number(cbProductoDe(it)?.id), noches = cbTarNoches(it.ida, it.vuelta);
+  if (!id || !noches.length) return null;
+  const rangos = cbStops.filter(r => Number(r.producto_id) === id);
+  const de = estado => noches.filter(n => rangos.some(r => r.estado === estado && r.fecha_desde <= n && n <= r.fecha_hasta));
+  const stop = de('stop_sale'), rq = de('on_request').filter(n => !stop.includes(n));
+  return stop.length || rq.length ? { id, rangos, noches, stop, rq } : null;
+}
+function cbStopHtml(it) {
+  const s = cbStopDe(it);
+  if (!s) return '<div class="cb-ss cb-full" hidden></div>';
+  const lista = xs => xs.map(fmtDiaCorto).join(', ');
+  const libre = s.stop.length ? ssLibreDesde(s.rangos, s.stop[0]) : null;
+  const texto = s.stop.length
+    ? `Sin cupo ${s.stop.length === 1 ? 'la noche del' : 'las noches del'} ${lista(s.stop)}. Propón otras fechas u otro hotel del mismo destino.${libre ? ` Disponible desde el ${ssFechaCompleta(libre)}.` : ''}`
+    : `A confirmar ${s.rq.length === 1 ? 'la noche del' : 'las noches del'} ${lista(s.rq)}. Pide confirmación de cupo: no cobres ni le confirmes al cliente hasta tener la respuesta.`;
+  return `<div class="cb-ss cb-full"><div class="ss-veredicto" role="alert" style="--c:${s.stop.length ? 'var(--danger)' : 'var(--amber)'}"><i class="fas ${s.stop.length ? 'fa-ban' : 'fa-clock'}"></i><div><div class="ss-veredicto-t">${s.stop.length ? 'No vender' : 'Consultar antes de confirmar'}</div><p>${esc(texto)}</p><button type="button" class="cb-link" data-cb-ss>Ver en Stop Sales</button></div></div></div>`;
+}
+function cbPintarStop(card, it) { const n = card.querySelector('.cb-ss'); if (n) n.outerHTML = cbStopHtml(it); }
+function cbVerStopSales(it) {
+  const s = cbStopDe(it); if (!s) return;
+  ssCambiarDestino(ssEsLosRoques(cbProductoDe(it)?.destino) ? 'roques' : 'bt');
+  ssHotelSel = s.rangos[0]?.nombre || null; ssVerifPendiente = String(s.id);
+  document.getElementById('ss-v-entrada').value = it.ida; document.getElementById('ss-v-salida').value = it.vuelta;
+  activateSection('stop-sales');
+}
 function cbFechasHtml(it, i, f) {
   const n = +cbNoches(it.ida, it.vuelta) || 0;
-  return `<div class="cb-fechas cb-full">${f('ida', 'Check-in', 'type="date"')}${f('vuelta', 'Check-out', 'type="date"')}<div class="field cb-noches"><span class="fl" id="cb-noches-l-${i}">${cbEmo('🌙')}Noches</span><div class="cb-step" role="group" aria-labelledby="cb-noches-l-${i}"><button type="button" class="cb-step-b" data-cb-noches="-1" aria-label="Una noche menos">−</button><output class="ei" aria-live="polite">${n || '–'}</output><button type="button" class="cb-step-b" data-cb-noches="1" aria-label="Una noche más">+</button></div></div></div>`;
+  return `<div class="cb-fechas cb-full">${f('ida', 'Check-in', 'type="date"')}${f('vuelta', 'Check-out', 'type="date"')}<div class="field cb-noches"><span class="fl" id="cb-noches-l-${i}">${cbEmo('🌙')}Noches</span><div class="cb-step" role="group" aria-labelledby="cb-noches-l-${i}"><button type="button" class="cb-step-b" data-cb-noches="-1" aria-label="Una noche menos">−</button><output class="ei" aria-live="polite">${n || '–'}</output><button type="button" class="cb-step-b" data-cb-noches="1" aria-label="Una noche más">+</button></div></div></div>${cbStopHtml(it)}`;
 }
 function cbDesgloseHtml(it) {
   const total = cbImporte(it);
@@ -33662,9 +33694,10 @@ window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud 
 const CB_CON_PRODUCTO = ['hotel', 'paquete', 'fullday', 'tour'];
 let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false;
 let cbProductoPendiente = null;
-function cbDesdeFicha(id) { cbProductoPendiente = Number(id); activateSection('cotizacion-boletos'); }
+let cbFechasPendientes = null;
+function cbDesdeFicha(id, fechas = null) { cbProductoPendiente = Number(id); cbFechasPendientes = fechas; activateSection('cotizacion-boletos'); }
 async function cbAplicarProducto() {
-  const id = cbProductoPendiente; cbProductoPendiente = null;
+  const id = cbProductoPendiente, fechas = cbFechasPendientes; cbProductoPendiente = null; cbFechasPendientes = null;
   const p = cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
   if (!p) { errToast('No se pudo cargar ese producto'); return; }
   cbHoteles.set(id, p);
@@ -33678,6 +33711,11 @@ async function cbAplicarProducto() {
     if (!it.auto) cbAutoIniciar(it);
     if (tipo === 'hotel') { cbRenderItems(); await cbHotelElegir(document.querySelector(`#cb-items .cb-item[data-i="${i}"]`), id); }
     else { it[cbTipo(it).campos[0][0]] = p.nombre; cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); }
+  }
+  if (fechas && tipo === 'hotel') {
+    const it = cbItems[i]; Object.assign(it, fechas);
+    if (it.auto) { delete it.auto.ida; delete it.auto.vuelta; }
+    cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
   }
   document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
@@ -34205,6 +34243,7 @@ async function cbCargarSeccion() {
       if (e.target.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(it, it.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
       if (e.target.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }); return; }
       if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
+      if (e.target.closest('[data-cb-ss]')) { cbVerStopSales(it); return; }
       if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); document.querySelector(`#cb-items .cb-item[data-i="${card.dataset.i}"] [data-cb-plegar]`).focus({ preventScroll: true }); return; }
       if (e.target.closest('[data-cb-unidad-cambiar]')) { it._unidadEditar = true; cbRenderItems(); document.getElementById(`cb-unidad-${card.dataset.i}`)?.focus(); return; }
       if (e.target.closest('[data-cb-usar]')) { cbHotelRecalcular(it, true); cbRenderItems(); cbProgramarBorrador(); return; }
@@ -34282,6 +34321,7 @@ async function cbCargarSeccion() {
       }
       if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
       if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbAutoIniciar(cbItems[+card.dataset.i]); cbAutoTodos(); cbRenderItems(); return; }
+      if (k === 'ida' || k === 'vuelta') cbPintarStop(card, it);
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (k === 'infantes' && it.tipo === 'hotel' && it.infantes_gratis));
       const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
@@ -34340,6 +34380,7 @@ async function cbCargarSeccion() {
   if (cotizaParaSi) sel.innerHTML = `<option value="${esc(MI_USUARIO_ID)}" selected>${esc(MI_NOMBRE)}</option>`;
   else sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
+  await cbCargarStops();
   if (cbLeadPendiente) cbAplicarLead();
   if (cbProductoPendiente) await cbAplicarProducto();
   cbResumenCliente();
@@ -34446,6 +34487,8 @@ window.cbGuardar = async function cbGuardar(accion) {
   if (hotelPendiente) { errToast('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); cbEnfocarServicio(hotelPendiente, 'ida'); return; }
   const ninosSinTarifa = cbItems.find(it => it.tipo === 'hotel' && !cbPorHabitacion(it) && Number(it.ninos) > 0 && (cbTarNum(it.tarifa_nino) === null || (it.tramos || []).some(t => cbTarNinoTramo(it, t) === null)));
   if (ninosSinTarifa) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); cbEnfocarServicio(ninosSinTarifa, 'tarifa_nino'); return; }
+  const sinCupo = cbItems.find(it => cbStopDe(it)?.stop.length);
+  if (sinCupo && !DR?.edicion('cotizacion')) { errToast(`${sinCupo.nombre}: sin cupo en esas fechas según Stop Sales. Cambia las fechas o el hotel.`); cbEnfocarServicio(sinCupo, 'ida'); return; }
   const registros = cbItems.map(it => ({ original: it, datos: cbLimpiarItem(it) })).filter(({ datos }) => cbTitulo(datos) || datos.tarifa);
   const items = registros.map(({ datos }) => datos);
   if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); cbEnfocarServicio(cbItems[0], 'nombre'); return; }
@@ -35248,9 +35291,7 @@ const NAV_ITEMS = [
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
   // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
-  { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', padre: 'grp-bandeja', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
   { sec: 'wa-bandeja', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp empresa', padre: 'grp-bandeja', roles: '', sub: 'Clientes que respondieron al número de la empresa', badge: 'nav-wab-count', badgeDefault: '0' },
-  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-bandeja', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
@@ -35271,7 +35312,6 @@ const NAV_ITEMS = [
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
@@ -35289,7 +35329,6 @@ const NAV_ITEMS = [
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
   { sec: 'induccion', icon: 'fas fa-graduation-cap', label: 'Inducción', padre: 'grp-equipo', roles: 'nav-admin-only', sub: 'Cómo le fue a cada persona en el modo de prueba' },
   // Tareas v2 (2026-10-23): entrada propia para todos los roles; antes solo freelancers o quien tuviera una abierta.
-  { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Tu día: lo que te asignaron y tus recordatorios', badge: 'nav-tareas-v2-count', badgeDefault: '0' },
   { sec: 'manual', icon: 'fas fa-book-open-reader', label: 'Videotutoriales', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok' },
   { sec: 'actualizaciones', icon: 'fas fa-bullhorn', label: 'Actualizaciones', padre: 'grp-ayuda', roles: 'nav-marketing-ok nav-boleteria-ok' },
   { sec: 'proyecto-constructor', icon: 'fas fa-drafting-compass', label: 'Proyecto Constructor', padre: 'grp-ayuda', roles: 'nav-admin-only', sub: 'Avance del CRM que se vende a otras empresas' },
@@ -35302,7 +35341,6 @@ const NAV_PADRES = [
   // Primera: es el trabajo principal del modo Boletería (fuera de ese modo no se ve).
   { sec: 'bol-solicitudes', hoja: true },
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
-  { sec: 'tareas', hoja: true },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
   { sec: 'cotizacion-boletos', hoja: true },
   { sec: 'boletos-emitidos', hoja: true },
@@ -35313,7 +35351,6 @@ const NAV_PADRES = [
   { sec: 'stop-sales', hoja: true },
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
   { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
-  { sec: 'pagos', hoja: true },
   { divisor: 'Gestión' },
   { sec: 'grp-equipo', icon: 'fas fa-people-group', label: 'Equipo', badge: 'nav-tareas-count', badgeDefault: '0' },
   { sec: 'grp-directorio', icon: 'fas fa-briefcase', label: 'Corporativo' },
