@@ -119,8 +119,9 @@
   const enLogin = () => !P.m.rol || loginVisible();
   // En la presentación (presentacion.js) no hay misiones: menú completo, sin bienvenida ni panel.
   const presentando = () => ss('prueba:modo') === 'presentacion';
-  // Pestaña nueva (sessionStorage vacío): la sesión vieja del mock sigue en localStorage y saltaría el inicio.
-  if (!ss('prueba:rol')) try { Object.keys(localStorage).filter(k => k.startsWith('prueba:')).forEach(k => localStorage.removeItem(k.slice(7))); } catch { /* sin storage */ }
+  // Sin rol a estas alturas (retoma.js no encontró a quién retomar): la sesión vieja del mock saltaría el inicio.
+  // El avance guardado (avance.js) se queda: es lo que permite retomar.
+  if (!ss('prueba:rol')) try { Object.keys(localStorage).filter(k => k.startsWith('prueba:') && k !== 'prueba:' + window.__pruebaAvance?.CLAVE).forEach(k => localStorage.removeItem(k.slice(7))); } catch { /* sin storage */ }
 
   /* ---------- Estilos ---------- */
   // Sin movimiento (reduced-motion o paleta «sereno»): el foco aparece en su lugar y la flecha queda quieta.
@@ -252,7 +253,6 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     if (!u || !sel || !pwd) return false;
     if (![...sel.options].some(o => o.value === u.username)) sel.add(new Option(u.nombre, u.username));
     sel.value = u.username; pwd.value = 'prueba';
-    estado = nuevo(); guarda(estado);
     document.getElementById('loginForm').requestSubmit();
     return true;
   }
@@ -260,13 +260,14 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   function pintaInicio() {
     let c = document.getElementById('prueba-inicio');
     if (!loginVisible()) return c?.remove();
-    // La clave se borra recién al confirmar el login ('prueba:accion' tipo login); si falla, se reintenta.
-    const pendiente = ss('prueba:entrar');
+    // Con rol en la pestaña nadie pasa por el login a mano; si falla, se reintenta. Cerrar sesión borra el rol (avance.js).
+    const pendiente = ss('prueba:rol');
     if (pendiente) { if (Date.now() - entrandoDesde > 5000 && entrar(pendiente)) entrandoDesde = Date.now(); return; }
     if (c) return;
     c = document.createElement('div');
     c.id = 'prueba-inicio';
     c.dataset.nombre = ss('prueba:nombre') || '';
+    const A = window.__pruebaAvance;
     const paso1 = () => {
       c.innerHTML = `<form class="pi-caja"><div class="pi-ico" aria-hidden="true">🧪</div><h2>Modo de prueba</h2><p>Practica el CRM sin miedo: los clientes, ventas y pagos son inventados.</p>
         <label for="pi-nombre">¿Cómo te llamas?</label><input id="pi-nombre" maxlength="40" autocomplete="given-name" placeholder="Tu nombre" required value="${escHtml(c.dataset.nombre)}">
@@ -287,7 +288,9 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
       c.querySelector('input').focus();
     };
     const entra = (rol, modo) => {
-      ss('prueba:nombre', c.dataset.nombre); ss('prueba:rol', rol); ss('prueba:entrar', rol); ss('prueba:modo', modo); ss(CLAVE, null);
+      ss('prueba:nombre', c.dataset.nombre); ss('prueba:rol', rol); ss('prueba:modo', modo);
+      // Practicar retoma lo de esa persona en ese cargo; la presentación arranca limpia.
+      if (modo || !A) ss(CLAVE, null); else A.restaura(c.dataset.nombre, rol);
       location.reload();
     };
     c.addEventListener('submit', e => {
@@ -623,7 +626,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     estado.hechas.push(mi.id); estado.pausa = true; guarda(estado);
     apaga(); pinta(true);
   }
-  addEventListener('prueba:accion', e => { if (e.detail.tipo === 'login') { ss('prueba:entrar', null); setTimeout(pinta, 600); } else registra(e.detail); });
+  addEventListener('prueba:accion', e => { if (e.detail.tipo === 'login') setTimeout(pinta, 600); else registra(e.detail); });
 
   /* ---------- Señales de UI que no pasan por el backend ---------- */
   let secVisible = null;

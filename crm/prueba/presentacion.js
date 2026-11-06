@@ -122,11 +122,13 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     pinta();
   }
   function salir() {
+    window.__pruebaAvance?.suelta(); // vuelve al inicio: retoma.js no debe entrar como el último practicante
     ['prueba:modo', 'prueba:rol', CLAVE].forEach(k => ss(k, null));
     location.reload();
   }
   function practicar() {
-    ss('prueba:modo', null); ss(CLAVE, null); ss('misiones', null);
+    ss('prueba:modo', null); ss(CLAVE, null);
+    window.__pruebaAvance?.restaura(ss('prueba:nombre'), ss('prueba:rol')) ?? ss('misiones', null);
     location.reload();
   }
 

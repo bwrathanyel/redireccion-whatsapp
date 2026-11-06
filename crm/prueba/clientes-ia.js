@@ -84,8 +84,25 @@
       else if (h.de === 'asesor') guardaMensaje(sim, { direccion: 'saliente_api', tipo: 'text', texto: h.texto, estado: 'leido', enviado_en: new Date(h.ts).toISOString() });
       if (h.adjunto === 'comprobante') comprobante(sim, pagoDe(sim, h.pago), h.ts);
     }
+    if (rehidratada) retoma(sim, o.historial);
     S.activo = true; pinta();
     return sim;
+  }
+  // Volver a la práctica no es dejar esperando al cliente: su reloj arranca de nuevo y, si lo último fue del asesor, le contesta.
+  function retoma(sim, historial) {
+    const delAsesor = historial.filter(h => h.de === 'asesor');
+    sim.llego = historial[0]?.ts || sim.llego; sim.ultimoCliente = Date.now();
+    sim.textosAsesor = delAsesor.map(h => h.texto);
+    if (delAsesor[0]) sim.atencionEn = delAsesor[0].ts;
+    // Las cotizaciones viven en el mock, que se borra al recargar: vuelven las de este chat para el PDF y Crear reserva.
+    for (const c of cotsGuardadas()[sim.id] || []) { const fila = { ...c, lead_id: sim.leadId }; tabla('cotizaciones_boleteria').push(fila); sim.cots.push(cotizacionDe(fila)); }
+    if (historial.at(-1)?.de === 'asesor' && !sim.comprobanteEn) { sim.respondido = true; setTimeout(() => contesta(sim, true), 3000); }
+  }
+  const cotsGuardadas = () => { try { return JSON.parse(ss('clientes:cots')) || {}; } catch { return {}; } };
+  function guardaCots(sim, c) {
+    const t = cotsGuardadas();
+    if (c) t[sim.id] = [...(t[sim.id] || []), c].slice(-3); else delete t[sim.id];
+    ss('clientes:cots', JSON.stringify(t));
   }
   const nuevoPend = () => ({ textos: [], crm: [], eventos: [], reloj: '' });
 
@@ -220,9 +237,9 @@
     return 'Zelle';
   }
   function pagoDe(sim, p) {
-    const metodo = p?.metodo || metodoPedido(sim), dado = Number(p?.monto) > 0 ? Number(p.monto) : montoAbono(sim), enBs = Number(p?.monto) > 0 && p?.moneda === 'VES';
-    const usd = dos(enBs ? dado / R.TASA_VES : dado);
-    return { metodo, usd, bs: EN_BS.has(metodo) ? (enBs ? dado : dos(usd * R.TASA_VES)) : 0, dicho: dado, dichoTexto: enBs ? `Bs ${cifra(dado)}` : `$${cifra(dado)}` };
+    const metodo = p?.metodo || metodoPedido(sim), dado = Number(p?.monto) > 0 ? Number(p.monto) : montoAbono(sim), enBs = Number(p?.monto) > 0 && p?.moneda === 'VES', enEur = Number(p?.monto) > 0 && p?.moneda === 'EUR';
+    const usd = dos(enBs ? dado / R.TASA_VES : enEur ? dado * R.TASAS_VES.EUR / R.TASA_VES : dado);
+    return { metodo, usd, eur: enEur ? dado : 0, bs: EN_BS.has(metodo) ? (enBs ? dado : dos(usd * R.TASA_VES)) : 0, dicho: dado, dichoTexto: enBs ? `Bs ${cifra(dado)}` : `${enEur ? '€' : '$'}${cifra(dado)}` };
   }
   // No imitan a ningún banco ni billetera: cada método tiene su forma de comprobante y llevan la marca de práctica.
   const RECIBOS = {
@@ -244,19 +261,19 @@
   }
   function comprobante(sim, pago, ts) {
     const clave = claveRecibo(pago.metodo), ref = RECIBOS[clave].ref(), bs = pago.bs;
-    const fila = guardaMensaje(sim, { direccion: 'entrante', tipo: 'image', texto: null, media_mime: 'image/svg+xml', media_path: `prueba-comprobante/${clave}/${pago.usd}/${bs}/${ref}`,
+    const fila = guardaMensaje(sim, { direccion: 'entrante', tipo: 'image', texto: null, media_mime: 'image/svg+xml', media_path: `prueba-comprobante/${clave}/${pago.usd}/${bs}/${ref}${pago.eur ? `/eur/${pago.eur}` : ''}`,
       enviado_en: new Date(ts || Date.now()).toISOString() });
     const c = { id: 500 + fila.id, conversacion_id: sim.convId, wamid: fila.wamid, estado: 'pendiente', duplicado_de: null,
-      datos: { metodo: pago.metodo, referencia: ref, monto: bs || pago.usd, moneda: bs ? 'VES' : 'USD', monto_usd: pago.usd, fecha: new Date().toLocaleDateString('es-VE') } };
+      datos: { metodo: pago.metodo, referencia: ref, monto: bs || pago.eur || pago.usd, moneda: bs ? 'VES' : pago.eur ? 'EUR' : 'USD', monto_usd: pago.usd, fecha: new Date().toLocaleDateString('es-VE') } };
     tabla('wa_comprobantes').push(c); P.empuja('wa_comprobantes', 'INSERT', c);
     sim.comprobanteEn = Date.now();
   }
   window.__pruebaComprobante = s => {
-    const [, clave = 'otro', usd = '0', bs = '0', ref = ''] = /prueba-comprobante\/([\w-]+)\/([\d.]+)\/([\d.]+)\/([\w-]+)/.exec(s) || [];
+    const [, clave = 'otro', usd = '0', bs = '0', ref = '', eur = '0'] = /prueba-comprobante\/([\w-]+)\/([\d.]+)\/([\d.]+)\/([\w-]+)(?:\/eur\/([\d.]+))?/.exec(s) || [];
     const r = RECIBOS[clave] || RECIBOS.otro, fondo = r.fondo || '#ffffff', tinta = r.tinta || '#111827', tenue = r.tenue || '#6b7280';
     const fecha = new Date().toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' });
-    const monto = Number(bs) > 0 ? `Bs ${cifra(bs)}` : r.moneda ? `${cifra(usd)} ${r.moneda}` : `$ ${cifra(usd)}`;
-    const filas = [['Fecha', fecha], [r.etqRef, ref], ...r.filas, ...(Number(bs) > 0 ? [['Equivale a', `$ ${cifra(usd)}`]] : [])];
+    const monto = Number(bs) > 0 ? `Bs ${cifra(bs)}` : r.moneda ? `${cifra(usd)} ${r.moneda}` : Number(eur) > 0 ? `€ ${cifra(eur)}` : `$ ${cifra(usd)}`;
+    const filas = [['Fecha', fecha], [r.etqRef, ref], ...r.filas, ...(Number(bs) > 0 ? [['Equivale a', Number(eur) > 0 ? `€ ${cifra(eur)}` : `$ ${cifra(usd)}`]] : [])];
     const lineas = filas.map(([a, b], i) => { const y = 310 + i * 28; return `<text x="28" y="${y}" font-size="14" fill="${tenue}">${esc(a)}</text><text x="332" y="${y}" font-size="14" fill="${tinta}" text-anchor="end" font-weight="600">${esc(b)}</text>`; }).join('');
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="520" viewBox="0 0 360 520" font-family="${(r.letra || 'Arial,Helvetica,sans-serif').replace(/"/g, '')}">
 <rect width="360" height="520" fill="${fondo}"/><rect width="360" height="84" fill="${r.cabeza}"/><text x="180" y="52" fill="#fff" font-size="21" text-anchor="middle" font-weight="700">${esc(r.metodo)}</text>
@@ -311,7 +328,7 @@ ${lineas}
     const d = e.detail || {};
     if (!S.activo || d.error) return;
     if (d.tipo === 'insert' && d.tabla === 'cotizaciones_boleteria') {
-      for (const c of d.filas || []) { const sim = simDeLead(c.lead_id) || foco(); if (sim) { sim.cots.push(cotizacionDe(c)); marca(sim, 'tarifario'); evento(sim, { tipo: 'cotizacion_creada', total: Number(c.total) || null }); } }
+      for (const c of d.filas || []) { const sim = simDeLead(c.lead_id) || foco(); if (sim) { sim.cots.push(cotizacionDe(c)); guardaCots(sim, c); marca(sim, 'tarifario'); evento(sim, { tipo: 'cotizacion_creada', total: Number(c.total) || null }); } }
       return;
     }
     if (d.tipo === 'update' && d.tabla === 'leads') { (d.filas || []).forEach(f => { const s = simDeLead(f.id); if (s) marca(s, 'ficha'); }); return; }
@@ -382,7 +399,7 @@ ${lineas}
   /* ---------- Cierre y evaluación ---------- */
   async function cierra(sim, motivo) {
     if (sim.cerrada) return;
-    sim.cerrada = true; clearTimeout(sim.timer);
+    sim.cerrada = true; clearTimeout(sim.timer); guardaCots(sim);
     pinta();
     // En el examen la tarjeta de cada chat taparía a los otros clientes: se ve todo junto al final.
     if (sim.examen) avisa(`Se cerró el chat con ${sim.cliente.nombre}. Su puntaje lo ves al terminar el examen.`); else tarjeta(null, sim);

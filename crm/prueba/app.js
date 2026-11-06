@@ -3226,6 +3226,7 @@ document.getElementById('claimForm').addEventListener('submit', async e => {
 // (mismo criterio que un refresh/cierre de pestaña sin logout, ver comentario
 // arriba de agent_check_in).
 window.cerrarSesion = async () => {
+  window.__pruebaAvance?.olvida();
   // Sin esto, una vista previa activa quedaba en sessionStorage y se le
   // pegaba al PRÓXIMO admin que loguee en la misma pestaña (compu
   // compartida) -- sessionStorage sobrevive a un logout, solo se limpia al
@@ -5702,8 +5703,8 @@ function rvBoletoSync(escribir = true) {
   const nom = (k, code) => {
     const el = document.getElementById(`rv-s-${k}-nom`); if (!el) return;
     const a = code && (bolCatalogo?.aeropuertos || []).find(x => x.iata_code === code);
-    el.textContent = !code ? (val(`rv-s-${k}`).trim() ? 'Elige un aeropuerto de la lista o escribe el código de 3 letras.' : '')
-      : a ? `${code} · ${rvAeropuertoTxt(a)}` : bolCatalogo ? `${code}: no está en el catálogo de aeropuertos.` : '';
+    el.innerHTML = !code ? (val(`rv-s-${k}`).trim() ? 'Elige un aeropuerto de la lista o escribe el código de 3 letras.' : '')
+      : a ? esc(`${code} · ${rvAeropuertoTxt(a)}`) : !bolCatalogo ? '' : bolPuedeEditar() ? bolIataBtn(code) : esc(`${code}: no está en el catálogo de aeropuertos.`);
   };
   nom('or', or); nom('de', de);
   if (!escribir) return;
@@ -5729,6 +5730,9 @@ function rvBoletoInit() {
         .sort((a, b) => rank(a) - rank(b)).slice(0, 6);
     }, a => `<span><b>${esc(a.iata_code)}</b> · ${esc(rvAeropuertoTxt(a))}</span>`, a => { inp.value = a.iata_code; rvBoletoSync(); });
     inp.addEventListener('input', () => rvBoletoSync());
+    document.getElementById(`rv-s-${k}-nom`)?.addEventListener('click', e => {
+      const b = e.target.closest('[data-iata-agregar]'); if (b) bolIataBoton(b, () => rvBoletoSync());
+    });
   });
   document.getElementById('rv-s-aerolinea')?.addEventListener('input', rvBoletoAerolineas);
   document.getElementById('rv-s-aer-sugs')?.addEventListener('click', e => {
@@ -5973,7 +5977,20 @@ function rvTramoFila(t = {}) {
     <div class="rv-3"><div><label class="fl">Origen</label><input class="ei" data-k="origen_iata" list="rv-iatas" maxlength="3" value="${esc(t.origen_iata || '')}" placeholder="CCS"></div><div><label class="fl">Destino</label><input class="ei" data-k="destino_iata" list="rv-iatas" maxlength="3" value="${esc(t.destino_iata || '')}" placeholder="MIA"></div><div><label class="fl">Vuelo</label><input class="ei" data-k="numero_vuelo" maxlength="12" value="${esc(t.numero_vuelo || '')}"></div></div>
     <div class="rv-2"><div><label class="fl">Sale (hora local)</label><input class="ei" data-k="sale_en" type="datetime-local" value="${esc(String(t.sale_en || '').slice(0, 16))}"></div><div><label class="fl">Llega (hora local)</label><input class="ei" data-k="llega_en" type="datetime-local" value="${esc(String(t.llega_en || '').slice(0, 16))}"></div></div>
     <div class="rv-2"><div><label class="fl">Aerolínea</label><select class="ei" data-k="aerolinea_id"><option value="">—</option>${aer}</select></div><div><label class="fl">Clase</label><input class="ei" data-k="clase" maxlength="20" value="${esc(t.clase || '')}"></div></div>
+    <div class="csub" data-iata-nota></div>
     <button class="btn-sm rv-danger" type="button" data-rv-accion="tramo-menos"><i class="fas fa-trash"></i> Quitar tramo</button></div>`);
+  const fila = box.lastElementChild;
+  fila.addEventListener('input', e => { if (e.target.matches('[data-k$="_iata"]')) rvTramoIatas(fila); });
+  fila.querySelector('[data-iata-nota]').addEventListener('click', e => {
+    const b = e.target.closest('[data-iata-agregar]');
+    if (b) bolIataBoton(b, () => document.querySelectorAll('#rv-tramos .rv-tramo').forEach(f => rvTramoIatas(f)));
+  });
+  rvTramoIatas(fila);
+}
+function rvTramoIatas(fila) {
+  const nota = fila.querySelector('[data-iata-nota]'); if (!nota || !bolCatalogo || !bolPuedeEditar()) return;
+  const codigos = [...fila.querySelectorAll('[data-k$="_iata"]')].map(i => i.value.trim().toUpperCase());
+  nota.innerHTML = [...new Set(codigos)].filter(c => /^[A-Z]{3}$/.test(c) && !bolCatalogo.aeropuertos.some(a => a.iata_code === c)).map(c => bolIataBtn(c)).join(' ');
 }
 function rvTramosSugeridos(s) {
   const iatas = rvRutaIatas(s?.detalle?.ruta || s?.descripcion || '');
@@ -28851,11 +28868,13 @@ function openLightbox(fotos, index) {
   lbFotos = fotos; lbIndex = Math.max(0, index);
   lbScale = 1; lbTX = 0; lbTY = 0; lbAnimando = false;
   renderLightbox();
+  document.getElementById('lbAcciones').hidden = !lbEsTarifario(lbFoto(lbIndex));
   lbEl().classList.add('open');
   document.body.classList.add('lb-lock');
   navPush({ type: 'lightbox' });
 }
 function closeLightbox(fromNav) {
+  fcCerrar();
   lbEl().classList.remove('open');
   document.body.classList.remove('lb-lock');
   if (!fromNav) navConsume();
@@ -28932,11 +28951,111 @@ function lbVolverAlCentro() {
   lbDesplazar(0);
   setTimeout(() => t.classList.remove('animando'), 300);
 }
+/* Guardar y compartir una foto del tarifario desde el visor. Siempre sale del Worker de fotos (fotoGrande), nunca de Supabase. */
+const lbEsTarifario = u => String(u).startsWith(CDN_FOTOS) || /\/_d\/\d+\//.test(u);
+const lbNombreFoto = () => `foto-tarifario-${lbIndex + 1}.jpg`;
+async function lbBajarFoto(url) {
+  let res;
+  try { res = await fetch(url); } catch { throw new Error('No se pudo cargar la foto'); }
+  if (!res.ok) throw new Error('No se pudo cargar la foto');
+  return res.blob();
+}
+async function lbGuardarFoto(btn) {
+  btn.disabled = true;
+  try {
+    const blob = await lbBajarFoto(lbFoto(lbIndex));
+    // En el celular la hoja de compartir es la que ofrece «Guardar imagen» (mismo patrón que los PDF de Boletería).
+    if (docTactil()) await docEntregarBlob(blob, lbNombreFoto(), blob.type || 'image/jpeg');
+    else descargarArchivo(blob, lbNombreFoto());
+  } catch (e) { errToast(e.message || 'No se pudo guardar la foto'); }
+  btn.disabled = false;
+}
+const fcEl = () => document.getElementById('foto-compartir');
+const fcCerrar = () => fcEl()?.remove();
+const fcNorm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+async function fcCargarChats() {
+  const [wa, equipo] = await Promise.all([
+    sb.from('whatsapp_conversaciones').select('id,nombre,wa_id,ultimo_entrante_at').neq('phone_number_id', '__gate_pnid').order('ultimo_mensaje_at', { ascending: false, nullsFirst: false }).limit(300),
+    sb.rpc('mis_conversaciones'),
+  ]);
+  // Con la ventana de 24 h cerrada WhatsApp solo acepta plantillas: se ve, pero no se puede elegir.
+  const cerrada = c => !c.ultimo_entrante_at || Date.now() - Date.parse(c.ultimo_entrante_at) >= 24 * 3600e3;
+  const chats = (wa.data || []).map(c => ({ clave: `wa-${c.id}`, wa: c.id, nombre: c.nombre || `+${c.wa_id}`, tel: c.wa_id || '', cerrada: cerrada(c) }));
+  return [...chats.filter(c => !c.cerrada),
+    ...(equipo.data || []).map(c => ({ clave: `eq-${c.conversacion_id}`, conv: c, nombre: c.nombre || 'Chat interno', tel: '', cerrada: false })),
+    ...chats.filter(c => c.cerrada)];
+}
+async function fcEnviarFoto(chat, url, nombre, texto) {
+  // A un chat le basta el ancho 1280, el mismo de las fotos que manda el bot de ventas.
+  const blob = await lbBajarFoto(url.replace('/_d/2048/', '/_d/1280/'));
+  const file = new File([blob], nombre, { type: blob.type || 'image/jpeg' });
+  if (chat.wa) {
+    const fd = new FormData();
+    fd.append('conversacion_id', String(chat.wa));
+    fd.append('tipo', /^image\/(jpeg|png)$/.test(file.type) ? 'imagen' : 'documento');
+    fd.append('archivo', file, nombre);
+    if (texto) fd.append('texto', texto);
+    const { data, error } = await sb.functions.invoke('whatsapp-enviar', { body: fd });
+    if (!error && data?.ok) return;
+    let det = data;
+    try { if (error) det = await error.context?.json(); } catch { /* sin cuerpo: mensaje genérico */ }
+    throw new Error(det?.error === 'ventana_cerrada' ? 'Se cerró la ventana de 24 h de ese chat' : det?.detalle ? `WhatsApp: ${det.detalle}` : 'No se pudo enviar la foto');
+  }
+  const path = `${chat.conv.conversacion_id}/${crypto.randomUUID()}-${chatNombreSeguro(nombre)}`;
+  const { error: upErr } = await sb.storage.from('chat-interno-adjuntos').upload(path, file, { contentType: file.type });
+  if (upErr) throw new Error('No se pudo subir la foto');
+  const ok = await chatEnviarMensaje({ tipo: 'imagen', contenido: texto || null, storage_path: path, nombre_archivo: nombre, peso_bytes: file.size }, chat.conv);
+  if (!ok) { await sb.storage.from('chat-interno-adjuntos').remove([path]); throw new Error('No se pudo enviar la foto'); }
+}
+function lbCompartirFoto() {
+  fcCerrar();
+  const url = lbFoto(lbIndex), nombre = lbNombreFoto();
+  const m = document.createElement('div');
+  m.id = 'foto-compartir'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-labelledby', 'fc-titulo');
+  m.innerHTML = `<div class="fc-caja">
+    <div class="fc-cab"><h3 id="fc-titulo">Compartir foto</h3><button type="button" class="fc-x" data-fc="cerrar" aria-label="Cerrar"><i class="fas fa-times"></i></button></div>
+    <img class="fc-foto" src="${esc(url)}" alt="Vista previa de la foto que vas a compartir">
+    <label for="fc-texto">Texto que acompaña la foto</label>
+    <textarea id="fc-texto" rows="2" maxlength="1000" placeholder="Escribe un mensaje (opcional)"></textarea>
+    <label for="fc-buscar">Enviar a</label>
+    <input id="fc-buscar" type="search" placeholder="Buscar chat o cliente" autocomplete="off">
+    <div class="fc-chats" id="fc-chats"><div class="fc-vacio">Cargando chats…</div></div>
+    <div class="fc-pie"><button type="button" class="dbtn gh" data-fc="cerrar">Cancelar</button><button type="button" class="dbtn save" data-fc="enviar" disabled><i class="fas fa-paper-plane"></i> <span>Elige un chat</span></button></div>
+  </div>`;
+  let chats = [], elegido = null;
+  const enviar = m.querySelector('[data-fc="enviar"]'), lista = m.querySelector('#fc-chats');
+  const pinta = () => {
+    const q = fcNorm(m.querySelector('#fc-buscar').value), vis = chats.filter(c => !q || fcNorm(c.nombre).includes(q) || c.tel.includes(q)).slice(0, 50);
+    lista.innerHTML = vis.map(c => `<button type="button" class="fc-chat${elegido === c ? ' on' : ''}" data-clave="${esc(c.clave)}" aria-pressed="${elegido === c}"${c.cerrada ? ' disabled' : ''}><i class="${c.wa ? 'fab fa-whatsapp' : 'fas fa-comments'}" aria-hidden="true"></i><span><b>${esc(c.nombre)}</b><small>${c.cerrada ? 'WhatsApp · ventana cerrada, solo plantilla' : c.wa ? 'WhatsApp' : 'Chat interno'}</small></span></button>`).join('') || '<div class="fc-vacio">No hay chats con ese nombre</div>';
+    enviar.disabled = !elegido;
+    enviar.querySelector('span').textContent = elegido ? `Enviar a ${elegido.nombre}` : 'Elige un chat';
+  };
+  m.querySelector('#fc-buscar').addEventListener('input', pinta);
+  m.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); fcCerrar(); } });
+  m.addEventListener('click', async e => {
+    if (e.target === m || e.target.closest('[data-fc="cerrar"]')) return fcCerrar();
+    const fila = e.target.closest('.fc-chat');
+    if (fila) { elegido = chats.find(c => c.clave === fila.dataset.clave) || null; return pinta(); }
+    if (!e.target.closest('[data-fc="enviar"]') || !elegido) return;
+    enviar.disabled = true; enviar.querySelector('span').textContent = 'Enviando…';
+    try {
+      await fcEnviarFoto(elegido, url, nombre, m.querySelector('#fc-texto').value.trim());
+      okToast(`Foto enviada a ${elegido.nombre}`);
+      fcCerrar();
+    } catch (err) { errToast(err.message || 'No se pudo enviar la foto'); pinta(); }
+  });
+  document.body.appendChild(m);
+  if (!docTactil()) m.querySelector('#fc-texto').focus();
+  fcCargarChats().then(c => { chats = c; if (m.isConnected) pinta(); })
+    .catch(() => { lista.innerHTML = '<div class="fc-vacio">No se pudieron cargar los chats</div>'; });
+}
 function setupLightbox() {
   const img = lbImgEl(), stage = document.getElementById('lbStage');
   document.getElementById('lbClose').onclick = () => closeLightbox();
   document.getElementById('lbNext').onclick = lbNext;
   document.getElementById('lbPrev').onclick = lbPrev;
+  document.getElementById('lbGuardar').onclick = e => lbGuardarFoto(e.currentTarget);
+  document.getElementById('lbCompartir').onclick = lbCompartirFoto;
   // El carril ahora tapa el escenario entero: tocar "el fondo" es tocar el
   // carril o un hueco vacío, nunca el <div class="lb-stage"> en sí.
   // El carril ahora tapa el escenario entero: tocar "el fondo" es tocar el
@@ -28949,7 +29068,7 @@ function setupLightbox() {
     if (!e.target.closest('.lb-img')) closeLightbox();
   });
   document.addEventListener('keydown', e => {
-    if (!lbEl().classList.contains('open')) return;
+    if (!lbEl().classList.contains('open') || fcEl()) return;
     if (e.key === 'Escape') closeLightbox();
     else if (e.key === 'ArrowRight') lbNext();
     else if (e.key === 'ArrowLeft') lbPrev();
@@ -33164,7 +33283,7 @@ function cbRutaResumen(it) {
   return '<span class="cb-ruta-vacia">Elija origen y destino</span>';
 }
 function cbApNota(code, texto) {
-  if (code) { const a = cbAeropuerto(code); return a ? `<i class="fas fa-location-dot"></i> ${esc(a.ciudad)}, ${esc(a.pais)}` : bolCatalogo ? '<span class="cb-warn"><i class="fas fa-circle-info"></i> Código fuera del catálogo de Boletería</span>' : ''; }
+  if (code) { const a = cbAeropuerto(code); return a ? `<i class="fas fa-location-dot"></i> ${esc(a.ciudad)}, ${esc(a.pais)}` : !bolCatalogo ? '' : bolPuedeEditar() ? bolIataBtn(code) : '<span class="cb-warn"><i class="fas fa-circle-info"></i> Código fuera del catálogo de Boletería</span>'; }
   return texto ? `<span class="cb-warn"><i class="fas fa-triangle-exclamation"></i> No encontramos «${esc(texto)}». Elija de la lista o escriba el código IATA (3 letras).</span>` : '';
 }
 function cbRefHtml(it) {
@@ -33210,10 +33329,17 @@ function cbApAbrir(inp) {
   else {
     const res = cbApBuscar(texto), code = texto.toUpperCase();
     const ops = res.map((a, i) => `<div class="cb-ap-op${i === 0 && texto ? ' activo' : ''}" role="option" data-code="${esc(a.iata_code)}"><span class="cb-ap-op-n"><b>${esc(cbApNombre(a))}</b><small>${esc(a.nombre_comercial ? a.ciudad + ', ' : '')}${esc(a.pais)}</small></span><em>${esc(a.iata_code)}</em></div>`);
-    if (cbEsIata(code) && !res.some(a => a.iata_code === code)) ops.push(`<div class="cb-ap-op${ops.length ? '' : ' activo'}" role="option" data-code="${code}"><span class="cb-ap-op-n"><b>Usar el código ${code}</b><small>No está en el catálogo de Boletería</small></span><em>${code}</em></div>`);
+    if (cbEsIata(code) && !res.some(a => a.iata_code === code)) {
+      const agrega = bolPuedeEditar();
+      ops.push(`<div class="cb-ap-op${ops.length ? '' : ' activo'}" role="option" data-code="${code}"${agrega ? ' data-iata-nuevo="1"' : ''}><span class="cb-ap-op-n"><b>${agrega ? 'Agregar' : 'Usar el'} código ${code}</b><small>${agrega ? 'La IA lo busca en línea para confirmarlo' : 'No está en el catálogo de Boletería'}</small></span><em>${code}</em></div>`);
+    }
     lista.innerHTML = ops.join('') || '<div class="cb-ap-vacio">Sin coincidencias. Escriba el código IATA de 3 letras.</div>';
   }
   lista.hidden = false; inp.setAttribute('aria-expanded', 'true');
+}
+function cbApOpcion(inp, op) {
+  cbApElegir(inp, op.dataset.code);
+  if (op.dataset.iataNuevo) inp.closest('.cb-ap')?.querySelector('.cb-ap-nota [data-iata-agregar]')?.click();
 }
 function cbApElegir(inp, code) {
   const it = cbApItem(inp), card = inp.closest('.cb-item'), libre = it.ruta_libre;
@@ -34032,7 +34158,7 @@ async function cbCargarSeccion() {
     // mousedown y no click: así la opción se elige antes del blur del input.
     cbLista.addEventListener('mousedown', e => {
       const op = e.target.closest('.cb-ap-op'); if (!op) return;
-      e.preventDefault(); cbApElegir(op.closest('.cb-ap').querySelector('.cb-ap-in'), op.dataset.code);
+      e.preventDefault(); cbApOpcion(op.closest('.cb-ap').querySelector('.cb-ap-in'), op);
     });
     cbLista.addEventListener('keydown', e => {
       const inp = e.target; if (!inp.matches('.cb-ap-in')) return;
@@ -34043,10 +34169,12 @@ async function cbCargarSeccion() {
         if (!ops.length) return;
         const n = (i + (e.key === 'ArrowDown' ? 1 : -1) + ops.length) % ops.length;
         ops.forEach((o, j) => o.classList.toggle('activo', j === n)); ops[n].scrollIntoView({ block: 'nearest' });
-      } else if (e.key === 'Enter') { e.preventDefault(); if (i >= 0 && !lista.hidden) cbApElegir(inp, ops[i].dataset.code); else cbApConfirmar(inp); }
+      } else if (e.key === 'Enter') { e.preventDefault(); if (i >= 0 && !lista.hidden) cbApOpcion(inp, ops[i]); else cbApConfirmar(inp); }
       else if (e.key === 'Escape') { cbApCerrar(inp); }
     });
     cbLista.addEventListener('click', e => {
+      const iata = e.target.closest('[data-iata-agregar]');
+      if (iata) { const inp = iata.closest('.cb-ap')?.querySelector('.cb-ap-in'); bolIataBoton(iata, () => { inp?.blur(); cbRefrescarRutas(); }); return; }
       const hab = e.target.closest('[data-cb-hab]'); if (hab) { cbHabElegir(hab); return; }
       const abrir = e.target.closest('[data-cb-hab-abrir]');
       if (abrir) { const lista = abrir.parentElement.querySelector('.cb-picker-lista'); lista.hidden = !lista.hidden; abrir.setAttribute('aria-expanded', String(!lista.hidden)); return; }
@@ -36960,6 +37088,7 @@ function setupBoleteriaSeccion() {
   document.getElementById('bol-requisito-nuevo')?.addEventListener('click', () => bolFormRequisito());
   document.getElementById('bol-temporada-nueva')?.addEventListener('click', () => bolFormTemporada());
   document.getElementById('sec-boleteria')?.addEventListener('click', e => {
+    const iata = e.target.closest('[data-iata-agregar]'); if (iata) { bolIataBoton(iata); return; }
     const b = e.target.closest('[data-bol-accion]'); if (!b) return;
     const { bolAccion: acc, bolEntidad: ent, bolId: id } = b.dataset;
     if (acc === 'editar') BOL_FORMS[ent]?.(id);
@@ -37095,11 +37224,13 @@ function renderBolPrecios() {
 function renderBolAeropuertos() {
   const wrap = document.getElementById('bol-aeropuertos-wrap'); if (!wrap) return;
   const aps = bolCatalogo.aeropuertos.filter(a => bolMatch(`${a.iata_code} ${a.ciudad} ${a.nombre_comercial || ''} ${a.nombre} ${a.pais}`));
-  const editor = bolPuedeEditar();
+  const editor = bolPuedeEditar(), q = bolFiltro().toUpperCase();
+  const nuevo = editor && /^[A-Z]{3}$/.test(q) && !bolCatalogo.aeropuertos.some(a => a.iata_code === q);
   wrap.innerHTML = `<div style="overflow-x:auto"><table class="bolc-tabla"><thead><tr><th>IATA</th><th>Nombre al cliente</th><th>Aeropuerto</th><th>País</th>${editor ? '<th></th>' : ''}</tr></thead><tbody>
     ${aps.length ? aps.map(a => `<tr><td><b>${esc(a.iata_code)}</b></td><td>${esc(a.nombre_comercial || a.ciudad)}</td><td>${esc(a.nombre)}</td><td>${esc(a.pais)}</td>
       ${editor ? `<td class="bolc-td-acc">${bolBtn('editar', 'aeropuerto', a.iata_code, '<i class="fas fa-pen"></i>')} ${bolBtn('quitar', 'aeropuerto', a.iata_code, '<i class="fas fa-trash"></i>', 'bolc-quitar')}</td>` : ''}</tr>`).join('')
-      : `<tr><td colspan="5" class="muted">Sin aeropuertos.</td></tr>`}
+      : nuevo ? '' : `<tr><td colspan="5" class="muted">Sin aeropuertos.</td></tr>`}
+    ${nuevo ? `<tr><td colspan="5">${bolIataBtn(q)}</td></tr>` : ''}
   </tbody></table></div>`;
 }
 function renderBolRequisitos() {
@@ -37211,19 +37342,49 @@ async function bolFormPrecio(id) {
     p_tipo: f.tipo, p_precio: precio, p_moneda: f.moneda, p_vigente_desde: f.desde || null, p_vigente_hasta: f.hasta || null, p_es_referencia: f.ref }, 'Precio guardado',
     p && (d => d.id !== p.id && sb.rpc('boleteria_desactivar', { p_entidad: 'precio', p_id: String(p.id) })));
 }
+const bolCamposAeropuerto = a => [
+  { id: 'ciudad', label: 'Ciudad', requerido: true, valor: a?.ciudad },
+  { id: 'comercial', label: 'Nombre que ve el cliente, si es otro (ej: Margarita)', valor: a?.nombre_comercial },
+  { id: 'nombre', label: 'Nombre del aeropuerto', requerido: true, valor: a?.nombre },
+  { id: 'pais', label: 'País', requerido: true, valor: a?.pais || 'Venezuela' },
+  { id: 'nacional', label: 'Es nacional (Venezuela)', tipo: 'check', valor: a ? a.es_nacional : false }];
 async function bolFormAeropuerto(iata) {
   const a = iata ? bolCatalogo.aeropuertos.find(x => x.iata_code === iata) : null;
   const f = await confirmarSheet({ titulo: a ? `Editar ${a.iata_code}` : 'Nuevo aeropuerto', textoOk: 'Guardar', campos: [
-    ...(a ? [] : [{ id: 'iata', label: 'Código IATA (3 letras, ej: MIA)', requerido: true }]),
-    { id: 'ciudad', label: 'Ciudad', requerido: true, valor: a?.ciudad },
-    { id: 'comercial', label: 'Nombre que ve el cliente, si es otro (ej: Margarita)', valor: a?.nombre_comercial },
-    { id: 'nombre', label: 'Nombre del aeropuerto', requerido: true, valor: a?.nombre },
-    { id: 'pais', label: 'País', requerido: true, valor: a?.pais || 'Venezuela' },
-    { id: 'nacional', label: 'Es nacional (Venezuela)', tipo: 'check', valor: a ? a.es_nacional : false }] });
+    ...(a ? [] : [{ id: 'iata', label: 'Código IATA (3 letras, ej: MIA)', requerido: true }]), ...bolCamposAeropuerto(a)] });
   if (!f) return;
   const code = (a?.iata_code || f.iata).toUpperCase();
   if (!/^[A-Z]{3}$/.test(code)) { errToast('El código IATA son 3 letras'); return; }
   await bolGuardar('boleteria_guardar_aeropuerto', { p_iata: code, p_nombre: f.nombre, p_ciudad: f.ciudad, p_pais: f.pais, p_es_nacional: f.nacional, p_nombre_comercial: f.comercial || null }, 'Aeropuerto guardado');
+}
+// Código IATA fuera del catálogo: la IA lo busca en línea, quien edita Boletería confirma (o corrige) y queda guardado.
+function bolIataBtn(code) { return `<button type="button" class="btn-sm" data-iata-agregar="${esc(code)}"><i class="fas fa-wand-magic-sparkles"></i> Agregar código ${esc(code)}</button>`; }
+async function bolIataAgregar(code) {
+  const { data: r, error } = await sb.functions.invoke('boleteria-iata-buscar', { body: { iata: code } });
+  if (error || !r?.ok) { errToast(`No se pudo buscar ${code} en línea. Intenta de nuevo o cárgalo en Boletería › Aeropuertos`); return false; }
+  if (!r.encontrado) { errToast(r.motivo || `No encontré ningún aeropuerto con el código ${code}. Revisa que esté bien escrito`); return false; }
+  if (!r.activo) {
+    const lugar = `${r.nombre}, en ${r.ciudad}, ${r.pais}`;
+    const pide = confirmarSheet({ titulo: `¿${code} es este aeropuerto?`, textoOk: 'Sí, agregarlo', textoCancelar: 'No es este', campos: bolCamposAeropuerto(r),
+      detalle: `${r.guardada ? `${code} estaba quitado del catálogo: ${lugar}.` : `La búsqueda en línea dice que ${code} es ${lugar}.`} Si estás de acuerdo, queda agregado al catálogo de Boletería.${r.aviso ? `\n${r.aviso}.` : ''}` });
+    if (r.fuente_url) document.getElementById('confirmar-sheet-detalle').insertAdjacentHTML('beforeend', `<br><a href="${esc(r.fuente_url)}" target="_blank" rel="noopener noreferrer">Ver la fuente</a>`);
+    const f = await pide;
+    if (!f) return false;
+    const { data, error: e } = await sb.rpc('boleteria_guardar_aeropuerto', { p_iata: code, p_nombre: f.nombre, p_ciudad: f.ciudad, p_pais: f.pais, p_es_nacional: f.nacional, p_nombre_comercial: f.comercial || null });
+    if (e || data?.ok === false) { errToast(e?.message || 'No se pudo guardar'); return false; }
+  }
+  okToast(`${code} ya está en el catálogo de aeropuertos`);
+  const { data: cat } = await sb.rpc('boleteria_catalogo');
+  if (cat) { bolCatalogo = cat; renderBoleteriaTab(); }
+  return true;
+}
+async function bolIataBoton(btn, despues) {
+  if (btn.disabled) return;
+  const antes = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando en línea…';
+  const listo = await bolIataAgregar(btn.dataset.iataAgregar).catch(e => { console.error('bolIataAgregar', e); errToast('No se pudo agregar el código'); return false; });
+  btn.disabled = false; btn.innerHTML = antes;
+  if (listo) despues?.();
 }
 async function bolFormRequisito(id) {
   const r = id ? bolCatalogo.requisitos.find(x => x.id === Number(id)) : null;

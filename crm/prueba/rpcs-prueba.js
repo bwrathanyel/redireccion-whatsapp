@@ -1219,5 +1219,5 @@ const FUNCIONES = { 'repartir-numeros': repartir_numeros, 'voz-ia-referencia': v
   // Firma de subida para el recibo y el voucher del abono (abonos.js): sin path, supabase-js revienta en uploadToSignedUrl.
   'reservas-documentos': (m, a) => g(a, 'accion') === 'subir' ? { ok: true, path: `${entero(g(a, 'reserva_id') || 0)}/${g(a, 'tipo') || 'doc'}-${Date.now()}.pdf`, token: 'prueba' } : _comprobante_doc(a) || OK };
 
-window.PRUEBA_RPCS = { RPCS, FUNCIONES, TASA_VES };
+window.PRUEBA_RPCS = { RPCS, FUNCIONES, TASA_VES, TASAS_VES };
 })();

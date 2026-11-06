@@ -224,7 +224,8 @@
     const req = input instanceof Request ? input : null;
     let url; try { url = new URL(req ? req.url : String(input), location.href); } catch { return origFetch(input, init); }
     if (url.hostname !== HOST && url.hostname !== FN_HOST) {
-      if (/supabase\.(co|in)$|destinoyeventoslotus360\.com$/i.test(url.hostname)) return resp({ error: 'No disponible en el modo prueba' }, 503);
+      // Las fotos del tarifario real sí se bajan del Worker: Guardar y Compartir del visor las piden con fetch.
+      if (url.origin + '/' !== TR?.cdn && /supabase\.(co|in)$|destinoyeventoslotus360\.com$/i.test(url.hostname)) return resp({ error: 'No disponible en el modo prueba' }, 503);
       return origFetch(input, init);
     }
     await sleep(40);
