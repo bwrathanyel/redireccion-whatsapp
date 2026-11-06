@@ -32924,6 +32924,32 @@ function cbTarPrecioNino(t, cantidad) {
   return { precio: aplican[0].precio, etiquetas: aplican.map(o => o.clave.replace(/(\d)_(\d)/g, '$1-$2').replace(/_/g, ' ').toUpperCase()) };
 }
 const cbTarNinoTramo = (it, t) => cbTarNum(it.tarifa_nino_auto === false ? it.tarifa_nino : (t.tarifa_nino ?? it.tarifa_nino));
+function cbTarPascua(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, h = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((b + 8) / 25) + 1) / 3) + 15) % 30;
+  const l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - h - c % 4) % 7, n = h + l - 7 * Math.floor((a + 11 * h + 22 * l) / 451) + 114;
+  return Date.UTC(y, Math.floor(n / 31) - 1, n % 31 + 1);
+}
+function cbTarFestivos(iso) {
+  const md = iso.slice(5), dias = Math.round((cbTarFecha(iso) - cbTarPascua(+iso.slice(0, 4))) / 864e5);
+  return [md >= '12-21' && md <= '12-27' && 'navidad', (md >= '12-28' || md <= '01-06') && 'fin de ano', dias >= -7 && dias <= 0 && 'semana santa', dias >= -51 && dias <= -46 && 'carnaval'].filter(Boolean);
+}
+const cbTarMarcas = s => [...new Set(cbTarNorm(s).match(/navidad|fin de ano|semana santa|carnaval|super ?alta|\b(?:alta|media|baja|verano)\b/g) || [])].map(m => m.replace('superalta', 'super alta'));
+const cbTarMarcaGeneral = m => !/navidad|fin de ano|semana santa|carnaval/.test(m);
+// minimo_noches del bloque sale de la nota al pie del PDF: cada clave nombra una temporada o una habitación, nunca la tabla entera.
+function cbTarMinimoBloque(t, noches) {
+  const bloque = cbTarBloque(t).minimo_noches, r = { exigidos: [], dudosos: [], ambiguo: false };
+  if (typeof bloque === 'number') { r.exigidos.push(bloque); return r; }
+  const hab = cbTarNorm(t.habitacion), delTitulo = cbTarMarcas(t.titulo), festivos = noches.flatMap(cbTarFestivos);
+  for (const [clave, valor] of Object.entries(bloque && typeof bloque === 'object' ? bloque : {})) {
+    const v = Number(valor), k = cbTarNorm(clave).split(/\bconsultar\b/)[0];
+    if (!(v > 0)) continue;
+    const rangos = [...k.matchAll(/(\d{2})\/(\d{2})\/(\d{4}) al (\d{2})\/(\d{2})\/(\d{4})/g)], marcas = cbTarMarcas(k);
+    const aplica = cbTarNorm(clave) === hab || (rangos.length ? noches.some(n => rangos.some(m => n >= `${m[3]}-${m[2]}-${m[1]}` && n <= `${m[6]}-${m[5]}-${m[4]}`)) : marcas.some(m => festivos.includes(m) || delTitulo.includes(m)));
+    if (aplica) { r.exigidos.push(v); r.ambiguo ||= /\d+ noches?\b/.test(k); }
+    else if (!rangos.length && (!marcas.length || (marcas.some(cbTarMarcaGeneral) && !delTitulo.some(cbTarMarcaGeneral)))) r.dudosos.push([clave, v]);
+  }
+  return r;
+}
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
   if (!noches.length) return fallo(it.ida && it.vuelta ? 'Las fechas deben sumar de 1 a 366 noches.' : 'Elige el check-in y las noches: la tarifa sale sola.');
@@ -32970,10 +32996,10 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     else tramos.push({ desde: noche, hasta: siguiente, noches: 1, tarifa, tarifa_nino: tarifaNino, ...(paxAdic ? { pax_adic: paxAdic, tarifa_pax_adic: tarifaPaxAdic } : {}), tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null });
   }
   for (const t of usadas) {
-    const b = cbTarBloque(t), mins = b.minimo_noches && typeof b.minimo_noches === 'object' ? [...new Set(Object.values(b.minimo_noches).map(Number).filter(n => n > 0))] : [];
-    if (!t.minimo_noches && mins.length > 1) return fallo('El mínimo de noches requiere confirmación manual para esta temporada.');
-    const min = Number(t.minimo_noches) || (typeof b.minimo_noches === 'number' ? b.minimo_noches : mins[0] || 0);
+    const b = cbTarBloque(t), m = Number(t.minimo_noches) ? { exigidos: [Number(t.minimo_noches)], dudosos: [], ambiguo: false } : cbTarMinimoBloque(t, noches), min = Math.max(0, ...m.exigidos);
+    if (min > noches.length && (m.ambiguo || new Set(m.exigidos).size > 1)) return fallo('El mínimo de noches requiere confirmación manual para esta temporada.');
     if (min > noches.length) return fallo(`El hotel exige mínimo ${min} noches. Confirma una excepción y tarifa manual.`);
+    for (const [clave, v] of m.dudosos) if (v > noches.length) avisos.add(`El tarifario pide mínimo ${v} noches en «${clave.slice(0, 80)}»: confirma si aplica a estas fechas.`);
     for (const c of t.condiciones || []) if (typeof c === 'string') avisos.add(c);
     for (const s of b.suplementos || []) if (s.obligatorio) avisos.add('Suplemento obligatorio pendiente: ' + (s.texto || s.temporada || 'confirmar en la ficha'));
     if (b.impuestos?.igtf_pct) avisos.add(`IGTF ${b.impuestos.igtf_pct}% pendiente según forma de pago.`);
@@ -33180,7 +33206,7 @@ const cbPlanEmoji = s => { const n = cbTarNorm(s); return /todo incluido|all inc
 const cbBonito = s => s && s === s.toUpperCase() ? s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()) : s;
 const cbSumarDias = (iso, n) => cbTarIso(cbTarFecha(iso) + n * 864e5);
 function cbMinNoches(it) {
-  const ns = cbHotelFilas(it).filter(t => !it.hab || cbTarNorm(t.habitacion) === cbTarNorm(it.hab))
+  const ns = cbHotelFilas(it).filter(t => (!it.hab || cbTarNorm(t.habitacion) === cbTarNorm(it.hab)) && (!it.ida || cbTarAmplitud(t, it.ida) !== null))
     .map(t => Number(t.minimo_noches) || (typeof cbTarBloque(t).minimo_noches === 'number' ? cbTarBloque(t).minimo_noches : 0)).filter(n => n > 0);
   return ns.length ? Math.min(...ns) : 1;
 }
@@ -33468,7 +33494,7 @@ async function cbTraerTarifas(id) {
     const control = new AbortController(); let reloj;
     const espera = new Promise((_, rechazar) => { reloj = setTimeout(() => { control.abort(); rechazar(new Error('La carga de tarifas tardó demasiado.')); }, 12000); });
     const consulta = (async () => {
-      const { data, error } = await sb.from('tarifas').select('id,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
+      const { data, error } = await sb.from('tarifas').select('id,titulo,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
       if (error) throw error;
       return cbTarAnotarUnidades(data || []);
     })();

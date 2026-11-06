@@ -8111,6 +8111,14 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   body.bi-on .update-toast{bottom:calc(78px + var(--safe-b) + var(--bi-h,0px))}
   /* Cerrada queda justo bajo la pantalla y su sombra hacia arriba oscurecía la barra */
   :is(.mfs,.sheet):not(.open),:root[data-theme="light"] :is(.mfs,.sheet):not(.open){box-shadow:none}
+  /* Lo cerrado fuera del árbol de render: en Leads 1.360 de 1.543 nodos con caja no estaban en
+     pantalla y cada recálculo los pagaba. allow-discrete mantiene el contenido durante el cierre.
+     .sidebar no entra: las transiciones de .nav-item al cambiar de sección, bajo hidden, suben de
+     ~35 a ~165 los recálculos por cambio (medido); sacarlo no pierde ganancia en la carga. */
+  :is(.sheet,.mfs,.drawer):not(.open),.lyra-panel:not(.show),.chat-panel:not(.abierto){content-visibility:hidden}
+  :is(.sheet,.mfs,.drawer){transition:transform .3s cubic-bezier(.3,1,.4,1),content-visibility .3s allow-discrete}
+  .lyra-panel:not(.show){transition-property:opacity,transform,visibility,content-visibility;transition-behavior:allow-discrete}
+  .chat-panel:not(.abierto){transition:opacity .2s,transform .32s var(--ease-salida),visibility 0s .32s,top .25s var(--ease-salida),content-visibility 0s .32s allow-discrete}
 }
 </style>
 </head>
