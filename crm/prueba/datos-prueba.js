@@ -100,10 +100,25 @@ const LEADS = [
     monto: 480, total: 480, monto_inicial: 480, monto_completo: 480, restante_pago: 0, servicio: 'Hospedaje' }),
 ];
 
+// La bandeja no arranca vacía: el «Compartir» de los PDF necesita clientes a quién mandarles, también con rol admin.
+const CHATS = [
+  ['María González', 'Hola, ¿me pasas la cotización que hablamos?', 1],
+  ['Ricardo Díaz', 'Buenas, quedo atento al PDF con los precios.', 3],
+  ['Carmen López', 'Hola, ¿ya tienen listo mi voucher?', 6],
+].map(([nombre, texto, horas], i) => {
+  const l = LEADS.find(x => x.nombre === nombre), t = hace(horas);
+  return {
+    conv: { id: 500 + i, nombre, wa_id: String(l.telefono).replace(/\D/g, ''), no_leidos: 0, ultimo_mensaje_at: t, ultimo_entrante_at: t, lead_id: l.id, asesor: ASESORA, phone_number_id: 'prueba' },
+    msg: { id: 70000 + i, conversacion_id: 500 + i, wamid: `prueba-semilla-${i}`, direccion: 'entrante', tipo: 'text', texto, enviado_en: t, estado: null, error: null, enviado_por: null, plantilla: null, media_id: null, media_mime: null, media_path: null, transcripcion: null },
+  };
+});
+
 const TABLAS = {
   usuarios: [_usuario(USUARIOS.asesor), _usuario(USUARIOS.admin)],
   asesores: ASESORES,
   leads: LEADS,
+  whatsapp_conversaciones: CHATS.map(c => c.conv),
+  whatsapp_mensajes: CHATS.map(c => c.msg),
   reasignaciones: [
     { id: 1, lead_id: 9012, asesor_anterior: 'Luisa Demo', asesor_nuevo: 'Carlos Demo', motivo: 'timeout_no_respuesta',
       minutos_transcurridos: 32, created_at: hace(3), leads: { nombre: 'Valentina Castro', telefono: '+584125550012', destino: 'Margarita' } },

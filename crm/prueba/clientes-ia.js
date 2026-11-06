@@ -457,42 +457,41 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
   }
   const reloj = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   // En el celular la guía arranca plegada (solo la pista del paso que sigue) para no tapar la pantalla.
-  let panel = null, plegadoGeneral = false, plegadoMovil = true, enChatPrev = false;
+  let panel = null, burbuja = null, plegado = true, enChatPrev = false;
   const movil = () => matchMedia('(max-width:760px)').matches;
   function pinta(festeja) {
-    // pc-sec: WhatsApp empresa a la vista. pc-chat: además hay una conversación abierta (ahí el panel va arriba; en la lista, abajo como en el resto).
     const enChat = S.activo && window.__pruebaMisiones?.terminadas?.() !== false && !!document.querySelector('.section.active .dm-shell.ver-chat');
     document.body.classList.toggle('pc-wa', S.activo);
-    document.body.classList.toggle('pc-sec', S.activo && !!$('sec-wa-bandeja')?.classList.contains('active'));
-    document.body.classList.toggle('pc-chat', enChat);
-    if (enChat && !enChatPrev && movil()) plegadoMovil = true;
+    if (enChat && !enChatPrev && movil()) plegado = true;
     enChatPrev = enChat;
     if (S.activo) $('prueba-panel')?.remove();
     if (!S.activo || window.__pruebaMisiones?.terminadas?.() === false) { panel?.remove(); panel = null; return; }
-    const plegado = movil() ? plegadoMovil : plegadoGeneral;
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'pc-panel'; panel.setAttribute('aria-label', 'Práctica con clientes');
       panel.addEventListener('click', e => {
         const b = e.target.closest('[data-pc]'); if (!b) return;
         const sim = S.sims.get(b.dataset.sim) || foco();
-        if (b.dataset.pc === 'plegar') { if (movil()) plegadoMovil = !plegadoMovil; else plegadoGeneral = !plegadoGeneral; }
-        if (b.dataset.pc === 'chat' && sim) irAlChat(sim);
+        if (b.dataset.pc === 'plegar') plegado = !plegado;
+        if (b.dataset.pc === 'chat' && sim) { irAlChat(sim); if (movil()) plegado = true; }
         if (b.dataset.pc === 'examen') return repiteExamen();
-        if (b.dataset.pc === 'ir' && sim) { const p = siguientePaso(sim); if (p) llevame(sim, p); }
+        if (b.dataset.pc === 'ir' && sim) { const p = siguientePaso(sim); if (p) { plegado = true; llevame(sim, p); } }
         if (b.dataset.pc === 'terminar' && sim) { if (b.dataset.seguro) cierra(sim, 'terminar'); else { b.dataset.seguro = '1'; b.textContent = '¿Seguro? Toca otra vez'; return; } }
         pinta();
       });
+      burbuja = window.__pruebaBurbuja(panel, { asa: '.pc-fila' });
       document.body.appendChild(panel);
     }
     const sim = foco();
     let html;
     const fin = S.examen?.fin;
-    if (!sim && fin) {
-      html = `<div class="pc-fila"><span class="pc-ava">${fin.aprobado ? '🎓' : '⏱️'}</span><div class="pc-tit">Examen ${fin.aprobado ? 'aprobado' : 'no aprobado'}<small>Promedio ${fin.promedio} de 100${fin.aprobado ? ' · administración te asigna clientes reales' : ` · hace falta ${EXAMEN.aprueba}`}</small></div></div>
+    const MINI = '<button class="pc-mini" data-pc="plegar" aria-label="Minimizar a burbuja" title="Minimizar">–</button>';
+    if (plegado) html = bolaHtml(sim, fin);
+    else if (!sim && fin) {
+      html = `<div class="pc-fila"><span class="pc-ava">${fin.aprobado ? '🎓' : '⏱️'}</span><div class="pc-tit">Examen ${fin.aprobado ? 'aprobado' : 'no aprobado'}<small>Promedio ${fin.promedio} de 100${fin.aprobado ? ' · administración te asigna clientes reales' : ` · hace falta ${EXAMEN.aprueba}`}</small></div>${MINI}</div>
         ${fin.aprobado ? '' : '<div class="pc-acc"><button class="pp-ir" data-pc="examen">Repetir el examen</button></div>'}`;
     } else if (!sim) {
-      html = `<div class="pc-fila"><span class="pc-ava">⏳</span><div class="pc-tit">${S.bloqueo ? 'Práctica en pausa' : S.llegando ? 'Llega un cliente…' : 'Esperando al próximo cliente'}<small>${S.bloqueo ? esc(S.bloqueo) : `Nivel ${S.nivel} · los clientes entran por Leads`}</small></div></div>`;
+      html = `<div class="pc-fila"><span class="pc-ava">⏳</span><div class="pc-tit">${S.bloqueo ? 'Práctica en pausa' : S.llegando ? 'Llega un cliente…' : 'Esperando al próximo cliente'}<small>${S.bloqueo ? esc(S.bloqueo) : `Nivel ${S.nivel} · los clientes entran por Leads`}</small></div>${MINI}</div>`;
     } else {
       const esperando = !sim.respondido && !sim.escribiendo && !sim.comprobanteEn ? Date.now() - sim.ultimoCliente : 0;
       const paso = siguientePaso(sim), guia = sim.guia;
@@ -501,21 +500,36 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
       const pistaHtml = paso && pista ? `<div class="pc-pista">${GUIA[paso.id]?.[0] || ''}${guia === 'completa' ? ` <button class="pp-ir" data-pc="ir" data-sim="${sim.id}">Llévame</button>` : ''}</div>` : '';
       html = `<div class="pc-fila"><button class="pc-ava" data-pc="chat" data-sim="${sim.id}" title="Abrir el chat">${esc(sim.cliente.nombre.split(' ').map(x => x[0]).join('').slice(0, 2))}</button>
           <div class="pc-tit">${esc(sim.cliente.nombre)}<small>Nivel ${sim.nivel} · ${esc(sim.titulo || '')}${sim.escribiendo ? ' · <b class="pc-esc">escribiendo…</b>' : esperando > 20e3 ? ` · <b class="${esperando > sim.paciencia * 30e3 ? 'pc-tarde' : ''}">esperando tu respuesta ${reloj(esperando)}</b>` : ''}</small></div>
-          <button class="pc-mini" data-pc="plegar" aria-label="${plegado ? 'Mostrar' : 'Ocultar'} la guía">${plegado ? '▴' : '▾'}</button></div>
+          ${MINI}</div>
         ${otras.length ? `<div class="pc-otras">${otras.map(o => `<button data-pc="chat" data-sim="${o.id}">${esc(o.cliente.nombre.split(' ')[0])}${!o.respondido ? ' •' : ''}</button>`).join('')}</div>` : ''}
-        ${plegado ? (guia !== 'ninguna' && !(enChat && movil()) ? pistaHtml : '') + (S.aviso ? `<div class="pc-acc"><span class="pc-aviso">${esc(S.aviso)}</span></div>` : '') : `${guia !== 'ninguna' && sim.temperatura != null ? `<div class="pc-temp" title="Qué tan cerca está de comprar"><span>Interés del cliente</span><i style="--t:${sim.temperatura}%"></i></div>` : ''}
+        ${guia !== 'ninguna' && sim.temperatura != null ? `<div class="pc-temp" title="Qué tan cerca está de comprar"><span>Interés del cliente</span><i style="--t:${sim.temperatura}%"></i></div>` : ''}
         ${guia === 'ninguna' ? '<p class="pc-sola">Sin guía: atiéndelo como a un cliente real. Al final ves tu puntaje.</p>'
           : `<ol class="pc-pasos">${(S.pasos || []).map(p => `<li class="${sim.pasos[p.id] ? 'hecho' : p === paso ? 'ahora' : ''}">${esc(p.texto)}</li>`).join('')}</ol>
              ${pistaHtml}`}
-        <div class="pc-acc">${S.aviso ? `<span class="pc-aviso">${esc(S.aviso)}</span>` : ''}<button class="pc-terminar" data-pc="terminar" data-sim="${sim.id}">Terminar chat</button></div>`}`;
+        <div class="pc-acc">${S.aviso ? `<span class="pc-aviso">${esc(S.aviso)}</span>` : ''}<button class="pc-terminar" data-pc="terminar" data-sim="${sim.id}">Terminar chat</button></div>`;
     }
-    if (enExamen()) html = `<div class="pc-examen">⏱ Examen «hora pico» · quedan <b>${Math.max(0, Math.ceil((EXAMEN.min * 60e3 - (Date.now() - S.examen.inicio)) / 60e3))} min</b> · ${S.examen.lanzados} de ${EXAMEN.clientes} clientes</div>` + html;
+    if (enExamen() && !plegado) html = `<div class="pc-examen">⏱ Examen «hora pico» · quedan <b>${Math.max(0, Math.ceil((EXAMEN.min * 60e3 - (Date.now() - S.examen.inicio)) / 60e3))} min</b> · ${S.examen.lanzados} de ${EXAMEN.clientes} clientes</div>` + html;
     if (panel.dataset.html !== html) { panel.dataset.html = html; panel.innerHTML = html; }
-    // Con un chat abierto en el celular el chat baja lo que mide el panel PLEGADO (--pc-h); desplegado se superpone y no se mide.
-    if (enChat && movil() && !(sim && !plegado) && panel.offsetHeight) document.documentElement.style.setProperty('--pc-h', panel.offsetTop + panel.offsetHeight + 'px');
+    panel.classList.toggle('pb-bola', plegado);
+    burbuja.ubica();
     if (festeja) { panel.classList.remove('pc-festejo'); void panel.offsetWidth; panel.classList.add('pc-festejo'); }
     pintaEstado();
   }
+  // Burbuja: cara del cliente y nivel a la vista; un punto si algo espera y la pista del paso unos segundos al lado.
+  function bolaHtml(sim, fin) {
+    const cara = sim ? esc(sim.cliente.nombre.split(' ').map(x => x[0]).join('').slice(0, 2)) : fin ? (fin.aprobado ? '🎓' : '⏱️') : '⏳';
+    const marca = enExamen() ? `${Math.max(0, Math.ceil((EXAMEN.min * 60e3 - (Date.now() - S.examen.inicio)) / 60e3))}′` : `N${sim ? sim.nivel : S.nivel}`;
+    const esperando = sim && !sim.respondido && !sim.escribiendo && !sim.comprobanteEn ? Date.now() - sim.ultimoCliente : 0;
+    const paso = sim && siguientePaso(sim), guia = sim?.guia;
+    if (paso && (guia === 'completa' || (guia === 'pistas' && esperando > 60e3)) && sim.bocaDe !== paso.id) {
+      sim.bocaDe = paso.id; S.boca = GUIA[paso.id]?.[0] || null;
+      clearTimeout(bolaHtml.t); bolaHtml.t = setTimeout(() => { S.boca = null; pinta(); }, 7000);
+    }
+    const urge = esperando > 20e3 || abiertas().some(o => o !== sim && !o.respondido);
+    const boca = S.aviso ? esc(S.aviso) : S.boca;
+    return `<button class="pc-bola" data-pc="plegar" aria-label="Abrir la guía de la práctica" title="Toca para abrir · arrastra para mover">${cara}<b>${marca}</b>${urge ? '<i></i>' : ''}</button>${boca ? `<div class="pc-boca">${boca}</div>` : ''}`;
+  }
+  addEventListener('pointerdown', e => { if (!plegado && movil() && panel && !panel.contains(e.target) && !e.target.closest?.('#pc-nota')) { plegado = true; pinta(); } }, true);
   function avisa(t) { S.aviso = t; pinta(); clearTimeout(avisa.t); avisa.t = setTimeout(() => { S.aviso = null; pinta(); }, 9000); }
 
   /* ---------- Piel de WhatsApp: «en línea / escribiendo…» y burbuja de tres puntos ---------- */
@@ -646,7 +660,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     M.modal([
       { icono: '👋', titulo: 'Esta es tu práctica', texto: 'El CRM es donde atendemos a los clientes de Lotus 360. Aquí todo es inventado: toca lo que quieras, no le llega nada a ningún cliente real.' },
       { icono: '💬', titulo: 'Clientes que escriben de verdad', texto: 'Van a llegar clientes a <b>Leads</b> como en un día normal. Tocas <b>Atender</b> y se abre su WhatsApp aquí mismo. Escríbeles como a un cliente real: del otro lado responde una IA que actúa como cliente.' },
-      { icono: '🧭', titulo: 'Te guío mientras atiendes', texto: 'Abajo a la derecha ves el procedimiento y se tilda solo a medida que avanzas. En el nivel 1 te llevo a cada paso; después te ayudo cada vez menos.' },
+      { icono: '🧭', titulo: 'Te guío mientras atiendes', texto: 'En la burbuja verde está el procedimiento: tócala para verlo, arrástrala a donde no estorbe. Se tilda solo a medida que avanzas. En el nivel 1 te llevo a cada paso; después te ayudo cada vez menos.' },
       { icono: '🏆', titulo: 'Niveles', texto: 'Cada cliente termina con un puntaje. Con 2 ventas cerradas de 70 o más subes de nivel, y el próximo cliente insiste justo en lo que te costó.' },
     ], 'Que llegue el primero', () => empezar(false));
   }
@@ -659,7 +673,14 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
   /* ---------- Estilos ---------- */
   const css = document.createElement('style');
   css.textContent = `
-#pc-panel{position:fixed;right:16px;bottom:16px;z-index:99980;width:min(340px,calc(100vw - 32px));padding:10px 12px;border-radius:16px;background:color-mix(in srgb,var(--panel-solid,#1b1b1f) 92%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 16px 36px -16px rgba(0,0,0,.6);color:var(--txt,#eee);font:13px/1.4 system-ui,sans-serif}
+#pc-panel{z-index:99980;width:min(340px,calc(100vw - 24px));max-height:min(72vh,520px);overflow:auto;box-sizing:border-box;padding:10px 12px;border-radius:16px;background:color-mix(in srgb,var(--panel-solid,#1b1b1f) 92%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 16px 36px -16px rgba(0,0,0,.6);color:var(--txt,#eee);font:13px/1.4 system-ui,sans-serif}
+#pc-panel.pb-bola{width:52px;height:52px;padding:0;overflow:visible;border:0;border-radius:50%;background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none}
+#pc-panel .pc-bola{position:relative;display:grid;place-items:center;width:100%;height:100%;padding:0;border:0;border-radius:50%;background:#25d366;color:#05301a;font:700 15px system-ui,sans-serif;box-shadow:0 10px 24px -8px rgba(0,0,0,.65)}
+#pc-panel .pc-bola b{position:absolute;right:-3px;bottom:-3px;min-width:22px;padding:1px 4px;box-sizing:border-box;border-radius:999px;background:var(--panel-solid,#1b1b1f);color:var(--txt,#eee);font-size:10.5px;line-height:1.4;box-shadow:0 0 0 1px var(--line2,rgba(255,255,255,.2))}
+#pc-panel .pc-bola i{position:absolute;top:0;right:0;width:12px;height:12px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px var(--panel-solid,#1b1b1f)}
+#pc-panel .pc-boca{position:absolute;top:50%;transform:translateY(-50%);width:max-content;max-width:min(230px,calc(100vw - 90px));padding:7px 10px;border-radius:12px;background:var(--panel-solid,#1b1b1f);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 10px 24px -10px rgba(0,0,0,.6);font-size:12.5px;line-height:1.35;pointer-events:none}
+#pc-panel[data-lado=der] .pc-boca{right:calc(100% + 8px)}#pc-panel[data-lado=izq] .pc-boca{left:calc(100% + 8px)}
+#pc-panel .pc-fila{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
 #pc-panel.pc-festejo{animation:pc-pulso .7s}
 @keyframes pc-pulso{30%{box-shadow:0 0 0 4px rgba(37,211,102,.45),0 16px 36px -16px rgba(0,0,0,.6)}}
 #pc-panel .pc-fila{display:flex;align-items:center;gap:10px}
@@ -708,11 +729,9 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
 #pc-nota button{font:inherit;border-radius:10px;padding:9px 16px;cursor:pointer}
 #pc-nota .pc-cargando{width:38px;height:38px;margin:4px auto 14px;border-radius:50%;border:4px solid var(--line2,rgba(255,255,255,.14));border-top-color:#25d366;animation:pc-gira 1s linear infinite}
 @keyframes pc-gira{to{transform:rotate(1turn)}}
-@media(max-width:760px){#pc-panel{left:10px;right:10px;bottom:calc(86px + env(safe-area-inset-bottom,0px));width:auto}body:has(>.mfab) #pc-panel{bottom:calc(144px + env(safe-area-inset-bottom,0px))}body.pc-wa:not(.pc-chat) .main{padding-bottom:calc(170px + env(safe-area-inset-bottom,0px))}#pc-panel .pc-pasos{max-height:24dvh}#pc-panel .pc-mini{min-width:44px;min-height:44px}#pc-nota .pc-cols{grid-template-columns:1fr}
+@media(max-width:760px){#pc-panel .pc-pasos{max-height:24dvh}body:is(.teclado,.menu-abierto) #pc-panel{display:none}#pc-panel .pc-mini{min-width:44px;min-height:44px}#pc-nota .pc-cols{grid-template-columns:1fr}
 #pc-nota .pc-caja{max-height:calc(100dvh - 32px);padding:16px}#pc-nota .pc-caja:has(.pc-acc){padding-bottom:0}#pc-nota .pc-acc{position:sticky;bottom:0;margin:12px -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--panel-solid,#1b1b1f)}}
 @media(prefers-reduced-motion:reduce){#pc-panel.pc-festejo,#pc-nota .pc-cargando{animation:none}}
-@media(min-width:761px){body.pc-sec #sec-wa-bandeja{padding-right:356px}}
-@media(max-width:760px){body.pc-chat #pc-panel{top:env(safe-area-inset-top,0px);bottom:auto;max-height:36dvh;overflow:auto}body.pc-chat #pc-panel .pc-pasos{max-height:none}body.pc-chat .dm-shell.ver-chat{margin-top:var(--pc-h,76px);height:calc(100dvh - var(--pc-h,76px))}body.pc-chat.teclado #pc-panel{display:none}body.pc-chat.teclado .dm-shell.ver-chat{margin-top:0;height:100dvh}}
 body.pc-wa #sec-wa-bandeja #wb-sub,body.pc-wa #sec-wa-bandeja .wb-por,body.pc-wa #sec-wa-bandeja #wb-recargar{display:none}
 body.pc-wa #sec-wa-bandeja .wa-cab{background:var(--wa-cabecera,#202c33)}
 body.pc-wa #sec-wa-bandeja #wb-head{background:var(--wa-cabecera,#202c33);border-bottom:1px solid rgba(134,150,160,.15)}

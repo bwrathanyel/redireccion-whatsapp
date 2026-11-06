@@ -29,7 +29,7 @@
     { tema: 'Ventas y abonos', titulo: 'Cada venta', sec: 'mis-ventas', sel: '#mv-cards', texto: 'Una tarjeta por venta. Ricardo Díaz ya pagó la mitad de su viaje y le quedan <b>$325</b> por pagar.' },
     { tema: 'Ventas y abonos', titulo: 'Registrar un abono', sec: 'mis-ventas', foco: 'Registrar abono', texto: 'Cada pago parcial se anota aquí: un monto menor o igual al saldo, y ves cuánto <b>quedará</b> antes de confirmar. Administración revisa el comprobante; recién ahí cuenta.' },
     { tema: 'Lyra y tareas', portada: true, icono: '✨', titulo: 'Lyra y tareas', texto: 'Tu asistente y tu lista del día.' },
-    { tema: 'Lyra y tareas', titulo: 'Lyra', sec: 'lyra', texto: 'Pídele cosas con palabras normales: «¿cómo va la reserva de María González?» o «deja una nota a María». Se abre con este círculo o con <b>Ctrl+Z</b> fuera de un campo.' },
+    { tema: 'Lyra y tareas', titulo: 'Lyra', sec: 'lyra', texto: 'Pídele cosas con palabras normales: «¿cómo va la reserva de María González?» o «deja una nota a María». Se abre desde el menú lateral o con <b>Ctrl+Z</b> fuera de un campo.' },
     { tema: 'Lyra y tareas', titulo: 'Tareas', sec: 'tareas', sel: '#sec-tareas', texto: 'Lo que te asignaron y tus recordatorios. Empieza el día por aquí.' },
     { tema: 'Fin', portada: true, icono: '🏁', titulo: 'Ahora tú', texto: 'Repite el caso completo: atiende a un cliente, cotízale, ciérrale la venta y registra su pago. Si te trabas, pregúntale a Lyra.', practicar: true },
   ];

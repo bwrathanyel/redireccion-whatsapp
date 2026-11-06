@@ -35549,6 +35549,7 @@ function abrirMenuMovil() {
 // cerrarDetalleBoleteria) -- lo usa activateSection, que empuja su propia
 // entrada justo después y no puede esperar al popstate asíncrono de un
 // history.back() para saber cuál se consumió.
+window.__pruebaCerrarMenu = () => cerrarMenuMovil('silencioso');
 function cerrarMenuMovil(modo) {
   if (!menuAbierto()) return;
   document.body.classList.remove('menu-abierto');

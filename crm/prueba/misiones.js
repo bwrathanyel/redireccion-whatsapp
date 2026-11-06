@@ -24,7 +24,7 @@
         ok: d => esLead(d, 'voucher_preparar') },
       { id: 'tareas', titulo: 'Revisa tus tareas', texto: 'Tu día: lo que te asignaron y tus recordatorios. Toca una tarea para ver sus pasos.', sec: 'tareas',
         ok: d => esLead(d, 'tarea_detalle') },
-      { id: 'lyra', titulo: 'Pídele ayuda a Lyra', texto: 'Abre a Lyra (círculo abajo a la izquierda o Ctrl+Z) y pregúntale: «¿cómo va la reserva de María González?». Sirve para cualquier duda del CRM.', sec: null,
+      { id: 'lyra', titulo: 'Pídele ayuda a Lyra', texto: 'Abre a Lyra (en el menú lateral ☰ o con Ctrl+Z) y pregúntale: «¿cómo va la reserva de María González?». Sirve para cualquier duda del CRM.', sec: null,
         ok: d => d.tipo === 'fn' && /^asistente/.test(d.nombre) && !d.args?.accion },
     ],
     admin: [
@@ -97,7 +97,7 @@
       ? 'Eres el administrador del CRM de Lotus 360: verificas pagos, repartes clientes y ves al equipo. Todo es inventado: toca lo que quieras, no le llega nada a ningún cliente.'
       : 'El CRM es donde atendemos a los clientes de Lotus 360. Todo es inventado: toca lo que quieras, no le llega nada a ningún cliente.' },
     { icono: '🪜', titulo: 'Vamos de a poco', texto: 'Empiezas con una sección. Cada tarea que terminas abre la siguiente.' },
-    { icono: '🎯', titulo: 'Tu guía', texto: 'Abajo está tu tarea. <b>Llévame</b> te muestra dónde ir; la <b>i</b> la explica otra vez y deja <b>Saltar</b> o <b>Reiniciar</b>.' },
+    { icono: '🎯', titulo: 'Tu guía', texto: 'Tu tarea vive en una burbuja: arrástrala a donde no estorbe y tócala para abrirla. <b>Llévame</b> te muestra dónde ir; adentro también puedes <b>Saltar</b> o <b>Reiniciar</b>.' },
   ];
   const CIERRE = {
     asesor: 'Repite tú solo el caso completo: atiende a un cliente, abre su ficha, ármale la cotización en PDF, registra su pago y genérale el voucher. Si te trabas, pregúntale a Lyra.',
@@ -135,8 +135,12 @@
     + `${s} #prueba-panel,${s} #prueba-panel .pp-fila,${s} #prueba-panel .pp-avance,${s} #prueba-panel .pp-detalle{transition:none}${s} #prueba-panel .pp-fila button.pp-ir,${s} #prueba-panel.festejo .pp-anillo,${s} #sidebar-nav .pp-ilumina,${s} #sidebar-nav .pp-nuevo-item{animation:none}`;
   const css = document.createElement('style');
   css.textContent = `
-#prueba-panel{position:fixed;left:50%;bottom:calc(16px + var(--bi-h,0px));transform:translateX(-50%);z-index:99980;width:min(460px,calc(100vw - 32px));color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
-#prueba-panel .pp-fila{display:flex;align-items:center;gap:10px;padding:5px 5px 5px 6px;border-radius:999px;background:color-mix(in srgb,var(--panel-solid,#1b1b1f) 84%,transparent);-webkit-backdrop-filter:blur(12px) saturate(1.2);backdrop-filter:blur(12px) saturate(1.2);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 12px 30px -14px rgba(0,0,0,.6)}
+#prueba-panel{z-index:99980;display:flex;flex-direction:column;width:min(340px,calc(100vw - 24px));max-height:min(72vh,480px);overflow:auto;border-radius:16px;background:var(--panel-solid,#1b1b1f);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 16px 36px -14px rgba(0,0,0,.65);color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
+#prueba-panel.pb-bola{width:52px;height:52px;overflow:visible;border-radius:50%}
+#prueba-panel.pb-bola :is(.pp-tit,.pp-fila .pp-acc,.pp-detalle){display:none}
+#prueba-panel.pb-bola .pp-fila{justify-content:center;padding:6px;border:0}
+#prueba-panel .pp-fila{order:-1;flex:none;display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+#prueba-panel.pp-abierto .pp-fila{border-bottom:1px solid var(--line2,rgba(255,255,255,.14))}
 #prueba-panel .pp-anillo{position:relative;flex:none;display:grid;place-items:center;width:38px;height:38px}
 #prueba-panel .pp-anillo svg{position:absolute;inset:0;transform:rotate(-90deg)}
 #prueba-panel .pp-anillo circle{fill:none;stroke-width:3}
@@ -144,16 +148,15 @@
 #prueba-panel .pp-avance{stroke:#ffb020;stroke-linecap:round;stroke-dasharray:100;transition:stroke-dashoffset .6s cubic-bezier(.22,1,.36,1),stroke .4s}
 #prueba-panel.pp-hecho .pp-avance{stroke:#4fbf7f}
 #prueba-panel .pp-anillo b{font-size:10.5px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-#prueba-panel .pp-tit{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13.5px}
-#prueba-panel .pp-tit small{display:block;overflow:hidden;text-overflow:ellipsis;font-weight:400;font-size:11.5px;color:var(--muted,#aaa)}
+#prueba-panel .pp-tit{flex:1;min-width:0;font-weight:600;font-size:13.5px}
+#prueba-panel .pp-tit small{display:block;font-weight:400;font-size:11.5px;color:var(--muted,#aaa)}
 #prueba-panel .pp-acc{display:flex;gap:6px;align-items:center;flex:none}
 #prueba-panel button,#prueba-modal button{font:inherit;font-size:13px;border-radius:10px;padding:7px 12px;cursor:pointer;border:1px solid var(--line2,rgba(255,255,255,.14));background:transparent;color:inherit}
 #prueba-panel .pp-fila button{border-radius:999px;padding:7px 14px}
 #prueba-panel button.pp-ir,#prueba-modal button.pp-ir{background:#ffb020;color:#1a1200;border-color:#ffb020;font-weight:600}
-#prueba-panel .pp-fila button.pp-info{display:grid;place-items:center;width:34px;height:34px;padding:0;font:italic 700 15px Georgia,serif;color:var(--muted,#bbb)}
-#prueba-panel.pp-abierto .pp-info{border-color:#ffb020;color:#ffb020}
-#prueba-panel .pp-detalle{position:absolute;left:0;right:0;bottom:calc(100% + 8px);padding:14px 16px;border-radius:16px;background:var(--panel-solid,#1b1b1f);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 18px 40px -18px rgba(0,0,0,.7);opacity:0;visibility:hidden;transform:translateY(6px);pointer-events:none;transition:opacity .25s ease,transform .35s cubic-bezier(.22,1,.36,1),visibility 0s linear .35s}
-#prueba-panel.pp-abierto .pp-detalle{opacity:1;visibility:visible;transform:none;pointer-events:auto;transition-delay:0s}
+#prueba-panel .pp-fila button.pp-info{display:grid;place-items:center;width:34px;height:34px;padding:0;font:600 17px system-ui,sans-serif;color:var(--muted,#bbb);border-color:transparent}
+#prueba-panel .pp-detalle{display:none;padding:10px 12px 12px}
+#prueba-panel.pp-abierto .pp-detalle{display:block}
 #prueba-panel h4{margin:0 0 4px;font-size:15px}
 #prueba-panel .pp-detalle p{margin:0 0 12px;color:var(--muted,#aaa)}
 #prueba-panel .pp-detalle .pp-acc{flex-wrap:wrap}
@@ -162,11 +165,6 @@
 #prueba-panel .pp-fila button.pp-ir{animation:pp-luz .9s ease-in-out infinite}
 @keyframes pp-luz{50%{box-shadow:0 0 0 3px rgba(255,176,32,.35),0 0 18px 4px rgba(255,176,32,.8);filter:brightness(1.2)}}
 @keyframes pp-pulso{40%{transform:scale(1.14);filter:drop-shadow(0 0 8px rgba(79,191,127,.7))}}
-body.prueba-guiada .main{padding-bottom:88px}
-@media (min-width:761px){body:has(.drawer.open) #prueba-panel{left:16px;transform:none;width:min(400px,calc(100vw - 32px))}}
-@media (min-width:761px) and (pointer:fine){#prueba-panel{transition:scale .2s ease}#prueba-panel .pp-fila{cursor:grab;user-select:none;transition:box-shadow .2s ease}#prueba-panel .pp-fila button{cursor:pointer}#prueba-panel.pp-arrastra{scale:1.03}#prueba-panel.pp-arrastra .pp-fila{cursor:grabbing;box-shadow:0 24px 48px -16px rgba(0,0,0,.75)}}
-#prueba-panel.pp-abajo .pp-detalle{bottom:auto;top:calc(100% + 8px);transform:translateY(-6px)}
-#prueba-panel.pp-abierto.pp-abajo .pp-detalle{transform:none}
 #sidebar-nav .pp-ilumina{animation:pp-ilumina 1s ease-in-out 2}
 @keyframes pp-ilumina{50%{background:rgba(255,176,32,.16);box-shadow:inset 0 0 0 1px rgba(255,176,32,.6),0 0 18px -4px rgba(255,176,32,.55)}}
 #sidebar-nav .pp-nuevo-item{animation:pp-aparece .6s cubic-bezier(.22,1,.36,1)}
@@ -221,18 +219,14 @@ body.prueba-guiada #prueba-candado{display:block}
 #prueba-inicio .pi-cargo:hover,#prueba-inicio .pi-cargo:focus-visible{border-color:#ffb020;background:rgba(255,176,32,.08);outline:none}
 #forgotLink,#claimLink,#loginPrueba{display:none!important}
 @media (max-width:760px){
-  #prueba-panel{left:10px;right:84px;width:auto;transform:none;bottom:calc(18px + env(safe-area-inset-bottom));font-size:13px}
-  body.prueba-lyra #prueba-panel{left:76px}
+  #prueba-panel{font-size:13px}
   body:has(input:focus,textarea:focus,select:focus) #prueba-panel{display:none}
-  body:has(#drawer.open) #prueba-panel{left:10px;right:10px}
-  body.prueba-guiada #drawer.open{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-  body.prueba-guiada .main{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
   #prueba-modal{background:rgba(8,8,12,.92);-webkit-backdrop-filter:none;backdrop-filter:none}
-  #prueba-panel .pp-fila{gap:8px;padding:3px 3px 3px 4px;-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--panel-solid,#1b1b1f)}
+  #prueba-panel .pp-fila{gap:8px;padding:6px 8px}
   #prueba-panel .pp-tit{font-size:13px}
   #prueba-panel button,#prueba-modal button{min-height:44px;padding:8px 14px;font-size:14px}
   #prueba-panel .pp-fila button.pp-info{width:44px;height:44px}
-  #prueba-panel .pp-detalle{bottom:calc(100% + 6px);padding:10px 12px 6px;border-radius:14px;max-height:min(46vh,320px);overflow:auto;overscroll-behavior:contain}
+  #prueba-panel .pp-detalle{padding:10px 12px 8px}
   #prueba-panel .pp-detalle h4{margin-bottom:3px;font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--muted,#aaa)}
   #prueba-panel .pp-detalle p{font-size:13.5px;line-height:1.4;margin-bottom:6px;color:var(--txt,#eee)}
   #prueba-panel .pp-detalle .pp-acc{gap:2px;margin:0 -6px}
@@ -452,7 +446,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     const s = scroller(el); if (!s) return Promise.resolve();
     const r = el.getBoundingClientRect(), p = panelGuia()?.getBoundingClientRect();
     const sr = s === document.body || s === document.documentElement ? { top: 0, bottom: innerHeight } : s.getBoundingClientRect();
-    const arriba = Math.max(sr.top, innerWidth <= 760 ? 72 : 16), abajo = Math.min(sr.bottom, p && p.width > innerWidth * .6 ? p.top - 12 : innerHeight), alto = abajo - arriba;
+    const arriba = Math.max(sr.top, innerWidth <= 760 ? 72 : 16), abajo = Math.min(sr.bottom, p && p.width > innerWidth * .6 && p.top > innerHeight * .5 ? p.top - 12 : innerHeight), alto = abajo - arriba;
     // Las medidas salen en píxeles de pantalla y scrollTop va en los del body con zoom.
     const delta = (r.height > alto * .8 ? r.top - arriba - 8 : r.top + r.height / 2 - (arriba + alto / 2)) / (parseFloat(getComputedStyle(document.body).zoom) || 1);
     const desde = s.scrollTop, hasta = limita(desde + delta, 0, s.scrollHeight - s.clientHeight);
@@ -546,6 +540,8 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     if (ir && k !== 'lyra' && window.__pruebaIr && !await viaja(k)) return false;
     const fab = document.getElementById('lyra-fab');
     const el = k === 'lyra' ? (fab?.offsetParent ? fab : document.getElementById('lyra-dock')) : document.querySelector(`#sidebar-nav [data-sec="${k}"]`);
+    // Lyra quedó dentro del menú lateral: con el menú del celular cerrado no hay nada que señalar en pantalla.
+    if (k === 'lyra' && !ir && el && el.getBoundingClientRect().right <= 0) return false;
     if (el && ir && k === 'lyra') { const t = turno; await despeja(el, t); if (t !== turno) return false; }
     if (el && ir && (k === 'lyra' || !window.__pruebaIr)) el.click();
     if (foco || opc.sel) return guiar(() => objetivoDe(opc.sel, foco), opc);
@@ -573,18 +569,19 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
   window.__pruebaMisiones = { terminadas: () => !enLogin() && !presentando() && !!estado.bienvenida && !actual(), modal,
     vista: s => { if (!estado.vistas.includes(s)) { estado.vistas.push(s); guarda(estado); } } };
 
-  /* ---------- Panel: píldora con la tarea; la explicación se despliega encima ---------- */
-  // abierto: la explicación a la vista. Se abre sola una vez por tarea nueva; se cierra con Llévame, «i» o tocando fuera.
-  let panel = null, abierto = false, detalleDe = null, pintado = '';
-  const INFO = '<button class="pp-info" data-acc="info" aria-label="Ver la explicación de la tarea" title="Ver la explicación">i</button>';
+  /* ---------- Panel: burbuja con el avance; al tocarla se despliega la tarea ---------- */
+  // abierto: la tarea a la vista. Se abre sola una vez por tarea nueva; vuelve a burbuja con Llévame, «–» o tocando fuera.
+  let burbuja = null, panel = null, abierto = false, detalleDe = null, pintado = '';
+  const INFO = '<button class="pp-info" data-acc="info" aria-label="Minimizar a burbuja" title="Minimizar">–</button>';
   function pinta(festejo) {
     if (enLogin() || !estado.bienvenida || directo() || window.__pruebaClientes?.activo()) { panel?.remove(); panel = null; pintado = ''; return; }
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'prueba-panel'; panel.setAttribute('aria-label', 'Tu práctica');
-      panel.innerHTML = `<div class="pp-detalle" aria-live="polite"></div><div class="pp-fila"><span class="pp-anillo"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="pp-pista" cx="18" cy="18" r="15.5"/><circle class="pp-avance" cx="18" cy="18" r="15.5" pathLength="100" style="stroke-dashoffset:100"/></svg><b></b></span><span class="pp-tit" aria-live="polite"></span><span class="pp-acc"></span></div>`;
+      panel.innerHTML = `<div class="pp-detalle" aria-live="polite"></div><div class="pp-fila"><span class="pp-anillo" role="button" tabindex="0" aria-label="Abrir tu tarea"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="pp-pista" cx="18" cy="18" r="15.5"/><circle class="pp-avance" cx="18" cy="18" r="15.5" pathLength="100" style="stroke-dashoffset:100"/></svg><b></b></span><span class="pp-tit" aria-live="polite"></span><span class="pp-acc"></span></div>`;
       panel.addEventListener('click', e => {
-        const b = e.target.closest('button[data-acc]'); if (!b) return;
+        const b = e.target.closest('button[data-acc]');
+        if (!b) { if (panel.classList.contains('pb-bola')) { abierto = true; pinta(); } return; }
         const mi = actual(), acc = b.dataset.acc;
         abierto = acc === 'info' && !abierto;
         if (acc === 'ir' && mi) destaca(clave(mi), true, mi.foco, { dura: 8000, sel: mi.sel });
@@ -593,7 +590,8 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
         if (acc === 'reiniciar' && confirm('¿Empezar de cero? Se borra lo que hiciste en la práctica.')) { mide('mision_reiniciar'); try { sessionStorage.removeItem(CLAVE); } catch { /* nada que limpiar */ } location.reload(); }
         pinta();
       });
-      arrastrable(panel);
+      panel.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && panel.classList.contains('pb-bola')) { e.preventDefault(); abierto = true; pinta(); } });
+      burbuja = window.__pruebaBurbuja(panel, { asa: '.pp-fila', alMover: remide });
       document.body.appendChild(panel);
     }
     const ls = lista(), hechas = ls.filter(x => estado.hechas.includes(x.id)).length, mi = actual();
@@ -619,73 +617,10 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     panel.querySelector('.pp-avance').style.strokeDashoffset = 100 - (ls.length ? hechas / ls.length * 100 : 0);
     panel.classList.toggle('pp-hecho', !!estado.pausa || !mi);
     panel.classList.toggle('pp-abierto', abierto && !!det);
+    panel.classList.toggle('pb-bola', !abierto && !estado.pausa);
     if (festejo) { panel.classList.remove('festejo'); void panel.offsetWidth; panel.classList.add('festejo'); }
-    ubica();
+    burbuja.ubica();
   }
-  /* ---------- Píldora movible (solo desktop con mouse) ---------- */
-  // Posición en píxeles de pantalla; el panel vive en body{zoom:.9}, así que left/top/translate van divididos por el zoom.
-  const POS = 'prueba-pos', movible = () => matchMedia('(min-width:761px) and (pointer:fine)').matches, zoomBody = () => parseFloat(getComputedStyle(document.body).zoom) || 1;
-  function ubica() {
-    if (!panel || panel.classList.contains('pp-arrastra')) return null;
-    let p = null; try { p = movible() && JSON.parse(ss(POS)); } catch { /* posición corrupta: vuelve a la de siempre */ }
-    const s = panel.style, fila = panel.querySelector('.pp-fila');
-    panel.classList.toggle('pp-movido', !!p); fila.title = movible() ? 'Arrastra para moverla · doble clic para volver a su lugar' : '';
-    if (!p) { s.left = s.top = s.bottom = s.transform = ''; panel.classList.remove('pp-abajo'); return null; }
-    // offsetWidth y no el rect: al soltar todavía corre la transición de scale y el rect sale inflado.
-    const z = zoomBody(), w = panel.offsetWidth * z, h = panel.offsetHeight * z;
-    const x = Math.round(Math.min(Math.max(8, p.x), innerWidth - w - 8)), y = Math.round(Math.min(Math.max(8, p.y), innerHeight - h - 8));
-    Object.assign(s, { left: x / z + 'px', top: y / z + 'px', bottom: 'auto', transform: 'none' });
-    panel.classList.toggle('pp-abajo', y < panel.querySelector('.pp-detalle').getBoundingClientRect().height + 16);
-    return { left: x, top: y };
-  }
-  // FLIP: arranca donde estaba y se asienta en su lugar nuevo con un rebote corto; la flecha de la guía lo acompaña.
-  function asienta(antes, despues) {
-    const s = panel.style, z = zoomBody();
-    if (quieto() || !despues) return remide();
-    s.transition = 'none'; s.translate = `${(antes.left - despues.left) / z}px ${(antes.top - despues.top) / z}px`;
-    void panel.offsetWidth;
-    s.transition = 'translate .38s cubic-bezier(.2,1.3,.4,1),scale .2s ease'; s.translate = '';
-    const t0 = performance.now(), sigue = () => { remide(); if (performance.now() - t0 < 420) requestAnimationFrame(sigue); else s.transition = ''; };
-    requestAnimationFrame(sigue);
-  }
-  function arrastrable(el) {
-    let a = null;
-    const mueve = () => { a.raf = 0; el.style.translate = `${a.dx / a.z}px ${a.dy / a.z}px`; remide(); };
-    el.addEventListener('pointerdown', e => {
-      if (e.button || !movible() || !e.target.closest('.pp-fila') || e.target.closest('button')) return;
-      a = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0, vivo: false, raf: 0 };
-      el.setPointerCapture(e.pointerId);
-    });
-    el.addEventListener('pointermove', e => {
-      if (!a || e.pointerId !== a.id) return;
-      a.dx = e.clientX - a.x0; a.dy = e.clientY - a.y0;
-      // Umbral de 4 px: un click con temblor de mano no se convierte en arrastre.
-      if (!a.vivo) {
-        if (Math.hypot(a.dx, a.dy) < 4) return;
-        const r = el.getBoundingClientRect(), z = zoomBody();
-        a.vivo = true; a.r = r; a.z = z;
-        Object.assign(el.style, { transition: quieto() ? 'none' : 'scale .2s ease', left: r.left / z + 'px', top: r.top / z + 'px', bottom: 'auto', transform: 'none' });
-        el.classList.add('pp-movido', 'pp-arrastra');
-      }
-      if (!a.raf) a.raf = requestAnimationFrame(mueve);
-    });
-    const suelta = e => {
-      if (!a || e.pointerId !== a.id) return;
-      const b = a; a = null; cancelAnimationFrame(b.raf);
-      if (!b.vivo) return;
-      const antes = { left: b.r.left + b.dx, top: b.r.top + b.dy };
-      ss(POS, JSON.stringify({ x: Math.round(antes.left), y: Math.round(antes.top) }));
-      el.classList.remove('pp-arrastra'); el.style.translate = ''; el.style.transition = '';
-      asienta(antes, ubica());
-    };
-    el.addEventListener('pointerup', suelta); el.addEventListener('pointercancel', suelta);
-    el.addEventListener('dblclick', e => {
-      if (!movible() || e.target.closest('button') || !ss(POS)) return;
-      const r = el.getBoundingClientRect(); ss(POS, null); ubica();
-      asienta(r, el.getBoundingClientRect());
-    });
-  }
-  addEventListener('resize', () => ubica(), { passive: true });
   addEventListener('pointerdown', e => { if (abierto && panel && !panel.contains(e.target) && !e.target.closest?.('#prueba-modal')) { abierto = false; pinta(); } }, true);
   function registra(d) {
     const mi = actual();

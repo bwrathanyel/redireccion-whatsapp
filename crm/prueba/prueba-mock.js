@@ -244,7 +244,8 @@
       if (p.startsWith('/functions/v1/')) return ejecuta('fn', p.split('/')[3], body);
       if (p.startsWith('/storage/v1/')) {
         if (p.includes('/object/sign/')) { const ruta = p.split('/object/sign/')[1]; return resp({ signedURL: `/object/public/${ruta}`, signedUrl: `/object/public/${ruta}` }); }
-        if (method === 'GET') return fotoResp(p);
+        if (method === 'GET') return archivoResp(p);
+        guardaArchivo(p, init?.body, headers);
         return resp({ Key: p });
       }
       avisa(`${method} ${p}`);
@@ -269,6 +270,34 @@
     const r = /\bh\/\d+-\d+\.jpg/.exec(s); return r ? `prueba-fotos/${r[0]}` : `prueba-fotos/f${hash(s) % NFOTOS + 1}.jpg`;
   };
   const fotoResp = p => origFetch(fotoLocal(p));
+
+  /* ---------- Storage en memoria: lo subido se vuelve a bajar tal cual (antes un PDF volvía como foto) ---------- */
+  const archivos = new Map();
+  const claveArchivo = p => decodeURIComponent(p.replace(/^\/storage\/v1\/object\/(?:public\/|authenticated\/)?/, ''));
+  function guardaArchivo(p, cuerpo, headers) {
+    const bin = cuerpo instanceof FormData ? [...cuerpo.values()].find(v => v instanceof Blob)
+      : cuerpo instanceof Blob ? cuerpo
+      : cuerpo instanceof ArrayBuffer || ArrayBuffer.isView(cuerpo) ? new Blob([cuerpo], { type: headers.get('content-type') || '' }) : null;
+    if (bin) archivos.set(claveArchivo(p), bin);
+  }
+  function archivoResp(p) {
+    const clave = claveArchivo(p), a = archivos.get(clave);
+    if (a) return new Response(a, { status: 200, headers: { 'content-type': a.type || 'application/octet-stream' } });
+    return /\.pdf$/i.test(clave) ? new Response(pdfEjemplo(clave.split('/').pop()), { status: 200, headers: { 'content-type': 'application/pdf' } }) : fotoResp(p);
+  }
+  // Los documentos sembrados en los datos de ejemplo no tienen archivo: se sirve un PDF válido de una página.
+  function pdfEjemplo(nombre) {
+    const limpio = String(nombre).replace(/[^\x20-\x7e]/g, '?').replace(/([\\()])/g, '\\$1');
+    const texto = `BT /F1 16 Tf 60 740 Td (Documento de ejemplo - modo prueba) Tj /F1 11 Tf 0 -26 Td (${limpio}) Tj ET`;
+    const objetos = ['<</Type/Catalog/Pages 2 0 R>>', '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+      '<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>',
+      `<</Length ${texto.length}>>\nstream\n${texto}\nendstream`, '<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>'];
+    let pdf = '%PDF-1.4\n';
+    const pos = objetos.map((o, i) => { const n = pdf.length; pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; return n; });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objetos.length + 1}\n0000000000 65535 f \n${pos.map(n => `${String(n).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<</Size ${objetos.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([pdf], { type: 'application/pdf' });
+  }
   // Adjuntos del chat (blob del practicante, comprobante del cliente, nota de voz): se cambian apenas se asigna la URL firmada,
   // sin esperar al error de red de demo.invalid (tarda y el chat se repinta en el medio).
   new MutationObserver(ms => {
