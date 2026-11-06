@@ -135,7 +135,7 @@
     + `${s} #prueba-panel,${s} #prueba-panel .pp-fila,${s} #prueba-panel .pp-avance,${s} #prueba-panel .pp-detalle{transition:none}${s} #prueba-panel .pp-fila button.pp-ir,${s} #prueba-panel.festejo .pp-anillo,${s} #sidebar-nav .pp-ilumina,${s} #sidebar-nav .pp-nuevo-item{animation:none}`;
   const css = document.createElement('style');
   css.textContent = `
-#prueba-panel{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99980;width:min(460px,calc(100vw - 32px));color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
+#prueba-panel{position:fixed;left:50%;bottom:calc(16px + var(--bi-h,0px));transform:translateX(-50%);z-index:99980;width:min(460px,calc(100vw - 32px));color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
 #prueba-panel .pp-fila{display:flex;align-items:center;gap:10px;padding:5px 5px 5px 6px;border-radius:999px;background:color-mix(in srgb,var(--panel-solid,#1b1b1f) 84%,transparent);-webkit-backdrop-filter:blur(12px) saturate(1.2);backdrop-filter:blur(12px) saturate(1.2);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 12px 30px -14px rgba(0,0,0,.6)}
 #prueba-panel .pp-anillo{position:relative;flex:none;display:grid;place-items:center;width:38px;height:38px}
 #prueba-panel .pp-anillo svg{position:absolute;inset:0;transform:rotate(-90deg)}

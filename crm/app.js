@@ -3245,7 +3245,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
-    setupTareasV2, setupTecladoMovil, setupEstadoBody,
+    setupTareasV2, setupTecladoMovil, setupEstadoBody, setupBarraInf,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -3336,7 +3336,7 @@ async function loadStats() {
   // Para asesor el badge de Leads muestra pendientes del inbox (actualizarBadgeLeads),
   // no el total histórico -- no pisarlo acá.
   // El total histórico (50k+) no decía nada: el admin ve los que esperan primer contacto.
-  if (ROL !== 'asesor') document.getElementById('nav-lead-count').textContent = Number.isFinite(STATS.por_atender) ? fmt(STATS.por_atender) : '—';
+  if (ROL !== 'asesor') { document.getElementById('nav-lead-count').textContent = Number.isFinite(STATS.por_atender) ? fmt(STATS.por_atender) : '—'; biBadge('bi-badge-leads', STATS.por_atender); }
 }
 
 /* ---------- KPIs ---------- */
@@ -8442,6 +8442,7 @@ function actualizarBadgeLeads(pendientes) {
   // En móvil el menú está cerrado casi siempre: el pendiente se avisa con un
   // punto sobre la hamburguesa, que es lo único visible en esa pantalla.
   document.getElementById('menu-dot')?.classList.toggle('show', pendientes > 0);
+  biBadge('bi-badge-leads', pendientes);
   if ('setAppBadge' in navigator) { (pendientes > 0 ? navigator.setAppBadge(pendientes) : navigator.clearAppBadge()).catch(() => {}); }
 }
 
@@ -15028,6 +15029,7 @@ function actualizarBadgeCorreo() {
     b.textContent = n > 99 ? '99+' : String(n);
     b.style.display = n ? '' : 'none';
   });
+  biBadge('bi-badge-bandeja', n);
 }
 async function cargarContadoresCorreo() {
   if (!CORREO_CUENTA_ACTIVA) return;
@@ -35080,6 +35082,7 @@ function ocultarHeadersVaciosMenu() {
   NAV_VIS = null;
   actualizarPadresNav();
   ocultarHeadersVacios('sidebar-nav', '.nav-item', '.nav-label');
+  pintarBarraInf();
 }
 // El modo prueba (misiones.js) oculta el menú por CSS y lo abre al terminar: necesita volver a medir los grupos.
 window.__navRefrescar = ocultarHeadersVaciosMenu;
@@ -35285,6 +35288,7 @@ function activateSection(sec, fromNav) {
   lyraSeccion(sec);
   chatActualizarVisibilidad();
   document.querySelectorAll('.nav-item[data-sec]').forEach(x => x.classList.toggle('active', x.dataset.sec === sec || x.dataset.sec === PADRE_DE[sec]));
+  marcarBarraInf();
   if (sheetAbierta) closeSheet(sheetAbierta, true);
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active', 'entrando'));
   const secEl = document.getElementById('sec-' + sec);
@@ -35551,6 +35555,39 @@ function setupBusquedaGlobal() {
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') { e.preventDefault(); abrirBusquedaGlobal(); }
   });
+}
+
+/* Barra inferior móvil: atajos, el ☰ sigue siendo el catálogo completo. Sin lista
+   propia de permisos: pregunta al menú (reglas de rol en CSS) y con menos de dos
+   destinos no aparece. */
+function biBadge(id, n) { const b = document.getElementById(id); if (b) b.textContent = n > 0 ? (n > 99 ? '99+' : String(n)) : ''; }
+function marcarBarraInf() {
+  document.querySelectorAll('.bi-tab[data-bi]').forEach(t => {
+    const on = t.dataset.bi === currentSec || t.dataset.bi === PADRE_DE[currentSec];
+    t.classList.toggle('on', on);
+    if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
+  });
+}
+function pintarBarraInf() {
+  let n = 0;
+  document.querySelectorAll('.bi-tab[data-bi]').forEach(t => {
+    const d = t.dataset.bi;
+    t.hidden = !(d.startsWith('grp-') ? hijasVisibles(d).length : navVisiblePorRol(navItemDe(d)));
+    if (!t.hidden) n++;
+  });
+  document.body.classList.toggle('bi-on', n > 1);
+  marcarBarraInf();
+}
+function setupBarraInf() {
+  document.getElementById('barra-inf')?.addEventListener('click', e => {
+    const t = e.target.closest('.bi-tab');
+    if (!t) return;
+    if (t.id === 'bi-mas') { abrirMenuMovil(); return; }
+    const sec = t.dataset.bi.startsWith('grp-') ? destinoDePadre(t.dataset.bi) : t.dataset.bi;
+    incrementarUsoSeccion(sec);
+    activateSection(sec);
+  });
+  pintarBarraInf();
 }
 
 function setupMenuMovil() {
@@ -36650,6 +36687,7 @@ function entrarModoBoleteria(sec) {
   document.body.classList.add('modo-boleteria');
   delete ULTIMA_CARGA['cotizacion-boletos'];
   ubicarSolicitudesNav();
+  pintarBarraInf();
   activateSection(typeof sec === 'string' ? sec : 'bol-solicitudes');
 }
 // En el celular el cambio de modo cierra el menú al instante: la pastilla del
@@ -36692,6 +36730,7 @@ function salirModoBoleteria() {
   document.body.classList.remove('modo-boleteria');
   delete ULTIMA_CARGA['cotizacion-boletos'];
   ubicarSolicitudesNav();
+  pintarBarraInf();
   activateSection(seccionAntesDeModoBoleteria && document.getElementById('sec-' + seccionAntesDeModoBoleteria) ? seccionAntesDeModoBoleteria : (ROL === 'asesor' ? 'leads' : 'dashboard'));
   seccionAntesDeModoBoleteria = null;
   if (quedarseEnMenu) { abrirMenuMovil(); document.getElementById('sidebar-nav')?.scrollTo({ top: 0 }); }
@@ -37885,6 +37924,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-05', emoji: '📱', titulo: 'Barra de accesos abajo en el teléfono', texto: 'En el teléfono ahora tienes abajo una barra con Leads, Bandeja, Tarifario, Cotizar y Más, para saltar entre lo de todos los días con el pulgar. El menú (☰) sigue igual, con todas las secciones; «Más» también lo abre. La barra se aparta cuando abres un chat o escribes, y solo muestra lo que tu cargo puede ver.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
   { fecha: '2026-11-05', emoji: '📱', titulo: '«No puedo» y Pausa de turno en el teléfono', texto: 'Ahora puedes soltar un lead desde el teléfono: en los tres puntos (⋯) de la tarjeta de un lead por atender, toca «No puedo: pasar a otro asesor». Y en el menú (☰) está «Pausa de turno», para pausar 30 minutos, 1 hora o hasta mañana, y para volver a turno cuando quieras.', roles: ['asesor'] },
   { fecha: '2026-11-05', emoji: '🇻🇪', titulo: 'Textos del CRM en español venezolano', texto: 'Revisamos los botones, avisos, ayudas y mensajes de todo el CRM para quitar las formas argentinas («elegí», «cargá», «tenés», «podés»…). Ahora dicen «elige», «carga», «tienes», «puedes». No cambia nada de cómo funciona, solo cómo se lee.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
   { fecha: '2026-11-04', emoji: '🧾', titulo: 'Facturas a empresas, ahora dentro del CRM', texto: 'Nueva entrada «Facturas» en Corporativo (lo que antes se hacía en Zoho, desde la INV-000030). Elige la empresa o, si no está, créala ahí mismo; carga los conceptos y sale el PDF con el membrete de Lotus. Descuento e IVA son opcionales: en 0 no aparecen. Desde la lista la marcas pagada o la anulas, y ves lo que falta cobrar y lo vencido. También hay un botón «Facturar» en la ficha de cada empresa.', roles: ['admin', 'administrativo'] },

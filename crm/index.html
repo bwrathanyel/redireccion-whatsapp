@@ -2796,13 +2796,13 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
    el panel como hoja desde abajo, con la sección visible detrás. La conversación
    desliza sobre la lista. Al escribir, la hoja sube hasta arriba. */
 @media(max-width:760px){
-  .chat-fab{right:16px;bottom:calc(18px + var(--safe-b));z-index:55}
-  body.con-mfab .chat-fab{bottom:calc(86px + var(--safe-b));width:46px;height:46px;font-size:18px}
+  .chat-fab{right:16px;bottom:calc(18px + var(--safe-b) + var(--bi-h,0px));z-index:55}
+  body.con-mfab .chat-fab{bottom:calc(86px + var(--safe-b) + var(--bi-h,0px));width:46px;height:46px;font-size:18px}
   body.menu-abierto .chat-fab,body.con-sheet .chat-fab,body.con-drawer .chat-fab,body.lyra-abierta .chat-fab,body.fabs-ocultos .chat-fab:not(.hay-nuevos){opacity:0;pointer-events:none;transform:translateY(18px) scale(.85)}
-  body.chat-on .main{padding-bottom:calc(92px + var(--safe-b))}
-  body.chat-on.con-mfab .main{padding-bottom:calc(146px + var(--safe-b))}
-  .chat-globo{right:16px;bottom:calc(86px + var(--safe-b));max-width:min(300px,calc(100vw - 32px))}
-  body.con-mfab .chat-globo{bottom:calc(144px + var(--safe-b))}
+  body.chat-on .main{padding-bottom:calc(92px + var(--safe-b) + var(--bi-h,0px))}
+  body.chat-on.con-mfab .main{padding-bottom:calc(146px + var(--safe-b) + var(--bi-h,0px))}
+  .chat-globo{right:16px;bottom:calc(86px + var(--safe-b) + var(--bi-h,0px));max-width:min(300px,calc(100vw - 32px))}
+  body.con-mfab .chat-globo{bottom:calc(144px + var(--safe-b) + var(--bi-h,0px))}
   /* Pantallas de chat (WhatsApp, DMs): su barra de escritura va abajo, ahí la burbuja no va y el aviso baja del appbar */
   .chat-fondo{display:block;position:fixed;inset:0;z-index:59;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .25s}
   body.chat-abierto .chat-fondo{opacity:1;pointer-events:auto}
@@ -4260,7 +4260,7 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
   /* Ya no hay barra fija abajo: lo que se pegaba encima de ella solo necesita
      respetar el área segura del teléfono. */
   :root{--nav-h:var(--safe-b)}
-  .main{padding:0 14px calc(26px + var(--safe-b))}
+  .main{padding:0 14px calc(26px + var(--safe-b) + var(--bi-h,0px))}
   /* Barra superior tipo app: hamburguesa + sección + acciones. Se esconde al
      bajar y vuelve al subir, siempre con transform (nunca height/padding). */
   .mobile-brand{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:30;margin:0 -14px 12px;padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top,0px));background:rgba(11,15,28,.97);border-bottom:1px solid var(--line);transition:transform var(--dur-normal) var(--ease-salida)}
@@ -4385,10 +4385,10 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
      elementos de .app en cada cuadro al abrir el menú o la bandeja de Tareas (lag, 2026-10-25).
      Las franjas que tapaba venían del zoom, ya quitado. */
   .dbtn{padding:15px}
-  .preview-pill{left:12px;right:12px;bottom:calc(84px + var(--safe-b));transform:translateY(140px);max-width:none}
+  .preview-pill{left:12px;right:12px;bottom:calc(84px + var(--safe-b) + var(--bi-h,0px));transform:translateY(140px);max-width:none}
   .preview-pill.show{transform:translateY(0)}
   .pp-label{max-width:38vw}
-  #toasts{left:12px;right:12px;bottom:calc(84px + var(--safe-b));align-items:stretch}.toast{max-width:none}
+  #toasts{left:12px;right:12px;bottom:calc(84px + var(--safe-b) + var(--bi-h,0px));align-items:stretch}.toast{max-width:none}
   .foot-note{margin-top:20px}
 
   /* filtros -> hoja inferior (bottom sheet), con botón "Filtros"/"Buscar y filtrar" a pantalla completa de ancho */
@@ -6030,7 +6030,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 
   /* z-index 55: encima del contenido y del app bar (30), debajo del cajón
      lateral (65), del drawer (60/61) y de la hoja (70/71). */
-  .mfab{display:flex;position:fixed;right:16px;bottom:calc(18px + var(--safe-b));width:56px;height:56px;align-items:center;justify-content:center;border:none;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:20px;cursor:pointer;box-shadow:0 10px 26px -6px rgba(var(--accent-rgb),.5);z-index:55;transition:transform var(--dur-rapida) var(--ease-salida),opacity var(--dur-rapida) linear}
+  .mfab{display:flex;position:fixed;right:16px;bottom:calc(18px + var(--safe-b) + var(--bi-h,0px));width:56px;height:56px;align-items:center;justify-content:center;border:none;border-radius:50%;background:var(--accent);color:var(--on-accent);font-size:20px;cursor:pointer;box-shadow:0 10px 26px -6px rgba(var(--accent-rgb),.5);z-index:55;transition:transform var(--dur-rapida) var(--ease-salida),opacity var(--dur-rapida) linear}
   .mfab:active{transform:scale(.92)}
   body.menu-abierto .mfab,body.con-sheet .mfab,body.con-drawer .mfab{opacity:0;pointer-events:none;transform:scale(.8)}
 
@@ -6936,17 +6936,17 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 @media(max-width:760px){
   body.lyra-on .lyra-dock{display:none}
   body.lyra-on .lyra-fab{display:flex}
-  .lyra-fab{position:fixed;left:14px;bottom:calc(16px + var(--safe-b));z-index:55;width:52px;height:52px;padding:0;align-items:center;justify-content:center;border:0;border-radius:50%;background:transparent;cursor:pointer;transition:opacity var(--dur-rapida),transform var(--dur-rapida) var(--ease-salida)}
+  .lyra-fab{position:fixed;left:14px;bottom:calc(16px + var(--safe-b) + var(--bi-h,0px));z-index:55;width:52px;height:52px;padding:0;align-items:center;justify-content:center;border:0;border-radius:50%;background:transparent;cursor:pointer;transition:opacity var(--dur-rapida),transform var(--dur-rapida) var(--ease-salida)}
   .lyra-fab:active{transform:scale(.92)}
   .lyra-fab .lyra-orb{--s:48px}
   .lyra-fab.nuevo::after{top:2px;left:39px}
   body.lyra-abierta .lyra-fab{opacity:0;pointer-events:none}
-  .lyra-globo{left:14px;right:84px;bottom:calc(80px + var(--safe-b));max-width:none}
+  .lyra-globo{left:14px;right:84px;bottom:calc(80px + var(--safe-b) + var(--bi-h,0px));max-width:none}
   /* P1-2: los FABs (Lyra a la izquierda, "+" a la derecha) tapaban el final
      de las listas. .main reserva su alto al pie, así todo se puede llevar
      por encima con scroll; al bajar se apartan (fabsOcultos en app.js). Las
      pantallas de chat tienen su barra de escritura abajo: ahí Lyra no va. */
-  body.lyra-on .main,body.con-mfab .main{padding-bottom:calc(92px + var(--safe-b))}
+  body.lyra-on .main,body.con-mfab .main{padding-bottom:calc(92px + var(--safe-b) + var(--bi-h,0px))}
   body.fabs-ocultos .lyra-fab,body.fabs-ocultos .mfab{opacity:0;pointer-events:none;transform:translateY(18px) scale(.85)}
   /* Oculto (scroll hacia abajo, panel de Lyra) o tapado por el menú, el orbe seguía con ~19
      animaciones infinitas: cada cuadro con trabajo en el hilo principal (scroll, arrastres) les
@@ -7938,8 +7938,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   .rol-asesor .nav-item.nav-pausa-turno{display:flex}
   /* FABs: nada flotante sobre paneles, hojas de filtros, teclado ni barras fijas */
   body.lyra-abierta .mfab,body.con-mfs :is(.mfab,.chat-fab,.lyra-fab),body.teclado :is(.mfab,.chat-fab,.lyra-fab){opacity:0;pointer-events:none;transform:scale(.8)}
-  body.en-voucher :is(.lyra-fab,.chat-fab){bottom:calc(84px + var(--safe-b))}
-  body.en-cotiz-boletos :is(.lyra-fab,.chat-fab){bottom:calc(132px + var(--safe-b))}
+  body.en-voucher :is(.lyra-fab,.chat-fab){bottom:calc(84px + var(--safe-b) + var(--bi-h,0px))}
+  body.en-cotiz-boletos :is(.lyra-fab,.chat-fab){bottom:calc(132px + var(--safe-b) + var(--bi-h,0px))}
   body.teclado #sec-cotizacion-boletos .cb-resumen-col,body.teclado #sec-voucher .vc-pie{display:none}
 
   /* Chat abierto a pantalla completa: los FABs, la barra y las pestañas vuelven con ← o Atrás */
@@ -8091,6 +8091,27 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 @media (pointer:coarse) and (min-width:761px){
   .topbar-help-btn,.seg,.modo-seg,.side-logout,.inbox-btn,.nav-buscar{min-height:40px}
   .nav-item .nav-fav{width:36px;height:36px}
+}
+/* Barra inferior móvil: atajos a lo de todos los días; ☰ sigue siendo el catálogo completo.
+   --bi-h sin safe-b porque los flotantes ya lo suman. Modo prueba guiado restringe el menú: sin barra. */
+.barra-inf{display:none}
+@media (max-width:760px){
+  body.bi-on:not(.prueba-guiada){--bi-h:56px}
+  body.bi-on:not(.prueba-guiada,.teclado,.ver-chat-on) .barra-inf{display:flex}
+  .barra-inf{position:fixed;inset:auto 0 0;z-index:50;padding-bottom:var(--safe-b);background:var(--panel-solid);border-top:1px solid var(--line2)}
+  .bi-tab{flex:1 1 0;min-width:0;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:none;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+  .bi-tab[hidden]{display:none}
+  .bi-tab:active{background:var(--line)}
+  .bi-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .bi-tab.on{color:var(--accent-ink)}
+  .bi-ico{position:relative;font-size:17px;line-height:1}
+  .bi-badge{position:absolute;bottom:9px;left:11px;min-width:16px;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:12px;font-weight:800;line-height:16px;text-align:center}
+  .bi-badge:empty{display:none}
+  body.bi-on:not(.prueba-guiada) :is(#sec-voucher .vc-pie,#sec-cotizacion-boletos .cb-resumen-col){bottom:calc(var(--bi-h) + var(--safe-b));padding-bottom:10px}
+  body.bi-on:not(.prueba-guiada) .main :is(.tar-selbar,.correo-responder-bar,.vr-accion-bar){bottom:calc(var(--bi-h) + var(--safe-b))}
+  body.bi-on .update-toast{bottom:calc(78px + var(--safe-b) + var(--bi-h,0px))}
+  /* Cerrada queda justo bajo la pantalla y su sombra hacia arriba oscurecía la barra */
+  :is(.mfs,.sheet):not(.open),:root[data-theme="light"] :is(.mfs,.sheet):not(.open){box-shadow:none}
 }
 </style>
 </head>
@@ -11823,6 +11844,13 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
        desde el 2026-07-15 (commit 320dd344), afectaba a TODOS los sheets. -->
   <div class="sheet-bg" id="sheet-bg"></div>
   <div class="drawer-bg" id="drawerBg"></div>
+  <nav class="barra-inf" id="barra-inf" aria-label="Accesos principales">
+    <button type="button" class="bi-tab" data-bi="grp-leads"><span class="bi-ico"><i class="fas fa-users" aria-hidden="true"></i><span class="bi-badge" id="bi-badge-leads"></span></span>Leads</button>
+    <button type="button" class="bi-tab" data-bi="grp-bandeja"><span class="bi-ico"><i class="fas fa-inbox" aria-hidden="true"></i><span class="bi-badge" id="bi-badge-bandeja"></span></span>Bandeja</button>
+    <button type="button" class="bi-tab" data-bi="grp-tarifario"><span class="bi-ico"><i class="fas fa-book-open" aria-hidden="true"></i></span>Tarifario</button>
+    <button type="button" class="bi-tab" data-bi="cotizacion-boletos"><span class="bi-ico"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i></span>Cotizar</button>
+    <button type="button" class="bi-tab" id="bi-mas"><span class="bi-ico"><i class="fas fa-ellipsis" aria-hidden="true"></i></span>Más</button>
+  </nav>
 </div>
 
 <!-- La bottom-nav y la hoja "Yo" se retiraron el 2026-08-27: el menú lateral
