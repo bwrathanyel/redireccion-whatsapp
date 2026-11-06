@@ -49,7 +49,7 @@
     ia: 'El cliente tardó en contestar. Se reintenta solo.',
   };
 
-  /* ---------- Llegada de un cliente: lead POR ATENDER + chat con su primer mensaje ---------- */
+  /* ---------- Llegada de un cliente: lead POR ATENDER con su ficha. El chat se abre con Atender y escribe primero el asesor ---------- */
   async function nuevoCliente() {
     if (S.llegando) return;
     S.llegando = true;
@@ -64,21 +64,21 @@
     S.pasos = r.pasos || S.pasos;
     if (examen) { S.examen.lanzados++; guardaExamen(); }
     crearSim({ id: r.sim_id, nivel: r.nivel, nivelJuego: r.nivel_juego, titulo: r.titulo, guia: r.guia, cliente: r.cliente, paciencia: r.paciencia_min, examen,
-      historial: [{ de: 'cliente', texto: r.primer_mensaje, ts: Date.now() }] });
+      historial: [] });
     sonido();
   }
   function crearSim(o, rehidratada) {
     const n = ++S.nSim, t = ahora();
     const tel = `+58414777${String(1000 + n + Math.floor(Math.random() * 8000)).slice(-4)}`;
-    const lead = D.lead(o.cliente.nombre, 'POR ATENDER', o.cliente.destino, { canal: o.cliente.canal, servicio: 'Hospedaje', personas: null, fecha_estimada: null });
-    Object.assign(lead, { id: 9600 + n, telefono: tel, numero: tel, fecha_creacion: t, lote_asignado_at: t, vence_at: new Date(Date.now() + 3600e3).toISOString() });
+    const f = o.cliente.ficha, destino = f ? `${o.cliente.destino}: ${f.hotel || 'hotel por definir'} · ${f.fechas}` : o.cliente.destino;
+    const lead = D.lead(o.cliente.nombre, 'POR ATENDER', destino, { canal: o.cliente.canal, servicio: 'Hospedaje', personas: f?.personas ?? null, fecha_estimada: f?.fecha ?? null });
+    Object.assign(lead, { id: 9600 + n, telefono: tel, numero: tel, fecha_creacion: t, lote_asignado_at: t, vence_at: new Date(Date.now() + 3600e3).toISOString(), notas: f ? `Bot: ${f.bot}` : null });
     const sim = { ...o, leadId: lead.id, convId: 700 + n, tel, llego: Date.now(), pasos: { ...(o.pasos || {}) }, pend: nuevoPend(), ocupado: false, otraVez: false,
       escribiendo: false, insistencias: 0, cerrada: false, comprobanteEn: null, registroEn: null, temperatura: null, cots: [], guiaVista: null };
     S.sims.set(sim.id, sim);
     if (rehidratada && o.historial.some(h => h.de === 'asesor')) { lead.estado = 'ATENDIDO'; lead.fecha_primer_contacto = t; }
     tabla('leads').push(lead); P.empuja('leads', 'INSERT', lead);
-    const conv = { id: sim.convId, nombre: o.cliente.nombre, wa_id: tel.slice(1), no_leidos: 0, ultimo_mensaje_at: t, ultimo_entrante_at: t, lead_id: lead.id, asesor: D.ASESORA, phone_number_id: 'prueba' };
-    tabla('whatsapp_conversaciones').push(conv); P.empuja('whatsapp_conversaciones', 'INSERT', conv);
+    if (o.historial.length) abreConv(sim);
     for (const h of o.historial) {
       if (h.de === 'cliente') entrante(sim, h.texto, h.ts);
       else if (h.de === 'asesor') guardaMensaje(sim, { direccion: 'saliente_api', tipo: 'text', texto: h.texto, estado: 'leido', enviado_en: new Date(h.ts).toISOString() });
@@ -88,12 +88,18 @@
     S.activo = true; pinta();
     return sim;
   }
+  function abreConv(sim) {
+    if (tabla('whatsapp_conversaciones').some(c => c.id === sim.convId)) return;
+    const t = ahora();
+    const conv = { id: sim.convId, nombre: sim.cliente.nombre, wa_id: sim.tel.slice(1), no_leidos: 0, ultimo_mensaje_at: t, ultimo_entrante_at: t, lead_id: sim.leadId, asesor: D.ASESORA, phone_number_id: 'prueba' };
+    tabla('whatsapp_conversaciones').push(conv); P.empuja('whatsapp_conversaciones', 'INSERT', conv);
+  }
   // Volver a la práctica no es dejar esperando al cliente: su reloj arranca de nuevo y, si lo último fue del asesor, le contesta.
   function retoma(sim, historial) {
     const delAsesor = historial.filter(h => h.de === 'asesor');
     sim.llego = historial[0]?.ts || sim.llego; sim.ultimoCliente = Date.now();
     sim.textosAsesor = delAsesor.map(h => h.texto);
-    if (delAsesor[0]) sim.atencionEn = delAsesor[0].ts;
+    if (delAsesor[0]) { sim.atencionEn = delAsesor[0].ts; sim.ultimoAsesor = delAsesor.at(-1).ts; }
     // Las cotizaciones viven en el mock, que se borra al recargar: vuelven las de este chat para el PDF y Crear reserva.
     for (const c of cotsGuardadas()[sim.id] || []) { const fila = { ...c, lead_id: sim.leadId }; tabla('cotizaciones_boleteria').push(fila); sim.cots.push(cotizacionDe(fila)); }
     if (historial.at(-1)?.de === 'asesor' && !sim.comprobanteEn) { sim.respondido = true; setTimeout(() => contesta(sim, true), 3000); }
@@ -336,6 +342,7 @@ ${lineas}
     const a = d.args || {}, sim = simDeLead(a.p_lead_id);
     if (!sim) return;
     if (d.nombre === 'actualizar_lead') {
+      if (a.p_estado && a.p_estado !== 'POR ATENDER') abreConv(sim);
       if (a.p_estado === 'ATENDIDO' && !sim.atendido) {
         sim.atendido = Date.now();
         const seg = Math.round((sim.atendido - sim.llego) / 1000);
@@ -384,7 +391,8 @@ ${lineas}
       if (sim.ocupado || sim.escribiendo) continue;
       // Pagó y nadie lo registró: a los 5 min se evalúa igual (el paso queda sin hacer).
       if (sim.comprobanteEn && !sim.registroEn && Date.now() - sim.comprobanteEn > 5 * 60e3) { cierra(sim, 'vendido'); continue; }
-      if (sim.respondido || sim.comprobanteEn) continue;
+      // Hasta que el asesor le escribe por primera vez, el cliente no reclama: escribe primero el asesor.
+      if (!sim.ultimoAsesor || sim.respondido || sim.comprobanteEn) continue;
       const min = (Date.now() - sim.ultimoCliente) / 60e3, umbral = sim.paciencia * [0.5, 1, 1.6][sim.insistencias];
       if (umbral && min >= umbral) {
         sim.insistencias++;
@@ -508,6 +516,7 @@ ${lineas}
   function abrirChat(url) {
     const tel = (/wa\.me\/(\d+)/.exec(url) || [])[1], sim = tel && simDeTel(tel);
     if (!sim) return false;
+    abreConv(sim);
     setTimeout(() => irAlChat(sim), 500);
     return true;
   }
@@ -523,7 +532,7 @@ ${lineas}
 
   /* ---------- Panel de la guía ---------- */
   const GUIA = {
-    rapidez: ['Contéstale ya: toca <b>Atender</b> en el cliente nuevo y se abre su chat.', { sec: 'leads', foco: 'Atender' }],
+    rapidez: ['Tienes un cliente nuevo: toca <b>Atender</b>, lee su ficha y escríbele tú primero.', { sec: 'leads', foco: 'Atender' }],
     presentacion: ['Salúdalo y dile quién eres.', { chat: '#wb-texto' }],
     calificacion: ['Averigua lo que te falte para recomendarle bien: destino, fechas, quiénes viajan o presupuesto.', { chat: '#wb-texto' }],
     ficha: ['Anota en su ficha lo que te contó: toca <b>Ver lead</b>.', { chat: '#wb-ver-lead' }],
@@ -629,6 +638,11 @@ ${lineas}
     const t = !sim ? '' : sim.escribiendo ? 'escribiendo…' : sim.cerrada ? '' : 'en línea';
     if (el.textContent !== t) el.textContent = t;
     el.classList.toggle('pc-esc', !!sim?.escribiendo);
+    let res = $('pc-wa-resumen');
+    if (!res) { res = document.createElement('div'); res.id = 'pc-wa-resumen'; el.after(res); }
+    const lead = sim && tabla('leads').find(l => l.id === sim.leadId), bot = sim?.cliente.ficha?.bot;
+    const r = !lead ? '' : [bot && `Bot: ${bot}`, `Ficha: ${lead.destino}${lead.personas ? ` · ${lead.personas} personas` : ''}`].filter(Boolean).join('\n');
+    if (res.textContent !== r) res.textContent = r;
     const mic = $('pc-mic'), oculto = !sim || sim.cerrada ? 'none' : '';
     if (mic && mic.style.display !== oculto) mic.style.display = oculto;
   }
@@ -814,6 +828,7 @@ ${lineas}
 @media(max-width:760px){#pc-panel .pc-pasos{max-height:24dvh}body:is(.teclado,.menu-abierto) #pc-panel{display:none}#pc-panel .pc-mini{min-width:44px;min-height:44px}#pc-nota .pc-cols{grid-template-columns:1fr}
 #pc-nota .pc-caja{max-height:calc(100dvh - 32px);padding:16px}#pc-nota .pc-caja:has(.pc-acc){padding-bottom:0}#pc-nota .pc-acc{position:sticky;bottom:0;margin:12px -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--panel-solid,#1b1b1f)}}
 @media(prefers-reduced-motion:reduce){#pc-panel.pc-festejo,#pc-nota .pc-cargando{animation:none}}
+#pc-wa-resumen{font-size:11.5px;line-height:1.35;color:var(--muted);white-space:pre-line;margin-top:2px}#pc-wa-resumen:empty{display:none}
 body.pc-wa #sec-wa-bandeja #wb-sub,body.pc-wa #sec-wa-bandeja .wb-por,body.pc-wa #sec-wa-bandeja #wb-recargar{display:none}
 body.pc-wa #sec-wa-bandeja .wa-cab{background:var(--wa-cabecera,#202c33)}
 body.pc-wa #sec-wa-bandeja #wb-head{background:var(--wa-cabecera,#202c33);border-bottom:1px solid rgba(134,150,160,.15)}
