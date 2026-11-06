@@ -5,6 +5,7 @@
 // solo plantilla aprobada. En vivo por Realtime; CSS propio mínimo (prefijo wb-).
 import { crearCampanasWa } from './wa-campanas.js';
 const VENTANA_MS = 24 * 60 * 60 * 1000;
+export const ventanaWaAbierta = c => !!c?.ultimo_entrante_at && Date.now() - Date.parse(c.ultimo_entrante_at) < VENTANA_MS;
 const TICK = { enviando: '🕓', enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '!' };
 const ERRORES = {
   ventana_cerrada: 'Pasaron más de 24 h desde el último mensaje del cliente: solo se puede mandar una plantilla',
@@ -36,9 +37,24 @@ const CSS = `
 .wb-comp-alerta{color:var(--amber);margin-top:4px}
 .wb-comp-acc{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
 .wb-comp-acc button{padding:5px 9px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--txt);font:inherit;font-size:12px;cursor:pointer}
+.wb-comp-acc .wb-comp-reserva{font-weight:700}
+#wb-pdf-previa{flex:none;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel-solid);color:var(--txt);font-size:14px}
+#wb-pdf-previa header{display:flex;align-items:flex-start;gap:10px}
+#wb-pdf-previa header>i{margin-top:3px;color:var(--danger)}
+#wb-pdf-previa header>div{flex:1;min-width:0}
+#wb-pdf-previa header b{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+#wb-pdf-previa header small{display:block;color:var(--muted);font-size:12.5px}
+#wb-pdf-previa button{font:inherit;color:inherit;cursor:pointer}
+#wb-pdf-previa header button{flex:none;width:36px;height:36px;border:0;border-radius:10px;background:transparent;font-size:18px}
+#wb-pdf-previa .wb-pv-pags{max-height:min(44dvh,420px);overflow:auto;display:grid;gap:8px;overscroll-behavior:contain}
+#wb-pdf-previa canvas{display:block;width:100%;height:auto;border-radius:6px;background:#fff}
+#wb-pdf-previa .wb-pv-nota{margin:12px 0;text-align:center;color:var(--muted);font-size:13px}
+#wb-pdf-previa footer{display:flex;justify-content:flex-end;gap:8px}
+#wb-pdf-previa footer button{min-width:0;min-height:40px;padding:8px 14px;border-radius:10px;border:1px solid var(--line2);background:transparent}
+#wb-pdf-previa footer .wb-pv-enviar{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-color:transparent;background:var(--wa);color:#fff;font-weight:600}
 `;
 
-export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, ok, error, navPush, navConsume }) {
+export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, crearReserva, cargarPdfjs, ok, error, navPush, navConsume }) {
   let convs = [];
   let actual = null;
   let navWb = null;
@@ -53,7 +69,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
   const urls = new Map();
   const $ = id => document.getElementById(id);
 
-  const ventanaAbierta = c => !!c?.ultimo_entrante_at && Date.now() - Date.parse(c.ultimo_entrante_at) < VENTANA_MS;
+  const ventanaAbierta = ventanaWaAbierta;
   function textoVentana(c) {
     if (!ventanaAbierta(c)) return '<span class="wb-ventana cerrada"><i class="fas fa-lock"></i> Ventana cerrada: solo plantilla</span>';
     const h = Math.max(0, Math.floor((VENTANA_MS - (Date.now() - Date.parse(c.ultimo_entrante_at))) / 3600000));
@@ -100,6 +116,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
   }
 
   async function abrir(c) {
+    cierraPrevia?.();
     const g = ++gen;
     actual = c;
     if (!navWb && matchMedia('(max-width:760px)').matches) { navWb = { type: 'wb-conv' }; navPush?.(navWb); }
@@ -130,6 +147,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
   }
 
   function cerrar(desdeNav) {
+    cierraPrevia?.();
     if (desdeNav !== true && navWb) navConsume?.();
     navWb = null;
     gen++;
@@ -196,7 +214,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     const partes = [d.metodo, d.referencia && `Ref. ${d.referencia}`, monto, d.fecha].filter(Boolean).map(esc).join(' · ');
     const dup = c.duplicado_de ? `<div class="wb-comp-alerta"><i class="fas fa-triangle-exclamation"></i> Esta referencia ya aparece ${c.duplicado_de.startsWith('abono:') ? 'en un abono registrado' : 'en otro comprobante de este número'}: revisa antes de registrar</div>` : '';
     const cierre = c.estado === 'registrado' ? '<div class="wb-ventana">Registrado</div>' : c.estado === 'descartado' ? '<div class="wb-ventana">Descartado</div>'
-      : `<div class="wb-comp-acc"><button data-wb-comp="${c.id}" data-wb-est="registrado">Ya lo registré</button><button data-wb-comp="${c.id}" data-wb-est="descartado">Descartar</button></div>`;
+      : `<div class="wb-comp-acc">${actual?.lead_id && ['admin', 'asesor', 'administrativo'].includes(rol()) ? `<button class="wb-comp-reserva" data-wb-reserva="${c.id}"><i class="fas fa-plus"></i> Crear reserva</button>` : ''}<button data-wb-comp="${c.id}" data-wb-est="registrado">Ya lo registré</button><button data-wb-comp="${c.id}" data-wb-est="descartado">Descartar</button></div>`;
     return `<div class="wb-comp"><span class="wb-comp-ia"><i class="fas fa-wand-magic-sparkles"></i> Lo leyó la IA, verifícalo con el banco</span><b>${partes || 'Sin datos legibles'}</b>${dup}${cierre}</div>`;
   }
   async function marcarComprobante(id, estado) {
@@ -204,6 +222,13 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     if (e) { error('No se pudo actualizar el comprobante'); return; }
     for (const c of comprobantes.values()) if (c.id === id) c.estado = estado;
     pintarMensajes(false);
+  }
+
+  async function reservaDeComprobante(id) {
+    const c = [...comprobantes.values()].find(x => x.id === id), leadId = actual?.lead_id;
+    if (!c || !leadId) return;
+    const path = mensajes.find(x => x.wamid === c.wamid)?.media_path;
+    crearReserva(leadId, c, path ? await urlFirmada(path) : null);
   }
 
   function pintarMensajes(alFinal) {
@@ -327,6 +352,57 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     pintarMensajes(false);
   }
 
+  // PDF de una cotización a la vista en el chat de su cliente. Se descarta al cambiar de chat, para que no le llegue a otro.
+  let cierraPrevia = null;
+  function verPdf(file) {
+    const u = URL.createObjectURL(file);
+    if (!window.open(u, '_blank')) { const a = document.createElement('a'); a.href = u; a.download = file.name; a.click(); }
+    setTimeout(() => URL.revokeObjectURL(u), 60_000);
+  }
+  async function pintarPaginasPdf(file, caja) {
+    try {
+      const lib = await cargarPdfjs();
+      const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+      const total = Math.min(doc.numPages, 6), ancho = Math.min(caja.clientWidth || 360, 640) * Math.min(devicePixelRatio || 1, 2);
+      caja.innerHTML = '';
+      for (let n = 1; n <= total && caja.isConnected; n++) {
+        const pag = await doc.getPage(n), vp = pag.getViewport({ scale: ancho / pag.getViewport({ scale: 1 }).width });
+        const c = document.createElement('canvas');
+        c.width = Math.round(vp.width); c.height = Math.round(vp.height); c.setAttribute('aria-label', `Página ${n} de ${doc.numPages}`);
+        caja.appendChild(c);
+        await pag.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      }
+      if (doc.numPages > total && caja.isConnected) caja.insertAdjacentHTML('beforeend', `<p class="wb-pv-nota">Y ${doc.numPages - total} página${doc.numPages - total === 1 ? '' : 's'} más: usa «Ver PDF».</p>`);
+      doc.destroy();
+    } catch (e) {
+      console.warn('vista previa del PDF', e);
+      if (caja.isConnected) caja.innerHTML = '<p class="wb-pv-nota">No se pudo mostrar la vista previa. Ábrelo con «Ver PDF» antes de enviarlo.</p>';
+    }
+  }
+  async function pdfEnChat(c, file) {
+    await abrir(c);
+    if (actual?.id !== c.id) return;
+    cierraPrevia?.();
+    const titulo = c.nombre || '+' + c.wa_id, p = document.createElement('section');
+    p.id = 'wb-pdf-previa'; p.setAttribute('aria-label', `Vista previa del PDF para ${titulo}`);
+    p.innerHTML = `<header><i class="fas fa-file-pdf" aria-hidden="true"></i><div><b title="${esc(file.name)}">${esc(file.name)}</b><small>Nada se envía hasta que toques Enviar. El texto de abajo va como pie del PDF.</small></div><button type="button" data-a="x" aria-label="Quitar PDF">×</button></header>
+      <div class="wb-pv-pags"><p class="wb-pv-nota">Cargando vista previa…</p></div>
+      <footer><button type="button" data-a="ver">Ver PDF</button><button type="button" data-a="enviar" class="wb-pv-enviar"><i class="fas fa-paper-plane" aria-hidden="true"></i> Enviar a ${esc(titulo)}</button></footer>`;
+    const cierra = () => { p.remove(); cierraPrevia = null; };
+    p.addEventListener('click', e => {
+      const a = e.target.closest('button[data-a]')?.dataset.a;
+      if (a === 'x') cierra();
+      else if (a === 'ver') verPdf(file);
+      else if (a === 'enviar') {
+        cierra();
+        if (ventanaAbierta(actual)) enviarArchivo(file); else error(ERRORES.ventana_cerrada);
+      }
+    });
+    cierraPrevia = cierra;
+    $('wb-compose').before(p);
+    pintarPaginasPdf(file, p.querySelector('.wb-pv-pags'));
+  }
+
   async function pintarPlantillas() {
     const sel = $('wb-pl-sel'), c = actual, c0 = plantillasPor.get(c.phone_number_id);
     if (c0 && c0.hasta > Date.now()) plantillas = c0.lista;
@@ -390,6 +466,8 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     $('wb-log').addEventListener('click', ev => {
       const b = ev.target.closest('[data-wb-comp]');
       if (b) marcarComprobante(Number(b.dataset.wbComp), b.dataset.wbEst);
+      const r = ev.target.closest('[data-wb-reserva]');
+      if (r) reservaDeComprobante(Number(r.dataset.wbReserva));
     });
     $('wb-ver-lead').addEventListener('click', () => actual?.lead_id && abrirLead(actual.lead_id));
     if (matchMedia('(max-width:760px)').matches) $('wb-texto').placeholder = 'Mensaje';
@@ -421,5 +499,5 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     await cargarLista(true);
   }
 
-  return { enlazar, abrirSeccion, cerrar, contar: cargarLista };
+  return { enlazar, abrirSeccion, cerrar, contar: cargarLista, marcarComprobante, pdfEnChat };
 }

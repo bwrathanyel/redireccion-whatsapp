@@ -6,29 +6,6 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
-  /* ---------- «Crear reserva» desde Reservas: se elige el cliente y sigue la hoja de siempre ---------- */
-  document.addEventListener('click', async e => {
-    if (!e.target.closest?.('#pv-nueva')) return;
-    const leads = (await g.__pruebaLeadsReserva?.() || []).filter(l => !['PAGO REALIZADO', 'VENTA COMPLETA', 'PERDIDO', 'NUMERO INVALIDO'].includes(l.estado));
-    const o = document.createElement('div');
-    o.style.cssText = 'position:fixed;inset:0;z-index:99960;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.55)';
-    o.innerHTML = `<div style="width:min(420px,100%);max-height:80vh;display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:14px;background:var(--panel-solid,#1b1b1f);color:var(--txt,#eee);border:1px solid var(--line2,rgba(255,255,255,.14))">
-      <b>¿Para qué cliente es la reserva?</b><input class="ei" type="search" placeholder="Buscar por nombre o destino" aria-label="Buscar cliente">
-      <div data-lista style="overflow:auto;display:flex;flex-direction:column;gap:4px"></div><button class="dbtn" type="button" data-cerrar>Cancelar</button></div>`;
-    const lista = o.querySelector('[data-lista]'), busca = o.querySelector('input');
-    const pinta = () => {
-      const q = busca.value.trim().toLowerCase(), hay = leads.filter(l => !q || `${l.nombre} ${l.destino || ''}`.toLowerCase().includes(q));
-      lista.innerHTML = hay.map(l => `<button class="dbtn" type="button" data-lead="${l.id}" style="text-align:left;justify-content:flex-start">${esc(l.nombre)}${l.destino ? ` · ${esc(l.destino)}` : ''}</button>`).join('') || '<p style="margin:8px 0;opacity:.7">No hay clientes sin reserva con ese nombre.</p>';
-    };
-    busca.addEventListener('input', pinta);
-    o.addEventListener('click', ev => {
-      const id = ev.target.closest('[data-lead]')?.dataset.lead;
-      if (id || ev.target === o || ev.target.closest('[data-cerrar]')) o.remove();
-      if (id) g.__pruebaCrearReserva?.(Number(id));
-    });
-    pinta(); document.body.append(o); busca.focus();
-  });
-
   /* ---------- Burbuja movible ---------- */
   // Se suelta contra el borde más cercano; lado + altura relativa sobreviven a recargas y a girar el teléfono.
   // left/top van divididos por el zoom del body (el CRM vive en body{zoom:.9}).
@@ -213,7 +190,7 @@
     });
   }
 
-  /* ---------- Compartir con lead vinculado: su chat con el PDF a la vista, sin enviar nada ---------- */
+  /* ---------- Compartir con lead vinculado: el chat simulado que le falta (la previa es la del CRM real) ---------- */
   function chatDelLead(lead) {
     const T = P.m.tablas, convs = T.whatsapp_conversaciones ||= [], msgs = T.whatsapp_mensajes ||= [];
     const previo = convs.find(c => c.lead_id === lead.id);
@@ -227,64 +204,7 @@
     msgs.push({ id: sig(msgs, 69999), conversacion_id: conv.id, wamid: `prueba-lead-${lead.id}`, direccion: 'entrante', tipo: 'text', texto: 'Hola, ¿me envías la cotización por aquí?', enviado_en: t, estado: null, error: null, enviado_por: null, plantilla: null, media_id: null, media_mime: null, media_path: null, transcripcion: null });
     return conv;
   }
-  async function pintaPaginas(file, caja) {
-    try {
-      const lib = await g.__pruebaPdfjs();
-      const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-      const total = Math.min(doc.numPages, 6), ancho = Math.min(caja.clientWidth || 360, 640) * Math.min(devicePixelRatio || 1, 2);
-      caja.innerHTML = '';
-      for (let n = 1; n <= total && caja.isConnected; n++) {
-        const pag = await doc.getPage(n), escala = ancho / pag.getViewport({ scale: 1 }).width, vp = pag.getViewport({ scale: escala });
-        const c = document.createElement('canvas');
-        c.width = Math.round(vp.width); c.height = Math.round(vp.height); c.setAttribute('aria-label', `Página ${n} de ${doc.numPages}`);
-        caja.appendChild(c);
-        await pag.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
-      }
-      if (doc.numPages > total && caja.isConnected) caja.insertAdjacentHTML('beforeend', `<p class="ppv-nota">Y ${doc.numPages - total} página${doc.numPages - total === 1 ? '' : 's'} más: usa «Ver PDF».</p>`);
-      doc.destroy();
-    } catch (e) {
-      console.warn('vista previa del PDF', e);
-      if (caja.isConnected) caja.innerHTML = '<p class="ppv-nota">No se pudo mostrar la vista previa. Ábrelo con «Ver PDF» antes de enviarlo.</p>';
-    }
-  }
-  let cierraPrevia = null;
-  function previaEnChat(file, conv) {
-    cierraPrevia?.();
-    const compose = $('wb-compose'), titulo = conv.nombre || '+' + conv.wa_id;
-    const p = document.createElement('section');
-    p.id = 'pp-pdf-previa'; p.setAttribute('aria-label', `Vista previa del PDF para ${titulo}`);
-    const cerrada = compose.hidden;
-    p.innerHTML = `<header><i class="fas fa-file-pdf" aria-hidden="true"></i><div><b title="${esc(file.name)}">${esc(file.name)}</b><small>${cerrada ? 'Ventana cerrada: solo plantilla, este PDF no se puede enviar.' : 'Nada se envía hasta que toques Enviar. El texto de abajo va como pie del PDF.'}</small></div><button type="button" data-a="x" aria-label="Quitar PDF">×</button></header>
-      <div class="ppv-pags"><p class="ppv-nota">Cargando vista previa…</p></div>
-      <footer><button type="button" data-a="ver">Ver PDF</button><button type="button" data-a="enviar" class="ppv-ppal"${cerrada ? ' disabled' : ''}><i class="fas fa-paper-plane" aria-hidden="true"></i> Enviar a ${esc(titulo)}</button></footer>`;
-    // El PDF es de este cliente: al cambiar de chat o salir de él se descarta, para que no le llegue a otro.
-    const sigue = () => !$('wb-head').hidden && $('wb-titulo').textContent === titulo;
-    const vigia = new MutationObserver(() => { if (!sigue()) cierra(); });
-    const cierra = () => { vigia.disconnect(); p.remove(); cierraPrevia = null; };
-    p.addEventListener('click', e => {
-      const a = e.target.closest('button[data-a]')?.dataset.a;
-      if (a === 'x') cierra();
-      else if (a === 'ver') ver(file);
-      else if (a === 'enviar' && sigue() && !compose.hidden) {
-        const dt = new DataTransfer(), inp = $('wb-archivo');
-        dt.items.add(file); inp.files = dt.files;
-        inp.dispatchEvent(new Event('change', { bubbles: true }));
-        cierra();
-      }
-    });
-    vigia.observe($('wb-titulo'), { childList: true, characterData: true, subtree: true });
-    vigia.observe($('wb-head'), { attributes: true, attributeFilter: ['hidden'] });
-    cierraPrevia = cierra;
-    compose.before(p);
-    pintaPaginas(file, p.querySelector('.ppv-pags'));
-  }
-  // Devuelve false si no hay chat al que llevarlo: quien llama cae a la hoja de siempre.
-  g.__pruebaCompartirLead = async (blob, nombre, leadId) => {
-    const lead = (P.m.tablas.leads || []).find(l => l.id === leadId), conv = lead && chatDelLead(lead);
-    if (!conv || !await irAlChat(conv.id)) return false;
-    previaEnChat(comoFile(blob, nombre), conv);
-    return true;
-  };
+  g.__pruebaChatDelLead = leadId => { const lead = (P.m.tablas.leads || []).find(l => l.id === leadId); if (lead) chatDelLead(lead); };
 
   // Todo PDF del CRM pasa por una de estas salidas; ninguna toca el código de cada módulo.
   const alBajar = a => { const b = pdfs.get(a.href); if (b && a.download) avisoPdf(comoFile(b, a.download), { conBajar: false }); };
@@ -350,21 +270,6 @@
 #pp-pdf-hoja .pph-error{margin:0;color:#ff8a7a;font-size:13px}
 #pp-pdf-hoja footer{display:flex;justify-content:flex-end;gap:8px}
 #pp-pdf-hoja footer button{min-height:40px;padding:8px 14px;border-radius:10px;border:1px solid var(--line2,rgba(255,255,255,.14));background:transparent}
-#pp-pdf-previa{flex:none;display:flex;flex-direction:column;gap:8px;padding:10px;border-top:1px solid var(--line,rgba(255,255,255,.1));background:var(--panel-solid,#1b1b1f);color:var(--txt,#eee);font:14px/1.4 system-ui,sans-serif}
-#pp-pdf-previa header{display:flex;align-items:flex-start;gap:10px}
-#pp-pdf-previa header>i{margin-top:3px;color:#ff8a7a}
-#pp-pdf-previa header>div{flex:1;min-width:0}
-#pp-pdf-previa header b{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
-#pp-pdf-previa header small{display:block;color:var(--muted,#aaa);font-size:12.5px}
-#pp-pdf-previa button{font:inherit;color:inherit;cursor:pointer}
-#pp-pdf-previa header button{flex:none;width:36px;height:36px;border:0;border-radius:10px;background:transparent;font-size:18px}
-#pp-pdf-previa .ppv-pags{max-height:min(44dvh,420px);overflow:auto;display:grid;gap:8px;overscroll-behavior:contain}
-#pp-pdf-previa canvas{display:block;width:100%;height:auto;border-radius:6px;background:#fff}
-#pp-pdf-previa .ppv-nota{margin:12px 0;text-align:center;color:var(--muted,#aaa);font-size:13px}
-#pp-pdf-previa footer{display:flex;justify-content:flex-end;gap:8px}
-#pp-pdf-previa footer button{min-width:0;min-height:40px;padding:8px 14px;border-radius:10px;border:1px solid var(--line2,rgba(255,255,255,.14));background:transparent}
-#pp-pdf-previa footer .ppv-ppal{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-color:transparent;background:#ffb020;color:#1a1200;font-weight:600}
-#pp-pdf-previa footer .ppv-ppal:disabled{opacity:.5;cursor:default}
 @media(max-width:760px){body.lyra-on #lyra-dock{display:flex}#lyra-dock{min-height:48px}#lyra-dock .lyra-dock-k{display:none}
   #pp-pdf-aviso{left:12px;right:12px;width:auto;transform:none}
   #pp-pdf-hoja{place-items:end stretch;padding:0}

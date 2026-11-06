@@ -4497,6 +4497,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pv-search{position:relative;flex:1;min-width:240px}.pv-search i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted2)}
 .pv-search input{width:100%;height:44px;border:1px solid var(--line2);border-radius:13px;background:var(--panel-solid);color:var(--txt);padding:0 14px 0 38px;font:inherit}
 .pv-refresh{width:44px;height:44px;border-radius:13px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--muted);cursor:pointer}
+.pv-refresh.pv-nueva{width:auto;padding:0 12px}.pv-nueva:not([hidden]){display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .pv-kpis{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
 .pv-kpi{padding:10px 12px;border-radius:14px;cursor:default}.pv-kpi .kv{font-size:19px;margin-top:4px}.pv-kpi .kt{text-transform:none;letter-spacing:0;font-size:11px}
 .pv-kpi::after{width:70px;height:70px;right:-24px;top:-28px}
@@ -4889,7 +4890,7 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
   .sidebar .brand img{width:28px;height:28px}
   .sidebar .brand .bt{font-size:13px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .sidebar .brand .bs{font-size:9px;letter-spacing:1.4px}
-  .pv-toolbar{flex-wrap:nowrap;min-width:0;max-width:100%}.pv-search{min-width:0}.pv-refresh{flex:0 0 44px}
+  .pv-toolbar{flex-wrap:nowrap;min-width:0;max-width:100%}.pv-search{min-width:0}.pv-refresh{flex:0 0 44px}.pv-refresh.pv-nueva{width:44px;padding:0}.pv-nueva span{display:none}
   .pv-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.pv-kpi{padding:8px 10px;min-width:0}.pv-kpi .kt{font-size:10.5px;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;line-height:1.3}.pv-kpi .kt i{margin-right:5px}.pv-kpi .kv{font-size:17px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pv-stagebar{width:100%;max-width:calc(100vw - 28px);min-width:0}
   .pv-grid{grid-template-columns:minmax(0,1fr);min-width:0}.pv-card{padding:15px;min-width:0}
@@ -8876,6 +8877,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-postventa">
       <div class="pv-toolbar">
         <div class="pv-search"><i class="fas fa-search"></i><input id="pv-search" type="search" placeholder="Buscar cliente, destino o localizador..."></div>
+        <button class="pv-refresh pv-nueva" id="pv-nueva" type="button" title="Crear reserva" aria-label="Crear reserva" hidden><i class="fas fa-plus"></i><span>Crear reserva</span></button>
         <button class="pv-refresh" id="pv-exportar" type="button" title="Exportar reservas (PDF o texto)" aria-label="Exportar reservas"><i class="fas fa-file-export"></i></button>
         <button class="pv-refresh" id="pv-refresh" type="button" title="Actualizar" aria-label="Actualizar postventa"><i class="fas fa-rotate"></i></button>
       </div>
@@ -12324,6 +12326,18 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 </div>
 
 <!-- Crear reserva (asesor/admin, desde el drawer de un lead): sin admin ni confirmación -->
+<div class="sheet" id="pv-nueva-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title"><i class="fas fa-plus"></i> Crear reserva</div>
+  <div class="edit-box" style="margin-top:4px">
+    <label class="fl" for="pv-nueva-q">¿Para qué cliente es la reserva?</label>
+    <input id="pv-nueva-q" class="ei" type="search" placeholder="Nombre o teléfono" autocomplete="off">
+    <div id="pv-nueva-res" class="cb-picker-lista" style="position:static;max-height:50vh;margin-top:8px;border:0;box-shadow:none;background:transparent"></div>
+  </div>
+  <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
+    <button class="dbtn" id="pv-nueva-cancelar" type="button" style="flex:1">Cancelar</button>
+  </div>
+</div>
 <div class="sheet" id="enviar-facturacion-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-plus"></i> Crear reserva</div>

@@ -307,17 +307,15 @@ ${lineas}
     const sim = simDeLead(leadId); if (sim && r.monto_pagado > 0) registro(sim);
     return r;
   };
-  // Botón junto a la foto (sitio en build-crm-prueba.mjs): abre la hoja con la cotización del lead y el pago ya cargados.
+  // Botón junto a la foto: la hoja la abre whatsapp-bandeja.js. En captura, para vincular antes su cotización al lead.
   document.addEventListener('click', e => {
-    const id = e.target.closest?.('[data-prueba-reserva]')?.dataset.pruebaReserva; if (!id) return;
+    const id = e.target.closest?.('[data-wb-reserva]')?.dataset.wbReserva; if (!id) return;
     const c = tabla('wa_comprobantes').find(x => x.id === Number(id)), leadId = c && tabla('whatsapp_conversaciones').find(x => x.id === c.conversacion_id)?.lead_id;
     if (!leadId) return;
     // La cotización pudo armarse sin vincular el cliente: la precarga de la hoja busca por lead.
     const cots = tabla('cotizaciones_boleteria');
     if (!cots.some(x => x.lead_id === leadId)) { const suelta = cots.filter(x => x.lead_id == null).at(-1); if (suelta) suelta.lead_id = leadId; }
-    const foto = tabla('whatsapp_mensajes').find(x => x.wamid === c.wamid)?.media_path;
-    window.__pruebaCrearReserva?.(leadId, { ...c.datos, foto: foto && window.__pruebaComprobante(foto) });
-  });
+  }, true);
 
   /* ---------- Señales del CRM que tildan pasos ---------- */
   const PASO_PAGO = new Set(['PAGO REALIZADO', 'VENTA COMPLETA']);

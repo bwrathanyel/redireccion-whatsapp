@@ -2,7 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
-import { crearBandejaWa } from './whatsapp-bandeja.js';
+import { crearBandejaWa, ventanaWaAbierta } from './whatsapp-bandeja.js';
 import { crearTareas } from './tareas.js';
 import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
@@ -3620,6 +3620,28 @@ try { const p = JSON.parse(localStorage.getItem('pv-prefs2') || '{}'); if (p.ord
 function pvGuardarPrefs() {
   try { localStorage.setItem('pv-prefs2', JSON.stringify({ orden: PV_ORDEN, vista: PV_VISTA })); } catch {}
 }
+// «Crear reserva» desde Reservas: se elige el cliente y sigue la hoja de siempre.
+let pvNuevaTk = 0, pvNuevaTimer = null;
+function pvNuevaAbrir() {
+  pvNuevaTk++; document.getElementById('pv-nueva-q').value = ''; document.getElementById('pv-nueva-res').innerHTML = '';
+  openSheet('pv-nueva-sheet');
+  document.getElementById('pv-nueva-q').focus();
+}
+async function pvNuevaBuscar() {
+  const box = document.getElementById('pv-nueva-res'), f = leadBusqueda(val('pv-nueva-q')), tk = ++pvNuevaTk;
+  const nota = t => { box.innerHTML = `<div class="cb-picker-vacio">${t}</div>`; };
+  if (!f.q) { box.innerHTML = ''; return; }
+  if (f.q.length < f.minimo) { nota('Sigue escribiendo el nombre, o escribe el teléfono.'); return; }
+  nota('Buscando clientes…');
+  let q = sb.from('leads').select('id,nombre,telefono,estado').is('eliminado_at', null).ilike(f.campo, f.patron);
+  for (const e of [...VENTA, 'PERDIDO', 'NUMERO INVALIDO']) q = q.neq('estado', e);
+  if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
+  const { data, error } = await q.order('id', { ascending: false }).limit(8);
+  if (tk !== pvNuevaTk) return;
+  if (error) { nota('No se pudo buscar. Intenta de nuevo.'); return; }
+  if (!data?.length) { nota('Ningún cliente sin reserva con ese dato.'); return; }
+  box.innerHTML = data.map(l => `<button type="button" data-pv-lead="${l.id}"><span><b>${esc(l.nombre || 'Sin nombre')}</b><small>${esc(l.telefono || 'Sin teléfono')} · ${esc(l.estado || '')}</small></span></button>`).join('');
+}
 function setupPostventa() {
   // La bandeja trae todas las etapas (cerrados incluidos): etapa, destino, orden y filtros rápidos se aplican en memoria.
   document.querySelectorAll('#pv-stagebar .pv-stage').forEach(b => b.addEventListener('click', () => {
@@ -3641,6 +3663,12 @@ function setupPostventa() {
   });
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
   document.getElementById('pv-exportar')?.addEventListener('click', pvExportarVarias);
+  const pvNueva = document.getElementById('pv-nueva');
+  if (pvNueva) pvNueva.hidden = !(ROL === 'asesor' || esOficina());
+  pvNueva?.addEventListener('click', pvNuevaAbrir);
+  document.getElementById('pv-nueva-q')?.addEventListener('input', () => { clearTimeout(pvNuevaTimer); pvNuevaTimer = setTimeout(pvNuevaBuscar, 280); });
+  document.getElementById('pv-nueva-cancelar')?.addEventListener('click', () => closeSheet('pv-nueva-sheet'));
+  document.getElementById('pv-nueva-res')?.addEventListener('click', e => { const b = e.target.closest('[data-pv-lead]'); if (b) efAbrirDeLead(Number(b.dataset.pvLead)); });
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
   });
@@ -10847,12 +10875,16 @@ function indAgilidad(s) {
   const resta = s.saltos * 12 + s.reintentos * 6 + s.errores * 4 + s.ayudas * 2 + Math.max(0, porTarea - 3) * 3;
   return Math.max(0, Math.round(100 - resta));
 }
+function indAgilidadMedia(s) {
+  const notas = (s.por_sesion || [s]).map(indAgilidad).filter(n => n != null);
+  return notas.length ? Math.round(notas.reduce((a, n) => a + n, 0) / notas.length) : null;
+}
 async function loadInduccion() {
   if (IND_TAB === 'vivo') indVivoArranca();
   const cont = document.getElementById('ind-lista');
   const { data, error } = await sb.rpc('prueba_resumen');
   if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver la inducción' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
-  IND_SESIONES = (data || []).map(s => ({ ...s, agilidad: indAgilidad(s) }));
+  IND_SESIONES = (data || []).map(s => ({ ...s, agilidad: indAgilidadMedia(s) }));
   indPintar();
 }
 function indPintar() {
@@ -11156,7 +11188,7 @@ let WB = null;
 function loadWaBandeja() {
   if (!WB) {
     WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
-      abrirLead: id => abrirLeadDesdeMisVentas(id), ok: okToast, error: errToast, navPush, navConsume });
+      abrirLead: id => abrirLeadDesdeMisVentas(id), crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
     WB.enlazar();
   }
   return WB.abrirSeccion();
@@ -12007,22 +12039,9 @@ const EF_ERRORES = {
   otro_no_combina: 'No se puede combinar "Otro" con otro tipo de venta',
 };
 
-window.__pruebaLeadsReserva = async () => (await sb.from('leads').select('id,nombre,telefono,destino,estado').order('id', { ascending: false }).limit(300)).data || [];
-window.__pruebaCrearReserva = async (leadId, pago) => {
-  const { data: l } = await sb.from('leads').select('*').eq('id', leadId).maybeSingle();
-  if (!l) { errToast('No se encontró ese cliente'); return; }
-  await abrirEnviarFacturacionSheet(l);
-  if (!pago) return;
-  const metodo = document.getElementById('ef-metodo'), monto = document.getElementById('ef-monto-pagado');
-  metodo.value = [...metodo.options].some(o => o.value === pago.metodo) ? pago.metodo : 'Otro';
-  document.getElementById('ef-referencia').value = pago.referencia || '';
-  monto.value = Number(pago.monto_usd).toFixed(2); monto.dispatchEvent(new Event('input'));
-  if (pago.foto) { const img = new Image(); img.id = 'ef-comp-previa'; img.src = pago.foto; img.alt = 'Comprobante del cliente'; img.style.cssText = 'display:block;max-height:180px;margin-top:8px;border-radius:8px'; document.querySelector('.ef-comprob')?.append(img); }
-  efComprobanteEstado('Comprobante del chat cargado. Revisa que coincida antes de crear la reserva.');
-};
 async function abrirEnviarFacturacionSheet(l) {
+  EF_LEAD_ACTUAL = l; EF_COMPROBANTE = null;
   document.getElementById('ef-comp-previa')?.remove();
-  EF_LEAD_ACTUAL = l;
   document.getElementById('ef-err').textContent = '';
   efCalCerrar();
   document.getElementById('ef-cliente').innerHTML =
@@ -12554,11 +12573,58 @@ function efComprobanteEstado(texto, malo) {
   st.textContent = texto || '';
   st.className = 'ef-comprob-st' + (texto ? ' show' : '') + (malo ? ' malo' : '');
 }
+async function efVolcarComprobante(d) {
+  const partes = [];
+  const metodo = document.getElementById('ef-metodo');
+  if (d.metodo && [...metodo.options].some(o => o.value === d.metodo)) { metodo.value = d.metodo; partes.push(d.metodo); }
+  if (d.referencia) { document.getElementById('ef-referencia').value = d.referencia; partes.push(`ref. ${d.referencia}`); }
+  let usd = null;
+  if (d.monto != null && d.moneda === 'USD') { usd = d.monto; partes.push(money(d.monto)); }
+  else if (d.monto != null && d.moneda === 'VES') {
+    const bs = d.monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const tasa = await tasaUsdActual();
+    if (tasa) {
+      usd = Math.round(d.monto / tasa * 100) / 100;
+      partes.push(`Bs ${bs} ≈ ${money(usd)} (tasa BCV ${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
+    } else partes.push(`Bs ${bs} (no hay tasa BCV cargada: escribe el monto en USD)`);
+  } else if (d.monto != null) partes.push(`monto ${d.monto} (moneda no clara: escribe el monto en USD)`);
+  if (usd != null) { const m = document.getElementById('ef-monto-pagado'); m.value = usd.toFixed(2); m.dispatchEvent(new Event('input')); }
+  if (d.fecha) partes.push(`fecha ${d.fecha.split('-').reverse().join('/')}`);
+  if (!partes.length) { efComprobanteEstado('No pude leer datos del comprobante. Llénalos a mano.', true); return; }
+  efComprobanteEstado(`Leído: ${partes.join(' · ')}.${d.confianza < 0.6 ? ' Lectura dudosa.' : ''} Revisa que coincida con el comprobante antes de crear la reserva.`);
+}
+// Junto al comprobante del chat: la misma hoja con el pago ya puesto. Nada se guarda hasta «Crear reserva».
+let EF_COMPROBANTE = null;
+async function efLeadPorId(id) {
+  const { data: l } = await sb.from('leads').select('*').eq('id', id).maybeSingle();
+  if (!l) errToast('No se encontró ese cliente');
+  return l;
+}
+async function efAbrirDeLead(id) { const l = await efLeadPorId(id); if (l) abrirEnviarFacturacionSheet(l); }
+async function efDesdeComprobante(leadId, c, foto) {
+  const l = await efLeadPorId(leadId);
+  if (!l) return;
+  // El pago de quien ya tiene reserva suele ser un abono: crear otra lo dejaría ahí y el saldo real sin moverse.
+  const { data: r, error } = await sb.rpc('reservas_de_lead', { p_lead_id: leadId });
+  if (error) { errToast('No se pudieron revisar las reservas de este cliente'); return; }
+  if (VENTA.includes(l.estado) || (r?.reservas || []).some(x => x.activo && Number(x.monto_total) > 0)) {
+    errToast('Este cliente ya tiene reserva: registra este pago en ella.');
+    openDrawer(l, { seccion: 'reservas' });
+    return;
+  }
+  await abrirEnviarFacturacionSheet(l);
+  EF_COMPROBANTE = c.id;
+  await efVolcarComprobante({ ...c.datos, monto: c.datos?.monto_usd ?? c.datos?.monto, moneda: 'USD' });
+  if (c.duplicado_de) efComprobanteEstado(`Esta referencia ya aparece en otro pago, revísala. ${document.getElementById('ef-comprobante-st').textContent}`, true);
+  if (foto) { const img = new Image(); img.id = 'ef-comp-previa'; img.src = foto; img.alt = 'Comprobante del cliente'; img.style.cssText = 'display:block;max-height:180px;max-width:100%;margin-top:8px;border-radius:8px'; document.querySelector('.ef-comprob')?.append(img); }
+}
 async function efLeerComprobante(file) {
   if (!file) return;
   const caja = document.querySelector('.ef-comprob');
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { efComprobanteEstado('Sube una captura en JPG, PNG o WebP.', true); return; }
   if (file.size > 6291456) { efComprobanteEstado('La imagen pesa más de 6 MB.', true); return; }
+  // Otra captura reemplaza al comprobante del chat: ese ya no es el pago que se va a registrar.
+  EF_COMPROBANTE = null; document.getElementById('ef-comp-previa')?.remove();
   caja.classList.add('leyendo');
   efComprobanteEstado('Leyendo comprobante…');
   try {
@@ -12568,24 +12634,7 @@ async function efLeerComprobante(file) {
       efComprobanteEstado(m === 'no_es_comprobante' ? 'Esa imagen no parece un comprobante de pago.' : `No pude leerlo: ${EF_COMP_ERRORES[m] || m}`, true);
       return;
     }
-    const d = data.datos, partes = [];
-    const metodo = document.getElementById('ef-metodo');
-    if (d.metodo && [...metodo.options].some(o => o.value === d.metodo)) { metodo.value = d.metodo; partes.push(d.metodo); }
-    if (d.referencia) { document.getElementById('ef-referencia').value = d.referencia; partes.push(`ref. ${d.referencia}`); }
-    let usd = null;
-    if (d.monto != null && d.moneda === 'USD') { usd = d.monto; partes.push(money(d.monto)); }
-    else if (d.monto != null && d.moneda === 'VES') {
-      const bs = d.monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const tasa = await tasaUsdActual();
-      if (tasa) {
-        usd = Math.round(d.monto / tasa * 100) / 100;
-        partes.push(`Bs ${bs} ≈ ${money(usd)} (tasa BCV ${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
-      } else partes.push(`Bs ${bs} (no hay tasa BCV cargada: escribe el monto en USD)`);
-    } else if (d.monto != null) partes.push(`monto ${d.monto} (moneda no clara: escribe el monto en USD)`);
-    if (usd != null) { const m = document.getElementById('ef-monto-pagado'); m.value = usd.toFixed(2); m.dispatchEvent(new Event('input')); }
-    if (d.fecha) partes.push(`fecha ${d.fecha.split('-').reverse().join('/')}`);
-    if (!partes.length) { efComprobanteEstado('No pude leer datos del comprobante. Llénalos a mano.', true); return; }
-    efComprobanteEstado(`Leído: ${partes.join(' · ')}.${d.confianza < 0.6 ? ' Lectura dudosa.' : ''} Revisa que coincida con el comprobante antes de crear la reserva.`);
+    await efVolcarComprobante(data.datos);
   } catch (e) {
     console.error('leer-comprobante', e);
     efComprobanteEstado('No pude leer el comprobante. Llénalo a mano.', true);
@@ -12629,7 +12678,8 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
     return;
   }
   closeSheet('enviar-facturacion-sheet');
-  if (currentSec === 'postventa') document.getElementById('pv-refresh')?.click();
+  if (EF_COMPROBANTE && pagado > 0) WB?.marcarComprobante(EF_COMPROBANTE, 'registrado');
+  if (currentSec === 'postventa') loadPostventa();
   okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
 });
 
@@ -14600,7 +14650,6 @@ let cvAnalizado = null;
 // pdf.js se carga a demanda, no en el arranque del CRM: son ~350KB que solo
 // hacen falta cuando alguien va a cargar un CV.
 let pdfjsLib = null;
-window.__pruebaPdfjs = () => cargarPdfjs();
 async function cargarPdfjs() {
   if (pdfjsLib) return pdfjsLib;
   pdfjsLib = await import(`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.min.mjs`);
@@ -20097,9 +20146,9 @@ async function loadStopSalesVigentes() {
   const cont = document.getElementById('ss-vigentes');
   cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('stop_sales_vigentes');
-  if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
+  if (error) { ssVerifPendiente = null; cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
   const hoteles = await ssProductosHotel();
-  if (!hoteles.length && data?.length) { cont.innerHTML = '<div class="vig-vacio">No se pudieron cargar los destinos. Vuelve a entrar a Stop Sales para reintentar.</div>'; return; }
+  if (!hoteles.length && data?.length) { ssVerifPendiente = null; cont.innerHTML = '<div class="vig-vacio">No se pudieron cargar los destinos. Vuelve a entrar a Stop Sales para reintentar.</div>'; return; }
   const destinos = new Map(hoteles.map(h => [Number(h.id), h.destino]));
   SS_VIGENTES_DATA = (data || []).map(f => ({ ...f, destino: destinos.get(Number(f.producto_id)) || '' }));
   ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
@@ -20182,7 +20231,7 @@ function ssVerificar() {
       <div>
         <div class="ss-veredicto-t">${titulo}</div>
         <p><b>${esc(nombre)}</b> · ${n === 1 ? '1 noche' : `${n} noches`}: entrada ${fmtDiaCorto(ent)}, salida ${fmtDiaCorto(sal)}</p>
-        <p>${texto}</p>${nStop || ROL === 'marketing' ? '' : '<button type="button" class="cb-link" onclick="ssCotizarVerif()">Llevar a Cotizaciones</button>'}
+        <p>${texto}</p>${nStop || !usuarioPuedeAbrirSeccion('cotizacion-boletos') ? '' : '<button type="button" class="cb-link" onclick="ssCotizarVerif()">Llevar a Cotizaciones</button>'}
       </div>
     </div>
     ${tramos.length ? `<div class="ss-v-tramos">${tramos.map((t) => `<div><b>${ETIQ[t.estado]}:</b> ${t.desde === t.hasta ? `noche del ${fmtDiaCorto(t.desde)}` : `noches del ${fmtDiaCorto(t.desde)} al ${fmtDiaCorto(t.hasta)}`}</div>`).join('')}</div>` : ''}
@@ -28591,7 +28640,7 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
     </div></details>` : ''}
     ${carpeta ? tarBarraSeleccionHtml() : ''}
-    <div class="dactions">${(esPromo ? x.producto_id : x.id) && ROL !== 'marketing' ? '<button class="dbtn save" id="dCotizarForm" type="button" style="width:auto;margin-top:0"><i class="fas fa-file-invoice-dollar"></i> Llevar a Cotizaciones</button>' : ''}<button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
+    <div class="dactions">${(esPromo ? x.producto_id : x.id) && usuarioPuedeAbrirSeccion('cotizacion-boletos') ? '<button class="dbtn save" id="dCotizarForm" type="button" style="width:auto;margin-top:0"><i class="fas fa-file-invoice-dollar"></i> Llevar a Cotizaciones</button>' : ''}<button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
@@ -33415,11 +33464,12 @@ function cbPaxHtml(it, i, tipo) {
   }).join('');
   return { cuentas: `<div class="cb-sec cb-full">${cbEmo('👥')}Viajeros</div><div class="cb-cuentas cb-full">${cuentas}</div>`, precios: `<div class="cb-precios cb-full">${precios}</div>` };
 }
+// Stop Sales ↔ Cotizaciones: misma RPC y regla que «¿Puedo vender?», noches [entrada, salida). Sin cupo no se genera; a confirmar solo avisa.
 let cbStops = null;
 async function cbCargarStops() {
   const { data, error } = await sb.rpc('stop_sales_vigentes');
-  if (error) return;
-  cbStops = data || [];
+  if (error || !Array.isArray(data)) return;
+  cbStops = data;
   document.querySelectorAll('#cb-items .cb-item').forEach(card => { const it = cbItems[+card.dataset.i]; if (it) cbPintarStop(card, it); });
 }
 function cbStopDe(it) {
@@ -33705,7 +33755,7 @@ async function cbAplicarProducto() {
   let i = cbItems.findIndex(it => it.tipo === tipo && (Number(it.producto_id) === id || cbTarNorm(cbTitulo(it)) === cbTarNorm(p.nombre)));
   if (i < 0) {
     i = cbItems.findIndex(it => it.tipo === tipo && !cbTitulo(it));
-    if (i < 0 && cbItems.length === 1 && !cbTitulo(cbItems[0])) { cbItems[0] = cbItemVacio(tipo); i = 0; }
+    if (i < 0 && cbItems.length === 1 && !cbTitulo(cbItems[0]) && !cbItems[0].tarifa && !cbItems[0].ida) { cbItems[0] = cbItemVacio(tipo); i = 0; }
     if (i < 0) i = cbItems.push(cbItemVacio(tipo)) - 1;
     const it = cbItems[i];
     if (!it.auto) cbAutoIniciar(it);
@@ -34000,6 +34050,19 @@ async function cbCargarProductos() {
   if (document.activeElement?.matches('[data-busca="hotel"]')) cbHotelBuscar(document.activeElement);
 }
 const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c)) : cbPdfBlob(c);
+// Lead con chat y ventana de 24 h abierta: su chat con el PDF a la vista, sin enviar nada. Si no, la hoja de siempre.
+async function cbCompartirAlChat(blob, nombre, leadId) {
+  window.__pruebaChatDelLead?.(leadId);
+  if (!usuarioPuedeAbrirSeccion('wa-bandeja')) return false;
+  const { data } = await sb.from('whatsapp_conversaciones').select('id,nombre,wa_id,no_leidos,ultimo_mensaje_at,ultimo_entrante_at,lead_id,asesor,phone_number_id')
+    .eq('lead_id', leadId).neq('phone_number_id', '__gate_pnid').order('ultimo_entrante_at', { ascending: false, nullsFirst: false }).limit(1);
+  const c = data?.[0];
+  if (!ventanaWaAbierta(c)) return false;
+  activateSection('wa-bandeja');
+  if (!WB) loadWaBandeja();
+  await WB.pdfEnChat(c, new File([blob], nombre, { type: 'application/pdf' }));
+  return true;
+}
 async function cbCompartir(blob, nombre) {
   const file = new File([blob], nombre, { type: 'application/pdf' });
   if (navigator.canShare?.({ files: [file] })) {
@@ -34321,7 +34384,7 @@ async function cbCargarSeccion() {
       }
       if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
       if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbAutoIniciar(cbItems[+card.dataset.i]); cbAutoTodos(); cbRenderItems(); return; }
-      if (k === 'ida' || k === 'vuelta') cbPintarStop(card, it);
+      if (k === 'ida' || k === 'vuelta' || k === 'nombre') cbPintarStop(card, it);
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (k === 'infantes' && it.tipo === 'hotel' && it.infantes_gratis));
       const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
@@ -34380,7 +34443,7 @@ async function cbCargarSeccion() {
   if (cotizaParaSi) sel.innerHTML = `<option value="${esc(MI_USUARIO_ID)}" selected>${esc(MI_NOMBRE)}</option>`;
   else sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
-  await cbCargarStops();
+  cbCargarStops();
   if (cbLeadPendiente) cbAplicarLead();
   if (cbProductoPendiente) await cbAplicarProducto();
   cbResumenCliente();
@@ -34487,8 +34550,6 @@ window.cbGuardar = async function cbGuardar(accion) {
   if (hotelPendiente) { errToast('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); cbEnfocarServicio(hotelPendiente, 'ida'); return; }
   const ninosSinTarifa = cbItems.find(it => it.tipo === 'hotel' && !cbPorHabitacion(it) && Number(it.ninos) > 0 && (cbTarNum(it.tarifa_nino) === null || (it.tramos || []).some(t => cbTarNinoTramo(it, t) === null)));
   if (ninosSinTarifa) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); cbEnfocarServicio(ninosSinTarifa, 'tarifa_nino'); return; }
-  const sinCupo = cbItems.find(it => cbStopDe(it)?.stop.length);
-  if (sinCupo && !DR?.edicion('cotizacion')) { errToast(`${sinCupo.nombre}: sin cupo en esas fechas según Stop Sales. Cambia las fechas o el hotel.`); cbEnfocarServicio(sinCupo, 'ida'); return; }
   const registros = cbItems.map(it => ({ original: it, datos: cbLimpiarItem(it) })).filter(({ datos }) => cbTitulo(datos) || datos.tarifa);
   const items = registros.map(({ datos }) => datos);
   if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); cbEnfocarServicio(cbItems[0], 'nombre'); return; }
@@ -34504,6 +34565,12 @@ window.cbGuardar = async function cbGuardar(accion) {
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
   const sol = ventas ? null : cbSolicitud, lead = ventas ? cbLead : null;
   try {
+    // Lista fresca al generar: la de entrada a la sección puede estar vencida. Si la RPC falla se sigue con la última conocida, como el resto de la pantalla.
+    if (!DR?.edicion('cotizacion')) {
+      await cbCargarStops();
+      const sinCupo = cbItems.find(it => cbStopDe(it)?.stop.length);
+      if (sinCupo) { errToast(`${sinCupo.nombre}: sin cupo en esas fechas según Stop Sales. Cambia las fechas o el hotel.`); cbEnfocarServicio(sinCupo, 'ida'); return; }
+    }
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
       items, total: cbTotalItems(items), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
@@ -34519,7 +34586,7 @@ window.cbGuardar = async function cbGuardar(accion) {
       if (ventas) {
         let marca = '';
         if (lead) marca = await cbRegistrarLeadCot(cot);
-        if (accion === 'compartir') { if (!lead || !await window.__pruebaCompartirLead?.(blob, cbArchivo(cot), lead.id)) await cbCompartir(blob, cbArchivo(cot)); }
+        if (accion === 'compartir') { if (!lead || !await cbCompartirAlChat(blob, cbArchivo(cot), lead.id)) await cbCompartir(blob, cbArchivo(cot)); }
         else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
         else cbDescargar(blob, cbArchivo(cot));
         okToast(`Cotización ${num} generada${marca}`);

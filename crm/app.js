@@ -2,7 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
-import { crearBandejaWa } from './whatsapp-bandeja.js';
+import { crearBandejaWa, ventanaWaAbierta } from './whatsapp-bandeja.js';
 import { crearTareas } from './tareas.js';
 import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
@@ -3618,6 +3618,28 @@ try { const p = JSON.parse(localStorage.getItem('pv-prefs2') || '{}'); if (p.ord
 function pvGuardarPrefs() {
   try { localStorage.setItem('pv-prefs2', JSON.stringify({ orden: PV_ORDEN, vista: PV_VISTA })); } catch {}
 }
+// «Crear reserva» desde Reservas: se elige el cliente y sigue la hoja de siempre.
+let pvNuevaTk = 0, pvNuevaTimer = null;
+function pvNuevaAbrir() {
+  pvNuevaTk++; document.getElementById('pv-nueva-q').value = ''; document.getElementById('pv-nueva-res').innerHTML = '';
+  openSheet('pv-nueva-sheet');
+  document.getElementById('pv-nueva-q').focus();
+}
+async function pvNuevaBuscar() {
+  const box = document.getElementById('pv-nueva-res'), f = leadBusqueda(val('pv-nueva-q')), tk = ++pvNuevaTk;
+  const nota = t => { box.innerHTML = `<div class="cb-picker-vacio">${t}</div>`; };
+  if (!f.q) { box.innerHTML = ''; return; }
+  if (f.q.length < f.minimo) { nota('Sigue escribiendo el nombre, o escribe el teléfono.'); return; }
+  nota('Buscando clientes…');
+  let q = sb.from('leads').select('id,nombre,telefono,estado').is('eliminado_at', null).ilike(f.campo, f.patron);
+  for (const e of [...VENTA, 'PERDIDO', 'NUMERO INVALIDO']) q = q.neq('estado', e);
+  if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
+  const { data, error } = await q.order('id', { ascending: false }).limit(8);
+  if (tk !== pvNuevaTk) return;
+  if (error) { nota('No se pudo buscar. Intenta de nuevo.'); return; }
+  if (!data?.length) { nota('Ningún cliente sin reserva con ese dato.'); return; }
+  box.innerHTML = data.map(l => `<button type="button" data-pv-lead="${l.id}"><span><b>${esc(l.nombre || 'Sin nombre')}</b><small>${esc(l.telefono || 'Sin teléfono')} · ${esc(l.estado || '')}</small></span></button>`).join('');
+}
 function setupPostventa() {
   // La bandeja trae todas las etapas (cerrados incluidos): etapa, destino, orden y filtros rápidos se aplican en memoria.
   document.querySelectorAll('#pv-stagebar .pv-stage').forEach(b => b.addEventListener('click', () => {
@@ -3639,6 +3661,12 @@ function setupPostventa() {
   });
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
   document.getElementById('pv-exportar')?.addEventListener('click', pvExportarVarias);
+  const pvNueva = document.getElementById('pv-nueva');
+  if (pvNueva) pvNueva.hidden = !(ROL === 'asesor' || esOficina());
+  pvNueva?.addEventListener('click', pvNuevaAbrir);
+  document.getElementById('pv-nueva-q')?.addEventListener('input', () => { clearTimeout(pvNuevaTimer); pvNuevaTimer = setTimeout(pvNuevaBuscar, 280); });
+  document.getElementById('pv-nueva-cancelar')?.addEventListener('click', () => closeSheet('pv-nueva-sheet'));
+  document.getElementById('pv-nueva-res')?.addEventListener('click', e => { const b = e.target.closest('[data-pv-lead]'); if (b) efAbrirDeLead(Number(b.dataset.pvLead)); });
   document.getElementById('pv-search')?.addEventListener('input', () => {
     clearTimeout(PV_SEARCH_TIMER); PV_SEARCH_TIMER = setTimeout(loadPostventa, 280);
   });
@@ -11164,7 +11192,7 @@ let WB = null;
 function loadWaBandeja() {
   if (!WB) {
     WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
-      abrirLead: id => abrirLeadDesdeMisVentas(id), ok: okToast, error: errToast, navPush, navConsume });
+      abrirLead: id => abrirLeadDesdeMisVentas(id), crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
     WB.enlazar();
   }
   return WB.abrirSeccion();
@@ -12016,7 +12044,8 @@ const EF_ERRORES = {
 };
 
 async function abrirEnviarFacturacionSheet(l) {
-  EF_LEAD_ACTUAL = l;
+  EF_LEAD_ACTUAL = l; EF_COMPROBANTE = null;
+  document.getElementById('ef-comp-previa')?.remove();
   document.getElementById('ef-err').textContent = '';
   efCalCerrar();
   document.getElementById('ef-cliente').innerHTML =
@@ -12548,11 +12577,58 @@ function efComprobanteEstado(texto, malo) {
   st.textContent = texto || '';
   st.className = 'ef-comprob-st' + (texto ? ' show' : '') + (malo ? ' malo' : '');
 }
+async function efVolcarComprobante(d) {
+  const partes = [];
+  const metodo = document.getElementById('ef-metodo');
+  if (d.metodo && [...metodo.options].some(o => o.value === d.metodo)) { metodo.value = d.metodo; partes.push(d.metodo); }
+  if (d.referencia) { document.getElementById('ef-referencia').value = d.referencia; partes.push(`ref. ${d.referencia}`); }
+  let usd = null;
+  if (d.monto != null && d.moneda === 'USD') { usd = d.monto; partes.push(money(d.monto)); }
+  else if (d.monto != null && d.moneda === 'VES') {
+    const bs = d.monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const tasa = await tasaUsdActual();
+    if (tasa) {
+      usd = Math.round(d.monto / tasa * 100) / 100;
+      partes.push(`Bs ${bs} ≈ ${money(usd)} (tasa BCV ${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
+    } else partes.push(`Bs ${bs} (no hay tasa BCV cargada: escribe el monto en USD)`);
+  } else if (d.monto != null) partes.push(`monto ${d.monto} (moneda no clara: escribe el monto en USD)`);
+  if (usd != null) { const m = document.getElementById('ef-monto-pagado'); m.value = usd.toFixed(2); m.dispatchEvent(new Event('input')); }
+  if (d.fecha) partes.push(`fecha ${d.fecha.split('-').reverse().join('/')}`);
+  if (!partes.length) { efComprobanteEstado('No pude leer datos del comprobante. Llénalos a mano.', true); return; }
+  efComprobanteEstado(`Leído: ${partes.join(' · ')}.${d.confianza < 0.6 ? ' Lectura dudosa.' : ''} Revisa que coincida con el comprobante antes de crear la reserva.`);
+}
+// Junto al comprobante del chat: la misma hoja con el pago ya puesto. Nada se guarda hasta «Crear reserva».
+let EF_COMPROBANTE = null;
+async function efLeadPorId(id) {
+  const { data: l } = await sb.from('leads').select('*').eq('id', id).maybeSingle();
+  if (!l) errToast('No se encontró ese cliente');
+  return l;
+}
+async function efAbrirDeLead(id) { const l = await efLeadPorId(id); if (l) abrirEnviarFacturacionSheet(l); }
+async function efDesdeComprobante(leadId, c, foto) {
+  const l = await efLeadPorId(leadId);
+  if (!l) return;
+  // El pago de quien ya tiene reserva suele ser un abono: crear otra lo dejaría ahí y el saldo real sin moverse.
+  const { data: r, error } = await sb.rpc('reservas_de_lead', { p_lead_id: leadId });
+  if (error) { errToast('No se pudieron revisar las reservas de este cliente'); return; }
+  if (VENTA.includes(l.estado) || (r?.reservas || []).some(x => x.activo && Number(x.monto_total) > 0)) {
+    errToast('Este cliente ya tiene reserva: registra este pago en ella.');
+    openDrawer(l, { seccion: 'reservas' });
+    return;
+  }
+  await abrirEnviarFacturacionSheet(l);
+  EF_COMPROBANTE = c.id;
+  await efVolcarComprobante(c.datos || {});
+  if (c.duplicado_de) efComprobanteEstado(`Esta referencia ya aparece en otro pago, revísala. ${document.getElementById('ef-comprobante-st').textContent}`, true);
+  if (foto) { const img = new Image(); img.id = 'ef-comp-previa'; img.src = foto; img.alt = 'Comprobante del cliente'; img.style.cssText = 'display:block;max-height:180px;max-width:100%;margin-top:8px;border-radius:8px'; document.querySelector('.ef-comprob')?.append(img); }
+}
 async function efLeerComprobante(file) {
   if (!file) return;
   const caja = document.querySelector('.ef-comprob');
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { efComprobanteEstado('Sube una captura en JPG, PNG o WebP.', true); return; }
   if (file.size > 6291456) { efComprobanteEstado('La imagen pesa más de 6 MB.', true); return; }
+  // Otra captura reemplaza al comprobante del chat: ese ya no es el pago que se va a registrar.
+  EF_COMPROBANTE = null; document.getElementById('ef-comp-previa')?.remove();
   caja.classList.add('leyendo');
   efComprobanteEstado('Leyendo comprobante…');
   try {
@@ -12562,24 +12638,7 @@ async function efLeerComprobante(file) {
       efComprobanteEstado(m === 'no_es_comprobante' ? 'Esa imagen no parece un comprobante de pago.' : `No pude leerlo: ${EF_COMP_ERRORES[m] || m}`, true);
       return;
     }
-    const d = data.datos, partes = [];
-    const metodo = document.getElementById('ef-metodo');
-    if (d.metodo && [...metodo.options].some(o => o.value === d.metodo)) { metodo.value = d.metodo; partes.push(d.metodo); }
-    if (d.referencia) { document.getElementById('ef-referencia').value = d.referencia; partes.push(`ref. ${d.referencia}`); }
-    let usd = null;
-    if (d.monto != null && d.moneda === 'USD') { usd = d.monto; partes.push(money(d.monto)); }
-    else if (d.monto != null && d.moneda === 'VES') {
-      const bs = d.monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const tasa = await tasaUsdActual();
-      if (tasa) {
-        usd = Math.round(d.monto / tasa * 100) / 100;
-        partes.push(`Bs ${bs} ≈ ${money(usd)} (tasa BCV ${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
-      } else partes.push(`Bs ${bs} (no hay tasa BCV cargada: escribe el monto en USD)`);
-    } else if (d.monto != null) partes.push(`monto ${d.monto} (moneda no clara: escribe el monto en USD)`);
-    if (usd != null) { const m = document.getElementById('ef-monto-pagado'); m.value = usd.toFixed(2); m.dispatchEvent(new Event('input')); }
-    if (d.fecha) partes.push(`fecha ${d.fecha.split('-').reverse().join('/')}`);
-    if (!partes.length) { efComprobanteEstado('No pude leer datos del comprobante. Llénalos a mano.', true); return; }
-    efComprobanteEstado(`Leído: ${partes.join(' · ')}.${d.confianza < 0.6 ? ' Lectura dudosa.' : ''} Revisa que coincida con el comprobante antes de crear la reserva.`);
+    await efVolcarComprobante(data.datos);
   } catch (e) {
     console.error('leer-comprobante', e);
     efComprobanteEstado('No pude leer el comprobante. Llénalo a mano.', true);
@@ -12623,6 +12682,8 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
     return;
   }
   closeSheet('enviar-facturacion-sheet');
+  if (EF_COMPROBANTE && pagado > 0) WB?.marcarComprobante(EF_COMPROBANTE, 'registrado');
+  if (currentSec === 'postventa') loadPostventa();
   okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
 });
 
@@ -20088,14 +20149,15 @@ async function loadStopSalesVigentes() {
   const cont = document.getElementById('ss-vigentes');
   cont.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const { data, error } = await sb.rpc('stop_sales_vigentes');
-  if (error) { cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
+  if (error) { ssVerifPendiente = null; cont.innerHTML = `<div class="vig-vacio">No se pudo cargar: ${esc(error.message)}</div>`; return; }
   const hoteles = await ssProductosHotel();
-  if (!hoteles.length && data?.length) { cont.innerHTML = '<div class="vig-vacio">No se pudieron cargar los destinos. Vuelve a entrar a Stop Sales para reintentar.</div>'; return; }
+  if (!hoteles.length && data?.length) { ssVerifPendiente = null; cont.innerHTML = '<div class="vig-vacio">No se pudieron cargar los destinos. Vuelve a entrar a Stop Sales para reintentar.</div>'; return; }
   const destinos = new Map(hoteles.map(h => [Number(h.id), h.destino]));
   SS_VIGENTES_DATA = (data || []).map(f => ({ ...f, destino: destinos.get(Number(f.producto_id)) || '' }));
   ssView = initViewSwitcher('ss-view-switch', 'stop-sales', 'calendario', (v) => { ssView = v; SS_DIA_ABIERTO = null; ssRenderVigentes(); }, ['calendario', 'hoteles']);
   ssRenderVigentes();
   await ssPintarHotelesVerif();
+  ssVerifPendiente = null;
   ssVerificar();
 }
 
@@ -20103,10 +20165,12 @@ async function loadStopSalesVigentes() {
    Noches = [entrada, salida): la del día de salida no se duerme. Cruza solo
    contra lo publicado del PDF de BT; si el hotel no figura, se dice tal cual
    (puede ser que BT no lo maneje), no se promete disponibilidad. */
+let ssVerifPendiente = null;
+window.ssCotizarVerif = () => cbDesdeFicha(val('ss-v-hotel'), { ida: val('ss-v-entrada'), vuelta: val('ss-v-salida') });
 async function ssPintarHotelesVerif() {
   const sel = document.getElementById('ss-v-hotel');
   if (!sel || !SS_VIGENTES_DATA) return;
-  const actual = sel.value;
+  const actual = ssVerifPendiente || sel.value;
   const destino = ssDestino;
   const hoteles = await ssProductosHotel();
   if (destino !== ssDestino) return;
@@ -20170,7 +20234,7 @@ function ssVerificar() {
       <div>
         <div class="ss-veredicto-t">${titulo}</div>
         <p><b>${esc(nombre)}</b> · ${n === 1 ? '1 noche' : `${n} noches`}: entrada ${fmtDiaCorto(ent)}, salida ${fmtDiaCorto(sal)}</p>
-        <p>${texto}</p>
+        <p>${texto}</p>${nStop || !usuarioPuedeAbrirSeccion('cotizacion-boletos') ? '' : '<button type="button" class="cb-link" onclick="ssCotizarVerif()">Llevar a Cotizaciones</button>'}
       </div>
     </div>
     ${tramos.length ? `<div class="ss-v-tramos">${tramos.map((t) => `<div><b>${ETIQ[t.estado]}:</b> ${t.desde === t.hasta ? `noche del ${fmtDiaCorto(t.desde)}` : `noches del ${fmtDiaCorto(t.desde)} al ${fmtDiaCorto(t.hasta)}`}</div>`).join('')}</div>` : ''}
@@ -28579,11 +28643,12 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
     </div></details>` : ''}
     ${carpeta ? tarBarraSeleccionHtml() : ''}
-    <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
+    <div class="dactions">${(esPromo ? x.producto_id : x.id) && usuarioPuedeAbrirSeccion('cotizacion-boletos') ? '<button class="dbtn save" id="dCotizarForm" type="button" style="width:auto;margin-top:0"><i class="fas fa-file-invoice-dollar"></i> Llevar a Cotizaciones</button>' : ''}<button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   if (!drawerAbierto) navPush({ type: 'drawer' });
+  document.getElementById('dCotizarForm')?.addEventListener('click', () => trasCerrarDrawer(() => cbDesdeFicha(esPromo ? x.producto_id : x.id)));
   document.getElementById('dCotizador').onclick = () =>
     lyraCotizar({ opcion_tabla: esPromo ? 'promociones' : 'productos', opcion_id: x.id, nombre }, `Cotízame ${nombre}: `);
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
@@ -33402,9 +33467,44 @@ function cbPaxHtml(it, i, tipo) {
   }).join('');
   return { cuentas: `<div class="cb-sec cb-full">${cbEmo('👥')}Viajeros</div><div class="cb-cuentas cb-full">${cuentas}</div>`, precios: `<div class="cb-precios cb-full">${precios}</div>` };
 }
+// Stop Sales ↔ Cotizaciones: misma RPC y regla que «¿Puedo vender?», noches [entrada, salida). Sin cupo no se genera; a confirmar solo avisa.
+let cbStops = null;
+async function cbCargarStops() {
+  const { data, error } = await sb.rpc('stop_sales_vigentes');
+  if (error || !Array.isArray(data)) return;
+  cbStops = data;
+  document.querySelectorAll('#cb-items .cb-item').forEach(card => { const it = cbItems[+card.dataset.i]; if (it) cbPintarStop(card, it); });
+}
+function cbStopDe(it) {
+  if (it.tipo !== 'hotel' || !cbStops) return null;
+  const id = Number(it.producto_id) || Number(cbProductoDe(it)?.id), noches = cbTarNoches(it.ida, it.vuelta);
+  if (!id || !noches.length) return null;
+  const rangos = cbStops.filter(r => Number(r.producto_id) === id);
+  const de = estado => noches.filter(n => rangos.some(r => r.estado === estado && r.fecha_desde <= n && n <= r.fecha_hasta));
+  const stop = de('stop_sale'), rq = de('on_request').filter(n => !stop.includes(n));
+  return stop.length || rq.length ? { id, rangos, noches, stop, rq } : null;
+}
+function cbStopHtml(it) {
+  const s = cbStopDe(it);
+  if (!s) return '<div class="cb-ss cb-full" hidden></div>';
+  const lista = xs => xs.map(fmtDiaCorto).join(', ');
+  const libre = s.stop.length ? ssLibreDesde(s.rangos, s.stop[0]) : null;
+  const texto = s.stop.length
+    ? `Sin cupo ${s.stop.length === 1 ? 'la noche del' : 'las noches del'} ${lista(s.stop)}. Propón otras fechas u otro hotel del mismo destino.${libre ? ` Disponible desde el ${ssFechaCompleta(libre)}.` : ''}`
+    : `A confirmar ${s.rq.length === 1 ? 'la noche del' : 'las noches del'} ${lista(s.rq)}. Pide confirmación de cupo: no cobres ni le confirmes al cliente hasta tener la respuesta.`;
+  return `<div class="cb-ss cb-full"><div class="ss-veredicto" role="alert" style="--c:${s.stop.length ? 'var(--danger)' : 'var(--amber)'}"><i class="fas ${s.stop.length ? 'fa-ban' : 'fa-clock'}"></i><div><div class="ss-veredicto-t">${s.stop.length ? 'No vender' : 'Consultar antes de confirmar'}</div><p>${esc(texto)}</p><button type="button" class="cb-link" data-cb-ss>Ver en Stop Sales</button></div></div></div>`;
+}
+function cbPintarStop(card, it) { const n = card.querySelector('.cb-ss'); if (n) n.outerHTML = cbStopHtml(it); }
+function cbVerStopSales(it) {
+  const s = cbStopDe(it); if (!s) return;
+  ssCambiarDestino(ssEsLosRoques(cbProductoDe(it)?.destino) ? 'roques' : 'bt');
+  ssHotelSel = s.rangos[0]?.nombre || null; ssVerifPendiente = String(s.id);
+  document.getElementById('ss-v-entrada').value = it.ida; document.getElementById('ss-v-salida').value = it.vuelta;
+  activateSection('stop-sales');
+}
 function cbFechasHtml(it, i, f) {
   const n = +cbNoches(it.ida, it.vuelta) || 0;
-  return `<div class="cb-fechas cb-full">${f('ida', 'Check-in', 'type="date"')}${f('vuelta', 'Check-out', 'type="date"')}<div class="field cb-noches"><span class="fl" id="cb-noches-l-${i}">${cbEmo('🌙')}Noches</span><div class="cb-step" role="group" aria-labelledby="cb-noches-l-${i}"><button type="button" class="cb-step-b" data-cb-noches="-1" aria-label="Una noche menos">−</button><output class="ei" aria-live="polite">${n || '–'}</output><button type="button" class="cb-step-b" data-cb-noches="1" aria-label="Una noche más">+</button></div></div></div>`;
+  return `<div class="cb-fechas cb-full">${f('ida', 'Check-in', 'type="date"')}${f('vuelta', 'Check-out', 'type="date"')}<div class="field cb-noches"><span class="fl" id="cb-noches-l-${i}">${cbEmo('🌙')}Noches</span><div class="cb-step" role="group" aria-labelledby="cb-noches-l-${i}"><button type="button" class="cb-step-b" data-cb-noches="-1" aria-label="Una noche menos">−</button><output class="ei" aria-live="polite">${n || '–'}</output><button type="button" class="cb-step-b" data-cb-noches="1" aria-label="Una noche más">+</button></div></div></div>${cbStopHtml(it)}`;
 }
 function cbDesgloseHtml(it) {
   const total = cbImporte(it);
@@ -33646,6 +33746,32 @@ window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud 
 // si se abrió desde un lead, la fila queda con lead_id y "Guardar en el lead" lo marca cotizado.
 const CB_CON_PRODUCTO = ['hotel', 'paquete', 'fullday', 'tour'];
 let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false;
+let cbProductoPendiente = null;
+let cbFechasPendientes = null;
+function cbDesdeFicha(id, fechas = null) { cbProductoPendiente = Number(id); cbFechasPendientes = fechas; activateSection('cotizacion-boletos'); }
+async function cbAplicarProducto() {
+  const id = cbProductoPendiente, fechas = cbFechasPendientes; cbProductoPendiente = null; cbFechasPendientes = null;
+  const p = cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
+  if (!p) { errToast('No se pudo cargar ese producto'); return; }
+  cbHoteles.set(id, p);
+  const tipo = { hotel: 'hotel', paquete: 'paquete', excursion: 'fullday', traslado: 'traslado' }[p.tipo] || 'otro';
+  let i = cbItems.findIndex(it => it.tipo === tipo && (Number(it.producto_id) === id || cbTarNorm(cbTitulo(it)) === cbTarNorm(p.nombre)));
+  if (i < 0) {
+    i = cbItems.findIndex(it => it.tipo === tipo && !cbTitulo(it));
+    if (i < 0 && cbItems.length === 1 && !cbTitulo(cbItems[0]) && !cbItems[0].tarifa && !cbItems[0].ida) { cbItems[0] = cbItemVacio(tipo); i = 0; }
+    if (i < 0) i = cbItems.push(cbItemVacio(tipo)) - 1;
+    const it = cbItems[i];
+    if (!it.auto) cbAutoIniciar(it);
+    if (tipo === 'hotel') { cbRenderItems(); await cbHotelElegir(document.querySelector(`#cb-items .cb-item[data-i="${i}"]`), id); }
+    else { it[cbTipo(it).campos[0][0]] = p.nombre; cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); }
+  }
+  if (fechas && tipo === 'hotel') {
+    const it = cbItems[i]; Object.assign(it, fechas);
+    if (it.auto) { delete it.auto.ida; delete it.auto.vuelta; }
+    cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
+  }
+  document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
 function cbDesdeLead(l) { cbLeadPendiente = { id: l.id, nombre: l.nombre || l.telefono || `Lead #${l.id}`, telefono: l.telefono }; activateSection('cotizacion-boletos'); }
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
@@ -33927,6 +34053,18 @@ async function cbCargarProductos() {
   if (document.activeElement?.matches('[data-busca="hotel"]')) cbHotelBuscar(document.activeElement);
 }
 const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c)) : cbPdfBlob(c);
+// Lead con chat y ventana de 24 h abierta: su chat con el PDF a la vista, sin enviar nada. Si no, la hoja de siempre.
+async function cbCompartirAlChat(blob, nombre, leadId) {
+  if (!usuarioPuedeAbrirSeccion('wa-bandeja')) return false;
+  const { data } = await sb.from('whatsapp_conversaciones').select('id,nombre,wa_id,no_leidos,ultimo_mensaje_at,ultimo_entrante_at,lead_id,asesor,phone_number_id')
+    .eq('lead_id', leadId).neq('phone_number_id', '__gate_pnid').order('ultimo_entrante_at', { ascending: false, nullsFirst: false }).limit(1);
+  const c = data?.[0];
+  if (!ventanaWaAbierta(c)) return false;
+  activateSection('wa-bandeja');
+  if (!WB) loadWaBandeja();
+  await WB.pdfEnChat(c, new File([blob], nombre, { type: 'application/pdf' }));
+  return true;
+}
 async function cbCompartir(blob, nombre) {
   const file = new File([blob], nombre, { type: 'application/pdf' });
   if (navigator.canShare?.({ files: [file] })) {
@@ -34170,6 +34308,7 @@ async function cbCargarSeccion() {
       if (e.target.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(it, it.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
       if (e.target.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }); return; }
       if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
+      if (e.target.closest('[data-cb-ss]')) { cbVerStopSales(it); return; }
       if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); document.querySelector(`#cb-items .cb-item[data-i="${card.dataset.i}"] [data-cb-plegar]`).focus({ preventScroll: true }); return; }
       if (e.target.closest('[data-cb-unidad-cambiar]')) { it._unidadEditar = true; cbRenderItems(); document.getElementById(`cb-unidad-${card.dataset.i}`)?.focus(); return; }
       if (e.target.closest('[data-cb-usar]')) { cbHotelRecalcular(it, true); cbRenderItems(); cbProgramarBorrador(); return; }
@@ -34247,6 +34386,7 @@ async function cbCargarSeccion() {
       }
       if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
       if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbAutoIniciar(cbItems[+card.dataset.i]); cbAutoTodos(); cbRenderItems(); return; }
+      if (k === 'ida' || k === 'vuelta' || k === 'nombre') cbPintarStop(card, it);
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (k === 'infantes' && it.tipo === 'hotel' && it.infantes_gratis));
       const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
@@ -34305,7 +34445,9 @@ async function cbCargarSeccion() {
   if (cotizaParaSi) sel.innerHTML = `<option value="${esc(MI_USUARIO_ID)}" selected>${esc(MI_NOMBRE)}</option>`;
   else sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
+  cbCargarStops();
   if (cbLeadPendiente) cbAplicarLead();
+  if (cbProductoPendiente) await cbAplicarProducto();
   cbResumenCliente();
   cbOffset = 0;
   await cbCargarHistorial(false);
@@ -34425,6 +34567,12 @@ window.cbGuardar = async function cbGuardar(accion) {
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
   const sol = ventas ? null : cbSolicitud, lead = ventas ? cbLead : null;
   try {
+    // Lista fresca al generar: la de entrada a la sección puede estar vencida. Si la RPC falla se sigue con la última conocida, como el resto de la pantalla.
+    if (!DR?.edicion('cotizacion')) {
+      await cbCargarStops();
+      const sinCupo = cbItems.find(it => cbStopDe(it)?.stop.length);
+      if (sinCupo) { errToast(`${sinCupo.nombre}: sin cupo en esas fechas según Stop Sales. Cambia las fechas o el hotel.`); cbEnfocarServicio(sinCupo, 'ida'); return; }
+    }
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
       items, total: cbTotalItems(items), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
@@ -34440,7 +34588,7 @@ window.cbGuardar = async function cbGuardar(accion) {
       if (ventas) {
         let marca = '';
         if (lead) marca = await cbRegistrarLeadCot(cot);
-        if (accion === 'compartir') await cbCompartir(blob, cbArchivo(cot));
+        if (accion === 'compartir') { if (!lead || !await cbCompartirAlChat(blob, cbArchivo(cot), lead.id)) await cbCompartir(blob, cbArchivo(cot)); }
         else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
         else cbDescargar(blob, cbArchivo(cot));
         okToast(`Cotización ${num} generada${marca}`);
@@ -35202,7 +35350,6 @@ function setupMisNotas() {
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
-  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
@@ -35221,6 +35368,7 @@ const NAV_ITEMS = [
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
   { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
+  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-reservas', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   { sec: 'campanas-wa', icon: 'fa-brands fa-whatsapp', label: 'Campañas WhatsApp', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-no', sub: 'Plantillas a clientes con venta: campañas, audiencia y envíos' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
