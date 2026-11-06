@@ -3245,7 +3245,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
-    setupTareasV2, setupTecladoMovil,
+    setupTareasV2, setupTecladoMovil, setupEstadoBody,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -37478,6 +37478,29 @@ function setupTecladoMovil() {
   });
 }
 
+/* Capas abiertas y pantallas especiales como clases de <body>: cada body:has(...)
+   reevaluaba estilos con casi cualquier cambio del DOM (Tarifario móvil, medido).
+   Observer y no llamadas: .drawer.open tiene más de 12 escritores y módulos propios. */
+const ESTADO_BODY_CLASES = ['sheet', 'drawer', 'mfs', 'section', 'dm-shell'];
+function pintarEstadoBody() {
+  const b = document.body.classList, sec = document.querySelector('.section.active');
+  b.toggle('con-sheet', !!document.querySelector('.sheet.open'));
+  b.toggle('con-drawer', !!document.querySelector('.drawer.open'));
+  b.toggle('con-mfs', !!document.querySelector('.mfs.open'));
+  b.toggle('con-mfab', !!document.querySelector('body>.mfab'));
+  b.toggle('con-vp', !!document.getElementById('vista-previa-banner'));
+  b.toggle('ver-chat-on', !!sec?.querySelector('.dm-shell.ver-chat'));
+  b.toggle('en-voucher', sec?.id === 'sec-voucher');
+  b.toggle('en-cotiz-boletos', sec?.id === 'sec-cotizacion-boletos');
+}
+function setupEstadoBody() {
+  pintarEstadoBody();
+  new MutationObserver(recs => { if (recs.some(r => ESTADO_BODY_CLASES.some(c => r.target.classList.contains(c)))) pintarEstadoBody(); })
+    .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  // Banner, FAB y cajones de módulos se montan y desmontan como hijos directos de <body>.
+  new MutationObserver(pintarEstadoBody).observe(document.body, { childList: true });
+}
+
 /* P1-2: al bajar, los FABs (Lyra y "+") se apartan para no tapar lo que se
    está leyendo; vuelven al subir o al llegar al final, donde .main ya les
    reserva el alto. En captura porque en móvil scrollea la ventana y también
@@ -37550,6 +37573,7 @@ function sincronizarPopoverSheet(el) {
   }
   est.montado = debeEstar;
   est.propio = false;
+  pintarEstadoBody(); // Al quitarle .sheet el observer ya no lo reconoce.
 }
 function cerrarPopoverSheet(el) {
   const est = POPOVER_SHEETS.get(el); if (!est) return;
