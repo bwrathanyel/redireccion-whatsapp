@@ -309,6 +309,9 @@
     el.dataset.pruebaFoto = '1'; el.src = fotoLocal(el.src || '');
   }, true);
 
+  // El tarifario real de BT vive en el Drive de Lotus: acá se abre un PDF de ejemplo en vez del error «No se pudo abrir».
+  R.FUNCIONES['tarifario-bt-pdf'] = () => ({ ok: true, url: URL.createObjectURL(pdfEjemplo('Tarifario BT Travel.pdf')) });
+
   /* ---------- Realtime falso (phoenix): acepta todo y emite lo que se le empuje ---------- */
   const sockets = new Set();
   class FakeWS {
