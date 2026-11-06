@@ -92,13 +92,6 @@
     'clientes-eventos': { icono: '🎪', titulo: 'Se abrió: Clientes Eventos', texto: 'Registrados con el QR del stand y sus premios.' },
     'proyecto-constructor': { icono: '🏗️', titulo: 'Se abrió: Proyecto Constructor', texto: 'El avance del CRM que Lotus vende a otras empresas.' },
   };
-  const bienvenida = rol => [
-    { icono: '👋', titulo: `¡Hola${ss('prueba:nombre') ? ', ' + escHtml(ss('prueba:nombre')) : ''}! Esta es tu práctica`, texto: rol === 'admin'
-      ? 'Eres el administrador del CRM de Lotus 360: verificas pagos, repartes clientes y ves al equipo. Todo es inventado: toca lo que quieras, no le llega nada a ningún cliente.'
-      : 'El CRM es donde atendemos a los clientes de Lotus 360. Todo es inventado: toca lo que quieras, no le llega nada a ningún cliente.' },
-    { icono: '🪜', titulo: 'Vamos de a poco', texto: 'Empiezas con una sección. Cada tarea que terminas abre la siguiente.' },
-    { icono: '🎯', titulo: 'Tu guía', texto: 'Tu tarea vive en una burbuja: arrástrala a donde no estorbe y tócala para abrirla. <b>Llévame</b> te muestra dónde ir; adentro también puedes <b>Saltar</b> o <b>Reiniciar</b>.' },
-  ];
   const CIERRE = {
     asesor: 'Repite tú solo el caso completo: atiende a un cliente, abre su ficha, ármale la cotización en PDF, registra su pago y genérale el voucher. Si te trabas, pregúntale a Lyra.',
     admin: 'Repite tú solo el recorrido: aprueba un pago, genera un voucher, reparte un número, asigna una tarea y revisa quién vino hoy. Si te trabas, pregúntale a Lyra.',
@@ -639,8 +632,7 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     pintaInicio();
     aplicaGuia();
     if (!enLogin() && !presentando() && !estado.bienvenida && directo()) { estado.bienvenida = true; guarda(estado); }
-    if (!enLogin() && !presentando() && !estado.bienvenida && !document.getElementById('prueba-modal'))
-      modal(bienvenida(P.m.rol), 'Empezar', () => { estado.bienvenida = true; guarda(estado); const mi = actual(); mi ? presenta(mi) : pinta(); });
+    if (!enLogin() && !presentando() && !estado.bienvenida && !document.getElementById('prueba-modal')) { estado.bienvenida = true; const mi = actual(); if (mi) estado.vistas.push(clave(mi)); guarda(estado); mi ? presenta(mi) : pinta(); }
     if (document.getElementById('drawer')?.classList.contains('open')) registra({ tipo: 'ficha' });
     const s = visible();
     if (s !== secVisible) { secVisible = s; if (s) { mide('seccion', { seccion: s }); registra({ tipo: 'seccion', sec: s }); } pinta(); }
