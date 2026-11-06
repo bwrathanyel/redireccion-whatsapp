@@ -366,6 +366,9 @@ const RESERVA_META = {
   'Isabel Moreno': ['SEGUIMIENTO_POSTVIAJE', 'BAJA', -6, 3, 'Venetur Mérida', 15],
   'Pedro Martínez': ['COBRO_PENDIENTE', 'NORMAL', 20, 3, 'Hesperia Playa El Agua', 0],
 };
+// Reservas hechas en la prueba con «Crear reserva» (lead id → meta, servicios y comprobante). Se pierden al recargar, como todo lo demás.
+const CREADAS = new Map();
+const _meta = l => CREADAS.get(l.id)?.meta ?? RESERVA_META[l.nombre];
 const DOCS_POR_ETAPA = { COBRO_PENDIENTE: 1, CONFIRMACION_RESERVA: 1, DOCUMENTACION: 3, LISTO_PARA_VIAJAR: 6, EN_VIAJE: 6,
   SEGUIMIENTO_POSTVIAJE: 6, CERRADO: 6 };
 const DOCS = ['comprobante_pago', 'reserva_emitida', 'voucher_hotel', 'boletos', 'seguro', 'itinerario_entregado'];
@@ -378,13 +381,13 @@ function _nombre_usuario(m, a) {
 
 
 function _vendidos(m, asesor = null) {
-  return _leads(m).filter(l => VENDIDOS.includes(l.estado) && Object.hasOwn(RESERVA_META, l.nombre) && (asesor === null || l.asesor === asesor));
+  return _leads(m).filter(l => (CREADAS.has(l.id) || (VENDIDOS.includes(l.estado) && Object.hasOwn(RESERVA_META, l.nombre))) && (asesor === null || l.asesor === asesor));
 }
 
 
 // Cierres dentro del mes en curso (hora Caracas) para que el KPI "ventas del mes" no quede en 0 a principio de mes.
 function _cierre(l) {
-  const d = RESERVA_META[l.nombre][5];
+  const d = _meta(l)[5];
   let f = mas(AHORA, { dias: -d });
   const caracas = mas(AHORA, { horas: -4 });
   const inicio = mas(rep(caracas, { day: 1, hour: 0, minute: 0, second: 0 }), { horas: 4 });
@@ -411,10 +414,11 @@ function mis_ventas(m, a) {
 
 
 function _reserva(l) {
-  const [etapa, prio, viaje, noches, prov] = RESERVA_META[l.nombre];
+  const [etapaBase, prio, viaje, noches, prov] = _meta(l), creada = CREADAS.has(l.id);
   const rid = l.id - 9000 + 100;
   const tot = flotante(l.total), pag = _pagado(l);
-  const ndocs = DOCS_POR_ETAPA[etapa];
+  const etapa = creada ? (pag < tot ? 'COBRO_PENDIENTE' : 'CONFIRMACION_RESERVA') : etapaBase;
+  const ndocs = creada && !pag ? 0 : DOCS_POR_ETAPA[etapa];
   return { id: rid, codigo: `R-${pad(rid, 6)}`, principal: true, factura_id: null, lead_id: l.id, nombre: l.nombre,
     cliente: l.nombre, telefono: l.telefono, destino: l.destino, servicio: l.servicio,
     servicios_comprados: [l.servicio], estado_lead: l.estado, asesor: l.asesor, fecha_creacion: l.fecha_creacion,
@@ -466,7 +470,8 @@ function _servicio(r, sid, tipo, desc, ini, fin, estado, usd, { pax = 2, hora = 
 function reserva_detalle(m, a) {
   const r = _reservas(m).find(x => x.id === entero(g(a, 'p_reserva_id') || 0)) ?? null;
   if (!r) return { ok: false, error: 'Reserva no encontrada' };
-  const ini = r.fecha_viaje_inicio, fin = r.fecha_viaje_fin, noches = RESERVA_META[r.nombre][3], base = r.id * 10;
+  const creada = CREADAS.get(r.lead_id);
+  const ini = r.fecha_viaje_inicio, fin = r.fecha_viaje_fin, noches = _meta({ id: r.lead_id, nombre: r.nombre })[3], base = r.id * 10;
   const hosp = { hospedaje: { hotel: r.proveedor, habitacion: 'Doble estándar', plan: 'Todo incluido', noches } };
   let servicios, pasajeros;
   if (r.nombre === 'María González') {
@@ -483,9 +488,11 @@ function reserva_detalle(m, a) {
     const nom = r.nombre.slice(0, sp), ape = r.nombre.slice(sp + 1);
     pasajeros = [[nom, ape, 'V-00.000.0' + String(r.id).slice(-2), '1985-03-20', true]];
   }
+  if (creada) servicios = creada.servicios.map((s, i) => ({ ..._servicio(r, base + 1 + i, s.tipo, s.descripcion, s.fecha_inicio, s.fecha_fin ?? s.fecha_inicio, 'solicitado', flotante(s.precio),
+    { pax: s.pax_adultos, hora: s.hora ?? null, detalle: s.detalle }), pax_ninos: s.pax_ninos }));
   const pas = pasajeros.map(([n, ap, doc, fn, tit], i) => ({ id: base + 50 + i, nombre: n, apellido: ap, tipo_documento: 'cedula', numero_documento: doc, fecha_nacimiento: fn,
     nacionalidad: 'Venezolana', telefono: tit ? r.telefono : null, email: null, titular: tit }));
-  const docs = [{ id: base + 80, servicio_id: null, tipo: 'comprobante', nombre: 'comprobante-abono.jpg', mime: 'image/jpeg',
+  const docs = creada && !creada.comprobante ? [] : [{ id: base + 80, servicio_id: null, tipo: 'comprobante', nombre: creada ? 'comprobante-del-chat.svg' : 'comprobante-abono.jpg', mime: creada ? 'image/svg+xml' : 'image/jpeg',
     tamano_bytes: 184000, created_at: r.fecha_cierre, subido_por: r.asesor }];
   if (r.documentos.voucher_hotel) {
     docs.push({ id: base + 81, servicio_id: servicios[servicios.length - 1].id, tipo: 'voucher', nombre: 'voucher-hotel.pdf',
@@ -493,6 +500,39 @@ function reserva_detalle(m, a) {
   }
   return { ok: true, vista: _es_asesor(m) ? 'asesor' : 'admin', reserva: r, servicios, pasajeros: pas,
     documentos: docs };
+}
+
+
+// Mismas validaciones y mismo cambio de estado que crear_reserva_con_servicios (m13): el lead queda EN ESPERA DE PAGO y el pago es el primer abono.
+function crear_reserva_con_servicios(m, a) {
+  const l = _fila_lead(m, g(a, 'p_lead_id'));
+  if (!l || g(l, 'eliminado_at')) return { ok: false, error: 'lead_no_disponible' };
+  if (CREADAS.has(l.id) || (VENDIDOS.includes(l.estado) && Object.hasOwn(RESERVA_META, l.nombre))) return { ok: false, error: 'reserva_ya_tiene_servicios' };
+  const servicios = g(a, 'p_servicios') || [], metodo = g(a, 'p_metodo_pago'), pagado = rd(flotante(g(a, 'p_monto_pagado') || 0), 2);
+  const total = rd(servicios.reduce((s, x) => s + flotante(x.precio || 0), 0), 2);
+  if (!servicios.length) return { ok: false, error: 'servicios_invalidos' };
+  if (!(total > 0)) return { ok: false, error: 'total_cero' };
+  if (pagado < 0) return { ok: false, error: 'monto_invalido' };
+  if (pagado > 0 && !metodo) return { ok: false, error: 'falta_metodo_pago' };
+  if (pagado > total) return { ok: false, error: 'pagado_mayor_que_total' };
+  const dias = (x, y) => Math.round((Date.parse(x) - Date.parse(y)) / 86400000);
+  const inicios = servicios.map(s => s.fecha_inicio).sort(), finales = servicios.map(s => s.fecha_fin ?? s.fecha_inicio).sort();
+  const hosp = servicios.find(s => s.tipo === 'hospedaje'), prov = hosp?.detalle?.hotel || servicios[0].descripcion;
+  CREADAS.set(l.id, { meta: [null, 'NORMAL', dias(inicios[0], dia(0)), Math.max(dias(finales.at(-1), inicios[0]), 0), prov, 0], servicios, comprobante: g(a, 'p_comprobante_path') ?? null });
+  Object.assign(l, { total, monto_inicial: pagado, restante_pago: rd(total - pagado, 2), monto_completo: pagado >= total ? total : null });
+  if (!['EN ESPERA DE PAGO', ...VENDIDOS].includes(l.estado)) { l.estado = 'EN ESPERA DE PAGO'; l.fecha_cierre = null; }
+  const r = _reserva(l);
+  CREADAS.get(l.id).docId = r.id * 10 + 80;
+  if (pagado > 0) setdefault(m.tablas, '_abonos_reserva', {})[r.id] = [{ id: r.id * 100, reserva_id: r.id, servicio_id: null, monto_usd: pagado, monto_original: pagado, moneda: 'USD',
+    tasa_usd_ves: null, tasa_tipo: null, metodo, referencia: g(a, 'p_referencia_pago'), nota: 'Pago al crear la reserva', fecha: iso(AHORA),
+    asesor: r.asesor, comprobante_path: g(a, 'p_comprobante_path') ?? null, anulado_en: null, documentos_estado: 'listo', recibo_documento_id: null }];
+  return { ok: true, reserva_id: r.id, codigo: r.codigo, reserva_nueva: true, servicios: servicios.length, monto_total: total, monto_pagado: pagado, saldo_pendiente: rd(total - pagado, 2) };
+}
+// El comprobante del chat que quedó guardado en la reserva se vuelve a ver desde Documentos.
+function _comprobante_doc(a) {
+  if (g(a, 'accion') !== 'descargar') return null;
+  const c = [...CREADAS.values()].find(x => x.docId === entero(g(a, 'documento_id') || 0));
+  return c?.comprobante && window.__pruebaComprobante ? { ok: true, url: window.__pruebaComprobante(c.comprobante) } : null;
 }
 
 
@@ -581,7 +621,7 @@ function listar_leads_en_facturacion(m, a) {
   _vendidos(m, _es_asesor(m) ? g(m.usuario, 'nombre') : null).forEach((l, idx) => {
     const i = idx + 1;
     const hecho = l.estado === 'VENTA COMPLETA';
-    const meta = RESERVA_META[l.nombre];
+    const meta = _meta(l);
     out.push({ bandeja_id: i, lead_id: l.id, nombre: l.nombre, telefono: l.telefono, destino: l.destino,
       asesor: l.asesor, enviado_por: l.asesor, creado_en: _cierre(l), estado: hecho ? 'procesado' : 'pendiente',
       procesado_en: hecho ? hace({ dias: 2 }) : null, admin_destino: 'Admin Demo', cedula: 'V-00.000.0' + pad(i, 2),
@@ -1051,7 +1091,7 @@ const RPCS_ASESOR = {
   actualizar_lead, reportar_telefono_incorrecto, set_pausa_asesor,
   fijar_proxima_accion, guardar_notas_lead,
   registrar_cotizacion_enviada, enviar_a_facturacion, emitir_pago,
-  registrar_abono_venta, reserva_abonos_lista, registrar_abono_reserva_v2, estadisticas_asesor,
+  registrar_abono_venta, reserva_abonos_lista, registrar_abono_reserva_v2, estadisticas_asesor, crear_reserva_con_servicios,
   abono_documentos_registrar: (m, a) => OK, registrar_documento: (m, a) => ({ ok: true, documento_id: null }),
   usuarios_chat: (m, a) => [{ id: USUARIOS.admin.id, nombre: 'Admin Demo', rol: 'admin' }],
   mis_ventas, postventa_bandeja, postventa_resumen,
@@ -1177,7 +1217,7 @@ const FUNCIONES = { 'repartir-numeros': repartir_numeros, 'voz-ia-referencia': v
   // Redes (Zernio): sin cuentas ni marcas conectadas; con `{ ok: true }` a secas el CRM hace `.cuentas.filter` / `.marcas.filter` sobre undefined.
   'marketing-zernio': (m, a) => ({ ok: true, marcas: [] }), 'redes-facebook-zernio': (m, a) => ({ ok: true, cuentas: [] }),
   // Firma de subida para el recibo y el voucher del abono (abonos.js): sin path, supabase-js revienta en uploadToSignedUrl.
-  'reservas-documentos': (m, a) => g(a, 'accion') === 'subir' ? { ok: true, path: `${entero(g(a, 'reserva_id') || 0)}/${g(a, 'tipo') || 'doc'}-${Date.now()}.pdf`, token: 'prueba' } : OK };
+  'reservas-documentos': (m, a) => g(a, 'accion') === 'subir' ? { ok: true, path: `${entero(g(a, 'reserva_id') || 0)}/${g(a, 'tipo') || 'doc'}-${Date.now()}.pdf`, token: 'prueba' } : _comprobante_doc(a) || OK };
 
-window.PRUEBA_RPCS = { RPCS, FUNCIONES };
+window.PRUEBA_RPCS = { RPCS, FUNCIONES, TASA_VES };
 })();

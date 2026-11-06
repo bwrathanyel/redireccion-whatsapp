@@ -335,7 +335,8 @@ ${QUIETO(':root[data-paleta="sereno"]')}`;
     document.body.classList.toggle('prueba-guiada', guiada);
     // Los grupos del menú (Inicio, Leads, Reservas...) se midieron con todo oculto: al abrirse el menú se vuelven a medir.
     if (eraGuiada !== guiada) window.__navRefrescar?.();
-    const ok = new Set(estado.vistas);
+    // Reservas está abierta desde el arranque; su explicación sale igual la primera vez que se entra.
+    const ok = new Set([...estado.vistas, 'postventa']);
     // Sin guía (práctica terminada) el FAB de Lyra está a la vista: el panel se corre igual para no taparlo.
     document.body.classList.toggle('prueba-lyra', ok.has('lyra') || !guiada);
     if (!guiada) return;

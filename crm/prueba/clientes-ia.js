@@ -82,7 +82,7 @@
     for (const h of o.historial) {
       if (h.de === 'cliente') entrante(sim, h.texto, h.ts);
       else if (h.de === 'asesor') guardaMensaje(sim, { direccion: 'saliente_api', tipo: 'text', texto: h.texto, estado: 'leido', enviado_en: new Date(h.ts).toISOString() });
-      if (h.adjunto === 'comprobante') comprobante(sim, h.ts);
+      if (h.adjunto === 'comprobante') comprobante(sim, pagoDe(sim, h.pago), h.ts);
     }
     S.activo = true; pinta();
     return sim;
@@ -128,20 +128,14 @@
     return { ok: true };
   };
 
-  const RE_PRESENTA = /(soy|mi nombre|te habla|le habla|te saluda|le saluda|te escribe|le escribe|te atiende|le atiende)/i;
-  const RE_FECHAS = /(fecha|cu[aá]ndo|d[ií]as|noches|mes)/i, RE_PERSONAS = /(cu[aá]nt[oa]s|personas|adultos|ni[ñn]os|viajan|acompa)/i;
-  const RE_PAGO = /(abono|separ|transfer|pago m[oó]vil|zelle|datos (de|para) (pago|pagar)|cuenta|binance|efectivo)/i;
   function saliente(sim, fila, archivo, seg) {
     sim.respondido = true; sim.ultimoAsesor = Date.now(); sim.insistencias = Math.min(sim.insistencias, 1);
+    atencion(sim);
     if (fila.tipo === 'audio' && !fila.transcripcion) sim.pend.crm.push(`El asesor te mandó una nota de voz de ${seg} s, pero no se le entiende nada.`);
     else if (fila.tipo === 'text' || fila.tipo === 'audio') {
       const texto = fila.tipo === 'audio' ? `[nota de voz de ${seg} s] ${fila.transcripcion}`.slice(0, 990) : fila.texto;
       sim.pend.textos.push(texto);
       sim.textosAsesor = [...(sim.textosAsesor || []), texto];
-      const todo = sim.textosAsesor.join('\n');
-      if (/lotus/i.test(todo) && RE_PRESENTA.test(todo)) marca(sim, 'presentacion');
-      if (RE_FECHAS.test(todo) && RE_PERSONAS.test(todo)) marca(sim, 'calificacion');
-      if (RE_PAGO.test(texto)) marca(sim, 'cierre');
     } else if (fila.tipo === 'image') {
       sim.pend.crm.push(`El asesor te mandó una foto${fila.texto ? ` con el texto «${fila.texto}»` : ''}.`);
       marca(sim, 'opciones');
@@ -188,8 +182,13 @@
     S.aviso = null;
     Object.assign(sim, { temperatura: r.temperatura, decision: r.decision });
     if (r.decision === 'comprar') marca(sim, 'objeciones');
-    await escribe(sim, r.burbujas || []);
-    if (r.adjunto === 'comprobante') { await espera(1500); comprobante(sim); marca(sim, 'cierre'); }
+    const logros = (r.logros || []).filter(l => !sim.pasos[l]);
+    if (logros.length) { logros.forEach(l => { sim.pasos[l] = true; }); pinta(true); }
+    const burbujas = [...(r.burbujas || [])], pago = r.adjunto === 'comprobante' ? pagoDe(sim, r.pago) : null;
+    // El cliente siempre dice cuánto abonó: si el modelo no lo escribió, se agrega y coincide con la captura.
+    if (pago && !burbujas.join(' ').replace(/[.,\s]/g, '').includes(String(Math.trunc(pago.dicho)))) burbujas.push(`Te aboné ${pago.dichoTexto} por ${pago.metodo}`);
+    await escribe(sim, burbujas);
+    if (pago) { await espera(1500); comprobante(sim, pago); marca(sim, 'cierre'); }
     sim.ocupado = false;
     if (r.decision === 'irse') { setTimeout(() => cierra(sim, 'perdido'), 5000); return; }
     if (sim.otraVez) { sim.otraVez = false; contesta(sim); }
@@ -207,34 +206,95 @@
     pinta();
   }
 
-  /* ---------- Comprobante de pago del cliente (imagen + lectura «IA» como en el CRM real) ---------- */
+  /* ---------- Comprobante de pago del cliente (imagen según el método + lectura «IA» como en el CRM real) ---------- */
+  const EN_BS = new Set(['Pago móvil', 'Transferencia bancaria', 'Efectivo Bs', 'Punto de venta']);
+  const METODO_EN_TEXTO = [[/zelle/i, 'Zelle'], [/pago\s*m[oó]vil/i, 'Pago móvil'], [/binance|usdt/i, 'Binance / USDT'], [/punto\s*de\s*venta/i, 'Punto de venta'],
+    [/efectivo.*(bs|bol[ií]var)/i, 'Efectivo Bs'], [/efectivo/i, 'Efectivo USD'], [/transferencia/i, 'Transferencia bancaria']];
+  const dos = n => Math.round(n * 100) / 100;
+  const cifra = n => Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const digitos = n => Array.from({ length: n }, () => Math.floor(Math.random() * 10)).join('');
+  const letras = n => Array.from({ length: n }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
+  // El último método que nombró el asesor, por si el modelo no lo devuelve.
+  function metodoPedido(sim) {
+    for (const t of [...(sim.textosAsesor || [])].reverse()) { const h = METODO_EN_TEXTO.find(([re]) => re.test(t)); if (h) return h[1]; }
+    return 'Zelle';
+  }
+  function pagoDe(sim, p) {
+    const metodo = p?.metodo || metodoPedido(sim), dado = Number(p?.monto) > 0 ? Number(p.monto) : montoAbono(sim), enBs = Number(p?.monto) > 0 && p?.moneda === 'VES';
+    const usd = dos(enBs ? dado / R.TASA_VES : dado);
+    return { metodo, usd, bs: EN_BS.has(metodo) ? (enBs ? dado : dos(usd * R.TASA_VES)) : 0, dicho: dado, dichoTexto: enBs ? `Bs ${cifra(dado)}` : `$${cifra(dado)}` };
+  }
+  // No imitan a ningún banco ni billetera: cada método tiene su forma de comprobante y llevan la marca de práctica.
+  const RECIBOS = {
+    zelle: { metodo: 'Zelle', titulo: 'Pago enviado', cabeza: '#5b21b6', ref: () => letras(9), etqRef: 'Confirmación', filas: [['Para', 'Destinos y Eventos Lotus'], ['Correo', 'pagos@lotus-prueba.test'], ['Nota', 'Abono reserva']] },
+    'pago-movil': { metodo: 'Pago móvil', titulo: 'Pago móvil', cabeza: '#0f766e', ref: () => digitos(12), etqRef: 'Referencia', filas: [['Teléfono destino', '0414-000-0360'], ['RIF destino', 'J-00000000-0'], ['Concepto', 'Abono reserva']] },
+    transferencia: { metodo: 'Transferencia bancaria', titulo: 'Transferencia exitosa', cabeza: '#1e3a8a', ref: () => digitos(8), etqRef: 'Nro. de operación', filas: [['Beneficiario', 'Destinos y Eventos Lotus'], ['Cuenta destino', '•••• •••• 0360'], ['Concepto', 'Abono reserva']] },
+    binance: { metodo: 'Binance / USDT', titulo: 'Envío completado', cabeza: '#111827', fondo: '#1f2937', tinta: '#f9fafb', tenue: '#9ca3af', moneda: 'USDT', ref: () => digitos(18), etqRef: 'ID de orden', filas: [['Red', 'TRC20'], ['Para', 'Lotus 360 (práctica)'], ['Estado', 'Completado']] },
+    'efectivo-usd': { metodo: 'Efectivo USD', titulo: 'Recibo de caja', cabeza: '#92400e', fondo: '#fffbeb', ref: () => 'REC-' + digitos(5), etqRef: 'Recibo', filas: [['Recibió', 'Oficina Lotus 360'], ['Forma', 'Efectivo en dólares'], ['Concepto', 'Abono reserva']] },
+    'efectivo-bs': { metodo: 'Efectivo Bs', titulo: 'Recibo de caja', cabeza: '#92400e', fondo: '#fffbeb', ref: () => 'REC-' + digitos(5), etqRef: 'Recibo', filas: [['Recibió', 'Oficina Lotus 360'], ['Forma', 'Efectivo en bolívares'], ['Concepto', 'Abono reserva']] },
+    punto: { metodo: 'Punto de venta', titulo: 'APROBADA', cabeza: '#374151', letra: "'Courier New',monospace", ref: () => digitos(6), etqRef: 'Ref.', filas: [['Comercio', 'LOTUS 360'], ['Terminal', '00036001'], ['Tarjeta', 'DÉBITO **** 0360']] },
+    otro: { metodo: 'Otro', titulo: 'Pago realizado', cabeza: '#374151', ref: () => digitos(10), etqRef: 'Referencia', filas: [['Para', 'Destinos y Eventos Lotus'], ['Concepto', 'Abono reserva']] },
+  };
+  const claveRecibo = metodo => Object.keys(RECIBOS).find(k => RECIBOS[k].metodo === metodo) || 'otro';
   function montoAbono(sim) {
     const textos = (sim.textosAsesor || []).slice(-6).join(' ');
     const m = [...textos.matchAll(/(?:\$\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(?:\$|d[oó]lares|usd))/gi)].at(-1);
     const v = m ? Number((m[1] || m[2]).replace(',', '.')) : NaN;
     return Number.isFinite(v) && v > 0 ? v : Math.round((sim.cots.at(-1)?.total || 200) / 2);
   }
-  function comprobante(sim, ts) {
-    const monto = montoAbono(sim), ref = String(Math.floor(1e9 + Math.random() * 9e9)).slice(0, 10);
-    const fila = guardaMensaje(sim, { direccion: 'entrante', tipo: 'image', texto: null, media_mime: 'image/svg+xml', media_path: `prueba-comprobante/${monto}/${ref}`,
+  function comprobante(sim, pago, ts) {
+    const clave = claveRecibo(pago.metodo), ref = RECIBOS[clave].ref(), bs = pago.bs;
+    const fila = guardaMensaje(sim, { direccion: 'entrante', tipo: 'image', texto: null, media_mime: 'image/svg+xml', media_path: `prueba-comprobante/${clave}/${pago.usd}/${bs}/${ref}`,
       enviado_en: new Date(ts || Date.now()).toISOString() });
     const c = { id: 500 + fila.id, conversacion_id: sim.convId, wamid: fila.wamid, estado: 'pendiente', duplicado_de: null,
-      datos: { metodo: 'Pago móvil', referencia: ref, monto, moneda: 'USD', fecha: new Date().toLocaleDateString('es-VE') } };
+      datos: { metodo: pago.metodo, referencia: ref, monto: bs || pago.usd, moneda: bs ? 'VES' : 'USD', monto_usd: pago.usd, fecha: new Date().toLocaleDateString('es-VE') } };
     tabla('wa_comprobantes').push(c); P.empuja('wa_comprobantes', 'INSERT', c);
     sim.comprobanteEn = Date.now();
   }
   window.__pruebaComprobante = s => {
-    const [, monto = '0', ref = ''] = /prueba-comprobante\/([\d.]+)\/(\d+)/.exec(s) || [];
+    const [, clave = 'otro', usd = '0', bs = '0', ref = ''] = /prueba-comprobante\/([\w-]+)\/([\d.]+)\/([\d.]+)\/([\w-]+)/.exec(s) || [];
+    const r = RECIBOS[clave] || RECIBOS.otro, fondo = r.fondo || '#ffffff', tinta = r.tinta || '#111827', tenue = r.tenue || '#6b7280';
     const fecha = new Date().toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' });
-    const fila = (y, a, b) => `<text x="32" y="${y}" font-size="15" fill="#6b7280">${a}</text><text x="328" y="${y}" font-size="15" fill="#111827" text-anchor="end" font-weight="600">${b}</text>`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="520" viewBox="0 0 360 520" font-family="Arial,Helvetica,sans-serif">
-<rect width="360" height="520" fill="#ffffff"/><rect width="360" height="84" fill="#0f766e"/><text x="180" y="52" fill="#fff" font-size="21" text-anchor="middle" font-weight="700">Pago móvil</text>
+    const monto = Number(bs) > 0 ? `Bs ${cifra(bs)}` : r.moneda ? `${cifra(usd)} ${r.moneda}` : `$ ${cifra(usd)}`;
+    const filas = [['Fecha', fecha], [r.etqRef, ref], ...r.filas, ...(Number(bs) > 0 ? [['Equivale a', `$ ${cifra(usd)}`]] : [])];
+    const lineas = filas.map(([a, b], i) => { const y = 310 + i * 28; return `<text x="28" y="${y}" font-size="14" fill="${tenue}">${esc(a)}</text><text x="332" y="${y}" font-size="14" fill="${tinta}" text-anchor="end" font-weight="600">${esc(b)}</text>`; }).join('');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="520" viewBox="0 0 360 520" font-family="${(r.letra || 'Arial,Helvetica,sans-serif').replace(/"/g, '')}">
+<rect width="360" height="520" fill="${fondo}"/><rect width="360" height="84" fill="${r.cabeza}"/><text x="180" y="52" fill="#fff" font-size="21" text-anchor="middle" font-weight="700">${esc(r.metodo)}</text>
 <circle cx="180" cy="142" r="32" fill="#16a34a"/><path d="M165 142l10 10 21-22" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-<text x="180" y="210" font-size="17" text-anchor="middle" fill="#111827">Operación exitosa</text><text x="180" y="262" font-size="36" text-anchor="middle" font-weight="700" fill="#111827">$ ${Number(monto).toLocaleString('es-VE', { minimumFractionDigits: 2 })}</text>
-${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino', 'Lotus 360')}${fila(428, 'Concepto', 'Abono reserva')}
-<text x="180" y="490" font-size="11" text-anchor="middle" fill="#9ca3af">Comprobante de práctica · no es un pago real</text></svg>`;
+<text x="180" y="210" font-size="17" text-anchor="middle" fill="${tinta}">${esc(r.titulo)}</text><text x="180" y="262" font-size="34" text-anchor="middle" font-weight="700" fill="${tinta}">${esc(monto)}</text>
+${lineas}
+<text x="180" y="500" font-size="11" text-anchor="middle" fill="${tenue}">Comprobante de práctica · no es un pago real</text></svg>`;
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   };
+  // «Leer captura» en la hoja de Crear reserva: no hay IA que lea la imagen, se toma el último pago sin registrar.
+  R.FUNCIONES['leer-comprobante'] = () => {
+    const c = tabla('wa_comprobantes').filter(x => x.estado === 'pendiente').at(-1)?.datos, fecha = new Date().toISOString().slice(0, 10);
+    return { ok: true, datos: { metodo: c?.metodo || 'Zelle', referencia: c?.referencia || letras(9), monto: c?.monto_usd ?? 100, moneda: 'USD', fecha, confianza: 0.95 } };
+  };
+  // La reserva creada guarda la captura y deja el comprobante del chat como registrado.
+  const crearReserva = R.RPCS.crear_reserva_con_servicios;
+  R.RPCS.crear_reserva_con_servicios = (m, a) => {
+    const leadId = Number(a.p_lead_id), conv = tabla('whatsapp_conversaciones').find(c => c.lead_id === leadId);
+    const comp = conv && tabla('wa_comprobantes').find(x => x.conversacion_id === conv.id && x.estado === 'pendiente' && x.datos?.referencia === a.p_referencia_pago);
+    const foto = comp && tabla('whatsapp_mensajes').find(x => x.wamid === comp.wamid)?.media_path;
+    const r = crearReserva(m, { ...a, p_comprobante_path: foto ?? null });
+    if (!r.ok) return r;
+    if (comp) { comp.estado = 'registrado'; P.empuja('wa_comprobantes', 'UPDATE', comp); }
+    const lead = tabla('leads').find(x => x.id === leadId); if (lead) P.empuja('leads', 'UPDATE', lead);
+    const sim = simDeLead(leadId); if (sim && r.monto_pagado > 0) registro(sim);
+    return r;
+  };
+  // Botón junto a la foto (sitio en build-crm-prueba.mjs): abre la hoja con la cotización del lead y el pago ya cargados.
+  document.addEventListener('click', e => {
+    const id = e.target.closest?.('[data-prueba-reserva]')?.dataset.pruebaReserva; if (!id) return;
+    const c = tabla('wa_comprobantes').find(x => x.id === Number(id)), leadId = c && tabla('whatsapp_conversaciones').find(x => x.id === c.conversacion_id)?.lead_id;
+    if (!leadId) return;
+    // La cotización pudo armarse sin vincular el cliente: la precarga de la hoja busca por lead.
+    const cots = tabla('cotizaciones_boleteria');
+    if (!cots.some(x => x.lead_id === leadId)) { const suelta = cots.filter(x => x.lead_id == null).at(-1); if (suelta) suelta.lead_id = leadId; }
+    const foto = tabla('whatsapp_mensajes').find(x => x.wamid === c.wamid)?.media_path;
+    window.__pruebaCrearReserva?.(leadId, { ...c.datos, foto: foto && window.__pruebaComprobante(foto) });
+  });
 
   /* ---------- Señales del CRM que tildan pasos ---------- */
   const PASO_PAGO = new Set(['PAGO REALIZADO', 'VENTA COMPLETA']);
@@ -251,7 +311,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     const d = e.detail || {};
     if (!S.activo || d.error) return;
     if (d.tipo === 'insert' && d.tabla === 'cotizaciones_boleteria') {
-      for (const c of d.filas || []) { const sim = simDeLead(c.lead_id) || foco(); if (sim) { sim.cots.push(cotizacionDe(c)); evento(sim, { tipo: 'cotizacion_creada', total: Number(c.total) || null }); } }
+      for (const c of d.filas || []) { const sim = simDeLead(c.lead_id) || foco(); if (sim) { sim.cots.push(cotizacionDe(c)); marca(sim, 'tarifario'); evento(sim, { tipo: 'cotizacion_creada', total: Number(c.total) || null }); } }
       return;
     }
     if (d.tipo === 'update' && d.tabla === 'leads') { (d.filas || []).forEach(f => { const s = simDeLead(f.id); if (s) marca(s, 'ficha'); }); return; }
@@ -263,7 +323,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
         sim.atendido = Date.now();
         const seg = Math.round((sim.atendido - sim.llego) / 1000);
         evento(sim, { tipo: 'atendido', seg });
-        if (seg <= 120) marca(sim, 'rapidez'); else avisa(`Lo atendiste a los ${Math.round(seg / 60)} min: con un cliente real, a esa altura ya le escribió a otra agencia.`);
+        atencion(sim);
       }
       if (Object.keys(a).some(k => !['p_lead_id', 'p_estado'].includes(k) && a[k] != null && a[k] !== '')) marca(sim, 'ficha');
       if (a.p_estado) evento(sim, { tipo: 'estado', estado: a.p_estado });
@@ -271,6 +331,15 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     } else if (['guardar_notas_lead', 'fijar_proxima_accion', 'registrar_interaccion_lead'].includes(d.nombre)) marca(sim, 'ficha');
     else if ((d.nombre === 'guardar_postventa' && a.p_marcar_pagado) || /^registrar_abono/.test(d.nombre) || d.nombre === 'voucher_preparar') registro(sim);
   });
+  // Atender o escribirle cuenta igual. Pasados 2 min el paso queda perdido, pero no frena la guía.
+  function atencion(sim) {
+    if (sim.atencionEn) return;
+    sim.atencionEn = Date.now();
+    const seg = Math.round((sim.atencionEn - sim.llego) / 1000);
+    if (seg <= 120) return marca(sim, 'rapidez');
+    sim.tarde = true;
+    avisa(`Lo atendiste a los ${Math.round(seg / 60)} min: con un cliente real, a esa altura ya le escribió a otra agencia.`);
+  }
   function registro(sim) {
     if (sim.registroEn) return;
     sim.registroEn = Date.now(); marca(sim, 'registro'); evento(sim, { tipo: 'pago_registrado' });
@@ -282,6 +351,7 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     clearTimeout(busca);
     busca = setTimeout(() => { const s = foco(), v = e.target.value.trim(); if (s && v.length > 2) { marca(s, 'tarifario'); evento(s, { tipo: 'busqueda', texto: v.slice(0, 60) }); } }, 1200);
   }, true);
+  document.addEventListener('click', e => { if (S.activo && e.target.closest?.('#sec-tarifario')) { const s = foco(); if (s) marca(s, 'tarifario'); } }, true);
   function marca(sim, paso) {
     if (sim.pasos[paso]) return;
     sim.pasos[paso] = true;
@@ -436,18 +506,18 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
 
   /* ---------- Panel de la guía ---------- */
   const GUIA = {
-    rapidez: ['Toca <b>Atender</b> en el cliente nuevo: se abre su chat.', { sec: 'leads', foco: 'Atender' }],
-    presentacion: ['Salúdalo y preséntate: tu nombre y que eres de <b>Lotus 360</b>.', { chat: '#wb-texto' }],
-    calificacion: ['Pregunta lo que falta: <b>fechas</b>, <b>cuántas personas</b> (niños y edades) y <b>presupuesto</b>.', { chat: '#wb-texto' }],
+    rapidez: ['Contéstale ya: toca <b>Atender</b> en el cliente nuevo y se abre su chat.', { sec: 'leads', foco: 'Atender' }],
+    presentacion: ['Salúdalo y dile quién eres.', { chat: '#wb-texto' }],
+    calificacion: ['Averigua lo que te falte para recomendarle bien: destino, fechas, quiénes viajan o presupuesto.', { chat: '#wb-texto' }],
     ficha: ['Anota en su ficha lo que te contó: toca <b>Ver lead</b>.', { chat: '#wb-ver-lead' }],
     tarifario: ['Busca el hotel o el destino en el <b>Tarifario</b>: precio por persona y qué incluye.', { sec: 'tarifario', sel: '#tar-search' }],
-    opciones: ['Mándale fotos y explícale qué incluye (📎 en el chat).', { chat: '#wb-adjuntar' }],
-    cotizacion: ['En <b>Cotizaciones</b> vincula al cliente, arma el servicio, <b>Descarga el PDF</b> y mándaselo con 📎.', { sec: 'cotizacion-boletos', sel: '#cb-lead-q' }],
+    opciones: ['Cuéntale una o dos opciones y qué incluyen. Si tienes fotos, mándalas con 📎.', { chat: '#wb-texto' }],
+    cotizacion: ['En <b>Cotizaciones</b> vincula al cliente, arma el servicio y toca <b>Compartir</b>: se abre su chat con el PDF para revisarlo y enviarlo.', { sec: 'cotizacion-boletos', sel: '#cb-lead-q' }],
     objeciones: ['Responde sus dudas. Si no sabes algo, no inventes: dile que lo confirmas.', { chat: '#wb-texto' }],
-    cierre: ['Propón separar con un <b>abono</b> y pásale los datos de pago.', { chat: '#wb-texto' }],
-    registro: ['Llegó el comprobante: abre su ficha (<b>Ver lead</b>) y registra el pago.', { chat: '#wb-ver-lead' }],
+    cierre: ['Cuando lo veas listo, propón separar con un <b>abono</b> y pásale los datos de pago.', { chat: '#wb-texto' }],
+    registro: ['Llegó el comprobante: junto a la foto toca <b>Crear reserva</b>. La cotización y el pago ya vienen cargados: revísalos y confirma.', { chat: '[data-prueba-reserva]' }],
   };
-  const siguientePaso = sim => (S.pasos || []).find(p => !sim.pasos[p.id] && !(p.id === 'registro' && !sim.comprobanteEn));
+  const siguientePaso = sim => (S.pasos || []).find(p => !sim.pasos[p.id] && !(p.id === 'rapidez' && sim.tarde) && !(p.id === 'registro' && !sim.comprobanteEn));
   async function llevame(sim, paso) {
     const [, d] = GUIA[paso.id] || [];
     const G = window.__pruebaGuia;
@@ -497,14 +567,14 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
       const paso = siguientePaso(sim), guia = sim.guia;
       const pista = guia === 'completa' || (guia === 'pistas' && esperando > 60e3);
       const otras = abiertas().filter(x => x !== sim);
-      const pistaHtml = paso && pista ? `<div class="pc-pista">${GUIA[paso.id]?.[0] || ''}${guia === 'completa' ? ` <button class="pp-ir" data-pc="ir" data-sim="${sim.id}">Llévame</button>` : ''}</div>` : '';
+      const pistaHtml = paso && pista ? `<div class="pc-pista">Sugerencia: ${GUIA[paso.id]?.[0] || ''}${guia === 'completa' ? ` <button class="pp-ir" data-pc="ir" data-sim="${sim.id}">Llévame</button>` : ''}</div>` : '';
       html = `<div class="pc-fila"><button class="pc-ava" data-pc="chat" data-sim="${sim.id}" title="Abrir el chat">${esc(sim.cliente.nombre.split(' ').map(x => x[0]).join('').slice(0, 2))}</button>
           <div class="pc-tit">${esc(sim.cliente.nombre)}<small>Nivel ${sim.nivel} · ${esc(sim.titulo || '')}${sim.escribiendo ? ' · <b class="pc-esc">escribiendo…</b>' : esperando > 20e3 ? ` · <b class="${esperando > sim.paciencia * 30e3 ? 'pc-tarde' : ''}">esperando tu respuesta ${reloj(esperando)}</b>` : ''}</small></div>
           ${MINI}</div>
         ${otras.length ? `<div class="pc-otras">${otras.map(o => `<button data-pc="chat" data-sim="${o.id}">${esc(o.cliente.nombre.split(' ')[0])}${!o.respondido ? ' •' : ''}</button>`).join('')}</div>` : ''}
         ${guia !== 'ninguna' && sim.temperatura != null ? `<div class="pc-temp" title="Qué tan cerca está de comprar"><span>Interés del cliente</span><i style="--t:${sim.temperatura}%"></i></div>` : ''}
         ${guia === 'ninguna' ? '<p class="pc-sola">Sin guía: atiéndelo como a un cliente real. Al final ves tu puntaje.</p>'
-          : `<ol class="pc-pasos">${(S.pasos || []).map(p => `<li class="${sim.pasos[p.id] ? 'hecho' : p === paso ? 'ahora' : ''}">${esc(p.texto)}</li>`).join('')}</ol>
+          : `<p class="pc-pasos-nota">Sin orden fijo: se marcan solos según la conversación y lo que hagas en el CRM.</p><ul class="pc-pasos">${(S.pasos || []).map(p => `<li class="${sim.pasos[p.id] ? 'hecho' : p.id === 'rapidez' && sim.tarde ? 'tarde' : ''}">${p.id === 'rapidez' && sim.tarde ? 'Contestaste después de los 2 min' : esc(p.texto)}</li>`).join('')}</ul>
              ${pistaHtml}`}
         <div class="pc-acc">${S.aviso ? `<span class="pc-aviso">${esc(S.aviso)}</span>` : ''}<button class="pc-terminar" data-pc="terminar" data-sim="${sim.id}">Terminar chat</button></div>`;
     }
@@ -694,7 +764,8 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
 #pc-panel .pc-pasos li::before{content:"○";position:absolute;left:3px}
 #pc-panel .pc-pasos li.hecho{color:var(--txt,#eee);text-decoration:line-through;text-decoration-color:rgba(37,211,102,.6)}
 #pc-panel .pc-pasos li.hecho::before{content:"✓";color:#25d366;font-weight:700}
-#pc-panel .pc-pasos li.ahora{color:var(--txt,#eee);font-weight:600}#pc-panel .pc-pasos li.ahora::before{content:"●";color:#ffb020}
+#pc-panel .pc-pasos li.tarde{color:#ff8a7a}#pc-panel .pc-pasos li.tarde::before{content:"!";font-weight:700}
+#pc-panel .pc-pasos-nota{margin:9px 0 0;font-size:12px;color:var(--muted,#aaa)}
 #pc-panel .pc-pista{margin-top:9px;padding:9px 10px;border-radius:12px;background:rgba(255,176,32,.12);border:1px solid rgba(255,176,32,.35);font-size:12.5px}
 #pc-panel .pc-pista button{margin-left:6px;border-radius:999px;padding:4px 12px;font-size:12px}
 #pc-panel .pc-sola{margin:9px 0 0;font-size:12.5px;color:var(--muted,#aaa)}

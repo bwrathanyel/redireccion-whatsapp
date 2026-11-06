@@ -39,8 +39,8 @@ const USUARIOS = {
 function _usuario(u, extra = {}) {
   return { id: u.id, username: u.username, nombre: u.nombre, rol: u.rol,
     debe_cambiar_password: false, avatar_url: null,
-    // Pipeline e Inicio (Dashboard, Mis Ventas) nacen apagados en el CRM real; las misiones los necesitan.
-    preferencias: { tutorial_visto: true, nav_extra: ['pipeline', 'grp-inicio', 'grp-bandeja'], ultima_hija: { 'grp-bandeja': 'wa-bandeja' } }, ve_informe_diario: u.rol === 'admin',
+    // Pipeline e Inicio nacen apagados en el CRM real. El asesor no ve Inicio (Mis Ventas pasó a Reservas); el admin lo conserva porque sus misiones usan Dashboard y Ranking.
+    preferencias: { tutorial_visto: true, nav_extra: ['pipeline', ...(u.rol === 'admin' ? ['grp-inicio'] : []), 'grp-bandeja'], ultima_hija: { 'grp-bandeja': 'wa-bandeja' } }, ve_informe_diario: u.rol === 'admin',
     es_freelancer: false, bloqueado: false, es_superadmin: false, ...extra };
 }
 

@@ -196,7 +196,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     const partes = [d.metodo, d.referencia && `Ref. ${d.referencia}`, monto, d.fecha].filter(Boolean).map(esc).join(' · ');
     const dup = c.duplicado_de ? `<div class="wb-comp-alerta"><i class="fas fa-triangle-exclamation"></i> Esta referencia ya aparece ${c.duplicado_de.startsWith('abono:') ? 'en un abono registrado' : 'en otro comprobante de este número'}: revisa antes de registrar</div>` : '';
     const cierre = c.estado === 'registrado' ? '<div class="wb-ventana">Registrado</div>' : c.estado === 'descartado' ? '<div class="wb-ventana">Descartado</div>'
-      : `<div class="wb-comp-acc"><button data-wb-comp="${c.id}" data-wb-est="registrado">Ya lo registré</button><button data-wb-comp="${c.id}" data-wb-est="descartado">Descartar</button></div>`;
+      : `<div class="wb-comp-acc"><button data-prueba-reserva="${c.id}" style="font-weight:700"><i class="fas fa-plus"></i> Crear reserva</button><button data-wb-comp="${c.id}" data-wb-est="registrado">Ya lo registré</button><button data-wb-comp="${c.id}" data-wb-est="descartado">Descartar</button></div>`;
     return `<div class="wb-comp"><span class="wb-comp-ia"><i class="fas fa-wand-magic-sparkles"></i> Lo leyó la IA, verifícalo con el banco</span><b>${partes || 'Sin datos legibles'}</b>${dup}${cierre}</div>`;
   }
   async function marcarComprobante(id, estado) {

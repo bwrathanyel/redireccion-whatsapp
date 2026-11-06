@@ -11947,7 +11947,21 @@ const EF_ERRORES = {
   otro_no_combina: 'No se puede combinar "Otro" con otro tipo de venta',
 };
 
+window.__pruebaLeadsReserva = async () => (await sb.from('leads').select('id,nombre,telefono,destino,estado').order('id', { ascending: false }).limit(300)).data || [];
+window.__pruebaCrearReserva = async (leadId, pago) => {
+  const { data: l } = await sb.from('leads').select('*').eq('id', leadId).maybeSingle();
+  if (!l) { errToast('No se encontró ese cliente'); return; }
+  await abrirEnviarFacturacionSheet(l);
+  if (!pago) return;
+  const metodo = document.getElementById('ef-metodo'), monto = document.getElementById('ef-monto-pagado');
+  metodo.value = [...metodo.options].some(o => o.value === pago.metodo) ? pago.metodo : 'Otro';
+  document.getElementById('ef-referencia').value = pago.referencia || '';
+  monto.value = Number(pago.monto_usd).toFixed(2); monto.dispatchEvent(new Event('input'));
+  if (pago.foto) { const img = new Image(); img.id = 'ef-comp-previa'; img.src = pago.foto; img.alt = 'Comprobante del cliente'; img.style.cssText = 'display:block;max-height:180px;margin-top:8px;border-radius:8px'; document.querySelector('.ef-comprob')?.append(img); }
+  efComprobanteEstado('Comprobante del chat cargado. Revisa que coincida antes de crear la reserva.');
+};
 async function abrirEnviarFacturacionSheet(l) {
+  document.getElementById('ef-comp-previa')?.remove();
   EF_LEAD_ACTUAL = l;
   document.getElementById('ef-err').textContent = '';
   efCalCerrar();
@@ -12555,6 +12569,7 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
     return;
   }
   closeSheet('enviar-facturacion-sheet');
+  if (currentSec === 'postventa') document.getElementById('pv-refresh')?.click();
   okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
 });
 
@@ -35046,7 +35061,6 @@ function setupMisNotas() {
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
-  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
@@ -35065,6 +35079,7 @@ const NAV_ITEMS = [
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
   { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
+  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-reservas', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   { sec: 'campanas-wa', icon: 'fa-brands fa-whatsapp', label: 'Campañas WhatsApp', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-no', sub: 'Plantillas a clientes con venta: campañas, audiencia y envíos' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).

@@ -6,6 +6,29 @@
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
+  /* ---------- «Crear reserva» desde Reservas: se elige el cliente y sigue la hoja de siempre ---------- */
+  document.addEventListener('click', async e => {
+    if (!e.target.closest?.('#pv-nueva')) return;
+    const leads = (await g.__pruebaLeadsReserva?.() || []).filter(l => !['PAGO REALIZADO', 'VENTA COMPLETA', 'PERDIDO', 'NUMERO INVALIDO'].includes(l.estado));
+    const o = document.createElement('div');
+    o.style.cssText = 'position:fixed;inset:0;z-index:99960;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,.55)';
+    o.innerHTML = `<div style="width:min(420px,100%);max-height:80vh;display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:14px;background:var(--panel-solid,#1b1b1f);color:var(--txt,#eee);border:1px solid var(--line2,rgba(255,255,255,.14))">
+      <b>¿Para qué cliente es la reserva?</b><input class="ei" type="search" placeholder="Buscar por nombre o destino" aria-label="Buscar cliente">
+      <div data-lista style="overflow:auto;display:flex;flex-direction:column;gap:4px"></div><button class="dbtn" type="button" data-cerrar>Cancelar</button></div>`;
+    const lista = o.querySelector('[data-lista]'), busca = o.querySelector('input');
+    const pinta = () => {
+      const q = busca.value.trim().toLowerCase(), hay = leads.filter(l => !q || `${l.nombre} ${l.destino || ''}`.toLowerCase().includes(q));
+      lista.innerHTML = hay.map(l => `<button class="dbtn" type="button" data-lead="${l.id}" style="text-align:left;justify-content:flex-start">${esc(l.nombre)}${l.destino ? ` · ${esc(l.destino)}` : ''}</button>`).join('') || '<p style="margin:8px 0;opacity:.7">No hay clientes sin reserva con ese nombre.</p>';
+    };
+    busca.addEventListener('input', pinta);
+    o.addEventListener('click', ev => {
+      const id = ev.target.closest('[data-lead]')?.dataset.lead;
+      if (id || ev.target === o || ev.target.closest('[data-cerrar]')) o.remove();
+      if (id) g.__pruebaCrearReserva?.(Number(id));
+    });
+    pinta(); document.body.append(o); busca.focus();
+  });
+
   /* ---------- Burbuja movible ---------- */
   // Se suelta contra el borde más cercano; lado + altura relativa sobreviven a recargas y a girar el teléfono.
   // left/top van divididos por el zoom del body (el CRM vive en body{zoom:.9}).
