@@ -654,15 +654,9 @@ ${fila(320, 'Fecha', fecha)}${fila(356, 'Referencia', ref)}${fila(392, 'Destino'
     if (!previas.length && !enExamen()) siguiente(rehidratar ? 3000 : 6000);
   }
   function presenta() {
-    const M = window.__pruebaMisiones;
-    if (!M || ss('clientes:intro')) return;
+    if (ss('clientes:intro')) return;
     ss('clientes:intro', '1');
-    M.modal([
-      { icono: '👋', titulo: 'Esta es tu práctica', texto: 'El CRM es donde atendemos a los clientes de Lotus 360. Aquí todo es inventado: toca lo que quieras, no le llega nada a ningún cliente real.' },
-      { icono: '💬', titulo: 'Clientes que escriben de verdad', texto: 'Van a llegar clientes a <b>Leads</b> como en un día normal. Tocas <b>Atender</b> y se abre su WhatsApp aquí mismo. Escríbeles como a un cliente real: del otro lado responde una IA que actúa como cliente.' },
-      { icono: '🧭', titulo: 'Te guío mientras atiendes', texto: 'En la burbuja verde está el procedimiento: tócala para verlo, arrástrala a donde no estorbe. Se tilda solo a medida que avanzas. En el nivel 1 te llevo a cada paso; después te ayudo cada vez menos.' },
-      { icono: '🏆', titulo: 'Niveles', texto: 'Cada cliente termina con un puntaje. Con 2 ventas cerradas de 70 o más subes de nivel, y el próximo cliente insiste justo en lo que te costó.' },
-    ], 'Que llegue el primero', () => empezar(false));
+    empezar(false);
   }
   addEventListener('prueba:misiones-fin', () => { if (P.m.rol === 'asesor') presenta(); });
   setTimeout(function arranca() {
