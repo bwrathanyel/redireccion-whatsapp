@@ -10851,12 +10851,16 @@ function indAgilidad(s) {
   const resta = s.saltos * 12 + s.reintentos * 6 + s.errores * 4 + s.ayudas * 2 + Math.max(0, porTarea - 3) * 3;
   return Math.max(0, Math.round(100 - resta));
 }
+function indAgilidadMedia(s) {
+  const notas = (s.por_sesion || [s]).map(indAgilidad).filter(n => n != null);
+  return notas.length ? Math.round(notas.reduce((a, n) => a + n, 0) / notas.length) : null;
+}
 async function loadInduccion() {
   if (IND_TAB === 'vivo') indVivoArranca();
   const cont = document.getElementById('ind-lista');
   const { data, error } = await sb.rpc('prueba_resumen');
   if (error) { cont.innerHTML = `<div class="vig-vacio">${error.code === '42501' ? 'Solo un admin puede ver la inducción' : 'No se pudo cargar: ' + esc(error.message || '')}</div>`; return; }
-  IND_SESIONES = (data || []).map(s => ({ ...s, agilidad: indAgilidad(s) }));
+  IND_SESIONES = (data || []).map(s => ({ ...s, agilidad: indAgilidadMedia(s) }));
   indPintar();
 }
 function indPintar() {
