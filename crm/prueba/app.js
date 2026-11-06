@@ -14525,6 +14525,7 @@ let cvAnalizado = null;
 // pdf.js se carga a demanda, no en el arranque del CRM: son ~350KB que solo
 // hacen falta cuando alguien va a cargar un CV.
 let pdfjsLib = null;
+window.__pruebaPdfjs = () => cargarPdfjs();
 async function cargarPdfjs() {
   if (pdfjsLib) return pdfjsLib;
   pdfjsLib = await import(`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.min.mjs`);
@@ -34283,7 +34284,7 @@ window.cbGuardar = async function cbGuardar(accion) {
       if (ventas) {
         let marca = '';
         if (lead) marca = await cbRegistrarLeadCot(cot);
-        if (accion === 'compartir') await cbCompartir(blob, cbArchivo(cot));
+        if (accion === 'compartir') { if (!lead || !await window.__pruebaCompartirLead?.(blob, cbArchivo(cot), lead.id)) await cbCompartir(blob, cbArchivo(cot)); }
         else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
         else cbDescargar(blob, cbArchivo(cot));
         okToast(`Cotización ${num} generada${marca}`);
