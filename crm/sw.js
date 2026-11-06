@@ -11,6 +11,8 @@
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
 const CACHE_VERSION = 'lotus-crm-shell-v620';
+// Solo esta versión recarga sola las pestañas abiertas (pedido del dueño 2026-11-06): el resto de deploys sigue con el aviso, que deja elegir cuándo.
+const RECARGA_FORZADA = 'lotus-crm-shell-v621';
 const SHELL_FILES = [
   './',
   './app.js',
@@ -55,12 +57,17 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION && k !== CACHE_IDENTIDAD).map((k) => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    const viejas = keys.filter((k) => k !== CACHE_VERSION && k !== CACHE_IDENTIDAD);
+    await Promise.all(viejas.map((k) => caches.delete(k)));
+    await self.clients.claim();
+    // Instalación nueva (sin shell viejo): no hay nada que actualizar, y recargar interrumpiría el primer arranque.
+    if (CACHE_VERSION !== RECARGA_FORZADA || !viejas.some((k) => k.startsWith('lotus-crm-shell-'))) return;
+    const tabs = await self.clients.matchAll({ type: 'window' });
+    // /prueba/ queda fuera: guarda el avance en memoria y recargar se lo borraría a quien esté practicando.
+    await Promise.all(tabs.filter((c) => !new URL(c.url).pathname.startsWith('/prueba/')).map((c) => c.navigate(c.url).catch(() => {})));
+  })());
 });
 
 self.addEventListener('fetch', (event) => {
