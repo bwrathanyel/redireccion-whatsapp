@@ -243,7 +243,12 @@
       if (p.startsWith('/rest/v1/')) return rest(method, p.split('/')[3], sp, headers, body);
       if (p.startsWith('/functions/v1/')) return ejecuta('fn', p.split('/')[3], body);
       if (p.startsWith('/storage/v1/')) {
-        if (p.includes('/object/sign/')) { const ruta = p.split('/object/sign/')[1]; return resp({ signedURL: `/object/public/${ruta}`, signedUrl: `/object/public/${ruta}` }); }
+        if (p.includes('/object/sign/')) {
+          const ruta = p.split('/object/sign/')[1];
+          // createSignedUrls firma por lote y espera un array; con un objeto revienta en data.map.
+          if (Array.isArray(body?.paths)) return resp(body.paths.map(x => ({ path: x, signedURL: `/object/public/${ruta}/${x}`, error: null })));
+          return resp({ signedURL: `/object/public/${ruta}`, signedUrl: `/object/public/${ruta}` });
+        }
         if (method === 'GET') return archivoResp(p);
         guardaArchivo(p, init?.body, headers);
         return resp({ Key: p });

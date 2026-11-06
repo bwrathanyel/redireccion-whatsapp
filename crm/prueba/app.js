@@ -28511,11 +28511,12 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
         : `<button class="dbtn gh" id="tar-editar-ficha" type="button" style="margin-top:16px"><i class="fas fa-pen"></i> Corregir nombre, destino o descripción</button>`}
     </div></details>` : ''}
     ${carpeta ? tarBarraSeleccionHtml() : ''}
-    <div class="dactions"><button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
+    <div class="dactions">${(esPromo ? x.producto_id : x.id) && ROL !== 'marketing' ? '<button class="dbtn save" id="dCotizarForm" type="button" style="width:auto;margin-top:0"><i class="fas fa-file-invoice-dollar"></i> Llevar a Cotizaciones</button>' : ''}<button class="dbtn gh" id="dCotizador"><i class="fas fa-comments"></i> Cotizar con Lyra</button></div>
     <div style="font-size:11px;color:var(--muted2);margin-top:14px;text-align:center">Fuente: ${esc(x.fuente_archivo)}</div>`;
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawerBg').classList.add('open');
   if (!drawerAbierto) navPush({ type: 'drawer' });
+  document.getElementById('dCotizarForm')?.addEventListener('click', () => trasCerrarDrawer(() => cbDesdeFicha(esPromo ? x.producto_id : x.id)));
   document.getElementById('dCotizador').onclick = () =>
     lyraCotizar({ opcion_tabla: esPromo ? 'promociones' : 'productos', opcion_id: x.id, nombre }, `Cotízame ${nombre}: `);
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
@@ -33469,6 +33470,26 @@ window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud 
 // si se abrió desde un lead, la fila queda con lead_id y "Guardar en el lead" lo marca cotizado.
 const CB_CON_PRODUCTO = ['hotel', 'paquete', 'fullday', 'tour'];
 let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false;
+let cbProductoPendiente = null;
+function cbDesdeFicha(id) { cbProductoPendiente = Number(id); activateSection('cotizacion-boletos'); }
+async function cbAplicarProducto() {
+  const id = cbProductoPendiente; cbProductoPendiente = null;
+  const p = cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
+  if (!p) { errToast('No se pudo cargar ese producto'); return; }
+  cbHoteles.set(id, p);
+  const tipo = { hotel: 'hotel', paquete: 'paquete', excursion: 'fullday', traslado: 'traslado' }[p.tipo] || 'otro';
+  let i = cbItems.findIndex(it => it.tipo === tipo && (Number(it.producto_id) === id || cbTarNorm(cbTitulo(it)) === cbTarNorm(p.nombre)));
+  if (i < 0) {
+    i = cbItems.findIndex(it => it.tipo === tipo && !cbTitulo(it));
+    if (i < 0 && cbItems.length === 1 && !cbTitulo(cbItems[0])) { cbItems[0] = cbItemVacio(tipo); i = 0; }
+    if (i < 0) i = cbItems.push(cbItemVacio(tipo)) - 1;
+    const it = cbItems[i];
+    if (!it.auto) cbAutoIniciar(it);
+    if (tipo === 'hotel') { cbRenderItems(); await cbHotelElegir(document.querySelector(`#cb-items .cb-item[data-i="${i}"]`), id); }
+    else { it[cbTipo(it).campos[0][0]] = p.nombre; cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); }
+  }
+  document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
 function cbDesdeLead(l) { cbLeadPendiente = { id: l.id, nombre: l.nombre || l.telefono || `Lead #${l.id}`, telefono: l.telefono }; activateSection('cotizacion-boletos'); }
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
@@ -34127,6 +34148,7 @@ async function cbCargarSeccion() {
   else sel.innerHTML = '<option value="">— Elige el asesor —</option>' + asesores.map(u => `<option value="${esc(u.id)}"${u.id === previo ? ' selected' : ''}>${esc(u.nombre)}${u.rol === 'admin' ? ' (admin)' : ''}</option>`).join('');
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
   if (cbLeadPendiente) cbAplicarLead();
+  if (cbProductoPendiente) await cbAplicarProducto();
   cbResumenCliente();
   cbOffset = 0;
   await cbCargarHistorial(false);
@@ -37918,6 +37940,7 @@ const tutorialesDeSeccion = sec => tutorialesVisibles().filter(t => t.secciones.
 const fmtDuracion = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const TUT_URLS = new Map();
 async function urlsTutoriales(rutas) {
+  return rutas.map(r => 'prueba-tutoriales/' + r);
   const ahora = Date.now();
   const faltan = rutas.filter(r => !(TUT_URLS.get(r)?.vence > ahora));
   if (faltan.length) {
