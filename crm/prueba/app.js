@@ -33152,6 +33152,7 @@ function cbApAbrir(inp) {
 function cbApElegir(inp, code) {
   const it = cbApItem(inp), card = inp.closest('.cb-item'), libre = it.ruta_libre;
   it[inp.dataset.ap] = code; inp.value = cbApTexto(code); cbApCerrar(inp);
+  if (it.auto) delete it.auto[inp.dataset.ap];
   inp.closest('.cb-ap').querySelector('.cb-ap-nota').innerHTML = cbApNota(code);
   cbSyncRuta(it); cbProgramarBorrador();
   if (libre && !it.ruta_libre) { cbRenderItems(); return; }
@@ -33164,6 +33165,7 @@ function cbApConfirmar(inp) {
   if (texto && texto === cbApTexto(it[ap])) return;
   const code = texto ? cbApResolver(texto) : '';
   if (code) { cbApElegir(inp, code); return; }
+  if (it.auto && (texto || it[ap])) delete it.auto[ap];
   it[ap] = ''; cbSyncRuta(it); cbProgramarBorrador();
   inp.closest('.cb-ap').querySelector('.cb-ap-nota').innerHTML = cbApNota('', texto);
   cbPintarRuta(inp.closest('.cb-item'), it);
@@ -33258,7 +33260,7 @@ function cbItemHtml(it, i) {
       + pax.precios + cbHotelPrecioHtml(it, i) + cbDesgloseHtml(it)
       + (porHab ? '<small class="cb-full cb-condicion">Precio por habitación: niños y adultos adicionales se suman aparte según el tarifario.</small>' : '')
     : (boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : '')
-      + campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ' list="cb-productos" autocomplete="off"') : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
+      + campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ` list="cb-productos-${i}" autocomplete="off"`) + `<datalist id="cb-productos-${i}">${cbOpcionesProducto(it)}</datalist>` : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
       + (pax ? pax.cuentas + tarifaSec('') + pax.precios + cbDesgloseHtml(it) : '')
       + (boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : '');
   return `<div class="cb-item${hotel ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
@@ -33385,8 +33387,72 @@ function cbRenderItems() {
     lista.innerHTML = cbItems.map(cbItemHtml).join(''); cbActualizarTotal();
   } finally { cbRenderizando = false; }
 }
-window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbRenderItems(); cbProgramarBorrador(); };
-window.cbQuitarItem = i => { cbItems.splice(i, 1); cbRenderItems(); cbProgramarBorrador(); };
+// Autocompletar servicios (2026-11-06, pedido del dueño): un servicio nuevo sale con los viajeros, fechas y
+// destino de lo ya cargado y los sigue mientras nadie los edite. `auto` marca los campos aún automáticos: editar
+// uno a mano lo saca y no se vuelve a pisar. Manda el hotel, luego el paquete, luego el primero cargado: editar un
+// servicio de abajo no cambia el hotel. Las filas sin `auto` (guardadas o de una solicitud) no se tocan.
+// Coche no tiene vuelo propio: sale por Porlamar.
+const CB_DESTINO_IATA = { margarita: 'PMV', 'isla margarita': 'PMV', 'la asuncion': 'PMV', coche: 'PMV', 'isla de coche': 'PMV', 'los roques': 'LRV', merida: 'MRD', caracas: 'CCS', valencia: 'VLN', 'puerto la cruz': 'BLA' };
+function cbDestinoIata(destino) {
+  const n = cbTarNorm(destino), ciudad = n.split(',')[0].trim();
+  return CB_DESTINO_IATA[n] || bolCatalogo?.aeropuertos?.find(a => [a.ciudad, a.nombre_comercial].some(x => x && cbTarNorm(x) === ciudad))?.iata_code || '';
+}
+const cbRango = it => it.tipo === 'hotel' ? 0 : it.tipo === 'paquete' ? 1 : 2;
+const cbProductoDe = it => cbHoteles.get(Number(it.producto_id)) || [...cbHoteles.values()].find(p => p.tipo === it.tipo && cbTarNorm(p.nombre) === cbTarNorm(it.nombre));
+function cbDestinoViaje() {
+  for (const it of cbItems.filter(x => cbRango(x) < 2).sort((a, b) => cbRango(a) - cbRango(b))) {
+    const p = cbProductoDe(it);
+    if (p?.destino) return { it, p, iata: cbDestinoIata(p.destino) };
+  }
+  return null;
+}
+function cbOpcionesProducto(it) {
+  const d = cbDestinoViaje(), iata = d?.iata || cbItems.find(x => x.tipo === 'boleto' && x.destino)?.destino;
+  const cerca = p => (iata && cbDestinoIata(p.destino) === iata) || (d && cbTarNorm(p.destino) === cbTarNorm(d.p.destino)) ? 0 : 1;
+  const lista = [...cbHoteles.values()].filter(p => p.tipo === (it.tipo === 'paquete' ? 'paquete' : 'excursion')).sort((a, b) => cerca(a) - cerca(b) || a.nombre.localeCompare(b.nombre, 'es'));
+  return [...new Map(lista.map(p => [p.nombre, p])).values()].map(p => `<option value="${esc(p.nombre)}"${p.destino ? ` label="${esc(p.destino)}"` : ''}>`).join('');
+}
+function cbAutoCampos(it) {
+  const t = cbTipo(it), c = t.campos.map(x => x[0]);
+  return [...(t.pax ? ['adultos', 'ninos', 'infantes'] : []), ...['ida', 'vuelta', 'cant'].filter(k => c.includes(k)), ...({ hotel: ['habitaciones'], boleto: ['destino'], traslado: ['ruta'] }[it.tipo] || [])];
+}
+function cbValorAuto(it, k, nuevo) {
+  if (k === 'destino' || k === 'ruta') {
+    const d = cbDestinoViaje();
+    return k === 'destino' ? d?.iata : d?.iata && d.it.tipo === 'hotel' ? `Aeropuerto ${d.iata} - ${d.p.nombre}` : '';
+  }
+  if (k === 'cant') return ['adultos', 'ninos', 'infantes'].reduce((s, c) => s + (Number(cbValorAuto(it, c, true)) || 0), 0) || '';
+  const f = cbItems.filter(x => x !== it && cbAutoCampos(x).includes(k) && String(x[k] ?? '') !== '').sort((a, b) => cbRango(a) - cbRango(b))[0];
+  if (!f) return undefined;
+  const manda = cbRango(f) < cbRango(it) || (cbRango(f) === cbRango(it) && cbItems.indexOf(f) < cbItems.indexOf(it));
+  return manda || nuevo || String(it[k] ?? '') === '' ? f[k] : undefined;
+}
+function cbAutoAplicar(it, nuevo) {
+  const cambios = Object.keys(it.auto || {}).filter(k => {
+    const v = cbValorAuto(it, k, nuevo);
+    if (v == null || v === '' || String(it[k] ?? '') === String(v)) return false;
+    it[k] = v; return true;
+  });
+  if (cambios.length) { if (it.tipo === 'boleto') cbSyncRuta(it); cbHotelRecalcular(it); }
+  return cambios;
+}
+function cbAutoIniciar(it) { it.auto = Object.fromEntries(cbAutoCampos(it).map(k => [k, true])); cbAutoAplicar(it, true); }
+const cbAutoTodos = () => cbItems.forEach(it => cbAutoAplicar(it));
+function cbAutoSincronizar() {
+  cbItems.forEach((it, i) => {
+    const cambios = cbAutoAplicar(it), card = document.querySelector(`#cb-items .cb-item[data-i="${i}"]`);
+    if (!cambios.length || !card) return;
+    if (!card.contains(document.activeElement)) { card.outerHTML = cbItemHtml(it, i); return; }
+    // Rehacer la tarjeta en edición le quitaría el foco.
+    cambios.forEach(k => { const inp = card.querySelector(`[data-k="${k}"]`); if (inp && inp !== document.activeElement) inp.value = it[k]; });
+    card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
+    const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
+  });
+  document.querySelectorAll('#cb-items datalist').forEach(dl => { const it = cbItems[+dl.closest('.cb-item').dataset.i]; if (it) dl.innerHTML = cbOpcionesProducto(it); });
+  cbActualizarTotal();
+}
+window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbAutoIniciar(cbItems.at(-1)); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); };
+window.cbQuitarItem = i => { cbItems.splice(i, 1); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); };
 // Cotizar desde una solicitud de boletería (2026-10-15): precarga cliente, ruta,
 // fechas, personas y el asesor que la pidió; al enviarla al asesor la solicitud
 // queda resuelta y notificar-boleteria le adjunta el PDF por Telegram.
@@ -33510,7 +33576,7 @@ async function cbHotelElegir(card, id) {
   const carga = (it._cargaHotel || 0) + 1;
   Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tarifa_nino: '', tarifa_nino_auto: true, tarifa_nino_contexto: '', tramos: [], tarifas_contexto: '', tarifa_manual: false, unidad_manual: false, _unidadEditar: false, tarifa_variante: '', habitacion_manual: false, plan_libre: false, hab_libre: false, _cargando: true, _cargaHotel: carga, _tarifaError: false, _aviso: '' });
   try {
-    cbRenderItems(); cbProgramarBorrador();
+    cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
     await Promise.all([cbTraerTarifas(p.id), cbTraerHabitaciones(p.id)]);
     if (!cbItems.includes(it) || it._cargaHotel !== carga || it.producto_id !== p.id) return;
     it.plan = cbTarOpciones(cbHotelFilas(it), 'plan')[0] || ''; cbHotelRecalcular(it);
@@ -33675,12 +33741,12 @@ async function cbCargarProductos() {
   if (cbProductosListos) return;
   cbProductosListos = true;
   const [{ data, error }] = await Promise.all([
-    sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete']).eq('activo', true).order('nombre').limit(1000),
+    sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete', 'excursion']).eq('activo', true).order('nombre').limit(1000),
     cbCargarHotSales(),
   ]);
   if (error) { cbProductosListos = false; return; }
   (data || []).forEach(p => cbHoteles.set(Number(p.id), p));
-  document.getElementById('cb-productos').innerHTML = [...new Set((data || []).map(p => p.nombre))].map(n => `<option value="${esc(n)}">`).join('');
+  if (cbItems.length) cbAutoSincronizar();
   if (document.activeElement?.matches('[data-busca="hotel"]')) cbHotelBuscar(document.activeElement);
 }
 const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c)) : cbPdfBlob(c);
@@ -33817,7 +33883,7 @@ function cbResetForm() {
   cbLeadTk++; clearTimeout(cbLeadTimer); cbLeadsRes = [];
   const busca = document.getElementById('cb-lead-q'), res = document.getElementById('cb-lead-res');
   if (busca) busca.value = ''; if (res) res.hidden = true;
-  cbItems = [cbItemVacio(cbModo === 'ventas' ? 'hotel' : 'boleto')]; cbRenderItems();
+  cbItems = [cbItemVacio(cbModo === 'ventas' ? 'hotel' : 'boleto')]; cbAutoIniciar(cbItems[0]); cbRenderItems();
   document.getElementById('cb-cliente').value = '';
   document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbHoy();
   document.getElementById('cb-notas').value = CB_NOTAS; document.getElementById('cb-terminos').value = CB_TERMINOS;
@@ -33832,7 +33898,7 @@ async function cbCargarSeccion() {
   if (primera || cambio) document.getElementById('cb-origen').value = modo;
   if (cambio && !primera) cbResetForm();
   cbCargarProductos();
-  bolAsegurarCatalogo().then(cbRefrescarRutas);
+  bolAsegurarCatalogo().then(() => { cbAutoSincronizar(); cbRefrescarRutas(); });
   ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
   if (!cbListo) {
     cbListo = true;
@@ -33913,7 +33979,8 @@ async function cbCargarSeccion() {
       if (noches) {
         if (!it.ida) { errToast('Primero elige el check-in'); docEnfocar(card.querySelector('[data-k="ida"]')); return; }
         it.vuelta = cbSumarDias(it.ida, Math.max(1, (+cbNoches(it.ida, it.vuelta) || 0) + Number(noches.dataset.cbNoches)));
-        cbHotelRecalcular(it); cbRenderItems(); cbProgramarBorrador(); return;
+        if (it.auto) delete it.auto.vuelta;
+        cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); return;
       }
       const plan = e.target.closest('[data-cb-plan]');
       if (plan) {
@@ -33934,6 +34001,7 @@ async function cbCargarSeccion() {
       if (viaje) { if (it.viaje === viaje.dataset.viaje) return; it.viaje = viaje.dataset.viaje; cbSyncRuta(it); cbPintarRuta(card, it); cbProgramarBorrador(); }
       else if (e.target.closest('.cb-ap-swap')) {
         [it.origen, it.destino] = [it.destino, it.origen]; cbSyncRuta(it);
+        if (it.auto) delete it.auto.destino;
         card.querySelectorAll('.cb-ap-in').forEach(inp => { inp.value = cbApTexto(it[inp.dataset.ap]); inp.closest('.cb-ap').querySelector('.cb-ap-nota').innerHTML = cbApNota(it[inp.dataset.ap]); });
         card.querySelector('.cb-ap-swap').classList.remove('girando'); void card.offsetWidth; card.querySelector('.cb-ap-swap').classList.add('girando');
         cbPintarRuta(card, it); cbProgramarBorrador();
@@ -33954,6 +34022,7 @@ async function cbCargarSeccion() {
       }
       if (!k || !card) return;
       const it = cbItems[+card.dataset.i], previo = it[k]; it[k] = e.target.value;
+      if (it.auto) delete it.auto[k];
       if (it.tipo === 'hotel' && k === 'unidad') {
         it.unidad_manual = true; it._unidadPendiente = false; it.tarifa_manual = false;
         it.tarifa = ''; it.tarifa_nino = ''; it.tarifa_nino_auto = true; it.tramos = []; it.tarifas_contexto = ''; it.tarifa_variante = '';
@@ -33993,15 +34062,16 @@ async function cbCargarSeccion() {
         const antes = +cbNoches(previo, it.vuelta) || 0;
         if (antes || !it.vuelta || it.vuelta <= it.ida) {
           it.vuelta = cbSumarDias(it.ida, antes || cbMinNoches(it));
+          if (it.auto) delete it.auto.vuelta;
           const v = card.querySelector('[data-k="vuelta"]'); if (v) v.value = it.vuelta;
         }
       }
       if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
-      if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbRenderItems(); return; }
+      if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbAutoIniciar(cbItems[+card.dataset.i]); cbAutoTodos(); cbRenderItems(); return; }
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (k === 'infantes' && it.tipo === 'hotel' && it.infantes_gratis));
       const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
-      cbActualizarTotal();
+      cbAutoSincronizar();
     });
     cbLista.addEventListener('change', e => {
       const k = e.target.dataset.k, card = e.target.closest('.cb-item'); if (!card) return;

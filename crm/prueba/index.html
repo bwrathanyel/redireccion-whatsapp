@@ -4026,6 +4026,7 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
   #sec-cotizacion-boletos .cb-item-cab .cb-item-acc .cb-importe{margin-right:auto}
   #sec-cotizacion-boletos .cb-item-acc .cb-plegar{margin-right:0}
   .cb-cuentas{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  @media(max-width:480px){.cb-cuentas{grid-template-columns:repeat(2,minmax(0,1fr))}}
   .cb-fechas{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cb-noches{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:11px}
   .cb-noches .fl{margin:0}.cb-noches .cb-step{width:150px}
@@ -8111,14 +8112,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   body.bi-on .update-toast{bottom:calc(78px + var(--safe-b) + var(--bi-h,0px))}
   /* Cerrada queda justo bajo la pantalla y su sombra hacia arriba oscurecía la barra */
   :is(.mfs,.sheet):not(.open),:root[data-theme="light"] :is(.mfs,.sheet):not(.open){box-shadow:none}
-  /* Lo cerrado fuera del árbol de render: en Leads 1.360 de 1.543 nodos con caja no estaban en
-     pantalla y cada recálculo los pagaba. allow-discrete mantiene el contenido durante el cierre.
-     .sidebar no entra: las transiciones de .nav-item al cambiar de sección, bajo hidden, suben de
-     ~35 a ~165 los recálculos por cambio (medido); sacarlo no pierde ganancia en la carga. */
-  :is(.sheet,.mfs,.drawer):not(.open),.lyra-panel:not(.show),.chat-panel:not(.abierto){content-visibility:hidden}
-  :is(.sheet,.mfs,.drawer){transition:transform .3s cubic-bezier(.3,1,.4,1),content-visibility .3s allow-discrete}
-  .lyra-panel:not(.show){transition-property:opacity,transform,visibility,content-visibility;transition-behavior:allow-discrete}
-  .chat-panel:not(.abierto){transition:opacity .2s,transform .32s var(--ease-salida),visibility 0s .32s,top .25s var(--ease-salida),content-visibility 0s .32s allow-discrete}
 }
 </style>
 </head>
@@ -10806,7 +10799,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <summary><span>Cliente y documento</span><small id="cb-cliente-resumen">Cliente, fecha y vigencia</small><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
         <div class="doc-contenido">
         <div id="cb-lead" class="cb-solicitud" hidden></div>
-        <datalist id="cb-productos"></datalist>
         <div class="cb-picker cb-solo-ventas cb-lead-buscar"><label class="fl" for="cb-lead-q">Vincular cliente del CRM</label><input id="cb-lead-q" class="ei" placeholder="Buscar por nombre o teléfono…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-lead-res"><div id="cb-lead-res" class="cb-picker-lista" role="listbox" aria-label="Clientes" hidden></div></div>
         <div class="cb-cab-grid">
           <div class="field cb-cliente-campo"><label class="fl">Nombre en la cotización</label><input id="cb-cliente" class="ei" placeholder="Nombre del cliente o BOLETERÍA"></div>
