@@ -2312,6 +2312,55 @@ async function loadPersonalTiempo(soloFreelancers) {
   personalBaja = data?.de_baja || [];
   pintarKPIsPersonal();
   renderPersonalCards();
+  if (!personalSoloFreelancers && ROL === 'admin') pintarSolicitudesCuenta();
+}
+
+// Pedidos de cuenta real desde /prueba/: sin aprobación de admin no se crea nada.
+const ERR_SOLICITUD_CUENTA = {
+  nombre_ocupado: 'Ya hay alguien con ese nombre en el equipo. Rechaza la solicitud y pide que la envíe con su nombre completo.',
+  ya_resuelta: 'Esta solicitud ya se resolvió o se está procesando. Si sigue en la lista, intenta en unos minutos.',
+  cantidad_invalida: 'El lote diario debe estar entre 1 y 50.',
+  username_invalido: 'No se pudo armar un usuario con ese nombre. Rechaza la solicitud y pide que la envíe con su nombre completo.',
+  reintentar_luego: 'No se pudo terminar. Intenta de nuevo en unos minutos: se retoma sin duplicar la cuenta.',
+  no_se_pudo_crear_la_cuenta: 'No se pudo crear la cuenta. Intenta de nuevo; si se repite, créala a mano en Personal.',
+  no_se_pudo_registrar_en_el_crm: 'No se pudo registrar la cuenta en el CRM. Intenta de nuevo; si se repite, créala a mano en Personal.',
+  cuenta_ya_creada: 'La cuenta ya se creó. Aprueba de nuevo para terminarla o dala de baja en Personal.',
+};
+async function pintarSolicitudesCuenta() {
+  const aviso = document.getElementById('gp-personal-aviso');
+  if (!aviso) return;
+  let caja = document.getElementById('gp-solicitudes-cuenta');
+  if (!caja) {
+    caja = document.createElement('div');
+    caja.id = 'gp-solicitudes-cuenta';
+    aviso.after(caja);
+    caja.addEventListener('click', e => { const b = e.target.closest('[data-sol-accion]'); if (b) resolverSolicitudCuenta(b); });
+  }
+  const { data, error } = await sb.from('solicitudes_cuenta_prueba').select('id,nombre,created_at').in('estado', ['pendiente', 'procesando']).order('created_at');
+  if (error || !data?.length) { caja.innerHTML = ''; return; }
+  caja.innerHTML = `<div class="edit-box" style="margin-bottom:14px">
+    <div class="eb-title"><i class="fas fa-user-clock"></i> Solicitudes de cuenta real (${data.length})</div>
+    ${data.map(s => `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border)">
+      <div style="flex:1;min-width:140px"><b>${esc(s.nombre)}</b><div style="font-size:12px;opacity:.7">Pedida el ${esc(new Date(s.created_at).toLocaleString())}. Confirma que es esa persona.</div></div>
+      <label style="font-size:12px">Clientes fríos al día <input type="number" min="1" max="50" value="15" data-sol-lote="${esc(s.id)}" style="width:60px"></label>
+      <button class="dbtn save" type="button" data-sol-accion="aprobar" data-sol-id="${esc(s.id)}" data-sol-nombre="${esc(s.nombre)}">Aprobar</button>
+      <button class="dbtn gh" type="button" data-sol-accion="rechazar" data-sol-id="${esc(s.id)}" data-sol-nombre="${esc(s.nombre)}">Rechazar</button>
+    </div>`).join('')}
+  </div>`;
+}
+async function resolverSolicitudCuenta(btn) {
+  const { solAccion: accion, solId: id, solNombre: nombre } = btn.dataset;
+  const cantidad = Number(document.querySelector(`[data-sol-lote="${id}"]`)?.value);
+  const aprobar = accion === 'aprobar';
+  const ok = await confirmarSheet(aprobar
+    ? { titulo: `¿Crear la cuenta de ${nombre}?`, detalle: `Tendrá acceso real al CRM como asesor integral y recibirá ${cantidad} clientes fríos al día desde el próximo reparto.`, textoOk: 'Crear cuenta' }
+    : { titulo: `¿Rechazar a ${nombre}?`, textoOk: 'Rechazar', destructivo: true });
+  if (!ok) return;
+  btn.disabled = true;
+  const { data, error } = await sb.functions.invoke('prueba-cuenta-real', { body: { accion, id, ...(aprobar ? { cantidad } : {}) } });
+  if (error || !data?.ok) { btn.disabled = false; const m = await msgErrorFn(error, data); errToast(ERR_SOLICITUD_CUENTA[m] || m || 'No se pudo resolver la solicitud.'); pintarSolicitudesCuenta(); return; }
+  okToast(aprobar ? `Cuenta creada: @${data.username}` : 'Solicitud rechazada');
+  loadPersonalTiempo(false);
 }
 
 function personalVisibles() {

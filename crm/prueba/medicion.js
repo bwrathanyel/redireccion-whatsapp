@@ -75,6 +75,7 @@
   };
   document.addEventListener('click', e => {
     const el = e.target.closest?.('button,a,[role="tab"],[data-sec],summary,label,input,select,tr,li,.card,[onclick]') || e.target;
+    if (el?.closest?.('#cr-hoja')) return; // lleva la contraseña real: nunca a la telemetría
     if (el?.closest?.('#prueba-panel')) {
       const b = el.closest('button[data-acc]');
       return anota('clic', { el: 'panel:' + (b?.dataset.acc || 'cabecera') });
