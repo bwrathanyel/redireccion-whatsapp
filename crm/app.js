@@ -5640,7 +5640,9 @@ function rvPagoInit(p, s) {
   ['rv-s-pago-moneda', 'rv-s-pago-tasa', 'rv-s-moneda'].forEach(k => document.getElementById(k)?.addEventListener('change', pintar));
   // La captura prellena lo que esté vacío (EF analizar-comprobante, la misma de Abonos); nunca registra nada.
   document.getElementById('rv-s-pago-file').onchange = async e => {
-    const archivo = e.target.files?.[0], aviso = document.getElementById('rv-s-pago-ia'); if (!archivo) { aviso.hidden = true; return; }
+    const archivo = e.target.files?.[0], aviso = document.getElementById('rv-s-pago-ia');
+    e.target.dataset.fecha = '';
+    if (!archivo) { aviso.hidden = true; return; }
     aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
     const d = await abonosModulo().analizarCaptura(archivo);
     if (!aviso.isConnected || e.target.files?.[0] !== archivo) return;
@@ -5651,6 +5653,9 @@ function rvPagoInit(p, s) {
     if (d.referencia && !ref.value) { ref.value = d.referencia; puestos.push('referencia'); }
     const chip = d.metodo && p.querySelector(`[data-rv-pago-metodo="${CSS.escape(d.metodo)}"]`);
     if (chip) { p.querySelectorAll('[data-rv-pago-metodo]').forEach(x => x.classList.toggle('on', x === chip)); puestos.push('método'); }
+    // Pago de otro día: el abono queda con esa fecha y la tasa de ese día (abonos.js, tasas_del_dia).
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+    if (d.fecha && d.fecha < hoy && d.fecha >= '2020-01-01') { e.target.dataset.fecha = d.fecha; puestos.push(`fecha ${d.fecha.split('-').reverse().join('/')}, se cobra a la tasa de ese día`); }
     aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revísalo antes de guardar.` : 'No se encontraron datos en la captura.';
     pintar();
   };
@@ -5667,7 +5672,8 @@ function rvPagoLeer() {
   if (metodo === 'Pago móvil' && moneda !== 'VES') return { error: 'El Pago móvil se registra en bolívares: elige VES.' };
   if (moneda === 'VES' && !abonosModulo().tasa(val('rv-s-pago-tasa'))) return { error: 'No hay tasa cargada para esa opción: elige otra o cobra en dólares.' };
   return { completo: m === 'completo', monto, moneda, metodo, tasaTipo: moneda === 'VES' ? val('rv-s-pago-tasa') : 'USD',
-    referencia: val('rv-s-pago-ref').trim(), nota: val('rv-s-pago-nota').trim(), archivo: document.getElementById('rv-s-pago-file')?.files?.[0] || null };
+    referencia: val('rv-s-pago-ref').trim(), nota: val('rv-s-pago-nota').trim(), archivo: document.getElementById('rv-s-pago-file')?.files?.[0] || null,
+    fecha: document.getElementById('rv-s-pago-file')?.dataset.fecha || null };
 }
 // Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
 // La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.

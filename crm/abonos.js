@@ -102,7 +102,15 @@ export function crearAbonos(c) {
   const nombreTasa = t => TASAS[t] || 'BCV dólar';
   const diaIso = f => new Date(f || Date.now()).toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
   const hospUnico = d => { const h = (d?.servicios || []).filter(s => s.tipo === 'hospedaje'); return h.length === 1 ? Number(h[0].id) : null; };
-  let est = { reservaId: null, datos: null, token: 0, tokenIA: 0, metodo: '', moneda: 'USD', tasaTipo: 'USD', archivo: null, guardando: false, formAbierto: false };
+  const diaCorto = f => String(f || '').slice(0, 10).split('-').reverse().join('/');
+  // Pago de un día anterior: la tasa de ese día (RPC tasas_del_dia), no la de hoy (pedido del dueño 7-nov).
+  const tasaForm = t => Number(est.tasasFecha?.[t]?.tasa || 0) || tasaDe(est.datos, t);
+  async function tasasDelDia(f) {
+    if (!f || f >= diaIso(new Date())) return null;
+    const { data, error } = await sb.rpc('tasas_del_dia', { p_fecha: f });
+    return error || !data ? null : data;
+  }
+  let est = { reservaId: null, datos: null, token: 0, tokenIA: 0, tokenFecha: 0, metodo: '', moneda: 'USD', tasaTipo: 'USD', archivo: null, guardando: false, formAbierto: false, tasasFecha: null };
 
   function inyectarCss() {
     if (document.getElementById('ab-css')) return;
@@ -116,7 +124,7 @@ export function crearAbonos(c) {
       const a = b.dataset.abAccion;
       if (!['metodo', 'tasa', 'cerrar'].includes(a)) c.usoBoton?.('ab:' + a, est.reservaId);
       if (a === 'nuevo') abrirForm();
-      else if (a === 'cerrar') { est.archivo = null; est.formAbierto = false; est.editando = null; pintar(); }
+      else if (a === 'cerrar') { est.archivo = null; est.formAbierto = false; est.editando = null; est.tasasFecha = null; pintar(); }
       else if (a === 'guardar') guardar(b);
       else if (a === 'eliminar') eliminar(Number(b.dataset.id));
       else if (a === 'editar') abrirForm(Number(b.dataset.id));
@@ -134,7 +142,7 @@ export function crearAbonos(c) {
       else if (a === 'tasa') {
         est.tasaTipo = b.dataset.tasa;
         const man = document.getElementById('ab-tasa-manual'), ed = est.editando;
-        if (man) man.value = ed?.moneda === 'VES' && ed.tasa_tipo === est.tasaTipo ? ed.tasa_usd_ves : tasaDe(est.datos, est.tasaTipo) || '';
+        if (man) man.value = ed?.moneda === 'VES' && ed.tasa_tipo === est.tasaTipo && !est.tasasFecha ? ed.tasa_usd_ves : tasaForm(est.tasaTipo) || '';
         p.querySelectorAll('[data-ab-accion="tasa"]').forEach(x => x.classList.toggle('on', x.dataset.tasa === est.tasaTipo));
         actualizarTasa();
       }
@@ -142,7 +150,10 @@ export function crearAbonos(c) {
     p.oninput = e => {
       if (['ab-monto', 'ab-moneda', 'ab-tasa-manual'].includes(e.target.id)) actualizarTasa();
     };
-    p.onchange = e => { if (e.target.id === 'ab-file') { est.archivo = e.target.files?.[0] || null; if (est.archivo) leerComprobante(est.archivo); } };
+    p.onchange = e => {
+      if (e.target.id === 'ab-file') { est.archivo = e.target.files?.[0] || null; if (est.archivo) leerComprobante(est.archivo); }
+      else if (e.target.id === 'ab-fecha') cambiarFecha(e.target.value);
+    };
     return true;
   }
   function kpis(d) {
@@ -173,14 +184,14 @@ export function crearAbonos(c) {
           <option value="VES"${est.moneda === 'VES' ? ' selected' : ''}>Bolívares (VES)</option></select></div>
       </div>
       <div class="ab-tasa" id="ab-tasa-box" ${est.moneda === 'VES' ? '' : 'hidden'}>
-        <div class="ab-chips" role="group" aria-label="Tasa del cobro">${Object.entries(TASAS).map(([t, n]) => `<button class="ab-chip ${t === est.tasaTipo ? 'on' : ''}" type="button" data-ab-accion="tasa" data-tasa="${t}"${tasaDe(d, t) || ed ? '' : ' disabled title="Sin tasa cargada"'}>${n}</button>`).join('')}</div>
+        <div class="ab-chips" role="group" aria-label="Tasa del cobro">${Object.entries(TASAS).map(([t, n]) => `<button class="ab-chip ${t === est.tasaTipo ? 'on' : ''}" type="button" data-ab-accion="tasa" data-tasa="${t}"${tasaForm(t) || ed ? '' : ' disabled title="Sin tasa cargada"'}>${n}</button>`).join('')}</div>
         Tasa <span id="ab-tasa-nombre"></span> <b id="ab-tasa">—</b> Bs/USD <span class="ab-tasa-fecha" id="ab-tasa-fecha"></span> · Equivale a <b id="ab-usd">—</b>
         ${ed ? `<label class="fl" for="ab-tasa-manual">Tasa del día del pago (Bs/USD)</label><input class="ei" id="ab-tasa-manual" type="number" min="0" step="0.0001" inputmode="decimal" value="${ed.moneda === 'VES' ? esc(ed.tasa_usd_ves || '') : esc(tasaDe(d, est.tasaTipo) || '')}">` : ''}</div>
       <label class="fl">Método de pago</label>
       <div class="ab-chips">${chips}</div>
       ${servicio}
       <label class="fl" for="ab-ref">Referencia</label><input class="ei" id="ab-ref" maxlength="120" placeholder="Número de operación" value="${ed ? esc(ed.referencia || '') : ''}">
-      ${ed ? `<label class="fl" for="ab-fecha">Fecha del pago</label><input class="ei" id="ab-fecha" type="date" max="${diaIso(new Date())}" value="${diaIso(ed.fecha)}">` : ''}
+      <label class="fl" for="ab-fecha">Fecha del pago</label><input class="ei" id="ab-fecha" type="date" min="2020-01-01" max="${diaIso(new Date())}" value="${ed ? diaIso(ed.fecha) : diaIso(new Date())}">
       <label class="fl" for="ab-nota">Nota (opcional)</label><textarea class="ei" id="ab-nota" maxlength="2000" rows="2">${ed ? esc(ed.nota || '') : ''}</textarea>
       ${ed ? '' : `<label class="fl" for="ab-file">Captura del comprobante del pago (opcional)</label>
       <input class="ei" id="ab-file" type="file" accept="image/jpeg,image/png,image/webp">`}
@@ -230,13 +241,15 @@ export function crearAbonos(c) {
     const moneda = document.getElementById('ab-moneda')?.value || est.moneda;
     const monto = Number(document.getElementById('ab-monto')?.value || 0);
     const man = Number(document.getElementById('ab-tasa-manual')?.value || 0);
-    const tasa = man > 0 ? man : tasaDe(est.datos, est.tasaTipo);
+    const tasa = man > 0 ? man : tasaForm(est.tasaTipo);
     box.hidden = moneda !== 'VES';
     if (moneda !== 'VES') return;
-    const en = est.datos?.tasas?.[est.tasaTipo]?.actualizado_en;
+    const en = est.datos?.tasas?.[est.tasaTipo]?.actualizado_en, delDia = est.tasasFecha?.[est.tasaTipo];
     document.getElementById('ab-tasa-nombre').textContent = nombreTasa(est.tasaTipo);
     document.getElementById('ab-tasa').textContent = tasa ? num(tasa, 4) : 'sin cargar';
-    document.getElementById('ab-tasa-fecha').textContent = man > 0 ? '' : en ? `(${c.fecha(en)})` : '';
+    document.getElementById('ab-tasa-fecha').textContent = man > 0 && !delDia ? ''
+      : delDia ? (delDia.historica ? `(del ${diaCorto(delDia.fecha)}, fecha del pago)` : '(no hay tasa guardada del día del pago: es la vigente)')
+      : en ? `(${c.fecha(en)})` : '';
     const eq = document.getElementById('ab-usd');
     if (eq) eq.textContent = !monto || !tasa ? '—' : usd(monto / tasa);
   }
@@ -258,8 +271,23 @@ export function crearAbonos(c) {
       est.metodo = d.metodo; puestos.push('método');
       panel()?.querySelectorAll('[data-ab-accion="metodo"]').forEach(x => x.classList.toggle('on', x.dataset.metodo === est.metodo));
     }
+    // La fecha del comprobante manda sobre la de hoy (el campo nace con hoy): de ella sale la tasa.
+    const fecha = document.getElementById('ab-fecha'), hoy = diaIso(new Date());
+    if (d.fecha && fecha && d.fecha <= hoy && d.fecha >= '2020-01-01' && (!fecha.value || fecha.value === hoy)) {
+      fecha.value = d.fecha; puestos.push(`fecha (${diaCorto(d.fecha)})`);
+      await cambiarFecha(d.fecha);
+    }
     actualizarTasa();
     aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revísalo antes de registrar.` : 'No se encontraron datos en la captura.';
+  }
+  async function cambiarFecha(f) {
+    const token = ++est.tokenFecha;
+    const t = await tasasDelDia(f);
+    if (token !== est.tokenFecha || !est.formAbierto) return;
+    est.tasasFecha = t;
+    const man = document.getElementById('ab-tasa-manual');
+    if (man) man.value = tasaForm(est.tasaTipo) || man.value;
+    actualizarTasa();
   }
   // null = no se pudo leer. También la usa el pago del formulario de servicio.
   async function analizarCaptura(archivo) {
@@ -276,7 +304,7 @@ export function crearAbonos(c) {
     est.editando = ed;
     if (ed) { est.metodo = METODOS.includes(ed.metodo) ? ed.metodo : ''; est.moneda = ed.moneda; }
     else { est.metodo = est.metodo || 'Zelle'; est.moneda = est.metodo === 'Pago móvil' ? 'VES' : 'USD'; }
-    est.archivo = null; est.formAbierto = true;
+    est.archivo = null; est.formAbierto = true; est.tasasFecha = null; est.tokenFecha++;
     est.tasaTipo = ed?.tasa_tipo || 'USD';
     est.solicitud = crypto.randomUUID();
     pintar();
@@ -317,7 +345,7 @@ export function crearAbonos(c) {
       await registrar({
         monto: Number(v('ab-monto') || 0), moneda: v('ab-moneda') || 'USD', metodo: est.metodo, referencia: v('ab-ref'), nota: v('ab-nota'),
         archivo: est.archivo || document.getElementById('ab-file')?.files?.[0] || null, servicio: Number(v('ab-servicio') || 0) || null,
-        tasaTipo: est.tasaTipo, solicitud: est.solicitud,
+        tasaTipo: est.tasaTipo, solicitud: est.solicitud, fecha: v('ab-fecha'), tasasFecha: est.tasasFecha,
       }, poner);
     } catch (e) {
       poner(mensaje(e));
@@ -333,13 +361,17 @@ export function crearAbonos(c) {
     if (!(p.monto > 0)) { poner(ERRORES.monto_invalido); return false; }
     if (!p.metodo) { poner(ERRORES.metodo_invalido); return false; }
     if (p.metodo === 'Pago móvil' && p.moneda !== 'VES') { poner(ERRORES.pago_movil_en_bs); return false; }
-    const ves = p.moneda === 'VES';
+    const ves = p.moneda === 'VES', hoy = diaIso(new Date());
+    if (p.fecha && (p.fecha > hoy || p.fecha < '2020-01-01')) { poner(ERRORES.fecha_invalida); return false; }
+    const fecha = p.fecha && p.fecha < hoy ? p.fecha : null;
+    const tasasF = fecha && ves ? p.tasasFecha || await tasasDelDia(fecha) : null;
     const comprobante = p.archivo ? await subirCaptura(p.archivo) : null;
     const llamar = forzar => sb.rpc('registrar_abono_reserva_v2', {
       p_reserva_id: est.reservaId, p_monto_original: p.monto, p_moneda: p.moneda, p_metodo: p.metodo,
       p_solicitud_id: p.solicitud, p_referencia: p.referencia || null, p_nota: p.nota || null,
       p_comprobante_path: comprobante, p_comprobante_datos: null, p_servicio_id: p.servicio, p_forzar: forzar,
-      p_tasa_tipo: ves ? p.tasaTipo : null, p_tasa_esperada: ves ? tasaDe(est.datos, p.tasaTipo) || null : null,
+      p_tasa_tipo: ves ? p.tasaTipo : null, p_tasa_esperada: ves ? (Number(tasasF?.[p.tasaTipo]?.tasa || 0) || tasaDe(est.datos, p.tasaTipo)) || null : null,
+      p_fecha: fecha,
     });
     let { data, error } = await llamar(false);
     // A3: el mismo pago cargado dos veces (R-000133). Solo sigue si confirman que es otro pago.
@@ -352,8 +384,8 @@ export function crearAbonos(c) {
     }
     // M10: la tasa se actualizó con el form abierto. Se muestra la nueva y se pide confirmar de nuevo.
     if (!error && data?.error === 'tasa_cambio') {
-      est.datos.tasas = est.datos.tasas || {};
-      (est.datos.tasas[data.tasa_tipo] ||= {}).tasa = data.tasa;
+      const destino = tasasF && tasasF === est.tasasFecha ? tasasF : (est.datos.tasas ||= {});
+      (destino[data.tasa_tipo] ||= {}).tasa = data.tasa;
       actualizarTasa();
       poner(`La tasa ${nombreTasa(data.tasa_tipo)} cambió a ${num(data.tasa, 4)}. Revisa el equivalente y registra de nuevo.`);
       return false;
@@ -366,7 +398,7 @@ export function crearAbonos(c) {
     const docs = await cadenaAbono({
       id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
       moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
-      referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: new Date().toISOString(),
+      referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: data.fecha || new Date().toISOString(),
     }, data.monto_pagado, data.saldo_pendiente);
     // El pago quedó guardado: nunca un toast de error, o lo vuelven a cargar (R-000133, abonos 66-68).
     if (docs.fallo) c.ok(`Abono registrado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): no lo cargues de nuevo, usa «Reintentar documentos».`);
@@ -399,10 +431,11 @@ export function crearAbonos(c) {
         if (!s) throw new Error('servicio_invalido');
         const falta = Math.min(Math.round((Number(s.precio_usd || 0) - pagadoDe(p.servicio)) * 100) / 100, Number(est.datos.saldo_pendiente || 0));
         if (!(falta > 0)) { poner('Ese servicio ya está pagado completo.'); return false; }
-        const tasa = tasaDe(est.datos, p.tasaTipo);
+        const tasasFecha = p.moneda === 'VES' ? await tasasDelDia(p.fecha) : null;
+        const tasa = Number(tasasFecha?.[p.tasaTipo]?.tasa || 0) || tasaDe(est.datos, p.tasaTipo);
         if (p.moneda === 'VES' && !tasa) throw new Error('tasa_no_disponible');
         // En Bs se redondea hacia abajo: un céntimo de más daría supera_saldo.
-        p = { ...p, monto: p.moneda === 'VES' ? Math.floor(falta * tasa * 100) / 100 : falta };
+        p = { ...p, tasasFecha, monto: p.moneda === 'VES' ? Math.floor(falta * tasa * 100) / 100 : falta };
       }
       return await registrar({ ...p, solicitud: p.solicitud || crypto.randomUUID() }, poner);
     } catch (e) { poner(mensaje(e)); return false; }
