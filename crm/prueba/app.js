@@ -629,7 +629,6 @@ async function entrarSegunRol() {
     if (MI_BLOQUEADO) mostrarBloqueoOverlay();
   }
   setupLatidoPresencia();
-  arrancar(setupAvisoInforme, setupPushBloqueo);
   renderAvisosPushUI();
   manejarDeepLinkAsistencia();
   // Antes de manejarDeepLinkSeccion: ese maneja "?ir=leads" con un
@@ -1344,92 +1343,9 @@ async function handleCheckIn() {
 const JORNADA_CAMPOS = ['jornada-como-me-fue', 'jornada-que-aprendi', 'jornada-que-se-complico', 'jornada-bloqueos'];
 function abrirResumenJornada() {
   if (!esOficina() && ROL !== 'asesor') return;
-  // El informe es obligatorio solo para Asesor Integral (decisión del dueño 2026-11-06).
-  if (!MI_ASESOR_INTEGRAL) { finalizarJornadaSinInforme(); return; }
-  const borrador = jornadaBorradorLeer();
-  JORNADA_CAMPOS.forEach(id => { const el = document.getElementById(id); if (el) el.value = borrador[id] || ''; });
-  validarResumenJornada();
-  jornadaPintarDia(null);
+  JORNADA_CAMPOS.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('jornada-resumen-ok').disabled = true;
   openSheet('jornada-resumen-sheet');
-  jornadaCargarDia();
-}
-async function finalizarJornadaSinInforme() {
-  if (!await confirmarSheet({ titulo: '¿Finalizar tu jornada?', detalle: 'Puedes seguir atendiendo a tus clientes desde casa.', textoOk: 'Finalizar jornada', textoCancelar: 'Seguir trabajando' })) return;
-  const { error } = await sb.rpc('agent_check_out_sin_informe');
-  if (error) { errToast('No se pudo cerrar la jornada: ' + error.message); return; }
-  JORNADA_ACTIVA = false;
-  renderJornadaUI();
-  okToast('Jornada finalizada');
-}
-// Borrador local: cerrar el aviso o la hoja no pierde lo escrito.
-const jornadaBorradorClave = () => `jornada-borrador:${MI_USUARIO_ID}:${hoyCaracas()}`;
-function jornadaBorradorLeer() { try { return JSON.parse(localStorage.getItem(jornadaBorradorClave())) || {}; } catch (_) { return {}; } }
-function jornadaBorradorGuardar() { try { localStorage.setItem(jornadaBorradorClave(), JSON.stringify(Object.fromEntries(JORNADA_CAMPOS.map(id => [id, document.getElementById(id)?.value || ''])))); } catch (_) {} }
-function jornadaBorradorBorrar() { try { localStorage.removeItem(jornadaBorradorClave()); } catch (_) {} }
-const JORNADA_RESULTADOS = { interesado: ['interesado', 'interesados'], no_contesta: ['no contestó', 'no contestaron'], no_interesa: ['no le interesa', 'no les interesa'], ya_viajo: ['ya viajó', 'ya viajaron'], numero_equivocado: ['número equivocado', 'números equivocados'] };
-function jornadaTextoDia(r) {
-  const contactos = Object.entries(r.contactos || {}), total = contactos.reduce((s, [, n]) => s + Number(n), 0);
-  const detalle = contactos.map(([k, n]) => `${n} ${JORNADA_RESULTADOS[k]?.[Number(n) === 1 ? 0 : 1] || k}`).join(', ');
-  const plural = (n, uno, varios) => `${n} ${Number(n) === 1 ? uno : varios}`;
-  const partes = [
-    total && `${plural(total, 'cliente contactado', 'clientes contactados')}${detalle ? ` (${detalle})` : ''}`,
-    Number(r.cotizaciones) > 0 && plural(r.cotizaciones, 'cotización', 'cotizaciones'),
-    Number(r.cobros?.n) > 0 && `${plural(r.cobros.n, 'cobro', 'cobros')} por $${Number(r.cobros.usd).toFixed(2)}`,
-    Number(r.seguimientos_manana) > 0 && plural(r.seguimientos_manana, 'seguimiento para mañana', 'seguimientos para mañana'),
-  ].filter(Boolean);
-  return partes.length ? `Hoy: ${partes.join('; ')}.` : '';
-}
-function jornadaPintarDia(r) {
-  const box = document.getElementById('jornada-dia');
-  if (!box) return;
-  box.hidden = !r;
-  if (!r) { box.innerHTML = ''; return; }
-  const total = Object.values(r.contactos || {}).reduce((s, n) => s + Number(n), 0);
-  const kpi = (v, t) => `<div class="jd-kpi"><b>${esc(String(v))}</b><span>${esc(t)}</span></div>`;
-  const clientes = r.clientes || [];
-  box.innerHTML = `<div class="jd-kpis">${kpi(total, 'Contactos')}${kpi(r.cotizaciones, 'Cotizaciones')}${kpi(r.cobros?.n || 0, 'Cobros')}${kpi(r.seguimientos_manana, 'Para mañana')}</div>`
-    + (r.sin_proximo ? `<p class="jd-falta"><i class="fas fa-triangle-exclamation"></i> ${r.sin_proximo === 1 ? '1 cliente sin próximo paso' : `${r.sin_proximo} clientes sin próximo paso`}</p>` : '')
-    + (clientes.length ? `<ul class="jd-clientes">${clientes.map(c => `<li><span><b>${esc(c.nombre || `Lead #${c.id}`)}</b><small>${esc(niceEstado(c.estado))}${c.destino ? ` · ${esc(c.destino)}` : ''}</small></span>${c.sin_proximo ? `<button class="dseg-btn" type="button" data-jd-manana="${c.id}">Mañana</button>` : c.proxima_accion_at ? `<small class="jd-seg">${esc(tiempoSeguimiento(c.proxima_accion_at))}</small>` : ''}</li>`).join('')}</ul>` : '');
-}
-async function jornadaCargarDia() {
-  const { data, error } = await sb.rpc('mi_resumen_jornada');
-  if (error || !data?.ok) { console.error('mi_resumen_jornada', error); return; }
-  jornadaPintarDia(data);
-  const como = document.getElementById('jornada-como-me-fue');
-  if (como && !como.value.trim()) { como.value = jornadaTextoDia(data); validarResumenJornada(); }
-}
-document.getElementById('jornada-dia')?.addEventListener('click', async e => {
-  const b = e.target.closest('[data-jd-manana]');
-  if (!b) return;
-  b.disabled = true;
-  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: Number(b.dataset.jdManana), p_at: seguimientoEnDias(1), p_nota: null });
-  if (error || !data?.ok) { b.disabled = false; errToast('No se pudo fijar el seguimiento'); return; }
-  jornadaCargarDia();
-});
-const AVISO_INFORME_MS = 10 * 60 * 1000;
-let avisoInformeUltimo = 0;
-// Desde las 4:30 pm Caracas: se puede cerrar, vuelve cada 10 minutos hasta entregar. No bloquea.
-function jornadaAvisoRevisar() {
-  const aviso = document.getElementById('jornada-aviso');
-  if (!aviso) return;
-  if (!MI_ASESOR_INTEGRAL || !JORNADA_ACTIVA) { aviso.hidden = true; return; }
-  const hora = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' });
-  if (hora < '16:30' || !aviso.hidden || sheetAbierta === 'jornada-resumen-sheet' || Date.now() - avisoInformeUltimo < AVISO_INFORME_MS) return;
-  avisoInformeUltimo = Date.now();
-  aviso.hidden = false;
-}
-function setupAvisoInforme() {
-  const aviso = document.getElementById('jornada-aviso');
-  if (!aviso) return;
-  aviso.addEventListener('click', e => {
-    const a = e.target.closest('[data-aviso]')?.dataset.aviso;
-    if (!a) return;
-    aviso.hidden = true;
-    if (a === 'informe') abrirResumenJornada();
-  });
-  setInterval(jornadaAvisoRevisar, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) jornadaAvisoRevisar(); });
-  jornadaAvisoRevisar();
 }
 // Solo las dos primeras respuestas habilitan el cierre; las otras dos son opcionales.
 function validarResumenJornada() {
@@ -1437,7 +1353,7 @@ function validarResumenJornada() {
     .every(id => (document.getElementById(id)?.value || '').trim().length > 0);
   document.getElementById('jornada-resumen-ok').disabled = !ok;
 }
-JORNADA_CAMPOS.forEach(id => document.getElementById(id)?.addEventListener('input', () => { validarResumenJornada(); jornadaBorradorGuardar(); }));
+JORNADA_CAMPOS.forEach(id => document.getElementById(id)?.addEventListener('input', validarResumenJornada));
 document.getElementById('jornada-resumen-cancelar')?.addEventListener('click', (e) => {
   if (e.currentTarget.disabled) return; // envío en curso -- no se puede cancelar a mitad de camino
   closeSheet('jornada-resumen-sheet');
@@ -1459,8 +1375,6 @@ document.getElementById('jornada-resumen-ok')?.addEventListener('click', async (
   cancelarBtn.disabled = false;
   if (error) { btn.disabled = false; errToast('No se pudo cerrar la jornada: ' + error.message); return; }
   JORNADA_ACTIVA = false;
-  jornadaBorradorBorrar();
-  jornadaAvisoRevisar();
   renderJornadaUI();
   closeSheet('jornada-resumen-sheet');
   if (document.getElementById('jornada-guardar-nota')?.checked) {
@@ -1471,7 +1385,7 @@ document.getElementById('jornada-resumen-ok')?.addEventListener('click', async (
     });
     if (!eNota) okToast('Guardado también en Mis Notas'); else errToast('La jornada se cerró, pero la nota no se pudo guardar.');
   }
-  okToast('Jornada finalizada: informe enviado. Puedes seguir atendiendo desde casa.');
+  okToast('Jornada finalizada — informe enviado');
 });
 window.toggleJornada = async () => { JORNADA_ACTIVA ? abrirResumenJornada() : await handleCheckIn(); };
 function renderJornadaUI() {
@@ -1693,7 +1607,7 @@ async function sincronizarSuscripcionPush() {
   // -- el banner se encarga de invitarla, y sin esa distinción la
   // reconciliación no podía ayudar justamente a quien nunca activó.
   if (estado.permiso !== 'granted') { renderAvisosPushUI(); return; }
-  if (!pushForzado() && MI_PREFERENCIAS.notificaciones_leads === false && MI_PREFERENCIAS.notificaciones_asistencia === false) return;
+  if (MI_PREFERENCIAS.notificaciones_leads === false && MI_PREFERENCIAS.notificaciones_asistencia === false) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     // Permiso concedido pero sin suscripción (o con una de otra clave VAPID):
@@ -1744,8 +1658,7 @@ async function renderAvisosPushUI() {
   // "Activar" ahí es mandar a la persona a un callejón sin salida -- toca,
   // falla, y no se entera de que lo que faltaba era instalar.
   const faltaInstalar = esIOS() && !pwaInstalada();
-  const forzado = pushForzado();
-  const mostrar = (estado.soportado || faltaInstalar) && !estado.activo && (forzado || !MI_PREFERENCIAS.push_rechazado);
+  const mostrar = (estado.soportado || faltaInstalar) && !estado.activo && !MI_PREFERENCIAS.push_rechazado;
   const texto = faltaInstalar
     ? 'En iPhone: toca Compartir y "Agregar a inicio"; actívalos desde ese ícono.'
     : (bloqueado
@@ -1760,74 +1673,13 @@ async function renderAvisosPushUI() {
     const span = el.querySelector('span');
     if (span) span.textContent = texto;
     const cerrar = el.querySelector('.rb-close');
-    if (cerrar) { cerrar.textContent = (bloqueado || faltaInstalar) ? 'Cerrar' : 'No, gracias'; cerrar.style.display = forzado ? 'none' : ''; }
+    if (cerrar) cerrar.textContent = (bloqueado || faltaInstalar) ? 'Cerrar' : 'No, gracias';
     // Sin permiso (denegado) o sin app instalada en iPhone, el botón no puede
     // hacer nada: el navegador no vuelve a preguntar y en iOS no hay
     // PushManager. Queda solo la instrucción, que es lo accionable.
     const btn = el.querySelector('button:not(.rb-close)');
     if (btn) btn.style.display = (bloqueado || faltaInstalar) ? 'none' : '';
   });
-}
-
-/* ---------- Avisos obligatorios para el rol asesor (dueño 2026-11-06) ----------
-   Criterio por persona: un teléfono que haya acusado un aviso en los últimos 7 días. Un PC no
-   alcanza porque con Chrome cerrado no recibe. Si la consulta o la prueba fallan por el sistema,
-   no se bloquea a nadie: vender pesa más que el aviso. Comprueba el momento, no garantiza el futuro. */
-function pushForzado() { return ROL === 'asesor' && MI_USERNAME !== 'ambar' && !window.PRUEBA_DATOS; }
-const PUSH_PRUEBA_MS = 20000, PUSH_INTENTOS_SALIDA = 3;
-let pushIntentos = 0;
-const pushBloqueoCerrar = () => { const box = document.getElementById('push-bloqueo'); if (box) box.hidden = true; };
-async function pushBloqueoRevisar() {
-  if (!pushForzado()) return;
-  const faltan = Object.fromEntries(['notificaciones_leads', 'notificaciones_asistencia'].filter(k => MI_PREFERENCIAS[k] === false).map(k => [k, true]));
-  if (Object.keys(faltan).length) {
-    MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ...faltan };
-    Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
-  }
-  const { data, error } = await sb.rpc('mi_push_estado');
-  if (error || !data?.ok || data.movil_acuse_7d) { pushBloqueoCerrar(); return; }
-  await pushBloqueoPintar();
-}
-async function pushBloqueoPintar(aviso = '') {
-  const box = document.getElementById('push-bloqueo');
-  if (!box) return;
-  const estado = await estadoPushReal(), movil = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const caso = !movil ? { t: 'Abre el CRM en tu teléfono y activa ahí los avisos. En la computadora no alcanza: con Chrome cerrado no llegan.', b: ['revisar', 'Ya lo activé'] }
-    : esIOS() && !pwaInstalada() ? { t: 'En iPhone: toca Compartir, luego «Agregar a inicio», y abre el CRM desde ese ícono.', b: ['revisar', 'Ya lo hice'] }
-    : !estado.soportado ? { t: 'Este navegador no recibe avisos. Abre el CRM en Chrome.', b: ['revisar', 'Revisar otra vez'] }
-    : estado.permiso === 'denied' ? { t: 'Tienes los avisos bloqueados. Toca el candado junto a la dirección, entra en Notificaciones, elige Permitir y recarga.', b: ['recargar', 'Recargar'] }
-    : { t: 'Para atender a tus clientes a tiempo necesitas los avisos del CRM. Te mandaremos uno de prueba.', b: ['probar', 'Activar y probar'] };
-  box.querySelector('.pb-texto').textContent = caso.t;
-  box.querySelector('.pb-aviso').textContent = aviso;
-  box.querySelector('.pb-acciones').innerHTML = `<button class="dbtn pb-ok" type="button" data-pb="${caso.b[0]}">${esc(caso.b[1])}</button>${pushIntentos >= PUSH_INTENTOS_SALIDA ? '<button class="dseg-btn" type="button" data-pb="seguir">Seguir por ahora</button>' : ''}`;
-  box.hidden = false;
-}
-async function pushBloqueoProbar(btn) {
-  btn.disabled = true; btn.textContent = 'Probando…';
-  const activos = (await estadoPushReal()).activo || await window.activarRecordatorios();
-  if (!activos) { await pushBloqueoPintar('No se pudieron activar. Revisa el permiso y vuelve a intentar.'); return; }
-  const { data, error } = await sb.functions.invoke('push-prueba', { body: { propio: true } });
-  if (error || !data?.ok) { pushBloqueoCerrar(); errToast('No pudimos probar tus avisos. Puedes seguir trabajando; lo intentamos la próxima vez que entres.'); return; }
-  const fin = Date.now() + PUSH_PRUEBA_MS;
-  while (Date.now() < fin) {
-    await new Promise(r => setTimeout(r, 2000));
-    const { data: e } = await sb.rpc('mi_push_estado');
-    if (e?.movil_acuse_7d) { pushBloqueoCerrar(); okToast('Listo: tus avisos funcionan'); return; }
-  }
-  pushIntentos++;
-  await pushBloqueoPintar('No llegó el aviso. Revisa: internet activo; Ajustes, Apps, Chrome, Batería, «Sin restricciones»; y notificaciones permitidas. Luego vuelve a intentar.');
-}
-function setupPushBloqueo() {
-  document.getElementById('push-bloqueo')?.addEventListener('click', e => {
-    const b = e.target.closest('[data-pb]');
-    if (!b) return;
-    const a = b.dataset.pb;
-    if (a === 'probar') pushBloqueoProbar(b);
-    else if (a === 'recargar') location.reload();
-    else if (a === 'seguir') pushBloqueoCerrar();
-    else pushBloqueoRevisar();
-  });
-  return pushBloqueoRevisar();
 }
 
 // Deep-link desde el click de una notificación (?accion=marcar-asistencia):
@@ -2581,14 +2433,11 @@ async function cargarTimelineAsesor() {
   if (!wrap || !timelineAsesorId) return;
   wrap.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   const fecha = document.getElementById('timeline-fecha').value || hoyCaracas();
-  const [{ data, error }, { data: asesorTl }] = await Promise.all([
-    sb.rpc('timeline_asesor', { p_asesor_id: timelineAsesorId, p_dia: fecha }),
-    sb.from('usuarios').select('asesor_integral').eq('id', timelineAsesorId).maybeSingle(),
-  ]);
+  const { data, error } = await sb.rpc('timeline_asesor', { p_asesor_id: timelineAsesorId, p_dia: fecha });
   if (error || !data?.ok) { wrap.innerHTML = '<div class="es-s">No se pudo cargar el timeline.</div>'; return; }
   document.getElementById('timeline-resumen').innerHTML =
     '<span class="chip">' + fmtMinutos(data.minutos_presencia) + ' de presencia</span>'
-    + (data.tiene_informe ? '<span class="chip ok">Dejó su informe</span>' : asesorTl?.asesor_integral ? '<span class="chip am">Sin informe ese día</span>' : '');
+    + (data.tiene_informe ? '<span class="chip ok">Dejó su informe</span>' : '<span class="chip am">Sin informe ese día</span>');
   const eventos = data.eventos || [];
   wrap.innerHTML = eventos.length
     ? eventos.map(e => '<div class="tl-ev"><div class="tl-ev-hora">' + fmtHoraCaracas(e.en) + '</div>'
@@ -8007,7 +7856,7 @@ async function loadTable(silencioso) {
   PARA_CERRAR_PAGINA = paraCerrar ? (data || []) : [];
   pintarBotonParaCerrar();
   if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('leads-cards').innerHTML = ''; document.getElementById('pager').innerHTML = ''; return; }
-  document.getElementById('tbody').innerHTML = data.map((l, i) => {
+  document.getElementById('tbody').innerHTML = data.map(l => {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
       <td class="solo-admin-borrar"><input type="checkbox" class="lead-check" data-id="${l.id}" ${SELECTED_LEADS.has(l.id) ? 'checked' : ''}></td>
@@ -8018,11 +7867,10 @@ async function loadTable(silencioso) {
       <td data-label="Asesor">${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</td>
       <td data-label="Estado"><span class="badge-st" style="color:${ESTADO_COLORS[l.estado] || '#8b93ad'};background:${(ESTADO_COLORS[l.estado] || '#8b93ad')}2e">${esc(niceEstado(l.estado))}</span></td>
       <td data-label="Fecha" class="muted">${l.fecha_creacion ? l.fecha_creacion.slice(0, 10) : '—'}</td>
-      <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>${ROL === 'asesor' || ROL === 'admin' ? `<button class="wa-btn wa-msg" type="button" data-wa-msg="${i}" title="Mensaje frecuente por WhatsApp" aria-label="Mensaje frecuente por WhatsApp"><i class="fas fa-comment-dots"></i></button>` : ''}` : '<span class="muted">—</span>'}</td>
+      <td class="td-wa">${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : '<span class="muted">—</span>'}</td>
     </tr>`;
   }).join('');
   [...document.querySelectorAll('#tbody tr')].forEach((tr, i) => tr.addEventListener('click', () => openDrawer(data[i])));
-  document.querySelectorAll('#tbody [data-wa-msg]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); waElegirMensaje(data[+b.dataset.waMsg]); }));
   const cardsEl = document.getElementById('leads-cards');
   cardsEl.innerHTML = data.map(leadCardHtml).join('');
   // Entrada escalonada (Fase 6) SOLO en esta carga completa -- se saca la
@@ -8072,7 +7920,6 @@ function abrirAccionesLeadSheet(l) {
   const opciones = [
     { k: 'ficha', t: 'Abrir ficha', i: 'fa-id-card', go: () => openDrawer(l) },
     ROL !== 'administrativo' && { k: 'estado', t: 'Cambiar estado', i: 'fa-arrows-rotate', go: () => abrirEstadoLeadSheet(l) },
-    vende && wa && { k: 'wa-msg', t: 'Mensaje frecuente por WhatsApp', i: 'fa-comment-dots', go: () => waElegirMensaje(l) },
     vende && cta !== 'cotizar' && { k: 'cotizar', t: 'Cotizar', i: 'fa-file-invoice-dollar', go: () => cbDesdeLead(l) },
     vende && !l.fecha_cotizacion_enviada && { k: 'reg-cot', t: 'Registrar cotización enviada', i: 'fa-file-circle-check', go: () => registrarCotizacionEnviada(l) },
     (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) && cta !== 'reserva' && { k: 'reserva', t: 'Crear reserva', i: 'fa-plus', go: () => abrirEnviarFacturacionSheet(l) },
@@ -8748,11 +8595,9 @@ function openDrawer(l, opciones = {}) {
         <select id="e-estado" ${dis}>${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select><i class="fas fa-chevron-down"></i></label>
       <button type="button" class="dacc-cta" id="e-a-cta" ${cta ? `data-accion="${cta.key}"` : 'hidden'}>${cta ? `<i class="fas ${cta.icono}"></i>${cta.texto}` : ''}</button>
       ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
-      ${wa && vende ? `<button type="button" class="dacc-ic" id="e-a-wa-msg" title="Mensaje frecuente por WhatsApp" aria-label="Mensaje frecuente por WhatsApp"><i class="fas fa-comment-dots"></i></button>` : ''}
       <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
     ${vende && !l.fecha_cotizacion_enviada ? `<button class="dacc-cot" id="e-a-cotizacion" type="button"><i class="fas fa-file-circle-check"></i><span>Registrar cotización enviada</span></button>` : ''}
-    ${vende && !soloLectura && !ESTADOS_SIN_SEGUIMIENTO.includes(l.estado) ? `<div class="dseg" id="d-seg" role="group" aria-label="Seguimiento">${dsegHtml(l)}</div>` : ''}
     <div class="dacc-mas" id="dacc-mas" hidden>
       ${vende && !soloLectura ? `<button class="dq-mas" id="e-a-pegar-chat" type="button"><i class="fas fa-paste"></i>Pegar chat de WhatsApp</button>` : ''}
       ${vende && l.destino ? `<button class="dq-mas" id="e-a-texto-ia" type="button"><i class="fas fa-wand-magic-sparkles"></i>Respuesta sugerida (IA)</button>` : ''}
@@ -8883,8 +8728,6 @@ function openDrawer(l, opciones = {}) {
   btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
   document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
   document.getElementById('e-a-recordar')?.addEventListener('click', () => { document.getElementById('dacc-mas').hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); recordarLeadManana(l); });
-  document.getElementById('e-a-wa-msg')?.addEventListener('click', () => waElegirMensaje(l));
-  document.getElementById('d-seg')?.addEventListener('click', e => { const b = e.target.closest('[data-seg]'); if (b) dsegAccion(l, b.dataset.seg, b); });
   document.getElementById('e-a-avisar')?.addEventListener('click', () => abrirAvisarTelefono(l));
   document.getElementById('e-servicio-ia').onclick = detectarServicioDelLead;
   document.getElementById('e-copiar-id').onclick = async () => {
@@ -9044,31 +8887,16 @@ async function facturarReservaLead(l, reservaId, btn) {
 }
 
 /* ---------- Recordar mañana (RPC fijar_proxima_accion; una sola por lead) ---------- */
-async function fijarSeguimiento(l, at, textoOk) {
-  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: l.id, p_at: at, p_nota: at ? l.proxima_accion_nota ?? null : null });
-  if (error || !data?.ok) { errToast(error?.message || (data?.error === 'lead_eliminado' ? 'Ese lead ya fue eliminado' : 'No se pudo fijar el seguimiento')); dsegPintar(l); return; }
+async function recordarLeadManana(l) {
+  const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); // 9:00 en la hora del equipo (VET)
+  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: l.id, p_at: d.toISOString(), p_nota: null });
+  if (error || !data?.ok) { errToast(error?.message || (data?.error === 'lead_eliminado' ? 'Ese lead ya fue eliminado' : 'No se pudo fijar el seguimiento')); return; }
   l.proxima_accion_at = data.proxima_accion_at ?? null; l.proxima_accion_nota = data.proxima_accion_nota ?? null;
   if (!data.sin_cambios) l.proxima_accion_aviso_at = null;
   if (currentLead?.id === l.id) Object.assign(currentLead, l);
-  dsegPintar(l);
   ACTIVIDAD_CACHE = null;
-  okToast(textoOk);
+  okToast('Te lo recordamos mañana a las 9:00');
   loadTable(); refrescarKpisHoyAsesor();
-}
-const recordarLeadManana = l => fijarSeguimiento(l, seguimientoEnDias(1), 'Te lo recordamos mañana a las 9:00');
-// Chips de seguimiento de la ficha. Hecho deja el lead sin próxima acción.
-const dsegHtml = l => `<span class="dseg-t"><i class="fas fa-calendar-check"></i> ${esc(tiempoSeguimiento(l.proxima_accion_at))}</span>${l.proxima_accion_at ? '<button class="dseg-btn" type="button" data-seg="hecho">Hecho</button>' : ''}<button class="dseg-btn" type="button" data-seg="1">+1 d</button><button class="dseg-btn" type="button" data-seg="3">+3 d</button><button class="dseg-btn" type="button" data-seg="fecha">Fecha</button>`;
-function dsegPintar(l) {
-  const box = document.getElementById('d-seg');
-  if (box && currentLead?.id === l.id) box.innerHTML = dsegHtml(l);
-}
-async function dsegAccion(l, seg, btn) {
-  if (seg === 'hecho') { btn.disabled = true; return fijarSeguimiento(l, null, 'Seguimiento hecho'); }
-  if (seg !== 'fecha') { btn.disabled = true; return fijarSeguimiento(l, seguimientoEnDias(+seg), `Seguimiento en ${seg === '1' ? '1 día' : `${seg} días`}, a las 9:00`); }
-  const f = await pedirTexto({ titulo: '¿Para cuándo el seguimiento?', detalle: 'Te lo recordamos ese día a las 9:00.', label: 'Fecha', tipo: 'date', valor: cbSumarDias(cbHoy(), 1), requerido: true, textoOk: 'Fijar' });
-  if (!f) return;
-  if (f < cbHoy()) { errToast('La fecha no puede ser anterior a hoy'); return; }
-  return fijarSeguimiento(l, seguimientoEnDias(0, f), `Seguimiento el ${fmtFechaSolo(f)}, a las 9:00`);
 }
 async function registrarCotizacionEnviada(l) {
   // El botón existe solo con el drawer abierto; desde el menú "⋯" de la
@@ -9089,9 +8917,8 @@ async function registrarCotizacionEnviada(l) {
   l.fecha_cotizacion_enviada = data.fecha_cotizacion_enviada;
   if (currentLead?.id === l.id) Object.assign(currentLead, l);
   if (btn) btn.innerHTML = '<i class="fas fa-file-circle-check"></i><span>Cotización registrada</span>';
-  const seguimiento = !data.estado_conservado && await seguimientoTrasCotizar(l);
   ACTIVIDAD_CACHE = null;
-  okToast((data.ya_registrada ? 'La cotización ya estaba registrada' : 'Cotización enviada registrada') + (seguimiento ? ' · seguimiento mañana a las 9:00' : ''));
+  okToast(data.ya_registrada ? 'La cotización ya estaba registrada' : 'Cotización enviada registrada');
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
 }
 
@@ -9103,16 +8930,12 @@ document.addEventListener('click', e => {
   if (!a || leadSoloLectura()) return;
   const id = Number(a.dataset.atender);
   a.removeAttribute('data-atender');
-  marcarLeadAtendido(id);
-}, true);
-function marcarLeadAtendido(id) {
-  if (leadSoloLectura()) return;
   sb.rpc('actualizar_lead', { p_lead_id: id, p_estado: 'ATENDIDO' }).then(({ data, error }) => {
     if (error || !data?.ok) return;
     if (currentLead?.id === id) { currentLead.estado = 'ATENDIDO'; currentLead.fecha_primer_contacto ||= new Date().toISOString(); const sel = document.getElementById('e-estado'); if (sel) sel.value = 'ATENDIDO'; }
     quitarDeInbox(id); loadTable();
   });
-}
+}, true);
 
 /* ---------- Pegar chat de WhatsApp → ficha (EF parse-chat-lead). La IA
    propone; el asesor tilda qué se aplica. Se aplica por el mismo camino que
@@ -31511,8 +31334,6 @@ function abonosModulo() {
     entregarUrl: docEntregarUrl,
     nombreArchivo: docNombrePorTipo,
     confirmar: confirmarSheet,
-    chatDeReserva: async reservaId => { const { data } = await sb.from('postventa_casos').select('lead_id').eq('id', reservaId).maybeSingle(); return data?.lead_id ? cbChatAbierto(data.lead_id) : null; },
-    pdfAlChat: cbPdfAlChat,
     // app.js es módulo: sin esto abonos.js no ve estas funciones (leer_comprobante no se medía).
     usoBoton: registrarUsoBoton, usoHerramienta: registrarUsoHerramienta,
     // Reemplaza al voucher de reserva previo (mismo nombre base): reintentar no suma otro PDF vigente.
@@ -33213,8 +33034,6 @@ const cbPlanDeBloque = b => {
 };
 const cbTarPlan = t => String(t.plan || cbTarBloque(t).plan || cbPlanDeBloque(cbTarBloque(t)) || '').trim();
 const cbTarNum = v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : null;
-// Paquete cerrado (2026-11-06): la fila trae `N_noches` (Campamento Morichal: boleto, traslados y 4 noches) y se cobra por persona por el paquete completo.
-const cbTarPaqueteNoches = t => Number((Object.entries(t?.precios || {}).find(([k, v]) => /^\d+_noches$/.test(k) && cbTarNum(v) !== null) || ['0'])[0].split('_')[0]);
 const cbTarCent = v => Math.round((Number(v) || 0) * 100);
 const cbTotalItems = items => items.reduce((s, it) => s + cbTarCent(cbImporte(it)), 0) / 100;
 const cbTarFecha = s => { const ms = /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Date.parse(s + 'T00:00:00Z') : NaN; return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s ? ms : NaN; };
@@ -33257,7 +33076,6 @@ function cbTarPrecioAdulto(t, adultos, ocupaciones) {
 // Espejo: pagina-web-next/lib/tarifas.ts (unidadTarifa) y supabase/functions/_shared/presupuesto.ts.
 const TAR_UNIDADES = { persona: 'persona_noche', persona_noche: 'persona_noche', habitacion: 'habitacion_noche', habitacion_noche: 'habitacion_noche' };
 function tarUnidad(t) {
-  if (cbTarPaqueteNoches(t)) return { unidad: 'persona', origen: 'fila' };
   const fila = cbTarNorm(t?.precios?.base), bloque = cbTarNorm(cbTarBloque(t || {}).base_precio);
   if (fila) return { unidad: TAR_UNIDADES[fila] || fila, origen: 'fila' };
   if (bloque) return { unidad: TAR_UNIDADES[bloque] || bloque, origen: 'bloque' };
@@ -33265,7 +33083,7 @@ function tarUnidad(t) {
   if (sgl === null || dbl === null || sgl === dbl) return { unidad: '', origen: null };
   return { unidad: dbl > sgl ? 'habitacion_noche' : 'persona_noche', origen: 'deducida' };
 }
-const TAR_UNIDAD_TEXTO = { persona_noche: 'por persona por noche', habitacion_noche: 'por habitación por noche', persona: 'por persona, paquete completo' };
+const TAR_UNIDAD_TEXTO = { persona_noche: 'por persona por noche', habitacion_noche: 'por habitación por noche' };
 const cbTarBase = t => { if (t._unidad) return t._unidad; const u = tarUnidad(t).unidad; return TAR_UNIDAD_TEXTO[u] ? u : ''; };
 // Cotización (2026-10-29): 388 tarifas vigentes no declaran unidad y tarUnidad no decide (SGL = DBL o
 // sin SGL); el asesor tenía que elegirla a mano y el precio no salía solo. Solo para esos huecos:
@@ -33324,9 +33142,6 @@ function cbHotelUnidad(it, filas) {
     const v = vs.find(([, n]) => n === porHab) || (vs.length && porHab > vs.at(-1)[1] ? vs.at(-1) : null);
     if (v) { it.tarifa_variante = v[0]; it.variante_auto = true; } else if (it.variante_auto) { it.tarifa_variante = ''; }
   }
-  // Paquete cerrado: la salida fija el regreso.
-  const nPaquete = it.unidad === 'persona' ? Math.max(0, ...candidatas.map(cbTarPaqueteNoches)) : 0;
-  if (nPaquete && Number.isFinite(cbTarFecha(it.ida))) it.vuelta = cbTarIso(cbTarFecha(it.ida) + nPaquete * 864e5);
 }
 function cbTarPrecioNino(t, cantidad) {
   const opciones = Object.entries(t.precios || {}).flatMap(([k, v]) => {
@@ -33370,14 +33185,13 @@ function cbTarMinimoBloque(t, noches) {
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
   if (!noches.length) return fallo(it.ida && it.vuelta ? 'Las fechas deben sumar de 1 a 366 noches.' : 'Elige el check-in y las noches: la tarifa sale sola.');
-  if (!cbPorNoche(it) && !(it.unidad === 'persona' && filas.some(cbTarPaqueteNoches))) return fallo('La estadía completa se cotiza manualmente.');
+  if (!cbPorNoche(it)) return fallo('La estadía completa se cotiza manualmente.');
   if (it._unidadPendiente) return fallo('El tarifario no declara una unidad única. Confirma «Tarifa por» antes de cargar el precio.');
   if (!it.hab) return fallo('Elige una habitación del tarifario o escribe una tarifa manual.');
   const porHab = cbPorHabitacion(it), habitaciones = cbHabitaciones(it), adultosHab = Number(it.adultos) / habitaciones;
   if (!porHab && !Number.isInteger(adultosHab)) return fallo(`${it.adultos} adultos no se reparten igual en ${cbHabitacionesTexto(it)}: separa las habitaciones en otro servicio o ingresa la tarifa manual.`);
   const utilizables = filas.filter(t => cbTarUtil(t, hoy));
   const candidatas = cbTarDelPlan(utilizables, it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
-  if (!cbPorNoche(it)) return cbTarPaquete(it, candidatas, noches, ocupaciones);
   const tramos = [], usadas = [], avisos = new Set();
   for (const noche of noches) {
     const cubren = candidatas.map(t => ({ t, amplitud: cbTarAmplitud(t, noche) })).filter(x => x.amplitud !== null);
@@ -33427,27 +33241,10 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
   else if (!utilizables.some(t => cbTarPlan(t))) avisos.add('El tarifario no especifica el plan: confirma que el plan ingresado corresponda a esta tarifa.');
   return { ok: true, tramos, avisos: [...avisos] };
 }
-// Un solo tramo con todas las noches del paquete; `por_pareja` es el total de 2 adultos en la misma habitación.
-function cbTarPaquete(it, candidatas, noches, ocupaciones) {
-  const fallo = texto => ({ ok: false, texto }), adultosHab = Number(it.adultos) / cbHabitaciones(it);
-  const t = candidatas.filter(cbTarPaqueteNoches).map(t => ({ t, amplitud: cbTarAmplitud(t, noches[0]) })).filter(x => x.amplitud !== null)
-    .sort((a, b) => a.amplitud - b.amplitud || (a.t.orden_pdf ?? 1e9) - (b.t.orden_pdf ?? 1e9) || a.t.id - b.t.id)[0]?.t;
-  if (!t) return fallo('No hay tarifa del paquete para esa fecha de salida. Ingresa el precio manualmente.');
-  const n = cbTarPaqueteNoches(t);
-  if (noches.length !== n) return fallo(`El paquete es de ${n + 1} días / ${cbNochesTexto(n)}: ajusta el check-out.`);
-  if (String(t.moneda || 'USD').toUpperCase() !== 'USD') return fallo('La moneda del tarifario requiere confirmación manual en USD.');
-  const pareja = adultosHab === 2 ? cbTarNum(t.precios.por_pareja) : null;
-  const tarifa = cbTarPrecioAdulto(t, adultosHab, ocupaciones) ?? (pareja !== null ? pareja / 2 : cbTarNum(t.precios[`${n}_noches`]));
-  const avisos = new Set([`Paquete completo de ${n + 1} días / ${cbNochesTexto(n)}: precio por persona${pareja !== null ? ' en pareja' : ''}, no por noche.`]);
-  let tarifaNino = null;
-  if (Number(it.ninos) > 0) { tarifaNino = cbTarPrecioNino(t, Number(it.ninos)).precio; if (tarifaNino === null) avisos.add('Niños sin precio en el paquete: confirma su tarifa en la ficha.'); }
-  for (const c of t.condiciones || []) if (typeof c === 'string') avisos.add(c);
-  return { ok: true, tramos: [{ desde: noches[0], hasta: cbTarIso(cbTarFecha(noches.at(-1)) + 864e5), noches: n, tarifa, tarifa_nino: tarifaNino, paquete: true, incluye: t.incluye_tags || [], tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null }], avisos: [...avisos] };
-}
 function cbTarImporte(it) {
   const a = Number(it.adultos) || 0, n = Number(it.ninos) || 0;
   if (cbPorHabitacion(it)) return (it.tramos || []).reduce((s, t) => s + (cbTarCent(t.tarifa) * cbHabitaciones(it) + cbTarCent(t.tarifa_pax_adic) * (Number(t.pax_adic) || 0) + cbTarCent(cbTarNinoTramo(it, t)) * n) * t.noches, 0) / 100;
-  return (it.tramos || []).reduce((s, t) => s + Math.round((a * Number(t.tarifa || 0) + n * (cbTarNinoTramo(it, t) || 0)) * 100) * (t.paquete ? 1 : t.noches), 0) / 100;
+  return (it.tramos || []).reduce((s, t) => s + Math.round((a * Number(t.tarifa || 0) + n * (cbTarNinoTramo(it, t) || 0)) * 100) * t.noches, 0) / 100;
 }
 function cbTarTramosValidos(it) {
   if (!it.tramos?.length) return true;
@@ -33789,7 +33586,6 @@ function cbDetalle(it) {
     add('PLAN', U(it.plan)); add('HABITACIÓN', U(it.hab)); add(tipo === 'hotel' ? 'CHECK-IN' : 'ENTRADA', cbFechaCorta(it.ida)); add(tipo === 'hotel' ? 'CHECK-OUT' : 'SALIDA', cbFechaCorta(it.vuelta)); add('NOCHES', cbNoches(it.ida, it.vuelta));
     if (cbPorHabitacion(it)) { add('TARIFA', `$${cbMonto(it.tarifa)} POR HABITACIÓN POR NOCHE × ${U(cbHabitacionesTexto(it))} × ${U(cbNochesTexto(cbNochesCobro(it)))}`); add('PASAJEROS', cbPaxTexto(it)); if (+it.ninos && +it.tarifa_nino) add('NIÑOS', `$${cbMonto(it.tarifa_nino)} POR NIÑO POR NOCHE`); }
     else if (cbPorNoche(it)) { const p = cbPax(it); add('TARIFA', p.n || p.i ? 'POR PERSONA POR NOCHE' : `$${cbMonto(it.tarifa)} POR PERSONA POR NOCHE × ${U(cbNochesTexto(cbNochesCobro(it)))}`); }
-    else if (it.tramos?.[0]?.paquete) { const t = it.tramos[0]; add('TARIFA', `PAQUETE ${t.noches + 1} DÍAS / ${U(cbNochesTexto(t.noches))} · $${cbMonto(it.tarifa)} POR PERSONA`); if (t.incluye?.length) add('INCLUYE', U(t.incluye.join(', '))); }
   } else if (tipo === 'traslado') {
     d.push(`TRASLADO: ${U(it.ruta)}`);
     add('FECHA', cbFechaCorta(it.ida)); add('HORA', U(it.ida_hora)); add('FECHA DE REGRESO', cbFechaCorta(it.vuelta)); add('HORA', U(it.vuelta_hora));
@@ -33973,46 +33769,21 @@ async function cbAplicarProducto() {
   }
   document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
-// Con Cotizaciones ya abierta (ficha abierta desde el buscador o el chat), activateSection no recarga: se aplica a mano.
-function cbDesdeLead(l) { cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
-const cbLeadDijo = l => [['Fecha', l.fecha_estimada], ['Personas', l.personas], ['Destino', l.destino]].filter(([, v]) => v && !String(v).includes('{{'));
+function cbDesdeLead(l) { cbLeadPendiente = { id: l.id, nombre: l.nombre || l.telefono || `Lead #${l.id}`, telefono: l.telefono }; activateSection('cotizacion-boletos'); }
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
   box.hidden = !cbLead;
-  const dijo = cbLead ? cbLeadDijo(cbLead) : [];
-  box.innerHTML = cbLead ? `<i class="fas fa-user"></i><span>Cotizando para <b>${esc(cbLead.nombre)}</b> (lead #${cbLead.id}): «Guardar en el lead» la deja como cotización enviada.${dijo.length ? `<br><small>El lead dice: ${dijo.map(([k, v]) => `${k} «${esc(v)}»`).join(' · ')}. Verifica lo precargado antes de enviar.</small>` : ''}</span><button class="btn-sm" type="button" onclick="cbQuitarLead()">Desvincular</button>` : '';
+  box.innerHTML = cbLead ? `<i class="fas fa-user"></i><span>Cotizando para <b>${esc(cbLead.nombre)}</b> (lead #${cbLead.id}): «Guardar en el lead» la deja como cotización enviada.</span><button class="btn-sm" type="button" onclick="cbQuitarLead()">Desvincular</button>` : '';
   document.getElementById('cb-lead-btn').hidden = !cbLead;
 }
 window.cbQuitarLead = () => { cbLead = null; cbPintarLead(); };
 // Un formulario a medio armar sin lead se conserva al ligarlo; si era de otro lead, se empieza de cero.
 function cbAplicarLead() {
   const l = cbLeadPendiente; cbLeadPendiente = null;
-  // Cambiar de cliente conserva los servicios y precios que ya se armaron; fechas y personas pasan a ser las del nuevo.
-  const otro = cbLead && cbLead.id !== l.id;
+  // Cambiar de cliente conserva los servicios y precios que ya se armaron.
   cbLead = l; cbPintarLead();
   document.getElementById('cb-cliente').value = l.nombre;
   cbResumenCliente(true);
-  cbPrecargarHotelDeLead(l, otro);
-}
-// Misma lectura que leerPersonas (manychat-recordatorio-seguimiento); `personas` trae basura como {{cuf_...}} o "Dos".
-function cbPersonasLead(texto) {
-  const t = cbTarNorm(texto).replace(/\{\{.*?\}\}/g, ''), ninos = /(\d+)\s*(nin|menor|chamo)/;
-  const adultos = Number(t.match(/(\d+)\s*adult/)?.[1] ?? t.replace(new RegExp(ninos, 'g'), '').match(/\d+/)?.[0] ?? 0), menores = Number(t.match(ninos)?.[1] ?? 0);
-  return { adultos: adultos > 0 && adultos <= 20 ? adultos : 0, ninos: menores <= 10 ? menores : 0 };
-}
-// Solo día o rango dan fecha cierta; «mes» y «parcial» («fin de año») se quedan en el aviso. Un día suelto no inventa las noches.
-function cbFechasLead(l) {
-  if (!['dia', 'rango'].includes(l.fecha_viaje_exactitud) || !l.fecha_viaje_desde || l.fecha_viaje_desde < cbHoy()) return {};
-  return { ida: l.fecha_viaje_desde, vuelta: l.fecha_viaje_hasta > l.fecha_viaje_desde ? l.fecha_viaje_hasta : '' };
-}
-function cbPrecargarHotelDeLead(l, otroLead) {
-  const it = cbItems.find(x => x.tipo === 'hotel' && (otroLead || (!x.ida && !x.vuelta))); if (!it) return;
-  const { adultos, ninos } = cbPersonasLead(l.personas);
-  const datos = { ...cbFechasLead(l), ...(adultos ? { adultos, ninos: ninos || '' } : {}) };
-  if (!Object.keys(datos).length) return;
-  Object.assign(it, datos);
-  if (it.auto) Object.keys(datos).forEach(k => delete it.auto[k]);
-  cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
 }
 const cbHoteles = new Map(), cbHotelTarifas = new Map(), cbHotelPeticiones = new Map();
 const cbHotelHabitaciones = new Map(), cbHabPeticiones = new Map(), cbFotosErrores = new Set();
@@ -34034,7 +33805,7 @@ async function cbBuscarLead() {
   const f = leadBusqueda(input.value), tk = ++cbLeadTk;
   cbPintarBusquedaLead(f);
   if (f.q.length < f.minimo) { cbLeadsRes = []; return; }
-  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino').is('eliminado_at', null).ilike(f.campo, f.patron);
+  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor').is('eliminado_at', null).ilike(f.campo, f.patron);
   if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
   try {
     const { data, error } = await q.order('id', { ascending: false }).limit(8);
@@ -34089,7 +33860,7 @@ async function cbTraerTarifas(id) {
     const control = new AbortController(); let reloj;
     const espera = new Promise((_, rechazar) => { reloj = setTimeout(() => { control.abort(); rechazar(new Error('La carga de tarifas tardó demasiado.')); }, 12000); });
     const consulta = (async () => {
-      const { data, error } = await sb.from('tarifas').select('id,titulo,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,incluye_tags,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
+      const { data, error } = await sb.from('tarifas').select('id,titulo,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
       if (error) throw error;
       return cbTarAnotarUnidades(data || []);
     })();
@@ -34280,50 +34051,17 @@ async function cbCargarProductos() {
 }
 const cbPdfDe = c => c.origen === 'ventas' ? pdfCotizacionCliente(cbDatosPdf(c)) : cbPdfBlob(c);
 // Lead con chat y ventana de 24 h abierta: su chat con el PDF a la vista, sin enviar nada. Si no, la hoja de siempre.
-async function cbChatAbierto(leadId) {
-  if (!usuarioPuedeAbrirSeccion('wa-bandeja')) return null;
+async function cbCompartirAlChat(blob, nombre, leadId) {
+  window.__pruebaChatDelLead?.(leadId);
+  if (!usuarioPuedeAbrirSeccion('wa-bandeja')) return false;
   const { data } = await sb.from('whatsapp_conversaciones').select('id,nombre,wa_id,no_leidos,ultimo_mensaje_at,ultimo_entrante_at,lead_id,asesor,phone_number_id')
     .eq('lead_id', leadId).neq('phone_number_id', '__gate_pnid').order('ultimo_entrante_at', { ascending: false, nullsFirst: false }).limit(1);
   const c = data?.[0];
-  return ventanaWaAbierta(c) ? c : null;
-}
-async function cbPdfAlChat(c, blob, nombre) {
+  if (!ventanaWaAbierta(c)) return false;
   activateSection('wa-bandeja');
   if (!WB) loadWaBandeja();
   await WB.pdfEnChat(c, new File([blob], nombre, { type: 'application/pdf' }));
-}
-async function cbCompartirAlChat(blob, nombre, leadId) {
-  window.__pruebaChatDelLead?.(leadId);
-  const c = await cbChatAbierto(leadId);
-  if (!c) return false;
-  await cbPdfAlChat(c, blob, nombre);
   return true;
-}
-// Mensajes frecuentes para WhatsApp: el asesor elige, se abre con el texto listo y él lo revisa y envía.
-const WA_MENSAJES = [
-  '¡Hola, {nombre}! Te saluda {asesor}, de Destino y Eventos Lotus 360. Vi que te interesa viajar a {destino}. ¿Para qué fechas lo tienes pensado y cuántas personas viajan?',
-  'Hola, {nombre}. Te escribe {asesor}, de Lotus 360. ¿Pudiste revisar la cotización que te envié para {destino}? Cualquier duda me dices y la ajustamos.',
-  'Hola, {nombre}. ¿Cómo estás? Soy {asesor}, de Lotus 360. Sigo pendiente de tu viaje a {destino}. ¿Te gustaría que avancemos con la reserva?',
-  'Hola, {nombre}. Soy {asesor}, de Lotus 360. Intenté comunicarme contigo por tu viaje a {destino} y no pude. ¿A qué hora te queda mejor que hablemos?',
-  'Hola, {nombre}. Para tu reserva a {destino} necesito el nombre completo y la cédula de cada pasajero. Me los puedes enviar por aquí.',
-];
-const waPrimerNombre = s => { const n = String(s ?? '').trim().split(/\s+/)[0]; return /^\p{L}{2,}$/u.test(n) ? n[0].toUpperCase() + n.slice(1).toLowerCase() : ''; };
-function waMensajeDe(plantilla, l, asesor) {
-  const destino = String(l.destino ?? '').trim();
-  return plantilla
-    .replace(/,? \{nombre\}/, waPrimerNombre(l.nombre) ? ` ${waPrimerNombre(l.nombre)}` : '')
-    .replace(/(?:para|a) \{destino\}/, destino ? m => m.replace('{destino}', destino) : '')
-    .replace('{asesor}', waPrimerNombre(asesor) || 'tu asesor')
-    .replace(/ +([.?!,])/g, '$1').replace(/ {2,}/g, ' ');
-}
-async function waElegirMensaje(l) {
-  const tel = String(l.telefono ?? '').replace(/\D/g, '');
-  if (!tel) return;
-  const opciones = WA_MENSAJES.map((m, v) => ({ v, t: waMensajeDe(m, l, MI_NOMBRE) }));
-  const r = await confirmarSheet({ titulo: 'Mensaje para WhatsApp', detalle: 'Se abre WhatsApp con el texto listo. Lo revisas y lo envías tú.', textoOk: 'Abrir WhatsApp', campos: [{ id: 'm', label: 'Mensaje', tipo: 'radio', requerido: true, opciones }] });
-  if (!r) return;
-  if (l.estado === 'POR ATENDER') marcarLeadAtendido(l.id);
-  cbAbrirWhatsapp(tel, opciones[+r.m].t);
 }
 async function cbCompartir(blob, nombre) {
   const file = new File([blob], nombre, { type: 'application/pdf' });
@@ -34407,10 +34145,8 @@ function cbRestaurarBorrador(b, sel) {
     }).catch(() => {});
   });
   [['cb-cliente', b.cliente], ['cb-fecha', b.fecha], ['cb-vence', b.vence], ['cb-notas', b.notas], ['cb-terminos', b.terminos]].forEach(([id, v]) => { if (typeof v === 'string') document.getElementById(id).value = v; });
-  // Un borrador de días atrás trae la fecha y la vigencia de entonces: la fecha vuelve a hoy y la vigencia cuenta desde ella.
-  const bFecha = document.getElementById('cb-fecha'), bVence = document.getElementById('cb-vence');
-  if (bFecha.value && bFecha.value < cbHoy()) bFecha.value = cbHoy();
-  if (bVence.value && bVence.value < cbHoy()) bVence.value = cbVenceDe(bFecha.value || cbHoy());
+  // Un borrador de días atrás trae la fecha y la vigencia de entonces: vuelven a hoy.
+  ['cb-fecha', 'cb-vence'].forEach(id => { const el = document.getElementById(id); if (el.value && el.value < cbHoy()) el.value = cbHoy(); });
   if (b.asesor && [...sel.options].some(o => o.value === b.asesor)) sel.value = b.asesor;
   cbResumenCliente();
 }
@@ -34451,8 +34187,6 @@ async function cbResolverSolicitud(solId, cot) {
   if (error || (!data?.ok && data?.error !== 'no_disponible')) errToast(`No se pudo marcar resuelta la solicitud #${solId}: hazlo desde Solicitudes`);
   return !!data?.ok;
 }
-// Vigencia: 2 días calendario desde la fecha de la cotización (pedido del dueño 2026-11-06).
-const cbVenceDe = fecha => cbSumarDias(fecha, 2);
 function cbResetForm() {
   DR?.cancelar('cotizacion');
   ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
@@ -34464,7 +34198,7 @@ function cbResetForm() {
   if (busca) busca.value = ''; if (res) res.hidden = true;
   cbItems = [cbItemVacio(cbModo === 'ventas' ? 'hotel' : 'boleto')]; cbAutoIniciar(cbItems[0]); cbRenderItems();
   document.getElementById('cb-cliente').value = '';
-  document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbVenceDe(cbHoy());
+  document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbHoy();
   document.getElementById('cb-notas').value = CB_NOTAS; document.getElementById('cb-terminos').value = CB_TERMINOS;
   document.getElementById('cb-cliente-seccion').open = true; cbResumenCliente();
 }
@@ -34490,12 +34224,12 @@ async function cbCargarSeccion() {
     leadInput.addEventListener('keydown', e => cbPickerTeclas(e, leadBox, op => cbElegirLead(+op.dataset.cbLead)));
     leadInput.addEventListener('focusout', () => { cbLeadTk++; clearTimeout(cbLeadTimer); leadBox.hidden = true; leadInput.setAttribute('aria-expanded', 'false'); });
     leadBox.addEventListener('mousedown', e => { const op = e.target.closest('[data-cb-lead]'); if (op) { e.preventDefault(); cbElegirLead(+op.dataset.cbLead); } });
-    // "Válida hasta" sigue a la fecha de la cotización con la vigencia de cbVenceDe; se puede cambiar a mano.
+    // "Válida hasta" sigue a la fecha de la cotización (pedido del dueño 2026-10-17); se puede alargar a mano.
     document.getElementById('cb-fecha').addEventListener('input', e => {
       const v = document.getElementById('cb-vence'), f = e.target.value;
       if (!f) return;
       v.min = f > cbHoy() ? f : cbHoy();
-      v.value = cbVenceDe(f);
+      v.value = f;
       cbProgramarBorrador();
     });
     cbResetForm();
@@ -34826,12 +34560,6 @@ window.cbGuardar = async function cbGuardar(accion) {
   if (!DR?.edicion('cotizacion') && [val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); docEnfocar(val('cb-fecha') && val('cb-fecha') < cbHoy() ? 'cb-fecha' : 'cb-vence'); return; }
   const asesorId = val('cb-asesor');
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); docEnfocar('cb-asesor'); return; }
-  // Sin lead la cotización no pasa el lead a COTIZACIÓN ENVIADA ni deja seguimiento.
-  if (ventas && !cbLead && !DR?.edicion('cotizacion')) {
-    const sinLead = await confirmarSheet({ titulo: 'Esta cotización no tiene lead', detalle: 'Si la vinculas, el lead queda en cotización enviada y con su seguimiento. Sin lead, queda solo en el historial.', textoOk: 'Guardar sin lead', textoCancelar: 'Vincular' });
-    if (!sinLead) { document.getElementById('cb-cliente-seccion').open = true; docEnfocar('cb-lead-q'); return; }
-    if (cbGenerando) return;
-  }
   const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.dataset.drEtiqueta || btn.innerHTML;
   cbGenerando = true; document.querySelectorAll('.cb-acciones button').forEach(b => b.disabled = true);
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
@@ -34879,22 +34607,10 @@ window.cbGuardar = async function cbGuardar(accion) {
     btn.disabled = false; btn.innerHTML = DR?.edicion('cotizacion') ? '<i class="fas fa-file-pdf"></i> Guardar revisión' : htmlBtn;
   }
 };
-const seguimientoEnDias = (dias, desde = cbHoy()) => new Date(`${cbSumarDias(desde, dias)}T09:00:00-04:00`).toISOString(); // 9:00 hora del equipo (VET)
-// Cotizar deja seguimiento para mañana si el lead no tiene uno futuro. La RPC solo admite admin y asesor: si falla, el flujo sigue.
-async function seguimientoTrasCotizar(l) {
-  if (l.proxima_accion_at && new Date(l.proxima_accion_at) > new Date()) return false;
-  try {
-    const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: l.id, p_at: seguimientoEnDias(1), p_nota: null });
-    if (error || !data?.ok) return false;
-    Object.assign(l, { proxima_accion_at: data.proxima_accion_at ?? null, proxima_accion_nota: data.proxima_accion_nota ?? null });
-    if (currentLead?.id === l.id) { Object.assign(currentLead, l); dsegPintar(currentLead); }
-    return true;
-  } catch (_) { return false; }
-}
 async function cbRegistrarLeadCot(cot) {
   if (!cot.lead_id) return '';
   try {
-    const { data: lead, error: lectura } = await sb.from('leads').select('id,estado,proxima_accion_at').eq('id', cot.lead_id).is('eliminado_at', null).maybeSingle();
+    const { data: lead, error: lectura } = await sb.from('leads').select('id,estado').eq('id', cot.lead_id).is('eliminado_at', null).maybeSingle();
     if (lectura || !lead) throw new Error('No se pudo consultar el lead');
     if (!['POR ATENDER', 'ATENDIDO', 'COTIZACION ENVIADA'].includes(lead.estado)) return ' · estado del lead conservado';
     const { data, error } = await sb.rpc('registrar_cotizacion_enviada', { p_lead_id: cot.lead_id });
@@ -34904,9 +34620,8 @@ async function cbRegistrarLeadCot(cot) {
       currentLead.estado = data.estado;
       if (data.fecha_cotizacion_enviada) currentLead.fecha_cotizacion_enviada = data.fecha_cotizacion_enviada;
     }
-    const seguimiento = !data.estado_conservado && await seguimientoTrasCotizar(lead);
     loadStats().then(renderAllSiVisible).catch(() => {});
-    return (data.estado_conservado ? ' · estado del lead conservado' : data.ya_registrada ? ' · lead ya registrado' : ' · lead en COTIZACIÓN ENVIADA') + (seguimiento ? ' · seguimiento mañana a las 9:00' : '');
+    return data.estado_conservado ? ' · estado del lead conservado' : data.ya_registrada ? ' · lead ya registrado' : ' · lead en COTIZACIÓN ENVIADA';
   } catch (e) {
     errToast(`${cbNumero(cot.numero)} se guardó; no se pudo registrar el lead. Reintenta «Registrar en lead» desde el historial.`);
     return ' · registro del lead pendiente';
@@ -35433,15 +35148,14 @@ async function loadClientesAsignados() {
   if (error) { console.error(error); wrap.innerHTML = '<div class="es-s">No se pudieron cargar tus clientes.</div>'; return; }
   const filas = data || [];
   if (!filas.length) { wrap.innerHTML = '<div class="es-s">No tienes clientes asignados por ahora.</div>'; return; }
-  wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFechaHoraCaracas(l.vence_at)) : 'Sin plazo'}</div>${l.notas ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(l.notas)}</div>` : ''}<div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="¿Qué te dijo el cliente? (obligatorio, salvo «No contesta»)"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn-sm" data-editar-lead="${l.lead_id}"><i class="fas fa-pen"></i> Editar datos</button><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
+  wrap.innerHTML = filas.map(l => `<article class="entity-card"><div class="ec-head"><b>${esc(l.nombre || 'Sin nombre')}</b><span class="chip">${esc(l.estado || 'Sin estado')}</span></div><div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono || 'Sin teléfono')}</div><div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino || 'Sin destino')}</div><div class="ec-row"><i class="fas fa-clock"></i> ${l.vence_at ? esc(fmtFechaHoraCaracas(l.vence_at)) : 'Sin plazo'}</div>${l.notas ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(l.notas)}</div>` : ''}<div class="seg-group" style="margin-top:10px;flex-wrap:wrap"><button class="seg" data-r="no_contesta" data-task="${l.task_id}">No contesta</button><button class="seg" data-r="numero_equivocado" data-task="${l.task_id}">Número equivocado</button><button class="seg" data-r="no_interesa" data-task="${l.task_id}">No interesa</button><button class="seg" data-r="interesado" data-task="${l.task_id}">Interesado</button><button class="seg" data-r="ya_viajo" data-task="${l.task_id}">Ya viajó</button></div><textarea class="ei" data-nota placeholder="¿Qué te dijo el cliente? (obligatorio para registrar el resultado)"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn-sm" data-editar-lead="${l.lead_id}"><i class="fas fa-pen"></i> Editar datos</button><a class="btn-sm" href="https://wa.me/${esc(String(l.telefono || '').replace(/\D/g,''))}" target="_blank" rel="noopener"><i class="fab fa-whatsapp"></i> WhatsApp</a><a class="btn-sm" href="tel:${esc(l.telefono || '')}"><i class="fas fa-phone"></i> Llamar</a></div></article>`).join('');
   wrap.querySelectorAll('[data-r]').forEach(btn => btn.addEventListener('click', async () => {
     const nota = btn.closest('.entity-card').querySelector('[data-nota]').value.trim();
-    if (!nota && btn.dataset.r !== 'no_contesta') { errToast('Cuenta qué te dijo el cliente antes de registrar el resultado.'); return; }
-    if (['no_interesa', 'ya_viajo'].includes(btn.dataset.r) && !await confirmarSheet({ titulo: '¿Pasar este cliente a PERDIDO?', detalle: 'Se cierra su seguimiento y sale de tus clientes abiertos.', textoOk: 'Pasar a PERDIDO', destructivo: true })) return;
+    if (!nota) { errToast('Cuenta qué te dijo el cliente antes de registrar el resultado.'); return; }
     btn.disabled = true;
     const { data: r, error: e } = await sb.rpc('registrar_contacto_lead', { p_task_id: Number(btn.dataset.task), p_resultado: btn.dataset.r, p_nota: nota });
     if (e || !r?.ok) { errToast('No se pudo registrar el contacto.'); btn.disabled = false; return; }
-    okToast(r.perdido ? 'El cliente pasó a PERDIDO' : r.reprogramado ? 'Te lo recordamos mañana a las 9:00' : 'Contacto registrado');
+    okToast('Contacto registrado');
     // Una objeción recién escuchada es justo lo que conviene guardar para
     // repasar: se ofrece pasarla a Mis Notas sin volver a escribirla.
     if (btn.dataset.r === 'no_interesa' && await confirmarSheet({
@@ -37963,42 +37677,6 @@ async function loadClientesFrios() {
   empty?.classList.toggle('show', filas.length === 0);
   grid.innerHTML = filas.map(leadCardHtml).join('');
   wireLeadCards(grid, filas);
-  await cfPintarResultados(grid, filas);
-}
-const CF_RESULTADOS = [['no_contesta', 'No contesta'], ['interesado', 'Interesado'], ['no_interesa', 'No interesa'], ['ya_viajo', 'Ya viajó'], ['numero_equivocado', 'Número equivocado']];
-// Tarea más reciente de cada lead. «No contesta» queda abierto al reintento aunque la tarea esté completada.
-async function cfPintarResultados(grid, filas) {
-  if (!filas.length) return;
-  const { data, error } = await sb.from('tasks').select('id,lead_id,estado,resultado_contacto').eq('tipo', 'lead').eq('asesor_id', MI_USUARIO_ID).in('lead_id', filas.map(l => l.id)).order('id', { ascending: false });
-  if (error) { console.error('clientes_frios tareas', error); return; }
-  const tareas = new Map();
-  (data || []).forEach(t => { if (!tareas.has(t.lead_id)) tareas.set(t.lead_id, t); });
-  [...grid.querySelectorAll('.entity-card')].forEach((card, i) => {
-    const l = filas[i], t = tareas.get(l?.id);
-    if (!t || t.estado === 'cancelada' || (['completada', 'cerrada'].includes(t.estado) && t.resultado_contacto !== 'no_contesta')) return;
-    card.insertAdjacentHTML('beforeend', `<div class="seg-group cf-resultados" role="group" aria-label="Resultado del contacto">${CF_RESULTADOS.map(([r, n]) => `<button class="seg" type="button" data-cf-r="${r}">${n}</button>`).join('')}</div>`);
-    const box = card.querySelector('.cf-resultados');
-    box.addEventListener('click', e => {
-      e.stopPropagation();
-      const b = e.target.closest('[data-cf-r]');
-      if (b) cfRegistrarResultado(l, t.id, b);
-    });
-  });
-}
-async function cfRegistrarResultado(l, taskId, btn) {
-  const r = btn.dataset.cfR, perdido = ['no_interesa', 'ya_viajo'].includes(r), etiqueta = CF_RESULTADOS.find(x => x[0] === r)[1], nombre = l.nombre || 'este cliente';
-  let nota = '';
-  if (r !== 'no_contesta') {
-    const hoja = await confirmarSheet({ titulo: perdido ? `¿Pasar a ${nombre} a PERDIDO?` : `${etiqueta}: ${nombre}`, detalle: perdido ? 'Se cierra su seguimiento y sale de tus clientes abiertos.' : '', textoOk: perdido ? 'Pasar a PERDIDO' : 'Registrar', destructivo: perdido, campos: [{ id: 'nota', label: '¿Qué te dijo el cliente?', tipo: 'textarea', requerido: true }] });
-    if (!hoja) return;
-    nota = hoja.nota;
-  }
-  btn.disabled = true;
-  const { data, error } = await sb.rpc('registrar_contacto_lead', { p_task_id: taskId, p_resultado: r, p_nota: nota });
-  if (error || !data?.ok) { errToast('No se pudo registrar el contacto.'); btn.disabled = false; return; }
-  ACTIVIDAD_CACHE = null;
-  okToast(data.perdido ? `${nombre} pasó a PERDIDO` : data.reprogramado ? 'Te lo recordamos mañana a las 9:00' : 'Contacto registrado');
-  loadClientesFrios();
 }
 
 /* ---------- Tarifario: buscador con IA ----------

@@ -80,7 +80,7 @@
     tabla('leads').push(lead); P.empuja('leads', 'INSERT', lead);
     if (o.historial.length) abreConv(sim);
     for (const h of o.historial) {
-      if (h.de === 'cliente') entrante(sim, h.texto, h.ts, h.audio);
+      if (h.de === 'cliente') entrante(sim, h.texto, h.ts);
       else if (h.de === 'asesor') guardaMensaje(sim, { direccion: 'saliente_api', tipo: 'text', texto: h.texto, estado: 'leido', enviado_en: new Date(h.ts).toISOString() });
       if (h.adjunto === 'comprobante') comprobante(sim, pagoDe(sim, h.pago), h.ts);
     }
@@ -126,12 +126,9 @@
     }
     return fila;
   }
-  // Nota de voz del cliente: el mp3 vive en R2 (prueba-audio/<hash> lo resuelve el mock) y lleva la transcripción, como en el CRM real.
-  function entrante(sim, texto, ts, audio) {
+  function entrante(sim, texto, ts) {
     sim.ultimoCliente = ts || Date.now(); sim.respondido = false;
-    const hash = audio && /\/prueba\/([0-9a-f]{64})\.mp3$/.exec(audio)?.[1];
-    return guardaMensaje(sim, { direccion: 'entrante', enviado_en: new Date(sim.ultimoCliente).toISOString(),
-      ...(hash ? { tipo: 'audio', texto: null, media_mime: 'audio/mpeg', media_path: `prueba-audio/${hash}`, transcripcion: texto } : { texto }) });
+    return guardaMensaje(sim, { direccion: 'entrante', texto, enviado_en: new Date(sim.ultimoCliente).toISOString() });
   }
   const tick = (fila, estado) => { fila.estado = estado; P.empuja('whatsapp_mensajes', 'UPDATE', fila); };
 
@@ -213,7 +210,7 @@
     const burbujas = [...(r.burbujas || [])], pago = r.adjunto === 'comprobante' ? pagoDe(sim, r.pago) : null;
     // El cliente siempre dice cuánto abonó: si el modelo no lo escribió, se agrega y coincide con la captura.
     if (pago && !burbujas.join(' ').replace(/[.,\s]/g, '').includes(String(Math.trunc(pago.dicho)))) burbujas.push(`Te aboné ${pago.dichoTexto} por ${pago.metodo}`);
-    if (r.audio) await graba(sim, burbujas[0] || '', r.audio); else await escribe(sim, burbujas);
+    await escribe(sim, burbujas);
     if (pago) { await espera(1500); comprobante(sim, pago); marca(sim, 'cierre'); }
     sim.ocupado = false;
     if (r.decision === 'irse') { setTimeout(() => cierra(sim, 'perdido'), 5000); return; }
@@ -230,15 +227,6 @@
       pintaEscribiendo();
     }
     pinta();
-  }
-  // Grabar se tarda lo que dura hablar (~14 caracteres por segundo), con tope para no dormir el chat.
-  async function graba(sim, texto, audio) {
-    sim.escribiendo = 'audio'; pinta(); pintaEscribiendo();
-    await espera(Math.min(Math.max(texto.length * 70, 2500), 12000));
-    sim.escribiendo = false;
-    if (sim.cerrada) return;
-    entrante(sim, texto, null, audio);
-    pintaEscribiendo(); pinta();
   }
 
   /* ---------- Comprobante de pago del cliente (imagen según el método + lectura «IA» como en el CRM real) ---------- */
@@ -605,7 +593,7 @@ ${lineas}
       const otras = abiertas().filter(x => x !== sim);
       const pistaHtml = paso && pista ? `<div class="pc-pista">Sugerencia: ${GUIA[paso.id]?.[0] || ''}${guia === 'completa' ? ` <button class="pp-ir" data-pc="ir" data-sim="${sim.id}">Llévame</button>` : ''}</div>` : '';
       html = `<div class="pc-fila"><button class="pc-ava" data-pc="chat" data-sim="${sim.id}" title="Abrir el chat">${esc(sim.cliente.nombre.split(' ').map(x => x[0]).join('').slice(0, 2))}</button>
-          <div class="pc-tit">${esc(sim.cliente.nombre)}<small>Nivel ${sim.nivel} · ${esc(sim.titulo || '')}${sim.escribiendo ? ` · <b class="pc-esc">${sim.escribiendo === 'audio' ? 'grabando audio…' : 'escribiendo…'}</b>` : esperando > 20e3 ? ` · <b class="${esperando > sim.paciencia * 30e3 ? 'pc-tarde' : ''}">esperando tu respuesta ${reloj(esperando)}</b>` : ''}</small></div>
+          <div class="pc-tit">${esc(sim.cliente.nombre)}<small>Nivel ${sim.nivel} · ${esc(sim.titulo || '')}${sim.escribiendo ? ' · <b class="pc-esc">escribiendo…</b>' : esperando > 20e3 ? ` · <b class="${esperando > sim.paciencia * 30e3 ? 'pc-tarde' : ''}">esperando tu respuesta ${reloj(esperando)}</b>` : ''}</small></div>
           ${MINI}</div>
         ${otras.length ? `<div class="pc-otras">${otras.map(o => `<button data-pc="chat" data-sim="${o.id}">${esc(o.cliente.nombre.split(' ')[0])}${!o.respondido ? ' •' : ''}</button>`).join('')}</div>` : ''}
         ${guia !== 'ninguna' && sim.temperatura != null ? `<div class="pc-temp" title="Qué tan cerca está de comprar"><span>Interés del cliente</span><i style="--t:${sim.temperatura}%"></i></div>` : ''}

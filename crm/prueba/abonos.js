@@ -584,14 +584,9 @@ export function crearAbonos(c) {
     const file = new File([doc.pdf], doc.nombre, { type: 'application/pdf' });
     const compartir = !!navigator.canShare?.({ files: [file] });
     const titulo = v?.pdf ? `Voucher ${v.numero}${v.revision ? ` · revisión ${v.revision}` : ''} actualizado` : 'Recibo del abono listo';
-    // El chat con ventana abierta va en la misma hoja: dos hojas seguidas se pisan. La bandeja muestra la vista previa y nada sale hasta tocar Enviar.
-    const chat = await Promise.resolve(c.chatDeReserva?.(est.reservaId)).catch(() => null);
-    const otra = compartir ? 'Compartir con el cliente' : 'Descargar PDF';
-    const ok = await c.confirmar({ titulo, textoOk: chat ? 'Continuar' : otra, textoCancelar: 'Cerrar',
-      detalle: `${v?.pdf ? 'Incluye el abono nuevo, el total abonado' : 'Esta reserva no tiene voucher para reimprimir. El recibo trae el total pagado'} y el saldo de ${usd(saldo)}.\nYa quedó adjunto en la reserva.`,
-      campos: chat ? [{ id: 'via', label: '¿Cómo se lo mandas?', tipo: 'radio', requerido: true, valor: 'chat', opciones: [{ v: 'chat', t: 'Al chat del cliente' }, { v: 'otra', t: otra }] }] : null });
+    const ok = await c.confirmar({ titulo, textoOk: compartir ? 'Compartir con el cliente' : 'Descargar PDF', textoCancelar: 'Cerrar',
+      detalle: `${v?.pdf ? 'Incluye el abono nuevo, el total abonado' : 'Esta reserva no tiene voucher para reimprimir. El recibo trae el total pagado'} y el saldo de ${usd(saldo)}.\nYa quedó adjunto en la reserva.` });
     if (!ok) return;
-    if (ok.via === 'chat') { await c.pdfAlChat(chat, doc.pdf, doc.nombre); return; }
     let accion = 'descarga';
     if (compartir) {
       try { await navigator.share({ files: [file], title: doc.nombre }); accion = 'compartir'; }
