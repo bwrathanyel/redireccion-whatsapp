@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v629';
+const CACHE_VERSION = 'lotus-crm-shell-v631';
 // Solo esta versión recarga sola las pestañas abiertas (pedido del dueño 2026-11-06): el resto de deploys sigue con el aviso, que deja elegir cuándo.
 const RECARGA_FORZADA = 'lotus-crm-shell-v621';
 const SHELL_FILES = [
@@ -200,8 +200,10 @@ self.addEventListener('push', (event) => {
     // (mensajes-badge, app.js) -- una notificación de sistema encima es
     // ruido puro. Solo aplica a tipo 'mensaje': para lead/asistencia se
     // mantiene el comportamiento de siempre (avisar igual).
+    // iOS revoca la suscripción si un push no muestra notificación: ahí nunca se suprime.
+    const esIOS = /iPhone|iPad|iPod/.test(self.navigator.userAgent);
     let suprimir = false;
-    if (data.tipo === 'mensaje' && data.url) {
+    if (!esIOS && data.tipo === 'mensaje' && data.url) {
       try {
         const convId = new URL(data.url, self.location.origin).searchParams.get('conversacion');
         if (convId) {
@@ -222,9 +224,9 @@ self.addEventListener('push', (event) => {
         // pisaban entre sí en la bandeja del SO. El colapso ahora se pide
         // explícito desde el backend (tag por lead, por fecha de asistencia);
         // el default es único justamente para que NO colapse nada por accidente.
-        tag: data.critico ? 'asistencia-critico' : (data.tag || 'lotus-' + (data.timestamp || Date.now())),
-        // Un lead sin atender no debería desaparecer solo de la bandeja.
-        requireInteraction: !!data.critico || data.tipo === 'lead',
+        tag: data.tag || (data.critico ? 'asistencia-critico' : 'lotus-' + (data.timestamp || Date.now())),
+        // Un aviso no debería desaparecer solo de la bandeja; los de cuota sí, porque se repiten.
+        requireInteraction: data.tipo !== 'cuota_vence',
         renotify: true,
         vibrate: data.critico ? [120, 50, 120, 50, 120] : [80, 40, 80],
         timestamp: data.timestamp || Date.now(),
@@ -240,8 +242,14 @@ self.addEventListener('push', (event) => {
     // sistema. Sin esto, cada mensaje suprimido por foco sumaría un "ok sin
     // entregar nunca" y el diagnóstico marcaría como fantasma una suscripción
     // sana.
-    if (envio) tareas.push(sbRpc('marcar_push_evento', { p_id: envio.id, p_token: envio.token, p_evento: 'entregado' }));
+    // El acuse va después de mostrar y con un reintento: si Android corta la red, el respaldo
+    // por Telegram se dispararía por un aviso que sí llegó.
     await Promise.all(tareas);
+    if (envio) {
+      const acuse = () => sbRpc('marcar_push_evento', { p_id: envio.id, p_token: envio.token, p_evento: 'entregado' });
+      const primero = await acuse();
+      if (!primero?.ok) { await new Promise((r) => setTimeout(r, 3000)); await acuse(); }
+    }
   })());
 });
 
