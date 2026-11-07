@@ -3896,7 +3896,7 @@ async function loadCampanasWa() {
 }
 async function pvcContarEnvios() {
   const desde = new Date(Date.now() - 30 * 864e5).toISOString();
-  const n = estado => sb.from('wa_plantilla_envios').select('id', { count: 'exact', head: true }).eq('estado', estado).gte('creado_en', desde);
+  const n = estado => sb.from('wa_plantilla_envios').select('id', { count: 'exact', head: true }).eq('estado', estado).eq('origen', 'campana').gte('creado_en', desde);
   const [env, fal] = await Promise.all([n('enviado'), n('fallido')]);
   PVC_ENVIOS30 = env.error || fal.error ? null : { enviados: env.count || 0, fallidos: fal.count || 0 };
   pvcKpis();
@@ -3910,8 +3910,8 @@ function pvcKpis() {
   const pct = r.vendidos ? Math.round((r.elegibles || 0) * 100 / r.vendidos) : 0;
   cont.innerHTML = kpi('Con venta', PV_WA_DATA ? r.vendidos || 0 : null, 'clientes con venta cerrada', 'fa-bag-shopping', 'var(--txt)')
     + kpi('Elegibles', PV_WA_DATA ? r.elegibles || 0 : null, `${pct}% · ${PV_WA_DIAS} días desde el viaje`, 'fa-circle-check', 'var(--green)')
-    + kpi('Enviados', e?.enviados, 'plantillas en 30 días', 'fa-paper-plane', 'var(--blue)')
-    + kpi('Fallidos', e?.fallidos, 'plantillas en 30 días', 'fa-triangle-exclamation', 'var(--amber)')
+    + kpi('Enviados', e?.enviados, 'por campañas en 30 días', 'fa-paper-plane', 'var(--blue)')
+    + kpi('Fallidos', e?.fallidos, 'por campañas en 30 días', 'fa-triangle-exclamation', 'var(--amber)')
     + kpi('No contactar', PV_WA_DATA ? r.excluidos?.no_contactar || 0 : null, 'lo pidieron explícitamente', 'fa-ban', 'var(--danger)');
 }
 async function pvcEnvios() {
@@ -5642,7 +5642,9 @@ function rvPagoInit(p, s) {
   ['rv-s-pago-moneda', 'rv-s-pago-tasa', 'rv-s-moneda'].forEach(k => document.getElementById(k)?.addEventListener('change', pintar));
   // La captura prellena lo que esté vacío (EF analizar-comprobante, la misma de Abonos); nunca registra nada.
   document.getElementById('rv-s-pago-file').onchange = async e => {
-    const archivo = e.target.files?.[0], aviso = document.getElementById('rv-s-pago-ia'); if (!archivo) { aviso.hidden = true; return; }
+    const archivo = e.target.files?.[0], aviso = document.getElementById('rv-s-pago-ia');
+    e.target.dataset.fecha = '';
+    if (!archivo) { aviso.hidden = true; return; }
     aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
     const d = await abonosModulo().analizarCaptura(archivo);
     if (!aviso.isConnected || e.target.files?.[0] !== archivo) return;
@@ -5653,6 +5655,9 @@ function rvPagoInit(p, s) {
     if (d.referencia && !ref.value) { ref.value = d.referencia; puestos.push('referencia'); }
     const chip = d.metodo && p.querySelector(`[data-rv-pago-metodo="${CSS.escape(d.metodo)}"]`);
     if (chip) { p.querySelectorAll('[data-rv-pago-metodo]').forEach(x => x.classList.toggle('on', x === chip)); puestos.push('método'); }
+    // Pago de otro día: el abono queda con esa fecha y la tasa de ese día (abonos.js, tasas_del_dia).
+    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
+    if (d.fecha && d.fecha < hoy && d.fecha >= '2020-01-01') { e.target.dataset.fecha = d.fecha; puestos.push(`fecha ${d.fecha.split('-').reverse().join('/')}, se cobra a la tasa de ese día`); }
     aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revísalo antes de guardar.` : 'No se encontraron datos en la captura.';
     pintar();
   };
@@ -5669,7 +5674,8 @@ function rvPagoLeer() {
   if (metodo === 'Pago móvil' && moneda !== 'VES') return { error: 'El Pago móvil se registra en bolívares: elige VES.' };
   if (moneda === 'VES' && !abonosModulo().tasa(val('rv-s-pago-tasa'))) return { error: 'No hay tasa cargada para esa opción: elige otra o cobra en dólares.' };
   return { completo: m === 'completo', monto, moneda, metodo, tasaTipo: moneda === 'VES' ? val('rv-s-pago-tasa') : 'USD',
-    referencia: val('rv-s-pago-ref').trim(), nota: val('rv-s-pago-nota').trim(), archivo: document.getElementById('rv-s-pago-file')?.files?.[0] || null };
+    referencia: val('rv-s-pago-ref').trim(), nota: val('rv-s-pago-nota').trim(), archivo: document.getElementById('rv-s-pago-file')?.files?.[0] || null,
+    fecha: document.getElementById('rv-s-pago-file')?.dataset.fecha || null };
 }
 // Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
 // La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.
@@ -8006,7 +8012,7 @@ async function loadTable(silencioso) {
   document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`;
   PARA_CERRAR_PAGINA = paraCerrar ? (data || []) : [];
   pintarBotonParaCerrar();
-  if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('leads-cards').innerHTML = ''; document.getElementById('pager').innerHTML = ''; return; }
+  if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('leads-cards').innerHTML = ''; document.getElementById('pager').innerHTML = ''; applyLeadsView(); return; }
   document.getElementById('tbody').innerHTML = data.map((l, i) => {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
@@ -8120,7 +8126,7 @@ async function parcharLeadLive(evento) {
   const nuevo = tmp.firstElementChild;
   LEADS_PAGINA[lead.id] = lead;
   if (card && card.outerHTML === nuevo.outerHTML) { if (currentLead?.id === lead.id && !document.getElementById('drawer')?.classList.contains('open')) currentLead = lead; return; }
-  if (card) card.replaceWith(nuevo); else { cards.prepend(nuevo); totalFiltered++; document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; }
+  if (card) card.replaceWith(nuevo); else { cards.prepend(nuevo); document.getElementById('tbl-empty').classList.remove('show'); totalFiltered++; document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; }
   wireLeadCardLive(nuevo, lead);
   nuevo.classList.add('lead-actualizado'); setTimeout(() => nuevo.classList.remove('lead-actualizado'), 1200);
   if (currentLead?.id === lead.id) {

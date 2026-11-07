@@ -18,7 +18,16 @@ const MOTIVOS = {
   enviado_hoy: 'Ya recibieron otra plantilla hoy',
   marketing_14d: 'Recibieron una promoción hace menos de 14 días',
   en_otra_campana: 'Ya están en otra campaña en curso',
+  sin_venta: 'Sin venta cerrada',
+  viaje_pendiente: 'Su viaje aún no termina',
+  muy_reciente: 'Viajaron o compraron hace menos de los días elegidos',
+  incidencia_abierta: 'Tienen una incidencia abierta',
+  sin_fecha: 'Sin fecha de viaje ni de cierre',
+  contactado_hace_poco: 'Su asesor los contactó hace menos de 14 días',
+  sin_destino: 'Sin destino (la plantilla lo usa)',
+  sin_resultado: 'Sin respuesta de WhatsApp (no se reintenta)',
 };
+const DIAS = [0, 15, 30, 60, 90];
 const ESTADOS = { borrador: 'Borrador', enviando: 'Enviando', pausada: 'Pausada', terminada: 'Terminada', cancelada: 'Cancelada' };
 const ESTADO_COLOR = { borrador: 'var(--muted)', enviando: 'var(--blue)', pausada: 'var(--amber)', terminada: 'var(--green)', cancelada: 'var(--danger)' };
 const PASOS = ['Plantilla', 'Audiencia', 'Vista previa', 'Crear'];
@@ -64,6 +73,12 @@ const CSS = `
 .wc-resumen{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:7px 14px;margin:0;font-size:12.5px}.wc-resumen dt{color:var(--muted)}.wc-resumen dd{margin:0;color:var(--txt);font-weight:700;min-width:0;overflow-wrap:anywhere}
 .wc-det-fila{display:grid;grid-template-columns:minmax(0,1.2fr) 112px 72px minmax(0,1.6fr);gap:9px;align-items:center;font-size:12px;padding:7px 9px;border-bottom:1px solid var(--line)}.wc-det-fila:last-child{border-bottom:0}
 .wc-det-fila b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}.wc-det-fila .num{font-variant-numeric:tabular-nums;color:var(--muted)}.wc-det-fila small{color:var(--muted)}
+.wc-aprobar{border:1px solid var(--accent);border-radius:12px;padding:13px;display:flex;flex-direction:column;gap:10px;background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.wc-aprobar .wc-fila{align-items:flex-end}.wc-aprobar .wc-fila>button{flex:0 0 auto}
+.wc-ok{font-size:12px;color:var(--green)}.wc-alerta{font-size:12px;color:var(--amber)}
+.wc-seg{display:inline-flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden;align-self:flex-start}
+.wc-seg button{padding:7px 13px;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:700;font-variant-numeric:tabular-nums;cursor:pointer}
+.wc-seg button+button{border-left:1px solid var(--line2)}.wc-seg button.on{background:var(--accent-soft);color:var(--accent)}
 @media(max-width:700px){.wc-emb .wc-num{grid-template-columns:repeat(3,minmax(0,1fr))}.wc-vivo{grid-template-columns:repeat(2,minmax(0,1fr))}.wc-pasos li{flex:0 0 auto}
   .wc-det-fila{grid-template-columns:minmax(0,1fr) auto}.wc-det-fila .num{display:none}.wc-det-fila small{grid-column:1/-1}}
 `;
@@ -79,7 +94,11 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
   let opciones = null;
   let vista = 'lista';
   let timer = null;
-  let paso = 1, previa = null, tCuenta = null, nPedido = 0, iMuestra = 0;
+  let paso = 1, previa = null, tCuenta = null, nPedido = 0, iMuestra = 0, dias = 30;
+  let aprobando = null;
+  const pruebas = new Map();
+  const telPrueba = { get: () => { try { return localStorage.getItem('wc-tel-prueba') || ''; } catch { return ''; } },
+    set: v => { try { localStorage.setItem('wc-tel-prueba', v); } catch { /* sin storage */ } } };
   const caja = () => raiz || fondo?.querySelector('.wc-caja') || null;
   const $ = id => caja()?.querySelector('#' + id) || null;
   const qa = sel => [...(caja()?.querySelectorAll(sel) || [])];
@@ -124,6 +143,7 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
   function filtrosTxt(s) {
     if (!s || s.origen !== 'reservas') return '';
     const p = [];
+    if (s.dias != null) p.push(`viaje terminado hace ${s.dias}+ días`);
     if (s.desde || s.hasta) p.push(`viaje ${s.desde || '…'} → ${s.hasta || '…'}`);
     if (s.etapas?.length) p.push(s.etapas.map(etapaTxt).join(', '));
     if (s.asesores?.length) p.push('asesor ' + s.asesores.join(', '));
@@ -137,7 +157,8 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
     const admin = rol === 'admin';
     const num = reservas
       ? `<span>Destinatarios <b>${c.total}</b></span><span>Enviados <b>${c.enviados}</b></span><span>Fallidos <b>${c.fallidos}</b></span>
-         <span>Omitidos <b>${c.omitidos}</b></span><span>Pendientes <b>${c.pendientes}</b></span><span>Costo est. <b>${usd(c.costo_estimado_usd)}</b></span>`
+         <span>Omitidos <b>${c.omitidos}</b></span><span>Pendientes <b>${c.pendientes}</b></span>
+         <span title="Pendientes: ${usd(c.costo_pendiente_usd)} · ya gastado: ${usd(c.costo_real_usd)}">${c.enviados ? 'Gastado' : 'Costo est.'} <b>${usd(c.enviados ? c.costo_real_usd : c.costo_pendiente_usd)}</b></span>`
       : `<span>Pendientes <b>${c.pendientes}</b></span><span>Enviados <b>${c.enviados}</b></span><span>Entregados <b>${c.entregados}</b></span>
          <span>Leídos <b>${c.leidos}</b></span><span>Respondieron <b>${c.respondieron}</b></span><span>Bajas <b>${c.bajas}</b></span>
          <span>Fallidos <b>${c.fallidos}</b></span><span>Cotizaciones <b>${c.cotizaciones}</b></span><span>Pagos <b>${c.pagos}</b></span>
@@ -152,17 +173,81 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
         <div class="wc-pl">Plantilla ${esc(c.plantilla)} · ${c.total} contactos${esc(filtrosTxt(c.segmento))}</div>
         ${['enviando', 'pausada', 'terminada'].includes(c.estado) ? `<div class="wc-barra" title="${hechos} de ${c.total}"><i style="width:${pct}%"></i></div>` : ''}
         <div class="wc-num">${num}</div>
-        <div class="wc-acc">
-          ${c.estado === 'borrador' && admin ? `<button class="btn-sm lt-primario" data-wc-acc="enviando" data-n="${c.pendientes}" data-tarifa="${c.tarifa_usd ?? 0.074}">Aprobar y enviar</button>` : ''}
+        ${reservas && c.estado === 'pausada' && c.motivo_pausa ? `<div class="wc-alerta"><i class="fas fa-circle-pause"></i> ${esc(c.motivo_pausa)}</div>` : ''}
+        ${reservas && c.estado === 'enviando' && c.pendientes ? `<div class="wc-nota">Faltan ${c.pendientes}: ${eta(c)}</div>` : ''}
+        ${reservas && aprobando === c.id ? panelAprobar(c) : `<div class="wc-acc">
+          ${c.estado === 'borrador' && admin ? (reservas ? `<button class="btn-sm lt-primario" data-wc-aprobar>Aprobar y enviar</button>`
+            : `<button class="btn-sm lt-primario" data-wc-acc="enviando" data-n="${c.pendientes}" data-tarifa="${c.tarifa_usd ?? 0.074}">Aprobar y enviar</button>`) : ''}
           ${c.estado === 'borrador' && !admin ? '<span class="wc-nota">Espera la aprobación de un administrador</span>' : ''}
+          ${c.estado === 'borrador' && reservas ? '<button class="btn-sm" data-wc-recalcular title="Vuelve a armar la lista con las reglas de hoy">Recalcular lista</button>' : ''}
           ${c.estado === 'enviando' ? '<button class="btn-sm" data-wc-acc="pausada">Pausar</button>' : ''}
-          ${c.estado === 'pausada' && admin ? '<button class="btn-sm lt-primario" data-wc-acc="enviando" data-n="0">Reanudar</button>' : ''}
+          ${c.estado === 'pausada' && admin ? (reservas ? '<button class="btn-sm lt-primario" data-wc-aprobar>Reanudar</button>'
+            : '<button class="btn-sm lt-primario" data-wc-acc="enviando" data-n="0">Reanudar</button>') : ''}
           ${['borrador', 'enviando', 'pausada'].includes(c.estado) ? '<button class="btn-sm" data-wc-acc="cancelada">Cancelar</button>' : ''}
-          ${c.estado === 'enviando' ? '<span class="wc-nota">Sale por tandas, unos 30 por minuto</span>' : ''}
-        </div>
+          ${c.estado === 'enviando' && !reservas ? '<span class="wc-nota">Sale por tandas, unos 30 por minuto</span>' : ''}
+        </div>`}
         ${reservas && malos ? `<details class="pv-wa-grupo" data-wc-det="${c.id}" style="--tc:var(--amber)"><summary><i class="fas fa-chevron-right flecha"></i><i class="fas fa-circle-info"></i>Por qué fallaron u omitieron<small>${malos} ${malos === 1 ? 'cliente' : 'clientes'}</small></summary>
           <div class="pv-wa-cuerpo" data-wc-det-cuerpo><div class="wc-nota">Cargando…</div></div></details>` : ''}
       </div>`;
+  }
+
+  // El tope diario es de toda la cuenta (todas las campañas juntas), por eso es un mínimo.
+  function eta(c) {
+    const tope = c.tope_diario || 200, d = Math.ceil(c.pendientes / tope);
+    return d <= 1 ? `hoy mismo si no hay otra campaña (tope de ${tope} por día, unos 30 por minuto)` : `al menos ${d} días con el tope de ${tope} por día`;
+  }
+
+  // Aprobar (borrador) o reanudar (pausada): prueba a un número propio y resumen antes de confirmar.
+  function panelAprobar(c) {
+    const primera = c.estado === 'borrador', p = pruebas.get(c.id), probada = !!c.prueba_ok_en;
+    return `<div class="wc-aprobar">
+      ${primera ? `<div class="wc-etq">1 · Mándate una prueba</div>
+      <div class="wc-fila"><label class="wc-campo">Tu WhatsApp (con código de país)<input data-wc-tel inputmode="tel" placeholder="+58 414 1234567" value="${esc(telPrueba.get())}"></label>
+        <button class="btn-sm" type="button" data-wc-probar><i class="fab fa-whatsapp"></i> Enviar prueba</button></div>
+      ${p?.texto ? `<div class="wc-burbuja">${esc(p.texto)}</div>` : ''}
+      ${probada ? `<div class="wc-ok"><i class="fas fa-circle-check"></i> Prueba enviada ${esc(new Date(c.prueba_ok_en).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }))}${p?.muestra ? ` con los datos de ${esc(p.muestra)}` : ''}. Revisa en tu teléfono que se vea bien.</div>`
+        : '<div class="wc-alerta">Falta la prueba: sin ella no se puede aprobar.</div>'}
+      <div class="wc-etq">2 · Confirma</div>` : ''}
+      <dl class="wc-resumen">
+        <dt>Plantilla</dt><dd>${esc(c.plantilla)} (${esc(c.idioma || 'es')})</dd>
+        <dt>Destinatarios</dt><dd>${c.pendientes} clientes reales</dd>
+        <dt>Costo aprox.</dt><dd>${usd(c.costo_pendiente_usd)} (lo cobra Meta por mensaje entregado)</dd>
+        <dt>Tiempo</dt><dd>${eta(c)}</dd>
+      </dl>
+      <div class="wc-nota">Antes de cada envío se vuelve a revisar: bajas, «no contactar», incidencias y promociones recientes. Si WhatsApp rechaza varios seguidos o la plantilla deja de estar aprobada, la campaña se pausa sola.</div>
+      <div class="wc-acc"><button class="btn-sm lt-primario" type="button" data-wc-acc="enviando"${primera && !probada ? ' disabled' : ''}>${primera ? `Aprobar y enviar a ${c.pendientes}` : 'Reanudar envío'}</button>
+        <button class="btn-sm" type="button" data-wc-aprobar-cerrar>Volver</button></div>
+    </div>`;
+  }
+
+  async function probar(id) {
+    const tel = caja().querySelector(`[data-wc-id="${id}"] [data-wc-tel]`)?.value.trim();
+    if (!tel || tel.replace(/\D/g, '').length < 10) { error('Escribe tu número de WhatsApp con código de país'); return; }
+    telPrueba.set(tel);
+    const btn = caja().querySelector(`[data-wc-id="${id}"] [data-wc-probar]`);
+    if (btn) btn.disabled = true;
+    const { data, error: e } = await sb.functions.invoke('wa-plantilla-enviar', { body: { accion: 'prueba_campana', campana_id: id, telefono: tel } });
+    const r = data || await e?.context?.json?.().catch(() => null);
+    if (!r?.ok) {
+      if (btn) btn.disabled = false;
+      const txt = { telefono: 'Ese número no es válido para WhatsApp', plantilla_no_aprobada: 'La plantilla ya no está aprobada en Meta', sin_destino: 'El primer cliente de la lista no tiene destino',
+        zernio: 'WhatsApp rechazó la prueba: ' + (r?.detalle || ''), estado: 'La campaña ya no está en borrador' }[r?.error];
+      error(txt || e?.message || 'No se pudo enviar la prueba');
+      if (r?.texto) pruebas.set(id, { texto: r.texto });
+      return;
+    }
+    pruebas.set(id, { texto: r.texto, muestra: r.muestra });
+    ok('Prueba enviada a ' + r.numero);
+    pintarLista(true);
+  }
+
+  async function recalcular(id) {
+    const { data, error: e } = await sb.rpc('wa_campana_recalcular', { p_id: id });
+    if (e || !data?.ok) { error(e?.message || 'No se pudo recalcular'); return; }
+    pruebas.delete(id);
+    ok(`Lista recalculada: ${data.envios} ${data.envios === 1 ? 'contacto' : 'contactos'}`);
+    pintarLista(true);
+    alCambiar?.();
   }
 
   async function cargarDetalle(det) {
@@ -193,12 +278,17 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
   }
 
   async function cambiarEstado(id, estado, total, tarifa) {
-    if (estado === 'enviando' && Number(total) > 0) {
+    // Reservas: la confirmación es el panel de aprobación (prueba + resumen), no un confirm().
+    if (!reservas && estado === 'enviando' && Number(total) > 0) {
       if (!confirm(`Se enviará la plantilla a ${total} contactos reales (costo aprox. ${usd(total * Number(tarifa || 0.074))}), hasta el tope diario. ¿Aprobar y enviar?`)) return;
     }
     if (estado === 'cancelada' && !confirm('¿Cancelar la campaña? Los envíos pendientes no saldrán.')) return;
     const { data, error: e } = await sb.rpc('wa_campana_estado', { p_id: id, p_estado: estado });
-    if (e || !data?.ok) { error(data?.error === 'solo_admin' ? 'Solo un administrador puede aprobar el envío' : e?.message || 'No se pudo cambiar el estado'); return; }
+    if (e || !data?.ok) {
+      error({ solo_admin: 'Solo un administrador puede aprobar el envío', sin_prueba: 'Primero mándate una prueba' }[data?.error] || e?.message || 'No se pudo cambiar el estado');
+      return;
+    }
+    if (aprobando === id) aprobando = null;
     ok('Campaña ' + (ESTADOS[estado] || estado).toLowerCase());
     pintarLista();
     alCambiar?.();
@@ -238,14 +328,16 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
     if (!caja() || vista !== 'nueva') return;
     if (e) { marco(`<div class="msg-empty">No se pudo cargar: ${esc(e.message)}</div>`); return; }
     opciones = data.opciones || { destinos: [], etapas: [], asesores: [] };
-    paso = 1; previa = null; iMuestra = 0;
+    paso = 1; previa = null; iMuestra = 0; dias = 30;
     const chips = (attr, items, val, txt) => `<div class="wc-chips">${items.map(x => `<label><input type="checkbox" ${attr} value="${esc(String(val(x)))}"> ${esc(txt(x))} <small>${x.n}</small></label>`).join('') || '<span class="wc-nota">Sin datos</span>'}</div>`;
     marco(`<ol class="wc-pasos">${PASOS.map((t, i) => `<li data-wc-paso-ind="${i + 1}"><span>${i + 1}</span>${t}</li>`).join('')}</ol>
       <section class="wc-paso" data-wc-paso="1">${camposPlantilla}
         <div class="wc-nota">{{1}} es siempre el primer nombre de cada cliente. Las demás variables aceptan {{destino}} (destino de su viaje).</div></section>
       <section class="wc-paso" data-wc-paso="2" hidden>
         <div class="wc-vivo" id="wc-vivo"></div>
-        <div class="wc-campo">Fecha de viaje
+        <div class="wc-campo">Viaje terminado hace al menos (días; sin fecha de viaje cuenta el cierre)
+          <div class="wc-seg" role="group" aria-label="Días mínimos desde el viaje">${DIAS.map(n => `<button type="button" data-wc-dias="${n}" class="${n === dias ? 'on' : ''}" aria-pressed="${n === dias}">${n}</button>`).join('')}</div></div>
+        <div class="wc-campo">Fecha de inicio del viaje (opcional)
           <div class="wc-acc"><button class="btn-sm" type="button" data-wc-rango="viajaron">Ya viajaron (últimos 120 días)</button>
             <button class="btn-sm" type="button" data-wc-rango="pronto">Viajan en los próximos 30 días</button>
             <button class="btn-sm" type="button" data-wc-rango="todas">Cualquier fecha</button></div></div>
@@ -257,7 +349,7 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
         <div class="wc-campo">Etapa de la reserva${chips('data-wc-etapa', opciones.etapas, x => x.etapa, x => etapaTxt(x.etapa))}</div>
         <div class="wc-campo">Asesor responsable${chips('data-wc-asesor', opciones.asesores, x => x.nombre, x => x.nombre)}</div>
         <div class="wc-campo">Destino${chips('data-wc-destino', opciones.destinos, x => x.id, x => x.nombre)}</div>
-        <div class="wc-nota">Sin marcar nada en un filtro = todos. Siempre se excluyen bajas, «no contactar», teléfonos inválidos y quien recibió una promoción en los últimos 14 días.</div>
+        <div class="wc-nota">Sin marcar nada en un filtro = todos. Misma regla que «Audiencia elegible»: solo clientes con venta cerrada y viaje terminado, sin incidencia abierta ni contacto de su asesor en 14 días. También se excluyen bajas, «no contactar», teléfonos inválidos y quien recibió una promoción en los últimos 14 días.</div>
       </section>
       <section class="wc-paso" data-wc-paso="3" hidden><div id="wc-resultado"></div></section>
       <section class="wc-paso" data-wc-paso="4" hidden><div id="wc-resumen"></div></section>
@@ -336,7 +428,7 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
         <div class="wc-burbuja">${esc(armarMensaje(p, vars, m))}</div>
         ${muestra.length > 1 ? '<div class="wc-acc"><button class="btn-sm" type="button" data-wc-muestra><i class="fas fa-shuffle"></i> Ver con otro cliente</button></div>' : ''}
         <div class="wc-res">
-          <div>Se enviarían <b>${d.a_enviar}</b> de <b>${d.elegibles}</b> elegibles · costo aproximado <b>${usd(d.costo_usd)}</b> (${usd(d.tarifa_usd)} por mensaje)</div>
+          <div>Se enviarían <b>${d.a_enviar}</b> de <b>${d.elegibles}</b> elegibles · costo aproximado <b>${usd(d.costo_usd)}</b> (${usd(d.tarifa_usd)} por mensaje a Venezuela; otros países según su tarifa)</div>
           ${ex.length ? `<div style="margin-top:7px" class="wc-etq">Quedan fuera</div>${ex.map(([k, n]) => `<div>${esc(MOTIVOS[k] || k)}: <b>${n}</b></div>`).join('')}` : ''}
           ${muestra.length ? `<div style="margin-top:7px" class="wc-etq">Algunos de la lista</div>${muestra.map(x => `<div>${esc(x.nombre || '—')} · ${esc(x.destino || 'sin destino')} · ${esc(x.fecha || 'sin fecha')} · ${esc(etapaTxt(x.etapa))}</div>`).join('')}` : ''}
         </div>
@@ -355,7 +447,7 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
         <dt>Destinatarios</dt><dd>${d.a_enviar}</dd>
         <dt>Costo aprox.</dt><dd>${usd(d.costo_usd)}</dd>
       </dl>
-      <div class="wc-nota" style="margin:11px 0">La lista queda congelada en un borrador. Para que salga, apruébala en la lista de campañas.</div>
+      <div class="wc-nota" style="margin:11px 0">La lista queda congelada en un borrador. Para que salga: en la lista de campañas, «Aprobar y enviar», mándate una prueba y confirma.</div>
       <div class="wc-acc"><button class="btn-sm lt-primario" type="button" id="wc-crear"${d.a_enviar ? '' : ' disabled'}><i class="fas fa-floppy-disk"></i> Crear borrador (no envía nada)</button></div>`;
   }
 
@@ -370,7 +462,9 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
       .map(p => ({ ...p, cuerpo: p.cuerpo ?? p.texto }))
       .filter(p => reservas ? p.categoria === 'MARKETING' : p.categoria === 'MARKETING' || p.categoria === 'UTILITY');
     sel.innerHTML = plantillas.length
-      ? '<option value="">Elegir plantilla…</option>' + plantillas.map((p, i) => `<option value="${i}">${esc(p.nombre)} (${esc(p.idioma)} · ${esc(p.categoria)})</option>`).join('')
+      ? '<option value="">Elegir plantilla…</option>' + plantillas.map((p, i) => p.soportada === false
+        ? `<option value="${i}" disabled>${esc(p.nombre)}: no se puede usar (${esc(p.motivo || 'formato no soportado')})</option>`
+        : `<option value="${i}">${esc(p.nombre)} (${esc(p.idioma)} · ${esc(p.categoria)})</option>`).join('')
       : '<option value="">No hay plantillas aprobadas todavía</option>';
   }
 
@@ -386,6 +480,8 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
 
   const segmento = () => reservas ? {
     origen: 'reservas',
+    dias,
+    requiere_destino: qa('[data-wc-var]').some(el => el.value.includes('{{destino}}')),
     limite: Number($('wc-limite').value) || 500,
     desde: $('wc-desde').value || null,
     hasta: $('wc-hasta').value || null,
@@ -444,6 +540,13 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
       if (conFondo && (t === el || t.closest('[data-wc-cerrar]'))) return cerrar();
       const v = t.closest('[data-wc-vista]');
       if (v) return v.dataset.wcVista === 'nueva' ? pintarNueva() : pintarLista();
+      const idDe = () => Number(t.closest('[data-wc-id]')?.dataset.wcId);
+      if (t.closest('[data-wc-aprobar]')) { aprobando = idDe(); return pintarLista(true); }
+      if (t.closest('[data-wc-aprobar-cerrar]')) { aprobando = null; return pintarLista(true); }
+      if (t.closest('[data-wc-probar]')) return probar(idDe());
+      if (t.closest('[data-wc-recalcular]')) return recalcular(idDe());
+      const dd = t.closest('[data-wc-dias]');
+      if (dd) { dias = Number(dd.dataset.wcDias); qa('[data-wc-dias]').forEach(b => { b.classList.toggle('on', b === dd); b.setAttribute('aria-pressed', b === dd); }); return recontar(); }
       const acc = t.closest('[data-wc-acc]');
       if (acc) return cambiarEstado(Number(acc.closest('[data-wc-id]').dataset.wcId), acc.dataset.wcAcc, acc.dataset.n, acc.dataset.tarifa);
       const r = t.closest('[data-wc-rango]');
@@ -462,6 +565,8 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
       if (reservas && ev.target.closest('[data-wc-paso="2"]')) recontar();
     });
     el.addEventListener('input', ev => {
+      if (ev.target.matches('[data-wc-tel]')) telPrueba.set(ev.target.value);
+      if (reservas && ev.target.matches('[data-wc-var]')) recontar();
       if (reservas && ev.target.id === 'wc-limite') recontar();
     });
   }
