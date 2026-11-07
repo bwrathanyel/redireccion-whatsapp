@@ -3894,7 +3894,7 @@ async function loadCampanasWa() {
 }
 async function pvcContarEnvios() {
   const desde = new Date(Date.now() - 30 * 864e5).toISOString();
-  const n = estado => sb.from('wa_plantilla_envios').select('id', { count: 'exact', head: true }).eq('estado', estado).gte('creado_en', desde);
+  const n = estado => sb.from('wa_plantilla_envios').select('id', { count: 'exact', head: true }).eq('estado', estado).eq('origen', 'campana').gte('creado_en', desde);
   const [env, fal] = await Promise.all([n('enviado'), n('fallido')]);
   PVC_ENVIOS30 = env.error || fal.error ? null : { enviados: env.count || 0, fallidos: fal.count || 0 };
   pvcKpis();
@@ -3908,8 +3908,8 @@ function pvcKpis() {
   const pct = r.vendidos ? Math.round((r.elegibles || 0) * 100 / r.vendidos) : 0;
   cont.innerHTML = kpi('Con venta', PV_WA_DATA ? r.vendidos || 0 : null, 'clientes con venta cerrada', 'fa-bag-shopping', 'var(--txt)')
     + kpi('Elegibles', PV_WA_DATA ? r.elegibles || 0 : null, `${pct}% · ${PV_WA_DIAS} días desde el viaje`, 'fa-circle-check', 'var(--green)')
-    + kpi('Enviados', e?.enviados, 'plantillas en 30 días', 'fa-paper-plane', 'var(--blue)')
-    + kpi('Fallidos', e?.fallidos, 'plantillas en 30 días', 'fa-triangle-exclamation', 'var(--amber)')
+    + kpi('Enviados', e?.enviados, 'por campañas en 30 días', 'fa-paper-plane', 'var(--blue)')
+    + kpi('Fallidos', e?.fallidos, 'por campañas en 30 días', 'fa-triangle-exclamation', 'var(--amber)')
     + kpi('No contactar', PV_WA_DATA ? r.excluidos?.no_contactar || 0 : null, 'lo pidieron explícitamente', 'fa-ban', 'var(--danger)');
 }
 async function pvcEnvios() {
@@ -38709,6 +38709,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-07', emoji: '📣', titulo: 'Campañas de WhatsApp más seguras', texto: 'Las campañas ahora usan la misma regla que el número de «Elegibles»: solo clientes con viaje terminado hace los días que elijas y sin incidencias abiertas. Antes de aprobar hay que enviar una prueba a tu teléfono, y verás cuánto va a costar y cuántos días va a tardar. Si WhatsApp empieza a rechazar mensajes o la plantilla deja de estar aprobada, la campaña se pausa sola y te dice por qué. En los borradores tienes «Recalcular lista».', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-06', emoji: '🧳', titulo: 'Cotizaciones se llena solo con lo que ya cargaste', texto: 'Al agregar otro servicio a una cotización, sale con los mismos adultos, niños, infantes y fechas del hotel. Si el hotel es de Margarita, el boleto ya trae el destino Margarita (PMV) y solo falta el origen. Si cambias el hotel o sus fechas, los demás servicios se actualizan. Lo que escribas a mano se respeta y no se vuelve a cambiar. También se corrigió la lista de Full day y Tour: ahora muestra las excursiones del tarifario, no hoteles.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
   { fecha: '2026-11-06', emoji: '🏨', titulo: 'Mínimo de noches según la temporada', texto: 'Al cotizar un hotel, el mínimo de noches ya no se aplica a todas las fechas: si el tarifario dice «Fin de año 4 noches», solo pide 4 noches en Fin de año. En el resto de las fechas carga el precio normal. Si el tarifario no deja claro a qué temporada corresponde, verás un aviso para confirmarlo.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
   { fecha: '2026-11-05', emoji: '📱', titulo: 'Barra de accesos abajo en el teléfono', texto: 'En el teléfono ahora tienes abajo una barra con Leads, Bandeja, Tarifario, Cotizar y Más, para saltar entre lo de todos los días con el pulgar. El menú (☰) sigue igual, con todas las secciones; «Más» también lo abre. La barra se aparta cuando abres un chat o escribes, y solo muestra lo que tu cargo puede ver.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
