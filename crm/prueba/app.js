@@ -34054,7 +34054,10 @@ async function cbAplicarProducto(id, fechas = null) {
   return cbItems[i];
 }
 // Con Cotizaciones ya abierta (ficha abierta desde el buscador o el chat), activateSection no recarga: se aplica a mano.
-function cbDesdeLead(l) { cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
+// «Cotizar» en otro lead es una cotización nueva: lo precargado del anterior (hotel, fechas, personas) no se arrastra.
+async function cbDesdeLead(l) {
+  if (cbLead && cbLead.id !== l.id) { await cbGuardarBorrador(); cbResetForm(); }
+  cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
 const CB_LEAD_CAMPOS = 'id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino,destino_consulta';
 // El chat de Bandeja solo conoce el lead_id: se trae con lo que lee el autorrelleno (destino_consulta, personas, fechas).
 async function cbCotizarLeadId(id) {
@@ -34074,7 +34077,7 @@ window.cbQuitarLead = () => { cbLead = null; cbPintarLead(); };
 // Un formulario a medio armar sin lead se conserva al ligarlo; si era de otro lead, se empieza de cero.
 function cbAplicarLead() {
   const l = cbLeadPendiente; cbLeadPendiente = null;
-  // Cambiar de cliente conserva los servicios y precios que ya se armaron; fechas y personas pasan a ser las del nuevo.
+  // Cambiar de cliente desde el buscador conserva los servicios y precios que ya se armaron; fechas y personas pasan a ser las del nuevo.
   const otro = cbLead && cbLead.id !== l.id;
   cbLead = l; cbPintarLead();
   document.getElementById('cb-cliente').value = l.nombre;
