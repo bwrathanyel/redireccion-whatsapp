@@ -4837,7 +4837,8 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .pv-rap:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pv-filtros{display:flex;align-items:flex-start;gap:10px}.pv-filtros .pv-stagebar{flex:1;min-width:0}
 .pv-selects{display:flex;gap:8px;flex:0 0 auto}.pv-selects select.flt{padding-top:7px;padding-bottom:7px;font-size:12px;max-width:230px}
-#pv-destino[hidden]{display:none}
+#pv-destino[hidden],#pv-asesor[hidden]{display:none}
+.pv-asesor-l{margin-top:4px}.pv-asesor-l i{color:var(--accent)}
 .pv-stage .pv-n{font-weight:800;margin-left:2px;opacity:.7}.pv-stage .pv-n:empty{display:none}
 /* Vista compacta: solo quién, cuándo viaja, plata y Gestionar; «Falta» y abonos quedan en la ficha. */
 #pv-grid.pv-compacta{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
@@ -8932,6 +8933,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div class="pv-selects">
           <!-- Destinos de la bandeja: se arman en JS (renderPvGrupos) -->
           <select class="flt" id="pv-destino" aria-label="Filtrar por destino" hidden></select>
+          <select class="flt" id="pv-asesor" aria-label="Filtrar por asesor" hidden></select>
           <select class="flt" id="pv-orden" aria-label="Ordenar reservas">
             <option value="recientes">Más recientes primero</option>
             <option value="antiguas">Más antiguas primero</option>

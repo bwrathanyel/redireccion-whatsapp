@@ -11,7 +11,7 @@ const ERRORES = {
   solicitud_ya_abierta: 'Esta solicitud ya está abierta; sus datos se pueden corregir con Editar.',
   solicitud_con_boleto_activo: 'La solicitud tiene un boleto activo. Gestiona su cambio desde la reserva antes de reabrirla.',
   pdf_requerido: 'El PDF no terminó de guardarse. Reintenta; la versión vigente se conserva.',
-  voucher_pendiente_confirmacion: 'Completa la generación pendiente de este voucher antes de corregirlo.',
+  voucher_pendiente_confirmacion: 'Este voucher quedó sin terminar. Tócalo en «Completar» (o anúlalo) antes de corregirlo.',
   factura_no_vigente: 'La factura vinculada está anulada o excluida. Puedes corregir datos; para cambiar importes, primero revisa la operación en Facturación.',
 };
 

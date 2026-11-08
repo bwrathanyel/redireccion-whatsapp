@@ -10,6 +10,7 @@ import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
+import { crearLlamadasWa } from './llamadas-wa.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -388,7 +389,7 @@ let previewSel = null, charts = {};
 let ACTIVOS = [];
 let leadsView = 'lista';
 let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null;
-let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_GRUPO = '', PV_SEARCH_TIMER = null;
+let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_GRUPO = '', PV_ASESOR = '', PV_SEARCH_TIMER = null;
 let RV_DET = null, RV_RESERVA_ID = null, RV_FORM = null, RV_DESTINOS = null, RV_PROVEEDORES = null, RV_APTOS = {}, RV_APTO_UNI = [], RV_APTO_REQ = 0;
 
 /* ---------- Periodos ---------- */
@@ -1041,6 +1042,11 @@ function tareasV2() {
   return TK;
 }
 function setupTareasV2() { if (MI_USUARIO_ID) tareasV2().enlazar(); }
+// Llamadas de WhatsApp (llamadas-wa.js): timbran en cualquier sección; la RLS decide quién las ve.
+function setupLlamadasWa() {
+  if (!['admin', 'administrativo', 'asesor'].includes(ROL) || !window.RTCPeerConnection) return;
+  crearLlamadasWa({ sb, esc, abrirLead: id => abrirLeadDesdeMisVentas(id), ok: okToast, error: errToast }).enlazar();
+}
 function loadTareasV2() {
   const q = new URLSearchParams(location.search), t = Number(q.get('t'));
   if (t) { q.delete('t'); history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '')); }
@@ -3445,7 +3451,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
-    setupTareasV2, setupTecladoMovil, setupEstadoBody, setupBarraInf,
+    setupTareasV2, setupLlamadasWa, setupTecladoMovil, setupEstadoBody, setupBarraInf,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -3797,6 +3803,7 @@ function setupPostventa() {
     PV_ETAPA = b.dataset.etapa || ''; renderPostventa();
   }));
   document.getElementById('pv-destino')?.addEventListener('change', e => { PV_GRUPO = e.target.value; renderPostventa(); });
+  document.getElementById('pv-asesor')?.addEventListener('change', e => { PV_ASESOR = e.target.value; renderPostventa(); });
   [['pv-orden', 'PV_ORDEN', 'recientes'], ['pv-vista', 'PV_VISTA', 'tarjetas']].forEach(([id, v, def]) => {
     const sel = document.getElementById(id);
     if (!sel) return;
@@ -4044,17 +4051,31 @@ function renderPvResumen(lista) {
 function pvGrupoDe(c) {
   return (RV_DESTINOS || []).find(d => d.id === c.destino_id)?.nombre || 'Sin destino';
 }
+const pvAsesorDe = c => c.asesor || 'Sin asesor';
+function pvDelAsesor() { return PV_ASESOR ? POSTVENTA.filter(c => pvAsesorDe(c) === PV_ASESOR) : POSTVENTA; }
+// El asesor solo ve sus reservas (postventa_bandeja filtra por rol): el selector aparece con 2+ asesores.
+function renderPvAsesores() {
+  const sel = document.getElementById('pv-asesor');
+  if (!sel) return;
+  const cuenta = new Map();
+  POSTVENTA.forEach(c => { const a = pvAsesorDe(c); cuenta.set(a, (cuenta.get(a) || 0) + 1); });
+  const orden = [...cuenta.keys()].sort((a, b) => (a === 'Sin asesor') - (b === 'Sin asesor') || a.localeCompare(b, 'es'));
+  if (PV_ASESOR && !cuenta.has(PV_ASESOR)) orden.push(PV_ASESOR);
+  sel.hidden = orden.length < 2 && !PV_ASESOR;
+  sel.innerHTML = [['', `Todos los asesores (${POSTVENTA.length})`], ...orden.map(a => [a, `${a} (${cuenta.get(a) || 0})`])]
+    .map(([k, l]) => `<option value="${esc(k)}"${k === PV_ASESOR ? ' selected' : ''}>${esc(l)}</option>`).join('');
+}
 function renderPvGrupos() {
   const sel = document.getElementById('pv-destino');
   if (!sel) return;
-  const cuenta = new Map();
-  POSTVENTA.forEach(c => { const g = pvGrupoDe(c); cuenta.set(g, (cuenta.get(g) || 0) + 1); });
+  const cuenta = new Map(), lista = pvDelAsesor();
+  lista.forEach(c => { const g = pvGrupoDe(c); cuenta.set(g, (cuenta.get(g) || 0) + 1); });
   const ordenDest = (RV_DESTINOS || []).map(d => d.nombre);
   const orden = [...[...cuenta.keys()].filter(g => g !== 'Sin destino').sort((a, b) => cuenta.get(b) - cuenta.get(a) || ordenDest.indexOf(a) - ordenDest.indexOf(b)), 'Sin destino'].filter(g => cuenta.has(g));
   // Si la búsqueda deja fuera el destino elegido, se mantiene con 0 en vez de soltar el filtro.
   if (PV_GRUPO && !cuenta.has(PV_GRUPO)) orden.push(PV_GRUPO);
   sel.hidden = !RV_DESTINOS || (orden.length < 2 && !PV_GRUPO);
-  sel.innerHTML = [['', `Todos los destinos (${POSTVENTA.length})`], ...orden.map(g => [g, `${g} (${cuenta.get(g) || 0})`])]
+  sel.innerHTML = [['', `Todos los destinos (${lista.length})`], ...orden.map(g => [g, `${g} (${cuenta.get(g) || 0})`])]
     .map(([k, l]) => `<option value="${esc(k)}"${k === PV_GRUPO ? ' selected' : ''}>${esc(l)}</option>`).join('');
 }
 // «Más recientes» usa el id: la bandeja no trae created_at y el id (como el código R-) es correlativo.
@@ -4071,8 +4092,9 @@ function pvOrdenar(casos) {
 }
 function renderPostventa() {
   const grid = document.getElementById('pv-grid');
+  renderPvAsesores();
   renderPvGrupos();
-  const base = PV_GRUPO ? POSTVENTA.filter(c => pvGrupoDe(c) === PV_GRUPO) : POSTVENTA;
+  const delAsesor = pvDelAsesor(), base = PV_GRUPO ? delAsesor.filter(c => pvGrupoDe(c) === PV_GRUPO) : delAsesor;
   const porEtapa = {};
   base.forEach(c => { porEtapa[c.etapa] = (porEtapa[c.etapa] || 0) + 1; });
   document.querySelectorAll('#pv-stagebar .pv-stage').forEach(b => {
@@ -4406,7 +4428,7 @@ function pvCardHtml(c, extra = '') {
         + (c.proximo_seguimiento_at ? `<div class="pv-meta"><span class="${vencido ? 'overdue' : ''}"><i class="fas fa-bell"></i>Seguimiento: ${tiempoSeguimiento(c.proximo_seguimiento_at)}</span></div>` : '');
     return `<article class="pv-card" data-id="${c.id}">
       <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}${viajeHtml}<span class="pv-tools"><button class="pv-tool" data-pv-exportar="${c.id}" type="button" aria-label="Exportar reserva ${esc(c.codigo || '')}" title="Exportar (PDF o texto)"><i class="fas fa-file-arrow-down" aria-hidden="true"></i></button>${esOficina() ? `<button class="pv-tool del" data-pv-eliminar="${c.id}" type="button" aria-label="Eliminar reserva ${esc(c.codigo || '')}" title="Eliminar reserva"><i class="fas fa-trash-can" aria-hidden="true"></i></button>` : ''}</span></div>
-      <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}${falta === null ? '' : ` · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}`}</div>${extra}
+      <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}${falta === null ? '' : ` · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}`}</div>${ROL !== 'asesor' && c.asesor ? `<div class="pv-dest pv-asesor-l"><i class="fas fa-user-tie" aria-hidden="true"></i> ${esc(c.asesor)}</div>` : ''}${extra}
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
       ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}
@@ -8010,7 +8032,8 @@ async function loadTable(silencioso) {
   document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`;
   PARA_CERRAR_PAGINA = paraCerrar ? (data || []) : [];
   pintarBotonParaCerrar();
-  if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('leads-cards').innerHTML = ''; document.getElementById('pager').innerHTML = ''; return; }
+  // Sin applyLeadsView la grilla queda oculta y el primer lead en vivo (parcharLeadLive) se agrega a un contenedor invisible.
+  if (!data.length) { empty.classList.add('show'); document.getElementById('tbody').innerHTML = ''; document.getElementById('leads-cards').innerHTML = ''; document.getElementById('pager').innerHTML = ''; applyLeadsView(); return; }
   document.getElementById('tbody').innerHTML = data.map((l, i) => {
     const cc = CANAL_CLASS[l.canal] ?? '', wa = l.telefono ? l.telefono.replace(/\D/g, '') : '', av = clientAvatar(l);
     return `<tr>
@@ -8124,7 +8147,7 @@ async function parcharLeadLive(evento) {
   const nuevo = tmp.firstElementChild;
   LEADS_PAGINA[lead.id] = lead;
   if (card && card.outerHTML === nuevo.outerHTML) { if (currentLead?.id === lead.id && !document.getElementById('drawer')?.classList.contains('open')) currentLead = lead; return; }
-  if (card) card.replaceWith(nuevo); else { cards.prepend(nuevo); totalFiltered++; document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; }
+  if (card) card.replaceWith(nuevo); else { cards.prepend(nuevo); document.getElementById('tbl-empty').classList.remove('show'); totalFiltered++; document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; }
   wireLeadCardLive(nuevo, lead);
   nuevo.classList.add('lead-actualizado'); setTimeout(() => nuevo.classList.remove('lead-actualizado'), 1200);
   if (currentLead?.id === lead.id) {
@@ -32441,7 +32464,7 @@ async function loadVoucherSeccion() {
   await cargarHistorialVouchers(false);
 }
 function vcQueryBase(recientes = false) {
-  let q = sb.from('vouchers').select('id,creado_por,revision,anulado_en,anulado_motivo,numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path,reserva_id,reserva_codigo');
+  let q = sb.from('vouchers').select('id,creado_por,revision,anulado_en,anulado_motivo,numero_factura,created_at,asesor_nombre,cliente_nombre,destino_hospedaje,total_general,pdf_path,reserva_id,reserva_codigo,solicitud_id,venta_resultado');
   // La ficha lateral siempre muestra los últimos activos, sin filtros del registro.
   if (recientes) return q.is('anulado_en', null);
   // Sin comas/paréntesis -- romperían la sintaxis del filtro .or() de PostgREST.
@@ -32501,6 +32524,7 @@ async function cargarHistorialVouchers(append) {
       <div class="lt-card-tit" title="${esc(v.cliente_nombre)}">${esc(v.cliente_nombre)}</div>
       <span class="bt-tag" style="--c:var(--blue)">N° ${fmt(v.numero_factura)}</span>
     </div>
+    ${vcPendiente(v) ? '<div class="lt-card-meta" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin terminar: la venta no se confirmó</div>' : ''}
     <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(v.asesor_nombre)} · ${esc((v.created_at || '').replace('T', ' ').slice(0, 16))}</div>
     <div class="lt-cifras" style="grid-template-columns:2fr 1fr">
       <div><span>Destino</span><b title="${esc(v.destino_hospedaje || '')}">${esc(v.destino_hospedaje || '—')}</b></div>
@@ -32510,6 +32534,7 @@ async function cargarHistorialVouchers(append) {
       <button class="btn-sm${v.pdf_path ? ' lt-primario' : ''}" type="button" onclick="verVoucherPdf('${(v.pdf_path || '').replace(/'/g, "\\'")}', ${v.numero_factura})">${v.pdf_path ? docBotonVer('Ver PDF') : '<i class="fas fa-rotate"></i> Reconstruir'}</button>
       ${DR?.acciones('voucher', v) || ''}
       ${v.reserva_codigo ? `<button class="vc-chip-res" type="button" data-vc-res="${v.reserva_id}" data-cod="${esc(v.reserva_codigo)}" title="Abrir la ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> ${esc(v.reserva_codigo)}</button>`
+        : vcPendiente(v) ? (vcPuedeConfirmar(v) ? `<button class="btn-sm lt-primario" type="button" data-vc-completar="${v.id}" title="Guardar el PDF y confirmar la operación pendiente"><i class="fas fa-circle-check"></i> Completar</button>` : '')
         : vcPuedePasar(v) ? `<button class="btn-sm" type="button" data-vc-pasar="${v.id}" title="Vincular con el cliente y crear su ficha en Reservas"><i class="fas fa-suitcase-rolling"></i> Pasar a Reservas</button>` : ''}
     </div>
   </article>`).join('');
@@ -32517,12 +32542,61 @@ async function cargarHistorialVouchers(append) {
   else tbody.innerHTML = append ? tbody.innerHTML + filas : filas;
   tbody.querySelectorAll('[data-vc-res]').forEach(b => b.onclick = () => abrirReservaDeLead(Number(b.dataset.vcRes), b.dataset.cod, b));
   tbody.querySelectorAll('[data-vc-pasar]').forEach(b => b.onclick = () => vcPasarAReservas(Number(b.dataset.vcPasar), b));
-  if (!append) entradaLista(tbody);
+  tbody.querySelectorAll('[data-vc-completar]').forEach(b => b.onclick = () => vcCompletarVoucher(Number(b.dataset.vcCompletar), b));
+  if (!append) { entradaLista(tbody); vcAvisoPendientes(tbody); }
   if (masBtn) masBtn.style.display = (data || []).length < VC_PAGE_SIZE ? 'none' : '';
   await actualizarBadgeVoucher();
 }
 // voucher_confirmar_venta: solo admin o el asesor que lo generó, y con el PDF guardado.
-const vcPuedePasar = v => !v.reserva_id && !v.anulado_en && v.pdf_path && (ROL === 'admin' || (ROL === 'asesor' && v.creado_por === MI_USUARIO_ID));
+const vcPuedeConfirmar = v => ROL === 'admin' || (ROL === 'asesor' && v.creado_por === MI_USUARIO_ID);
+const vcPuedePasar = v => !v.reserva_id && !v.anulado_en && v.pdf_path && vcPuedeConfirmar(v);
+// Generación cortada a mitad (PDF sin guardar o venta sin confirmar): tiene número pero no operación.
+const vcPendiente = v => v.solicitud_id && !v.venta_resultado && !v.anulado_en;
+async function vcAvisoPendientes(tbody) {
+  let aviso = document.getElementById('vc-pendientes-aviso');
+  if (!aviso) {
+    aviso = Object.assign(document.createElement('div'), { id: 'vc-pendientes-aviso', hidden: true });
+    aviso.style.cssText = 'margin:0 0 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--amber);color:var(--amber);font-size:13px';
+    tbody.before(aviso);
+  }
+  let q = sb.from('vouchers').select('numero_factura').not('solicitud_id', 'is', null).is('venta_resultado', null).is('anulado_en', null).order('created_at').limit(20);
+  if (ROL !== 'admin') q = q.eq('creado_por', MI_USUARIO_ID);
+  const { data, error } = await q;
+  if (error || !data?.length) { aviso.hidden = true; return; }
+  aviso.innerHTML = `<i class="fas fa-triangle-exclamation"></i> ${data.length === 1 ? 'Hay 1 voucher sin terminar' : `Hay ${data.length} vouchers sin terminar`} (N° ${data.map(v => fmt(v.numero_factura)).join(', ')}): tócalo en <b>Completar</b> o anúlalo si ya no va.`;
+  aviso.hidden = false;
+}
+// Retoma la generación cortada: el mismo PDF en Storage (o lo reconstruye) y la misma hoja de operación.
+async function vcCompletarVoucher(id, btn) {
+  btn.disabled = true;
+  try {
+    const { data: v, error } = await sb.from('vouchers').select('*').eq('id', id).single();
+    if (error || !v) throw new Error('No se pudo leer el voucher');
+    if (!vcPendiente(v)) { okToast('Este voucher ya estaba completo'); cargarHistorialVouchers(false); return; }
+    const pdfPath = `${v.creado_por}/${v.numero_factura}.pdf`;
+    const nombre = docNombre([`Voucher ${String(v.numero_factura).padStart(6, '0')}`, v.cliente_nombre, v.destino_hospedaje, docFecha(v.fecha_entrada)]);
+    let blob = (await sb.storage.from('vouchers-pdf').download(pdfPath)).data || null;
+    if (!blob) {
+      if (v.creado_por !== MI_USUARIO_ID) throw new Error(`El PDF no llegó a guardarse y va en la carpeta de ${v.asesor_nombre || 'quien lo generó'}: que lo complete esa persona, o anúlalo.`);
+      await ensureVoucherLibs();
+      blob = new Blob([await construirVoucherPdf(v)], { type: 'application/pdf' });
+      const up = await sb.storage.from('vouchers-pdf').upload(pdfPath, blob, { contentType: 'application/pdf' });
+      if (up.error && !(await sb.storage.from('vouchers-pdf').createSignedUrl(pdfPath, 60)).data?.signedUrl) throw new Error('No se pudo guardar el PDF. Revisa la conexión y reintenta.');
+    }
+    const plan = await vcRevisarOperacion(v, { modo: 'solo' });
+    if (!plan) return;
+    const cierre = await sb.rpc('voucher_confirmar_venta', { p_voucher_id: v.id, p_modo: plan.modo,
+      p_lead_id: plan.lead?.id || null, p_reserva_id: plan.reserva?.id || null,
+      p_revisadas: plan.revisadas || [], p_motivo: plan.motivo || null, p_pdf_path: pdfPath });
+    if (cierre.error || !cierre.data?.ok) throw new Error(cierre.data?.error === 'revisar_duplicados'
+      ? 'Apareció otra venta similar mientras confirmabas. Reintenta y revisa las coincidencias.' : 'La venta no se confirmó: ' + (cierre.error?.message || cierre.data?.error || 'error desconocido'));
+    const e = cierre.data.reserva_id && !cierre.data.reutilizado ? await vcAdjuntarPdf(cierre.data.reserva_id, cierre.data.servicio_id, blob, nombre) : null;
+    if (e) errToast(`Voucher completado (${cierre.data.codigo}), pero el PDF no se adjuntó a la ficha: ${e}`);
+    else okToast(`Voucher N° ${v.numero_factura} completado${cierre.data.codigo && plan.modo !== 'solo' ? ' · ' + cierre.data.codigo : ''}`);
+    cargarHistorialVouchers(false);
+  } catch (e) { console.error('vcCompletarVoucher', e); errToast(e.message); }
+  finally { btn.disabled = false; }
+}
 // Voucher generado como «solo PDF»: misma hoja que al generar (match de cliente / reservas similares).
 async function vcPasarAReservas(id, btn) {
   btn.disabled = true;
@@ -33959,9 +34033,8 @@ let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosList
 let cbProductoPendiente = null;
 let cbFechasPendientes = null;
 function cbDesdeFicha(id, fechas = null) { cbProductoPendiente = Number(id); cbFechasPendientes = fechas; activateSection('cotizacion-boletos'); }
-async function cbAplicarProducto() {
-  const id = cbProductoPendiente, fechas = cbFechasPendientes; cbProductoPendiente = null; cbFechasPendientes = null;
-  const p = cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
+async function cbAplicarProducto(id, fechas = null) {
+  const p =cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
   if (!p) { errToast('No se pudo cargar ese producto'); return; }
   cbHoteles.set(id, p);
   const tipo = { hotel: 'hotel', paquete: 'paquete', excursion: 'fullday', traslado: 'traslado' }[p.tipo] || 'otro';
@@ -33980,11 +34053,12 @@ async function cbAplicarProducto() {
     if (it.auto) { delete it.auto.ida; delete it.auto.vuelta; }
     cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
   }
-  document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  return cbItems[i];
 }
 // Con Cotizaciones ya abierta (ficha abierta desde el buscador o el chat), activateSection no recarga: se aplica a mano.
 function cbDesdeLead(l) { cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
-const cbLeadDijo = l => [['Fecha', l.fecha_estimada], ['Personas', l.personas], ['Destino', l.destino]].filter(([, v]) => v && !String(v).includes('{{'));
+const cbLeadDijo = l => [['Fecha', l.fecha_estimada], ['Personas', l.personas], ['Destino', l.destino], ['Hotel', cbViajeLead(l).hotel]].filter(([, v]) => v && !String(v).includes('{{'));
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
   box.hidden = !cbLead;
@@ -34001,24 +34075,68 @@ function cbAplicarLead() {
   cbLead = l; cbPintarLead();
   document.getElementById('cb-cliente').value = l.nombre;
   cbResumenCliente(true);
-  cbPrecargarHotelDeLead(l, otro);
+  cbPrecargarHotelDeLead(l, otro).catch(e => console.error('cbPrecargarHotelDeLead', e));
 }
 // Misma lectura que leerPersonas (manychat-recordatorio-seguimiento); `personas` trae basura como {{cuf_...}} o "Dos".
 function cbPersonasLead(texto) {
-  const t = cbTarNorm(texto).replace(/\{\{.*?\}\}/g, ''), ninos = /(\d+)\s*(nin|menor|chamo)/;
-  const adultos = Number(t.match(/(\d+)\s*adult/)?.[1] ?? t.replace(new RegExp(ninos, 'g'), '').match(/\d+/)?.[0] ?? 0), menores = Number(t.match(ninos)?.[1] ?? 0);
-  return { adultos: adultos > 0 && adultos <= 20 ? adultos : 0, ninos: menores <= 10 ? menores : 0 };
+  const t = cbTarNorm(texto).replace(/\{\{.*?\}\}/g, ''), ninos = /(\d+)\s*(nin|menor|chamo)/, bebes = /(\d+)\s*(bebe|infant)/;
+  const adultos = Number(t.match(/(\d+)\s*adult/)?.[1] ?? t.replace(new RegExp(ninos, 'g'), '').replace(new RegExp(bebes, 'g'), '').match(/\d+/)?.[0] ?? 0);
+  const menores = Number(t.match(ninos)?.[1] ?? 0), infantes = Number(t.match(bebes)?.[1] ?? 0);
+  return { adultos: adultos > 0 && adultos <= 20 ? adultos : 0, ninos: menores <= 10 ? menores : 0, infantes: infantes <= 6 ? infantes : 0 };
 }
 // Solo día o rango dan fecha cierta; «mes» y «parcial» («fin de año») se quedan en el aviso. Un día suelto no inventa las noches.
-function cbFechasLead(l) {
-  if (!['dia', 'rango'].includes(l.fecha_viaje_exactitud) || !l.fecha_viaje_desde || l.fecha_viaje_desde < cbHoy()) return {};
-  return { ida: l.fecha_viaje_desde, vuelta: l.fecha_viaje_hasta > l.fecha_viaje_desde ? l.fecha_viaje_hasta : '' };
+// La cotización web no llena fecha_viaje_*: trae «Fechas: 3 al 7 de diciembre de 2026» o «31 de diciembre de 2026 al 3 de enero de 2027».
+function cbFechasLead(l, fechasWeb = '') {
+  let desde = l.fecha_viaje_desde, hasta = l.fecha_viaje_hasta;
+  const w = cbTarNorm(fechasWeb).match(/^(\d{1,2})(?: de ([a-z]+))?(?: de (\d{4}))? al (\d{1,2}) de ([a-z]+) de (\d{4})/);
+  if (!['dia', 'rango'].includes(l.fecha_viaje_exactitud) && w) {
+    const iso = (d, m, a) => MESL.includes(m) ? `${a}-${String(MESL.indexOf(m) + 1).padStart(2, '0')}-${d.padStart(2, '0')}` : '';
+    desde = iso(w[1], w[2] || w[5], w[3] || w[6]); hasta = iso(w[4], w[5], w[6]);
+  } else if (!['dia', 'rango'].includes(l.fecha_viaje_exactitud)) return {};
+  if (!desde || desde < cbHoy()) return {};
+  return { ida: desde, vuelta: hasta > desde ? hasta : '' };
 }
-function cbPrecargarHotelDeLead(l, otroLead) {
-  const it = cbItems.find(x => x.tipo === 'hotel' && (otroLead || (!x.ida && !x.vuelta))); if (!it) return;
-  const { adultos, ninos } = cbPersonasLead(l.personas);
-  const datos = { ...cbFechasLead(l), ...(adultos ? { adultos, ninos: ninos || '' } : {}) };
-  if (!Object.keys(datos).length) return;
+// destino_consulta guarda lo que el cliente ya eligió: la web, «Hotel: X (#id) | Tarifa de referencia: #id»; la IA, «Ya se le mostró: X (precio)».
+function cbViajeLead(l) {
+  const c = String(l?.destino_consulta || ''), parte = k => c.split('|').map(s => s.trim()).find(s => s.startsWith(k + ':'))?.slice(k.length + 1).trim() || '';
+  const web = parte('Hotel'), webId = web.match(/\(#(\d+)\)$/);
+  return {
+    hotel: (webId ? web.replace(/\s*\(#\d+\)$/, '') : parte('Ya se le mostró').replace(/\s*\(.*$/, '')).trim(),
+    producto_id: webId ? Number(webId[1]) : null, tarifa_id: Number(parte('Tarifa de referencia').match(/^#(\d+)/)?.[1]) || null,
+    todo_incluido: /todo incluido|all inclusive/.test(cbTarNorm(c)), fechas: cbFechasLead(l || {}, parte('Fechas')),
+    ...cbPersonasLead(l?.personas || parte('Viajeros')),
+  };
+}
+// «Ya se le mostró» trae el nombre que vio el cliente, no el id: gana el hotel con más palabras en común, a igualdad el del destino del lead.
+const CB_PALABRAS_VACIAS = new Set(['hotel', 'posada', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'en']);
+function cbHotelParecido(nombre, destino, productos) {
+  const palabras = s => cbTarNorm(s).replace(/[^a-z0-9 ]+/g, ' ').split(' ').filter(w => w && !CB_PALABRAS_VACIAS.has(w));
+  const q = palabras(nombre), dest = cbTarNorm(destino); if (!q.length) return null;
+  const puntaje = p => { const ws = new Set(palabras(p.nombre)); return q.filter(w => ws.has(w)).length / Math.max(q.length, ws.size); };
+  const mejor = productos.map(p => ({ p, s: puntaje(p) + (dest && cbTarNorm(p.destino).includes(dest) ? 0.01 : 0) })).sort((a, b) => b.s - a.s)[0];
+  return mejor && mejor.s >= 0.5 ? Number(mejor.p.id) : null;
+}
+async function cbHotelPorNombre(nombre, destino) {
+  const { data } = await sb.from('productos').select('id,nombre,destino').in('tipo', ['hotel', 'paquete']).eq('activo', true).limit(2000);
+  return cbHotelParecido(nombre, destino, data || []);
+}
+// Solo elige hotel si la cotización aún no tiene uno ni viene un producto desde la ficha; el asesor puede cambiar todo después.
+async function cbPrecargarHotelDeLead(l, otroLead) {
+  const v = cbViajeLead(l), conHotel = () => cbItems.some(x => ['hotel', 'paquete'].includes(x.tipo) && cbTitulo(x));
+  let elegido = null;
+  if (!cbProductoPendiente && !conHotel() && (v.producto_id || v.hotel)) {
+    const id = v.producto_id || await cbHotelPorNombre(v.hotel, l.destino);
+    if (id && cbLead?.id === l.id && !conHotel()) elegido = await cbAplicarProducto(id);
+  }
+  const it = elegido || cbItems.find(x => x.tipo === 'hotel' && (otroLead || (!x.ida && !x.vuelta))); if (!it) return;
+  const datos = { ...(otroLead || (!it.ida && !it.vuelta) ? v.fechas : {}), ...(v.adultos ? { adultos: v.adultos, ninos: v.ninos || '', infantes: v.infantes || '' } : {}) };
+  if (elegido) {
+    const filas = cbHotelFilas(it), t = v.tarifa_id && filas.find(f => Number(f.id) === v.tarifa_id);
+    const plan = (t && cbTarPlan(t)) || (v.todo_incluido && cbTarOpciones(filas, 'plan').find(p => /todo incluido|all inclusive/.test(cbTarNorm(p))));
+    if (plan) it.plan = plan;
+    if (t?.habitacion) Object.assign(it, { hab: t.habitacion, habitacion_manual: true });
+  }
+  if (!Object.keys(datos).length && !elegido) return;
   Object.assign(it, datos);
   if (it.auto) Object.keys(datos).forEach(k => delete it.auto[k]);
   cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
@@ -34043,7 +34161,7 @@ async function cbBuscarLead() {
   const f = leadBusqueda(input.value), tk = ++cbLeadTk;
   cbPintarBusquedaLead(f);
   if (f.q.length < f.minimo) { cbLeadsRes = []; return; }
-  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino').is('eliminado_at', null).ilike(f.campo, f.patron);
+  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino,destino_consulta').is('eliminado_at', null).ilike(f.campo, f.patron);
   if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
   try {
     const { data, error } = await q.order('id', { ascending: false }).limit(8);
@@ -34719,7 +34837,7 @@ async function cbCargarSeccion() {
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
   cbCargarStops();
   if (cbLeadPendiente) cbAplicarLead();
-  if (cbProductoPendiente) await cbAplicarProducto();
+  if (cbProductoPendiente) { const id = cbProductoPendiente, fechas = cbFechasPendientes; cbProductoPendiente = cbFechasPendientes = null; await cbAplicarProducto(id, fechas); }
   cbResumenCliente();
   cbOffset = 0;
   await cbCargarHistorial(false);
