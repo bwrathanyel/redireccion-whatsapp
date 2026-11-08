@@ -11,6 +11,7 @@ import { crearCostosDigitales } from './costos-digitales.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
+import { crearLlamadasApp } from './llamadas-app.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -1046,6 +1047,13 @@ function setupTareasV2() { if (MI_USUARIO_ID) tareasV2().enlazar(); }
 function setupLlamadasWa() {
   if (!['admin', 'administrativo', 'asesor'].includes(ROL) || !window.RTCPeerConnection) return;
   crearLlamadasWa({ sb, esc, abrirLead: id => abrirLeadDesdeMisVentas(id), ok: okToast, error: errToast }).enlazar();
+}
+// Llamadas desde el WhatsApp del asesor (llamadas-app.js): botón en la ficha del lead y ficha de cierre.
+let llamadasApp = null;
+function setupLlamadasApp() {
+  if (ROL !== 'asesor' && ROL !== 'admin') return;
+  llamadasApp = crearLlamadasApp({ sb, esc, usuarioId: MI_USUARIO_ID, asesor: MI_NOMBRE, ok: okToast, error: errToast, aviso: linkToast });
+  llamadasApp.enlazar();
 }
 function loadTareasV2() {
   const q = new URLSearchParams(location.search), t = Number(q.get('t'));
@@ -3451,7 +3459,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
-    setupTareasV2, setupLlamadasWa, setupTecladoMovil, setupEstadoBody, setupBarraInf,
+    setupTareasV2, setupLlamadasWa, setupLlamadasApp, setupTecladoMovil, setupEstadoBody, setupBarraInf,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -8775,6 +8783,7 @@ function openDrawer(l, opciones = {}) {
         <select id="e-estado" ${dis}>${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select><i class="fas fa-chevron-down"></i></label>
       <button type="button" class="dacc-cta" id="e-a-cta" ${cta ? `data-accion="${cta.key}"` : 'hidden'}>${cta ? `<i class="fas ${cta.icono}"></i>${cta.texto}` : ''}</button>
       ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
+      ${postWa(l.telefono) && vende ? `<button type="button" class="dacc-ic" id="e-a-llamar" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i></button>` : ''}
       ${wa && vende ? `<button type="button" class="dacc-ic" id="e-a-wa-msg" title="Mensaje frecuente por WhatsApp" aria-label="Mensaje frecuente por WhatsApp"><i class="fas fa-comment-dots"></i></button>` : ''}
       <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
@@ -8916,6 +8925,7 @@ function openDrawer(l, opciones = {}) {
   btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
   document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
   document.getElementById('e-a-recordar')?.addEventListener('click', () => { document.getElementById('dacc-mas').hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); recordarLeadManana(l); });
+  document.getElementById('e-a-llamar')?.addEventListener('click', () => llamadasApp?.llamar(l, postWa(l.telefono)));
   document.getElementById('e-a-wa-msg')?.addEventListener('click', () => waElegirMensaje(l));
   document.getElementById('d-seg')?.addEventListener('click', e => { const b = e.target.closest('[data-seg]'); if (b) dsegAccion(l, b.dataset.seg, b); });
   document.getElementById('e-a-avisar')?.addEventListener('click', () => abrirAvisarTelefono(l));
@@ -38845,6 +38855,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-08', emoji: '📞', titulo: 'Botón Llamar en la ficha del lead', texto: 'En la ficha del lead hay un botón de teléfono que abre el WhatsApp del cliente para llamarlo. A los pocos segundos aparece una tarjeta para anotar cómo salió la llamada, si quieres una tarea para volver a llamar y una nota. La llamada no se graba.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-07', emoji: '📣', titulo: 'Campañas de WhatsApp más seguras', texto: 'Las campañas ahora usan la misma regla que el número de «Elegibles»: solo clientes con viaje terminado hace los días que elijas y sin incidencias abiertas. Antes de aprobar hay que enviar una prueba a tu teléfono, y verás cuánto va a costar y cuántos días va a tardar. Si WhatsApp empieza a rechazar mensajes o la plantilla deja de estar aprobada, la campaña se pausa sola y te dice por qué. En los borradores tienes «Recalcular lista».', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-06', emoji: '🧳', titulo: 'Cotizaciones se llena solo con lo que ya cargaste', texto: 'Al agregar otro servicio a una cotización, sale con los mismos adultos, niños, infantes y fechas del hotel. Si el hotel es de Margarita, el boleto ya trae el destino Margarita (PMV) y solo falta el origen. Si cambias el hotel o sus fechas, los demás servicios se actualizan. Lo que escribas a mano se respeta y no se vuelve a cambiar. También se corrigió la lista de Full day y Tour: ahora muestra las excursiones del tarifario, no hoteles.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
   { fecha: '2026-11-06', emoji: '🏨', titulo: 'Mínimo de noches según la temporada', texto: 'Al cotizar un hotel, el mínimo de noches ya no se aplica a todas las fechas: si el tarifario dice «Fin de año 4 noches», solo pide 4 noches en Fin de año. En el resto de las fechas carga el precio normal. Si el tarifario no deja claro a qué temporada corresponde, verás un aviso para confirmarlo.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },
