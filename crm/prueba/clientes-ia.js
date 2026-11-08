@@ -67,13 +67,20 @@
       historial: [] });
     sonido();
   }
+  // El bot real deja fecha_viaje_* (exactitud «rango»); sin eso Cotizaciones no precarga ida y vuelta. «31 ene al 3 feb» cruza de año.
+  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function viajeFicha(f) {
+    const fin = /al (\d{1,2})(?: ([a-z]{3}))?/.exec(f?.fechas || ''); if (!f?.fecha || !fin) return {};
+    const [a, mi] = f.fecha.split('-').map(Number), mf = fin[2] ? MESES.indexOf(fin[2]) + 1 : mi; if (!mf) return {};
+    return { fecha_viaje_desde: f.fecha, fecha_viaje_hasta: `${mf < mi ? a + 1 : a}-${String(mf).padStart(2, '0')}-${fin[1].padStart(2, '0')}`, fecha_viaje_exactitud: 'rango' };
+  }
   function crearSim(o, rehidratada) {
     const n = ++S.nSim, t = ahora();
     const tel = `+58414777${String(1000 + n + Math.floor(Math.random() * 8000)).slice(-4)}`;
     const f = o.cliente.ficha, destino = f ? `${o.cliente.destino}: ${f.hotel || 'hotel por definir'} · ${f.fechas}` : o.cliente.destino;
     // Mismo formato que arma el bot real (armarConsultaLead): Cotizaciones lo lee para autorrellenar hotel, fecha y personas.
     const consulta = f ? [o.cliente.destino, f.fecha && `Fecha estimada: ${f.fecha}`, f.hotel && `Ya se le mostró: ${f.hotel}`].filter(Boolean).join(' | ') : destino;
-    const lead = D.lead(o.cliente.nombre, 'POR ATENDER', destino, { canal: o.cliente.canal, servicio: 'Hospedaje', personas: f?.personas ?? null, fecha_estimada: f?.fecha ?? null, destino_consulta: consulta });
+    const lead = D.lead(o.cliente.nombre, 'POR ATENDER', destino, { canal: o.cliente.canal, servicio: 'Hospedaje', personas: f?.personas ?? null, fecha_estimada: f?.fecha ?? null, destino_consulta: consulta, ...viajeFicha(f) });
     Object.assign(lead, { id: 9600 + n, telefono: tel, numero: tel, fecha_creacion: t, lote_asignado_at: t, vence_at: new Date(Date.now() + 3600e3).toISOString(), notas: f ? `Bot: ${f.bot}` : null });
     const sim = { ...o, leadId: lead.id, convId: 700 + n, tel, llego: Date.now(), pasos: { ...(o.pasos || {}) }, pend: nuevoPend(), ocupado: false, otraVez: false,
       escribiendo: false, insistencias: 0, cerrada: false, comprobanteEn: null, registroEn: null, temperatura: null, cots: [], guiaVista: null };
