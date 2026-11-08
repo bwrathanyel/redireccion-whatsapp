@@ -34136,9 +34136,12 @@ async function cbHotelPorNombre(nombre, destino) {
 async function cbPrecargarHotelDeLead(l, otroLead) {
   const v = cbViajeLead(l), conHotel = () => cbItems.some(x => ['hotel', 'paquete'].includes(x.tipo) && cbTitulo(x));
   let elegido = null;
-  if (!cbProductoPendiente && !conHotel() && (v.producto_id || v.hotel)) {
+  if (!cbProductoPendiente && (otroLead || !conHotel()) && (v.producto_id || v.hotel)) {
     const id = v.producto_id || await cbHotelPorNombre(v.hotel, l.destino);
-    if (id && cbLead?.id === l.id && !conHotel()) elegido = await cbAplicarProducto(id);
+    // Al pasar a otro cliente su hotel reemplaza al del anterior (antes quedaba el viejo y parecía que no precargaba).
+    const viejo = id && otroLead ? cbItems.findIndex(x => x.tipo === 'hotel' && cbTitulo(x) && Number(x.producto_id) !== id) : -1;
+    if (viejo >= 0) cbItems[viejo].nombre = '';
+    if (id && cbLead?.id === l.id && (viejo >= 0 || otroLead || !conHotel())) elegido = await cbAplicarProducto(id);
   }
   const it = elegido || cbItems.find(x => x.tipo === 'hotel' && (otroLead || (!x.ida && !x.vuelta))); if (!it) return;
   const datos = { ...(otroLead || (!it.ida && !it.vuelta) ? v.fechas : {}), ...(v.adultos ? { adultos: v.adultos, ninos: v.ninos || '', infantes: v.infantes || '' } : {}) };
