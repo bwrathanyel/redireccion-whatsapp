@@ -11398,7 +11398,7 @@ let WB = null;
 function loadWaBandeja() {
   if (!WB) {
     WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
-      abrirLead: id => abrirLeadDesdeMisVentas(id), crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
+      abrirLead: id => abrirLeadDesdeMisVentas(id), cotizarLead: cbCotizarLeadId, crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
     WB.enlazar();
   }
   return WB.abrirSeccion();
@@ -34058,6 +34058,13 @@ async function cbAplicarProducto(id, fechas = null) {
 }
 // Con Cotizaciones ya abierta (ficha abierta desde el buscador o el chat), activateSection no recarga: se aplica a mano.
 function cbDesdeLead(l) { cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
+const CB_LEAD_CAMPOS = 'id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino,destino_consulta';
+// El chat de Bandeja solo conoce el lead_id: se trae con lo que lee el autorrelleno (destino_consulta, personas, fechas).
+async function cbCotizarLeadId(id) {
+  const { data, error } = await sb.from('leads').select(CB_LEAD_CAMPOS).eq('id', id).maybeSingle();
+  if (error || !data) return errToast('No se pudo abrir el lead para cotizar');
+  cbDesdeLead(data);
+}
 const cbLeadDijo = l => [['Fecha', l.fecha_estimada], ['Personas', l.personas], ['Destino', l.destino], ['Hotel', cbViajeLead(l).hotel]].filter(([, v]) => v && !String(v).includes('{{'));
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
@@ -34107,14 +34114,19 @@ function cbViajeLead(l) {
     ...cbPersonasLead(l?.personas || parte('Viajeros')),
   };
 }
-// «Ya se le mostró» trae el nombre que vio el cliente, no el id: gana el hotel con más palabras en común, a igualdad el del destino del lead.
-const CB_PALABRAS_VACIAS = new Set(['hotel', 'posada', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'en']);
+// «Ya se le mostró» trae el nombre de la oferta, no el id: «Escápate a Los Roques - Posada Gremary» es el hotel «Gremary (Posada Gremary)».
+// Gana el hotel cuyo nombre (sin las palabras de su destino) queda entero dentro de la oferta o al revés; a igualdad, más palabras en común y luego el del destino del lead.
+const CB_PALABRAS_VACIAS = new Set(['hotel', 'posada', 'resort', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'en', 'a', 'al', 'con', 'por', 'para', 'paquete', 'promo', 'promocion', 'escapate', 'todo', 'incluido']);
 function cbHotelParecido(nombre, destino, productos) {
   const palabras = s => cbTarNorm(s).replace(/[^a-z0-9 ]+/g, ' ').split(' ').filter(w => w && !CB_PALABRAS_VACIAS.has(w));
-  const q = palabras(nombre), dest = cbTarNorm(destino); if (!q.length) return null;
-  const puntaje = p => { const ws = new Set(palabras(p.nombre)); return q.filter(w => ws.has(w)).length / Math.max(q.length, ws.size); };
+  const q = new Set(palabras(nombre)), dest = cbTarNorm(destino); if (!q.size) return null;
+  const puntaje = p => {
+    const lugar = new Set(palabras(p.destino)), todas = [...new Set(palabras(p.nombre))], propias = todas.filter(w => !lugar.has(w));
+    const ws = propias.length ? propias : todas, comunes = ws.filter(w => q.has(w)).length;
+    return comunes ? comunes / Math.min(ws.length, q.size) + comunes / Math.max(ws.length, q.size) / 10 : 0;
+  };
   const mejor = productos.map(p => ({ p, s: puntaje(p) + (dest && cbTarNorm(p.destino).includes(dest) ? 0.01 : 0) })).sort((a, b) => b.s - a.s)[0];
-  return mejor && mejor.s >= 0.5 ? Number(mejor.p.id) : null;
+  return mejor && mejor.s >= 1 ? Number(mejor.p.id) : null;
 }
 async function cbHotelPorNombre(nombre, destino) {
   const { data } = await sb.from('productos').select('id,nombre,destino').in('tipo', ['hotel', 'paquete']).eq('activo', true).limit(2000);
@@ -34161,7 +34173,7 @@ async function cbBuscarLead() {
   const f = leadBusqueda(input.value), tk = ++cbLeadTk;
   cbPintarBusquedaLead(f);
   if (f.q.length < f.minimo) { cbLeadsRes = []; return; }
-  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino,destino_consulta').is('eliminado_at', null).ilike(f.campo, f.patron);
+  let q = sb.from('leads').select(CB_LEAD_CAMPOS).is('eliminado_at', null).ilike(f.campo, f.patron);
   if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
   try {
     const { data, error } = await q.order('id', { ascending: false }).limit(8);

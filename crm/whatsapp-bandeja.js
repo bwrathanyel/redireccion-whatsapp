@@ -54,7 +54,7 @@ const CSS = `
 #wb-pdf-previa footer .wb-pv-enviar{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-color:transparent;background:var(--wa);color:#fff;font-weight:600}
 `;
 
-export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, crearReserva, cargarPdfjs, ok, error, navPush, navConsume }) {
+export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, cotizarLead, crearReserva, cargarPdfjs, ok, error, navPush, navConsume }) {
   let convs = [];
   let actual = null;
   let navWb = null;
@@ -126,6 +126,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     $('wb-titulo').textContent = c.nombre || '+' + c.wa_id;
     $('wb-avatar').textContent = initials(c.nombre || '#');
     $('wb-ver-lead').style.display = c.lead_id ? '' : 'none';
+    $('wb-cotizar').style.display = c.lead_id && ['admin', 'asesor'].includes(rol()) ? '' : 'none';
     pintarCabecera();
     pintarCompositor();
     $('wb-log').innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
@@ -470,6 +471,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       if (r) reservaDeComprobante(Number(r.dataset.wbReserva));
     });
     $('wb-ver-lead').addEventListener('click', () => actual?.lead_id && abrirLead(actual.lead_id));
+    $('wb-cotizar').addEventListener('click', () => actual?.lead_id && cotizarLead(actual.lead_id));
     if (matchMedia('(max-width:760px)').matches) $('wb-texto').placeholder = 'Mensaje';
     $('wb-texto').addEventListener('input', autoAlto);
     $('wb-texto').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey && !matchMedia('(pointer:coarse)').matches) { ev.preventDefault(); enviarTexto(); } });
