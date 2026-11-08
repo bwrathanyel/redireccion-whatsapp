@@ -7,7 +7,7 @@
 (() => {
   'use strict';
   const P = window.__PRUEBA, D = window.PRUEBA_DATOS, R = window.PRUEBA_RPCS;
-  if (!P || !D || !R) return;
+  if (!P || !D || !R || !window.__pruebaCotizacion) return;
   const URL_IA = 'https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/prueba-cliente-ia';
   const ss = (k, v) => { try { return v === undefined ? sessionStorage.getItem(k) : v === null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch { return null; } };
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -135,14 +135,48 @@
   }
   const tick = (fila, estado) => { fila.estado = estado; P.empuja('whatsapp_mensajes', 'UPDATE', fila); };
 
+  /* ---------- PDF enviado: miniatura de la 1.ª página y nombre del archivo, como en WhatsApp ---------- */
+  // whatsapp-bandeja.js pregunta por window.__pruebaDocHtml (sitio del build) antes de pintar «Documento PDF».
+  const docs = new Map();
+  const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/'; // la misma versión que carga app.js
+  let pdfjs = null;
+  const cargaPdfjs = () => pdfjs ||= import(PDFJS + 'pdf.min.mjs').then(l => { l.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.mjs'; return l; });
+  const peso = b => b >= 1048576 ? `${(b / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(b / 1024))} kB`;
+  const docInterior = d => `<div class="pc-doc-mini">${d.src ? `<img src="${d.src}" alt="">` : `<span class="pc-doc-carga${d.fallo ? ' fallo' : ''}"></span>`}</div>
+    <div class="pc-doc-pie"><i class="fas fa-file-pdf" aria-hidden="true"></i><div><div class="msg-doc-nombre">${esc(d.nombre)}</div>
+    <div class="msg-doc-peso">PDF${d.paginas ? ` · ${d.paginas} ${d.paginas === 1 ? 'página' : 'páginas'}` : ''} · ${peso(d.peso)}</div></div></div>`;
+  window.__pruebaDocHtml = (m, fuente) => {
+    const d = docs.get(m.media_path);
+    return d ? `<div class="msg-doc pc-doc" ${fuente} data-wb-doc="1" data-pc-doc="${esc(m.media_path)}" title="${esc(d.nombre)}">${docInterior(d)}</div>` : '';
+  };
+  async function docEnviado(clave, archivo) {
+    const d = { nombre: archivo.name, peso: archivo.size };
+    docs.set(clave, d);
+    if (/pdf/i.test(archivo.type) || /\.pdf$/i.test(archivo.name)) try {
+      const lib = await cargaPdfjs();
+      const pdf = await lib.getDocument({ data: new Uint8Array(await archivo.arrayBuffer()) }).promise;
+      const pag = await pdf.getPage(1), vp = pag.getViewport({ scale: 520 / pag.getViewport({ scale: 1 }).width });
+      // Solo la franja de arriba (encabezado con el logo y el número), como la vista previa de WhatsApp.
+      const c = document.createElement('canvas');
+      c.width = Math.round(vp.width); c.height = Math.round(vp.width * 0.62);
+      await pag.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      d.paginas = pdf.numPages; d.src = c.toDataURL('image/jpeg', 0.85);
+      pdf.destroy();
+    } catch (e) { console.warn('[prueba] miniatura del PDF', e); d.fallo = true; }
+    else d.fallo = true;
+    document.querySelectorAll(`[data-pc-doc="${CSS.escape(clave)}"]`).forEach(el => { el.innerHTML = docInterior(d); });
+  }
+
   /* ---------- Lo que manda el asesor (mock de whatsapp-enviar) ---------- */
   R.FUNCIONES['whatsapp-enviar'] = (m, a) => {
     if (!a || a.conversacion_id == null) return { ok: true, plantillas: [] };
     const sim = simDeConv(a.conversacion_id);
     if (!tabla('whatsapp_conversaciones').some(c => c.id === Number(a.conversacion_id))) return { __status: 404, body: { ok: false, error: 'sin_acceso' } };
     const archivo = a.archivo instanceof File ? a.archivo : null, imagen = a.tipo === 'imagen';
+    const media = archivo && P.blob(archivo);
+    if (archivo && !imagen) docEnviado(media, archivo);
     const fila = guardaMensaje(sim || { convId: Number(a.conversacion_id) }, archivo
-      ? { direccion: 'saliente_api', tipo: imagen ? 'image' : 'document', texto: a.texto || null, estado: 'enviado', media_mime: imagen ? archivo.type : archivo.name, media_path: P.blob(archivo) }
+      ? { direccion: 'saliente_api', tipo: imagen ? 'image' : 'document', texto: a.texto || null, estado: 'enviado', media_mime: imagen ? archivo.type : archivo.name, media_path: media }
       : { direccion: 'saliente_api', tipo: 'text', texto: String(a.texto || ''), estado: 'enviado' });
     setTimeout(() => fila.estado === 'enviado' && tick(fila, 'entregado'), 700);
     if (sim && !sim.cerrada) saliente(sim, fila, archivo);
@@ -168,7 +202,7 @@
     } else {
       const cot = sim.cots.at(-1) || ultimaCotizacion(sim);
       if (cot) {
-        sim.pend.crm.push(`El asesor te mandó un PDF «${archivo?.name || 'cotización'}»: ${cot.detalle}. Total ${cot.total ?? '?'} $.`);
+        sim.pend.crm.push(textoPdf(archivo?.name, cot));
         sim.pend.eventos.push({ tipo: 'cotizacion', total: cot.total, detalle: cot.detalle.slice(0, 300) });
         marca(sim, 'cotizacion');
       } else sim.pend.crm.push(`El asesor te mandó un PDF «${archivo?.name || 'archivo'}» que no es una cotización (no trae precios).`);
@@ -335,11 +369,7 @@ ${lineas}
     const c = tabla('cotizaciones_boleteria').filter(x => x.lead_id === sim.leadId || x.lead_id == null).at(-1);
     return c ? cotizacionDe(c) : null;
   }
-  const cotizacionDe = c => ({
-    total: Number.isFinite(Number(c.total)) ? Number(c.total) : null,
-    detalle: (c.items || []).map(it => Object.entries(it).filter(([k, v]) => v !== '' && v != null && typeof v !== 'object' && !/(^id$|_id$|^_)/.test(k)).map(([k, v]) => `${k}: ${v}`).join(', ').slice(0, 300)).join(' | ')
-      + (c.fecha ? ` (emitida ${c.fecha}${c.vence ? `, vence ${c.vence}` : ''})` : ''),
-  });
+  const { cotizacionDe, textoPdf } = window.__pruebaCotizacion;
   addEventListener('prueba:accion', e => {
     const d = e.detail || {};
     if (!S.activo || d.error) return;
@@ -778,6 +808,16 @@ ${lineas}
   /* ---------- Estilos ---------- */
   const css = document.createElement('style');
   css.textContent = `
+.msg-doc.pc-doc{flex-direction:column;align-items:stretch;gap:0;padding:4px;width:260px;max-width:100%;min-width:0;box-sizing:border-box}
+.pc-doc .pc-doc-mini{aspect-ratio:1/.62;border-radius:9px;overflow:hidden;background:#fff}
+.pc-doc .pc-doc-mini img{display:block;width:100%;height:100%;object-fit:cover;object-position:top}
+.pc-doc .pc-doc-carga{display:block;height:100%;background:linear-gradient(90deg,rgba(0,0,0,.04),rgba(0,0,0,.09),rgba(0,0,0,.04));background-size:200% 100%;animation:pc-brillo 1.2s linear infinite}
+.pc-doc .pc-doc-carga.fallo{animation:none;background:rgba(0,0,0,.05)}
+@keyframes pc-brillo{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.pc-doc .pc-doc-carga{animation:none}}
+.pc-doc .pc-doc-pie{display:flex;align-items:center;gap:9px;padding:7px 6px 3px}
+#wb-log .pc-doc .pc-doc-pie i{color:var(--danger,#ef4444)}
+.pc-doc .msg-doc-nombre{max-width:none;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.3}
 #pc-panel{z-index:99980;width:min(340px,calc(100vw - 24px));max-height:min(72vh,520px);overflow:auto;box-sizing:border-box;padding:10px 12px;border-radius:16px;background:color-mix(in srgb,var(--panel-solid,#1b1b1f) 92%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid var(--line2,rgba(255,255,255,.14));box-shadow:0 16px 36px -16px rgba(0,0,0,.6);color:var(--txt,#eee);font:13px/1.4 system-ui,sans-serif}
 #pc-panel.pb-bola{width:52px;height:52px;padding:0;overflow:visible;border:0;border-radius:50%;background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none}
 #pc-panel .pc-bola{position:relative;display:grid;place-items:center;width:100%;height:100%;padding:0;border:0;border-radius:50%;background:#25d366;color:#05301a;font:700 15px system-ui,sans-serif;box-shadow:0 10px 24px -8px rgba(0,0,0,.65)}

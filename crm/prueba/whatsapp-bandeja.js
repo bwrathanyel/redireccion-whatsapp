@@ -178,6 +178,8 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     // transcripcion: la escribe whatsapp-webhook al bajar la nota de voz (mismo bloque que Meta DM).
     if (m.tipo === 'audio') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>${m.transcripcion ? `<div class="wa-transcripcion"><i class="fas fa-microphone"></i><span>${esc(m.transcripcion)}</span></div>` : ''}`;
     if (m.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
+    const prueba = window.__pruebaDocHtml?.(m, fuente);
+    if (prueba) return prueba;
     return `<div class="msg-doc" ${fuente} data-wb-doc="1"><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(etiquetaDoc(m))}</div></div></div>`;
   }
   function etiquetaDoc(m) {
