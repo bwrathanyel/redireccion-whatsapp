@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v640';
+const CACHE_VERSION = 'lotus-crm-shell-v641';
 // Solo esta versión recarga sola las pestañas abiertas (pedido del dueño 2026-11-06): el resto de deploys sigue con el aviso, que deja elegir cuándo.
 const RECARGA_FORZADA = 'lotus-crm-shell-v621';
 const SHELL_FILES = [
@@ -29,6 +29,7 @@ const SHELL_FILES = [
   './facturas-empresa.js',
   './llamadas-wa.js',
   './llamadas-app.js',
+  './llamadas-panel.js',
   './manifest.json',
   './logolotus.png',
   './logolotus-integrado.png',

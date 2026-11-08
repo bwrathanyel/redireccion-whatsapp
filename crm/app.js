@@ -12,6 +12,7 @@ import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
 import { crearLlamadasApp } from './llamadas-app.js';
+import { crearLlamadasPanel } from './llamadas-panel.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -1052,9 +1053,11 @@ function setupLlamadasWa() {
 let llamadasApp = null;
 function setupLlamadasApp() {
   if (ROL !== 'asesor' && ROL !== 'admin') return;
-  llamadasApp = crearLlamadasApp({ sb, esc, usuarioId: MI_USUARIO_ID, asesor: MI_NOMBRE, ok: okToast, error: errToast, aviso: linkToast });
+  llamadasApp = crearLlamadasApp({ sb, esc, usuarioId: MI_USUARIO_ID, asesor: MI_NOMBRE, ok: okToast, error: errToast, aviso: linkToast, alGuardar: () => LLAMADAS_PANEL?.cargar() });
   llamadasApp.enlazar();
 }
+let LLAMADAS_PANEL = null;
+const llamadasPanel = () => LLAMADAS_PANEL ||= crearLlamadasPanel({ sb, esc, pintarKPIs, hoy: hoyCaracas, rol: ROL, miNombre: MI_NOMBRE, abrirLead: id => abrirLeadDesdeMisVentas(id), completar: f => llamadasApp?.retomar(f), error: errToast, raiz: document.getElementById('llamadas-root') });
 function loadTareasV2() {
   const q = new URLSearchParams(location.search), t = Number(q.get('t'));
   if (t) { q.delete('t'); history.replaceState(null, '', location.pathname + (q.toString() ? `?${q}` : '')); }
@@ -1863,7 +1866,7 @@ function manejarDeepLinkAsistencia() {
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
-  'web-reasignados', 'contactos-directos', 'repartir', 'tarifario', 'galeria', 'stop-sales',
+  'web-reasignados', 'contactos-directos', 'repartir', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
@@ -35793,6 +35796,7 @@ const NAV_ITEMS = [
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
+  { sec: 'llamadas', icon: 'fas fa-phone', label: 'Llamadas', padre: 'grp-leads', roles: 'nav-administrativo-no', sub: 'Llamadas sin resultado y métricas por asesor' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Pega números o capturas y se reparten entre los asesores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
@@ -36237,6 +36241,7 @@ function cargarSeccion(sec) {
   if (sec === 'ads') adsMeta().cargar();
   if (sec === 'contenido') marketing().cargar();
   if (sec === 'costos-digitales') costosDigitales().cargar();
+  if (sec === 'llamadas') llamadasPanel().cargar();
   if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
   if (sec === 'facturas-empresa') facturasEmpresa().cargar();
   if (sec === 'voucher') loadVoucherSeccion();
@@ -38855,6 +38860,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-08', emoji: '📋', titulo: 'Nueva sección Llamadas', texto: 'En Leads › Llamadas ves las llamadas por WhatsApp que quedaron sin resultado y puedes completarlas con «Poner resultado». Arriba están tus números de hoy, 7 o 30 días: llamadas, contacto e interesados.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-08', emoji: '📞', titulo: 'Botón Llamar en la ficha del lead', texto: 'En la ficha del lead hay un botón de teléfono que abre el WhatsApp del cliente para llamarlo. A los pocos segundos aparece una tarjeta para anotar cómo salió la llamada, si quieres una tarea para volver a llamar y una nota. La llamada no se graba.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-07', emoji: '📣', titulo: 'Campañas de WhatsApp más seguras', texto: 'Las campañas ahora usan la misma regla que el número de «Elegibles»: solo clientes con viaje terminado hace los días que elijas y sin incidencias abiertas. Antes de aprobar hay que enviar una prueba a tu teléfono, y verás cuánto va a costar y cuántos días va a tardar. Si WhatsApp empieza a rechazar mensajes o la plantilla deja de estar aprobada, la campaña se pausa sola y te dice por qué. En los borradores tienes «Recalcular lista».', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-06', emoji: '🧳', titulo: 'Cotizaciones se llena solo con lo que ya cargaste', texto: 'Al agregar otro servicio a una cotización, sale con los mismos adultos, niños, infantes y fechas del hotel. Si el hotel es de Margarita, el boleto ya trae el destino Margarita (PMV) y solo falta el origen. Si cambias el hotel o sus fechas, los demás servicios se actualizan. Lo que escribas a mano se respeta y no se vuelve a cambiar. También se corrigió la lista de Full day y Tour: ahora muestra las excursiones del tarifario, no hoteles.', roles: ['admin', 'asesor', 'administrativo', 'boleteria', 'marketing'] },

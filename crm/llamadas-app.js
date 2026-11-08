@@ -22,7 +22,7 @@ const CSS = `
 .lc-guardar:disabled{opacity:.5;cursor:default}
 `;
 
-export function crearLlamadasApp({ sb, esc, usuarioId, asesor, ok, error, aviso }) {
+export function crearLlamadasApp({ sb, esc, usuarioId, asesor, ok, error, aviso, alGuardar }) {
   const clave = `lotus-llamada-app:${usuarioId}`;
   let pendiente = null, tarjeta = null, timer = null;
 
@@ -56,6 +56,7 @@ export function crearLlamadasApp({ sb, esc, usuarioId, asesor, ok, error, aviso 
       if (dias) await crearTarea(p, dias);
       cerrar();
       ok(dias ? 'Llamada guardada y tarea creada' : 'Llamada guardada');
+      alGuardar?.();
     } catch (e) { btn.disabled = false; error(mensaje(e)); }
   }
 
@@ -93,6 +94,13 @@ export function crearLlamadasApp({ sb, esc, usuarioId, asesor, ok, error, aviso 
     timer = setTimeout(mostrar, FICHA_MS);
   }
 
+  function retomar(f) {
+    pendiente = leer() || pendiente;
+    if (pendiente && pendiente.id !== f.id) { mostrar(); error('Primero guarda el resultado de la llamada anterior'); return; }
+    if (!pendiente) { pendiente = { ...f, tarea_token: crypto.randomUUID() }; escribir(pendiente); }
+    mostrar();
+  }
+
   function enlazar() {
     const st = document.createElement('style');
     st.textContent = CSS;
@@ -101,5 +109,5 @@ export function crearLlamadasApp({ sb, esc, usuarioId, asesor, ok, error, aviso 
     mostrar();
   }
 
-  return { enlazar, llamar };
+  return { enlazar, llamar, retomar };
 }
