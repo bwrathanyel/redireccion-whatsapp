@@ -71,7 +71,9 @@
     const n = ++S.nSim, t = ahora();
     const tel = `+58414777${String(1000 + n + Math.floor(Math.random() * 8000)).slice(-4)}`;
     const f = o.cliente.ficha, destino = f ? `${o.cliente.destino}: ${f.hotel || 'hotel por definir'} · ${f.fechas}` : o.cliente.destino;
-    const lead = D.lead(o.cliente.nombre, 'POR ATENDER', destino, { canal: o.cliente.canal, servicio: 'Hospedaje', personas: f?.personas ?? null, fecha_estimada: f?.fecha ?? null });
+    // Mismo formato que arma el bot real (armarConsultaLead): Cotizaciones lo lee para autorrellenar hotel, fecha y personas.
+    const consulta = f ? [o.cliente.destino, f.fecha && `Fecha estimada: ${f.fecha}`, f.hotel && `Ya se le mostró: ${f.hotel}`].filter(Boolean).join(' | ') : destino;
+    const lead = D.lead(o.cliente.nombre, 'POR ATENDER', destino, { canal: o.cliente.canal, servicio: 'Hospedaje', personas: f?.personas ?? null, fecha_estimada: f?.fecha ?? null, destino_consulta: consulta });
     Object.assign(lead, { id: 9600 + n, telefono: tel, numero: tel, fecha_creacion: t, lote_asignado_at: t, vence_at: new Date(Date.now() + 3600e3).toISOString(), notas: f ? `Bot: ${f.bot}` : null });
     const sim = { ...o, leadId: lead.id, convId: 700 + n, tel, llego: Date.now(), pasos: { ...(o.pasos || {}) }, pend: nuevoPend(), ocupado: false, otraVez: false,
       escribiendo: false, insistencias: 0, cerrada: false, comprobanteEn: null, registroEn: null, temperatura: null, cots: [], guiaVista: null };

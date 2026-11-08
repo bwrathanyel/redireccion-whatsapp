@@ -33956,9 +33956,8 @@ let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosList
 let cbProductoPendiente = null;
 let cbFechasPendientes = null;
 function cbDesdeFicha(id, fechas = null) { cbProductoPendiente = Number(id); cbFechasPendientes = fechas; activateSection('cotizacion-boletos'); }
-async function cbAplicarProducto() {
-  const id = cbProductoPendiente, fechas = cbFechasPendientes; cbProductoPendiente = null; cbFechasPendientes = null;
-  const p = cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
+async function cbAplicarProducto(id, fechas = null) {
+  const p =cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
   if (!p) { errToast('No se pudo cargar ese producto'); return; }
   cbHoteles.set(id, p);
   const tipo = { hotel: 'hotel', paquete: 'paquete', excursion: 'fullday', traslado: 'traslado' }[p.tipo] || 'otro';
@@ -33977,11 +33976,12 @@ async function cbAplicarProducto() {
     if (it.auto) { delete it.auto.ida; delete it.auto.vuelta; }
     cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
   }
-  document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  return cbItems[i];
 }
 // Con Cotizaciones ya abierta (ficha abierta desde el buscador o el chat), activateSection no recarga: se aplica a mano.
 function cbDesdeLead(l) { cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
-const cbLeadDijo = l => [['Fecha', l.fecha_estimada], ['Personas', l.personas], ['Destino', l.destino]].filter(([, v]) => v && !String(v).includes('{{'));
+const cbLeadDijo = l => [['Fecha', l.fecha_estimada], ['Personas', l.personas], ['Destino', l.destino], ['Hotel', cbViajeLead(l).hotel]].filter(([, v]) => v && !String(v).includes('{{'));
 function cbPintarLead() {
   const box = document.getElementById('cb-lead');
   box.hidden = !cbLead;
@@ -33998,24 +33998,68 @@ function cbAplicarLead() {
   cbLead = l; cbPintarLead();
   document.getElementById('cb-cliente').value = l.nombre;
   cbResumenCliente(true);
-  cbPrecargarHotelDeLead(l, otro);
+  cbPrecargarHotelDeLead(l, otro).catch(e => console.error('cbPrecargarHotelDeLead', e));
 }
 // Misma lectura que leerPersonas (manychat-recordatorio-seguimiento); `personas` trae basura como {{cuf_...}} o "Dos".
 function cbPersonasLead(texto) {
-  const t = cbTarNorm(texto).replace(/\{\{.*?\}\}/g, ''), ninos = /(\d+)\s*(nin|menor|chamo)/;
-  const adultos = Number(t.match(/(\d+)\s*adult/)?.[1] ?? t.replace(new RegExp(ninos, 'g'), '').match(/\d+/)?.[0] ?? 0), menores = Number(t.match(ninos)?.[1] ?? 0);
-  return { adultos: adultos > 0 && adultos <= 20 ? adultos : 0, ninos: menores <= 10 ? menores : 0 };
+  const t = cbTarNorm(texto).replace(/\{\{.*?\}\}/g, ''), ninos = /(\d+)\s*(nin|menor|chamo)/, bebes = /(\d+)\s*(bebe|infant)/;
+  const adultos = Number(t.match(/(\d+)\s*adult/)?.[1] ?? t.replace(new RegExp(ninos, 'g'), '').replace(new RegExp(bebes, 'g'), '').match(/\d+/)?.[0] ?? 0);
+  const menores = Number(t.match(ninos)?.[1] ?? 0), infantes = Number(t.match(bebes)?.[1] ?? 0);
+  return { adultos: adultos > 0 && adultos <= 20 ? adultos : 0, ninos: menores <= 10 ? menores : 0, infantes: infantes <= 6 ? infantes : 0 };
 }
 // Solo día o rango dan fecha cierta; «mes» y «parcial» («fin de año») se quedan en el aviso. Un día suelto no inventa las noches.
-function cbFechasLead(l) {
-  if (!['dia', 'rango'].includes(l.fecha_viaje_exactitud) || !l.fecha_viaje_desde || l.fecha_viaje_desde < cbHoy()) return {};
-  return { ida: l.fecha_viaje_desde, vuelta: l.fecha_viaje_hasta > l.fecha_viaje_desde ? l.fecha_viaje_hasta : '' };
+// La cotización web no llena fecha_viaje_*: trae «Fechas: 3 al 7 de diciembre de 2026» o «31 de diciembre de 2026 al 3 de enero de 2027».
+function cbFechasLead(l, fechasWeb = '') {
+  let desde = l.fecha_viaje_desde, hasta = l.fecha_viaje_hasta;
+  const w = cbTarNorm(fechasWeb).match(/^(\d{1,2})(?: de ([a-z]+))?(?: de (\d{4}))? al (\d{1,2}) de ([a-z]+) de (\d{4})/);
+  if (!['dia', 'rango'].includes(l.fecha_viaje_exactitud) && w) {
+    const iso = (d, m, a) => MESL.includes(m) ? `${a}-${String(MESL.indexOf(m) + 1).padStart(2, '0')}-${d.padStart(2, '0')}` : '';
+    desde = iso(w[1], w[2] || w[5], w[3] || w[6]); hasta = iso(w[4], w[5], w[6]);
+  } else if (!['dia', 'rango'].includes(l.fecha_viaje_exactitud)) return {};
+  if (!desde || desde < cbHoy()) return {};
+  return { ida: desde, vuelta: hasta > desde ? hasta : '' };
 }
-function cbPrecargarHotelDeLead(l, otroLead) {
-  const it = cbItems.find(x => x.tipo === 'hotel' && (otroLead || (!x.ida && !x.vuelta))); if (!it) return;
-  const { adultos, ninos } = cbPersonasLead(l.personas);
-  const datos = { ...cbFechasLead(l), ...(adultos ? { adultos, ninos: ninos || '' } : {}) };
-  if (!Object.keys(datos).length) return;
+// destino_consulta guarda lo que el cliente ya eligió: la web, «Hotel: X (#id) | Tarifa de referencia: #id»; la IA, «Ya se le mostró: X (precio)».
+function cbViajeLead(l) {
+  const c = String(l?.destino_consulta || ''), parte = k => c.split('|').map(s => s.trim()).find(s => s.startsWith(k + ':'))?.slice(k.length + 1).trim() || '';
+  const web = parte('Hotel'), webId = web.match(/\(#(\d+)\)$/);
+  return {
+    hotel: (webId ? web.replace(/\s*\(#\d+\)$/, '') : parte('Ya se le mostró').replace(/\s*\(.*$/, '')).trim(),
+    producto_id: webId ? Number(webId[1]) : null, tarifa_id: Number(parte('Tarifa de referencia').match(/^#(\d+)/)?.[1]) || null,
+    todo_incluido: /todo incluido|all inclusive/.test(cbTarNorm(c)), fechas: cbFechasLead(l || {}, parte('Fechas')),
+    ...cbPersonasLead(l?.personas || parte('Viajeros')),
+  };
+}
+// «Ya se le mostró» trae el nombre que vio el cliente, no el id: gana el hotel con más palabras en común, a igualdad el del destino del lead.
+const CB_PALABRAS_VACIAS = new Set(['hotel', 'posada', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'en']);
+function cbHotelParecido(nombre, destino, productos) {
+  const palabras = s => cbTarNorm(s).replace(/[^a-z0-9 ]+/g, ' ').split(' ').filter(w => w && !CB_PALABRAS_VACIAS.has(w));
+  const q = palabras(nombre), dest = cbTarNorm(destino); if (!q.length) return null;
+  const puntaje = p => { const ws = new Set(palabras(p.nombre)); return q.filter(w => ws.has(w)).length / Math.max(q.length, ws.size); };
+  const mejor = productos.map(p => ({ p, s: puntaje(p) + (dest && cbTarNorm(p.destino).includes(dest) ? 0.01 : 0) })).sort((a, b) => b.s - a.s)[0];
+  return mejor && mejor.s >= 0.5 ? Number(mejor.p.id) : null;
+}
+async function cbHotelPorNombre(nombre, destino) {
+  const { data } = await sb.from('productos').select('id,nombre,destino').in('tipo', ['hotel', 'paquete']).eq('activo', true).limit(2000);
+  return cbHotelParecido(nombre, destino, data || []);
+}
+// Solo elige hotel si la cotización aún no tiene uno ni viene un producto desde la ficha; el asesor puede cambiar todo después.
+async function cbPrecargarHotelDeLead(l, otroLead) {
+  const v = cbViajeLead(l), conHotel = () => cbItems.some(x => ['hotel', 'paquete'].includes(x.tipo) && cbTitulo(x));
+  let elegido = null;
+  if (!cbProductoPendiente && !conHotel() && (v.producto_id || v.hotel)) {
+    const id = v.producto_id || await cbHotelPorNombre(v.hotel, l.destino);
+    if (id && cbLead?.id === l.id && !conHotel()) elegido = await cbAplicarProducto(id);
+  }
+  const it = elegido || cbItems.find(x => x.tipo === 'hotel' && (otroLead || (!x.ida && !x.vuelta))); if (!it) return;
+  const datos = { ...(otroLead || (!it.ida && !it.vuelta) ? v.fechas : {}), ...(v.adultos ? { adultos: v.adultos, ninos: v.ninos || '', infantes: v.infantes || '' } : {}) };
+  if (elegido) {
+    const filas = cbHotelFilas(it), t = v.tarifa_id && filas.find(f => Number(f.id) === v.tarifa_id);
+    const plan = (t && cbTarPlan(t)) || (v.todo_incluido && cbTarOpciones(filas, 'plan').find(p => /todo incluido|all inclusive/.test(cbTarNorm(p))));
+    if (plan) it.plan = plan;
+    if (t?.habitacion) Object.assign(it, { hab: t.habitacion, habitacion_manual: true });
+  }
+  if (!Object.keys(datos).length && !elegido) return;
   Object.assign(it, datos);
   if (it.auto) Object.keys(datos).forEach(k => delete it.auto[k]);
   cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
@@ -34040,7 +34084,7 @@ async function cbBuscarLead() {
   const f = leadBusqueda(input.value), tk = ++cbLeadTk;
   cbPintarBusquedaLead(f);
   if (f.q.length < f.minimo) { cbLeadsRes = []; return; }
-  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino').is('eliminado_at', null).ilike(f.campo, f.patron);
+  let q = sb.from('leads').select('id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino,destino_consulta').is('eliminado_at', null).ilike(f.campo, f.patron);
   if (ROL === 'asesor') q = q.eq('asesor', MI_NOMBRE);
   try {
     const { data, error } = await q.order('id', { ascending: false }).limit(8);
@@ -34717,7 +34761,7 @@ async function cbCargarSeccion() {
   if (cbSolicitudPendiente) await cbAplicarSolicitud(sel);
   cbCargarStops();
   if (cbLeadPendiente) cbAplicarLead();
-  if (cbProductoPendiente) await cbAplicarProducto();
+  if (cbProductoPendiente) { const id = cbProductoPendiente, fechas = cbFechasPendientes; cbProductoPendiente = cbFechasPendientes = null; await cbAplicarProducto(id, fechas); }
   cbResumenCliente();
   cbOffset = 0;
   await cbCargarHistorial(false);
