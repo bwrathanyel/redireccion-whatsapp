@@ -2306,6 +2306,8 @@ function setupAsesoresPrueba() {
   document.getElementById('ld-activar')?.addEventListener('click', () => guardarLoteDiario(true));
   document.getElementById('ld-pausar')?.addEventListener('click', () => guardarLoteDiario(false));
   document.getElementById('ld-ahora')?.addEventListener('click', repartirLoteDiarioAhora);
+  document.getElementById('la-guardar')?.addEventListener('click', guardarLoteAuto);
+  document.getElementById('la-toggle')?.addEventListener('click', encenderLoteAuto);
   ['ap-desde', 'ap-hasta'].forEach(id => document.getElementById(id)?.addEventListener('change', apInvalidar));
   document.getElementById('ap-cantidad')?.addEventListener('input', apRenderResumen);
   document.getElementById('ap-preview-wrap')?.addEventListener('change', e => {
@@ -2348,7 +2350,7 @@ async function loadAsesoresPruebaTab() {
   }
   apInvalidar();
   await cargarDestinosLotePrueba();
-  await Promise.all([cargarProgresoLotesPrueba(), cargarLotesDiarios()]);
+  await Promise.all([cargarProgresoLotesPrueba(), cargarLotesDiarios(), cargarLoteAuto()]);
 }
 async function cargarLotesDiarios() {
   const wrap = document.getElementById('ld-wrap');
@@ -2391,6 +2393,72 @@ async function repartirLoteDiarioAhora() {
   if (fallos.length) err.textContent = fallos.join(' · ');
   if (fallos.length < sel.length) okToast(`Repartidos: ${total} lead(s)`);
   await Promise.all([cargarLotesDiarios(), cargarProgresoLotesPrueba()]);
+}
+/* ---------- Reparto continuo (lote_auto_config + cron lote-auto-tick cada 5 min) ----------
+   Guarda una foto de los filtros de arriba: cambiarlos después no toca lo guardado
+   hasta volver a guardar. */
+const LA_CADA = [{ valor: '15', etiqueta: '15 min' }, { valor: '30', etiqueta: '30 min' }, { valor: '60', etiqueta: '1 h' },
+  { valor: '120', etiqueta: '2 h' }, { valor: '180', etiqueta: '3 h' }, { valor: '240', etiqueta: '4 h' }];
+let laConfig = null;
+const laFecha = iso => iso ? new Date(iso).toLocaleDateString('es-VE') : '';
+async function cargarLoteAuto() {
+  const { data, error } = await sb.rpc('lote_auto_leer');
+  if (error || !data) { document.getElementById('la-estado').textContent = error?.message || 'No se pudo leer la configuración.'; return; }
+  laConfig = data;
+  renderChipGroup('la-cada-chips', LA_CADA, { multi: false, seleccion: [String(data.cada_min)] });
+  document.getElementById('la-cantidad').value = data.cantidad;
+  document.getElementById('la-tope').value = data.tope_pendientes;
+  document.getElementById('la-desde').value = (data.hora_desde || '08:00').slice(0, 5);
+  document.getElementById('la-hasta').value = (data.hora_hasta || '18:00').slice(0, 5);
+  const badge = document.getElementById('la-badge');
+  badge.textContent = data.activo ? 'Encendido' : 'Apagado';
+  badge.style.cssText = `margin-left:8px;${data.activo ? 'color:#22c55e;background:#16a34a2e' : 'color:var(--muted);background:#64748b2e'}`;
+  const tog = document.getElementById('la-toggle');
+  tog.innerHTML = data.activo ? '<i class="fas fa-pause"></i> Apagar' : '<i class="fas fa-play"></i> Encender sin cambiar nada';
+  tog.disabled = !data.activo && !data.asesores.length;
+  const cada = LA_CADA.find(o => o.valor === String(data.cada_min))?.etiqueta || `${data.cada_min} min`;
+  const hasta = data.fecha_hasta ? new Date(new Date(data.fecha_hasta).getTime() - 86400000).toISOString() : null;
+  const fechas = data.fecha_desde || hasta ? `${laFecha(data.fecha_desde) || 'el inicio'} a ${laFecha(hasta) || 'hoy'}` : 'todas las fechas';
+  const ult = data.ultimo_resultado?.asesores || [];
+  document.getElementById('la-estado').innerHTML = data.asesores.length ? `
+    <div><b>Guardado:</b> ${esc(data.asesores.join(', '))} · ${data.cantidad} cada ${esc(cada)}, de ${esc(document.getElementById('la-desde').value)} a ${esc(document.getElementById('la-hasta').value)} · tope ${data.tope_pendientes} pendientes</div>
+    <div><b>Leads:</b> ${esc(fechas)} · ${data.destinos?.length ? esc(data.destinos.join(', ')) : 'todos los destinos'} · ${fmt(data.disponibles)} disponibles</div>
+    <div><b>Última tanda:</b> ${data.ultima_corrida_at ? new Date(data.ultima_corrida_at).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' }) + (ult.length ? ' · ' + ult.map(r => `${esc(r.asesor.split(' ')[0])} +${r.asignados}`).join(', ') : '') : 'todavía ninguna'}</div>`
+    : 'Sin configurar: elige asesores y filtros arriba y toca «Guardar y encender».';
+}
+async function guardarLoteAuto() {
+  const err = document.getElementById('la-err'); err.textContent = '';
+  const sel = apAsesoresSel();
+  if (!sel.length) { err.textContent = 'Elige al menos un asesor arriba.'; return; }
+  const venceAt = apVenceAt();
+  if (venceAt === undefined) { err.textContent = 'Elige el plazo para contactarlos arriba.'; return; }
+  const cantidad = parseInt(document.getElementById('la-cantidad').value, 10), tope = parseInt(document.getElementById('la-tope').value, 10);
+  if (!(cantidad >= 1 && cantidad <= 50)) { err.textContent = 'Por tanda: entre 1 y 50.'; return; }
+  if (!(tope >= 1 && tope <= 200)) { err.textContent = 'Tope de pendientes: entre 1 y 200.'; return; }
+  const desde = document.getElementById('la-desde').value, hasta = document.getElementById('la-hasta').value;
+  if (!desde || !hasta || desde === hasta) { err.textContent = 'Revisa el horario.'; return; }
+  const cada = Number(chipGroupValores('la-cada-chips')[0] || 60);
+  const f = apFiltros(), sla = AP_SLA_OPCIONES.find(o => o.valor === chipGroupValores('ap-sla-chips')[0]);
+  if (!(await confirmarSheet({ titulo: '¿Encender el reparto continuo?',
+    detalle: `${sel.map(apNombre).join(', ')} reciben ${cantidad} cada ${LA_CADA.find(o => o.valor === String(cada)).etiqueta}, de ${desde} a ${hasta}, hasta tener ${tope} pendientes.\n\nUsa el período, destinos y plazo de arriba. Los leads pasan a ser suyos, con tarea de contacto, en Clientes Fríos.`,
+    textoOk: 'Encender' }))) return;
+  const { data, error } = await sb.rpc('lote_auto_guardar', { p_usuario_ids: sel, p_cada_min: cada, p_cantidad: cantidad, p_tope_pendientes: tope,
+    p_hora_desde: desde, p_hora_hasta: hasta, p_fecha_desde: f.p_fecha_desde, p_fecha_hasta: f.p_fecha_hasta,
+    p_destinos: f.p_destinos.length ? f.p_destinos : null, p_estados: f.p_estados, p_vence_horas: sla?.horas ?? null, p_activo: true });
+  if (error || !data?.ok) {
+    err.textContent = { no_integral: 'Algún asesor elegido no es integral.', horario_vacio: 'Revisa el horario.' }[data?.error] || error?.message || 'No se pudo guardar.';
+    return;
+  }
+  okToast('Reparto continuo encendido');
+  await cargarLoteAuto();
+}
+async function encenderLoteAuto() {
+  const err = document.getElementById('la-err'); err.textContent = '';
+  const activo = !laConfig?.activo;
+  const { data, error } = await sb.rpc('lote_auto_encender', { p_activo: activo });
+  if (error || !data?.ok) { err.textContent = data?.error === 'sin_asesores' ? 'Primero guarda una configuración.' : (error?.message || 'No se pudo cambiar.'); return; }
+  okToast(activo ? 'Reparto continuo encendido' : 'Reparto continuo apagado');
+  await cargarLoteAuto();
 }
 // contar_lote_prueba solo usa p_usuario_id para validar que sea asesor activo:
 // sirve cualquiera del listado, así el conteo sale antes de elegir asesores.

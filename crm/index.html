@@ -9590,6 +9590,22 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           </div>
         </div>
         <div class="card" style="margin-top:16px">
+          <h2><i class="fas fa-rotate"></i> Reparto continuo <span id="la-badge" class="badge-st" style="margin-left:8px"></span></h2>
+          <div class="csub">Reparte clientes fríos solo, en tandas a lo largo del día, con los asesores, período, destinos y plazo elegidos arriba. Le llegan a Clientes Fríos. Si un asesor llega al tope de pendientes, deja de recibir hasta que trabaje lo que tiene. Nunca toma leads creados en los últimos 30 días.</div>
+          <div class="ap-fila" style="flex-wrap:wrap;margin-top:10px">
+            <div><label class="fl">Cada cuánto</label><div id="la-cada-chips" class="chip-group"></div></div>
+            <div><label class="fl" for="la-cantidad">Por asesor en cada tanda</label><input id="la-cantidad" class="ei" type="number" min="1" max="50" value="2" inputmode="numeric" style="width:90px"></div>
+            <div><label class="fl" for="la-tope">Tope de pendientes</label><input id="la-tope" class="ei" type="number" min="1" max="200" value="20" inputmode="numeric" style="width:90px"></div>
+            <div><label class="fl" for="la-desde">Horario (Caracas)</label><div style="display:flex;gap:6px;align-items:center"><input id="la-desde" class="ei" type="time" value="08:00"><span style="color:var(--muted)">a</span><input id="la-hasta" class="ei" type="time" value="18:00"></div></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            <button class="dbtn save" id="la-guardar" type="button"><i class="fas fa-floppy-disk"></i> Guardar y encender</button>
+            <button class="dbtn" id="la-toggle" type="button"></button>
+          </div>
+          <div class="edit-err" id="la-err" role="alert"></div>
+          <div id="la-estado" style="margin-top:10px;font-size:12px;color:var(--muted2);line-height:1.6"></div>
+        </div>
+        <div class="card" style="margin-top:16px">
           <h2><i class="fas fa-sun"></i> Lote diario automático</h2>
           <p style="color:var(--muted);font-size:12px;margin:4px 0 10px">Cada mañana (7:30) se le completa al asesor la cola de recontacto hasta la cantidad elegida: leads de los últimos 90 días sin cotizar, con teléfono, los más recientes primero. Lo que no trabajó ayer no se acumula.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
