@@ -31985,7 +31985,7 @@ function vcHabElegir(op) {
 function vcHotelClick(e) {
   const t = e.target, hotel = t.closest('[data-cb-hotel]'), abierta = document.querySelector('#vc-hab-picker .cb-picker-lista:not([hidden])');
   if (abierta && !abierta.closest('.cb-picker').contains(t)) cbHabCerrar(abierta.closest('.cb-picker'));
-  if (hotel) { vcHotelElegir(hotel.dataset.cbHotel); return true; }
+  if (hotel) { if (hotel.closest('[data-si]')) vcServHotelElegir(hotel); else vcHotelElegir(hotel.dataset.cbHotel); return true; }
   const hab = t.closest('[data-cb-hab]'); if (hab) { vcHabElegir(hab); return true; }
   const abrir = t.closest('[data-cb-hab-abrir]');
   if (abrir) { const op = abrir.parentElement.querySelector('.cb-picker-lista'); op.hidden = !op.hidden; abrir.setAttribute('aria-expanded', String(!op.hidden)); return true; }
@@ -32006,6 +32006,11 @@ function vcHotelSetup(form) {
   inp.addEventListener('blur', () => { lista.hidden = true; inp.setAttribute('aria-expanded', 'false'); });
   inp.addEventListener('keydown', e => cbPickerTeclas(e, lista, op => vcHotelElegir(op.dataset.cbHotel)));
   form.addEventListener('pointerdown', e => { if (e.target.closest('[data-cb-hotel],[data-cb-hab]')) e.preventDefault(); });
+  // «Otro hotel» de servicios adicionales: el mismo buscador, con su lista al lado del input.
+  const servs = document.getElementById('vc-servicios'), esBusca = t => t.matches('#vc-servicios [data-busca="hotel"]');
+  servs.addEventListener('focusin', e => { if (esBusca(e.target)) { cbCargarProductos(); cbHotelBuscar(e.target); } });
+  servs.addEventListener('focusout', e => { if (esBusca(e.target)) { e.target.nextElementSibling.hidden = true; e.target.setAttribute('aria-expanded', 'false'); } });
+  servs.addEventListener('keydown', e => { if (esBusca(e.target)) cbPickerTeclas(e, e.target.nextElementSibling, vcServHotelElegir); });
   form.addEventListener('keydown', e => {
     const t = e.target; if (!t.matches('[data-cb-hab-abrir]')) return;
     const box = t.closest('.cb-picker'), op = box.querySelector('.cb-picker-lista');
@@ -32023,21 +32028,28 @@ const VC_SERV_TIPOS = {
   seguro: { nombre: 'Seguro de viaje', pdf: 'SEGURO DE VIAJE', icono: 'fa-shield-heart', ph: 'Assist Card, Universal Assistance...' },
   otro: { nombre: 'Otro servicio', pdf: '', icono: 'fa-plus', ph: 'Cena, entrada, alquiler...' },
 };
-const vcServConTarifario = tipo => tipo !== 'otro' && tipo !== 'seguro';
+const vcServConTarifario = tipo => tipo !== 'otro' && tipo !== 'seguro' && tipo !== 'hotel';
 const vcSeguroVigencia = s => s.fecha && s.hasta && s.hasta !== s.fecha ? `${vcFechaDma(s.fecha)} al ${vcFechaDma(s.hasta)}` : vcFechaDma(s.fecha || s.hasta);
 const vcHotelNoches = s => (s.fecha && s.hasta ? Math.round((new Date(s.hasta) - new Date(s.fecha)) / 864e5) : 0);
 const vcHotelEstadia = s => [vcSeguroVigencia(s), vcHotelNoches(s) > 0 && `${vcHotelNoches(s)} ${vcHotelNoches(s) === 1 ? 'noche' : 'noches'}`].filter(Boolean).join(' · ');
 // Otro hotel (2026-11-09): un segundo hospedaje en el mismo voucher; habitación, salida, infantes y localizador viajan en vouchers.servicios.
-function vcHotelHtml(s, f) {
-  const num = 'type="number" min="0" step="1" inputmode="numeric"', prod = vcServProd(s);
+function vcHotelHtml(s, i, f) {
+  const num = 'type="number" min="0" step="1" inputmode="numeric"', prod = s.producto_id ? cbHoteles.get(Number(s.producto_id)) : null;
   return `<div class="vc-fila">
-      ${f('nombre', 'Hotel', `list="vc-dl-hotel" autocomplete="off" placeholder="${esc(VC_SERV_TIPOS.hotel.ph)}"`, ' s2')}${f('habitacion', 'Habitación / clase', 'maxlength="80" placeholder="Habitación doble"')}${f('opcion', 'Modalidad', 'list="vc-dl-modalidad" maxlength="80" autocomplete="off" placeholder="Todo incluido"')}
+      <div class="vc-c s2"><span id="vc-sh-${i}-lbl">Hotel</span><div class="cb-picker"><input class="ei" data-sk="nombre" data-busca="hotel" value="${esc(String(s.nombre ?? ''))}" placeholder="${esc(VC_SERV_TIPOS.hotel.ph)}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="vc-sh-${i}" aria-labelledby="vc-sh-${i}-lbl"><div id="vc-sh-${i}" class="cb-picker-lista" role="listbox" aria-label="Hoteles" hidden></div></div></div>${f('habitacion', 'Habitación / clase', 'maxlength="80" placeholder="Habitación doble"')}${f('opcion', 'Modalidad', 'list="vc-dl-modalidad" maxlength="80" autocomplete="off" placeholder="Todo incluido"')}
       ${prod ? `<div class="vc-serv-hint"><span class="vc-pill ok"><i class="fas fa-link"></i> Tarifario</span>${esc(prod.destino || '')}</div>` : ''}
       ${f('fecha', 'Entrada', 'type="date"')}${f('hasta', 'Salida', 'type="date"')}
       ${f('adultos', 'Adultos', num)}${f('ninos', 'Niños (3+ años)', num)}${f('infantes', 'Infantes (0-2 años)', num)}
       ${f('localizador', 'Localizador (opcional)', 'maxlength="40" autocomplete="off" spellcheck="false"')}${f('monto', 'Monto (USD)', 'type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"')}
       ${f('detalle', 'Detalle (opcional)', 'placeholder="Horarios de entrada y salida, qué incluye..."', ' s3')}
     </div>`;
+}
+function vcServHotelElegir(op) {
+  const i = Number(op.closest('[data-si]').dataset.si), s = vcServicios[i], p = cbHoteles.get(Number(op.dataset.cbHotel));
+  if (!s || !p) return;
+  s.producto_id = p.id; s.nombre = p.nombre;
+  vcPintarServicios(); vcActualizarPreview();
+  document.querySelector(`#vc-servicios [data-si="${i}"] [data-sk="habitacion"]`)?.focus();
 }
 const vcHotelFalta = s => (s.fecha && s.hasta && s.hasta < s.fecha ? ['[data-sk="hasta"]', `La salida de ${String(s.nombre || '').trim() || 'otro hotel'} es antes de la entrada`] : null);
 // Seguro de viaje (2026-11-03): aseguradora va en nombre y plan/cobertura en opcion; vigencia, póliza y asistencia viajan en vouchers.servicios.
@@ -32203,7 +32215,7 @@ function vcServHtml(s, i) {
   return `<div class="vc-serv" data-si="${i}" data-key="${vcServKey(s)}">
     <div class="vc-serv-cab"><i class="fas ${t.icono}"></i><span>${t.nombre}</span><b data-s-importe>${s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''}</b>
       <button class="vc-quitar" type="button" data-vc-squitar="${i}" title="Quitar servicio" aria-label="Quitar ${esc(t.nombre)}"><i class="fas fa-trash"></i></button></div>
-    ${s.tipo === 'boleto' ? vcBoletoHtml(s, i, f) + '</div>' : s.tipo === 'seguro' ? vcSeguroHtml(s, f) + '</div>' : s.tipo === 'hotel' ? vcHotelHtml(s, f) + '</div>' : `<div class="vc-fila">
+    ${s.tipo === 'boleto' ? vcBoletoHtml(s, i, f) + '</div>' : s.tipo === 'seguro' ? vcSeguroHtml(s, f) + '</div>' : s.tipo === 'hotel' ? vcHotelHtml(s, i, f) + '</div>' : `<div class="vc-fila">
       ${f('nombre', conTarifario ? 'Servicio' : 'Descripción', `placeholder="${esc(t.ph)}"${conTarifario ? ` list="vc-dl-${s.tipo}" autocomplete="off"` : ''}`, ' s2')}
       ${prod?.tarifas.length ? `<label class="vc-c s2"><span>Tarifa / opción</span><select class="ei" data-sk="tarifa_id">${prod.tarifas.map(x => `<option value="${x.id}"${x.id === s.tarifa_id ? ' selected' : ''}>${esc(vcTarifaTxt(x))}</option>`).join('')}</select></label>`
         : f('opcion', 'Opción', `placeholder="${s.tipo === 'traslado' ? 'Privado, compartido, ida y vuelta...' : 'Opcional'}"`, ' s2')}
@@ -32239,7 +32251,6 @@ function vcAgregarServicio(tipo) {
       adultos: parseInt(val('vc-adultos'), 10) || '', ninos: /^\d+$/.test(ni) ? Number(ni) : '', infantes: parseInt(val('vc-infantes'), 10) || '', monto: '', detalle: '' });
     vcPintarServicios();
     document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="nombre"]`)?.focus();
-    vcCargarTarifario();
     return;
   }
   if (tipo === 'seguro') {
@@ -32266,6 +32277,9 @@ function vcServInput(el) {
     // Pasar a ida y vuelta con un solo tramo arma el regreso invertido.
     if (k === 'viaje' && el.value === 'ida_vuelta' && s.tramos.length === 1) { const t = s.tramos[0]; s.tramos.push(vcBolTramo(val('vc-fecha-salida'), t.destino, t.origen)); repintar = true; }
     s.nombre = vcBolNombre(s);
+  } else if (k === 'nombre' && s.tipo === 'hotel') {
+    if (s.producto_id && el.value !== cbHoteles.get(Number(s.producto_id))?.nombre) s.producto_id = null;
+    cbHotelBuscar(el);
   } else if (k === 'nombre' && vcServConTarifario(s.tipo)) {
     const p = vcTarifario?.porLabel[s.tipo]?.get(el.value.trim()) || null;
     if ((p?.id || null) !== s.producto_id) {
