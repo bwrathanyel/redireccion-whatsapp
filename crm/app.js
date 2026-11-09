@@ -31799,6 +31799,10 @@ function setupVoucher() {
     if (id === 'vc-lead-q') { clearTimeout(vcLeadTimer); vcLeadTimer = setTimeout(vcBuscarLeadsQ, 250); return; }
     if (e.target.dataset.sk) { vcServInput(e.target); return; }
     if (e.target.dataset.st || e.target.dataset.sp) { vcBolInput(e.target); return; }
+    if (id === 'vc-hosp-monto') {
+      vcHospManual = e.target.value === '' ? null : Math.max(0, Number(e.target.value) || 0);
+      vcHospMonto = vcHospManual ?? vcHospTarifa; vcAjustarTotal(); vcActualizarPreview(); return;
+    }
     if (id === 'vc-plan-selector') {
       const p = e.target.value;
       if (p === '__otra') { vcElegirPlan(''); return; }
@@ -31932,7 +31936,7 @@ function vcHotelPlan(plan) {
 // un ítem armado con los campos del voucher, siempre 1 habitación. Sin fechas muestra la tarifa más
 // baja vigente; con fechas, la de cada noche. Infantes (0-2) no pagan alojamiento, como en Cotizaciones.
 const vcPaxN = id => { const m = /^\s*(\d{1,2})/.exec(val(id)); return m ? Number(m[1]) : 0; };
-let vcHospMonto = 0, vcAutoAplicado = 0;
+let vcHospMonto = 0, vcAutoAplicado = 0, vcHospTarifa = 0, vcHospManual = null;
 function vcHospItem(hab, adultosDef = 0) {
   const it = { tipo: 'hotel', producto_id: vcHotel.producto_id, plan: vcHotel.plan, hab, ida: val('vc-fecha-entrada'), vuelta: val('vc-fecha-salida'),
     adultos: parseInt(val('vc-adultos'), 10) || adultosDef, ninos: vcPaxN('vc-ninos'), habitaciones: 1, unidad: 'persona_noche', unidad_manual: false, tarifa_variante: '', variante_auto: true };
@@ -31991,13 +31995,17 @@ function vcHospRecalc() {
     }
     if (inf) html += `<br>${rvPlural(inf, 'infante', 'infantes')}: alojamiento gratis, confirma con el hotel.`;
   }
-  vcHospMonto = monto; box.innerHTML = html; box.hidden = !html;
+  // Si cambian fechas o pax cambia la tarifa: un monto a mano de la estadía anterior ya no vale.
+  if (!vcHotel._cargando && monto !== vcHospTarifa) { vcHospTarifa = monto; vcHospManual = null; }
+  if (vcHotel.producto_id && !vcHotel._cargando) html += `<label class="vc-c" style="margin-top:8px;max-width:220px"><span>Monto del hospedaje (USD)</span><input id="vc-hosp-monto" class="ei" type="number" min="0" step="0.01" inputmode="decimal" value="${vcHospManual ?? (monto || '')}"></label>`;
+  vcHospMonto = vcHospManual ?? monto; box.innerHTML = html; box.hidden = !html;
   vcAjustarTotal();
 }
 async function vcHotelElegir(id) {
   const p = cbHoteles.get(Number(id)); if (!p) return;
   const carga = ++vcHotel.carga, inp = document.getElementById('vc-destino');
   inp.value = p.nombre; inp.setAttribute('aria-expanded', 'false'); document.getElementById('vc-hoteles').hidden = true;
+  vcHospManual = null;
   Object.assign(vcHotel, { producto_id: p.id, nombre: p.nombre, plan: '', planes: [], hab: '', hab_libre: false, hab_manual: false, _cargando: true, _tarifaError: false });
   vcHotelPintar(); vcHospRecalc(); vcActualizarPreview();
   try {
@@ -32017,6 +32025,7 @@ async function vcHotelElegir(id) {
   if (vcHotel.carga === carga && !ent.value && [inp, document.body].includes(document.activeElement)) ent.focus();
 }
 function vcHotelSoltar() {
+  vcHospManual = null;
   Object.assign(vcHotel, { producto_id: null, nombre: '', plan: '', planes: [], hab: '', hab_libre: false, hab_manual: false, _cargando: false, _tarifaError: false, carga: vcHotel.carga + 1 });
   vcHotelPintar(); vcSyncPlanes(); vcHospRecalc();
 }
@@ -32532,7 +32541,7 @@ function vcActualizarPreview() {
   $('vc-ref-box').hidden = !pm;
   $('vc-b-ref').innerHTML = forma ? `<i class="fas fa-receipt"></i> ${esc(forma)}${pm && ref ? ` · Ref. <b>${esc(ref)}</b>` : ''}` : '';
   $('vc-b-ref').hidden = !forma;
-  const incluye = [vcHospMonto > 0 ? `<b>${vcMoney(vcHospMonto)}</b> de hospedaje según tarifario` : '', vcServSuma > 0 ? `<b>${vcMoney(vcServSuma)}</b> de servicios adicionales` : ''].filter(Boolean).join(' y ');
+  const incluye = [vcHospMonto > 0 ? `<b>${vcMoney(vcHospMonto)}</b> de hospedaje${vcHospManual === null ? ' según tarifario' : ''}` : '', vcServSuma > 0 ? `<b>${vcMoney(vcServSuma)}</b> de servicios adicionales` : ''].filter(Boolean).join(' y ');
   $('vc-total-nota').innerHTML = incluye ? `<i class="fas fa-circle-info"></i> El total incluye ${incluye} (se suman solos; puedes corregirlo a mano).` : '';
   $('vc-total-nota').hidden = !incluye;
   txt('vc-b-total', vcMoney(total)); txt('vc-b-pagado', vcMoney(pagado)); txt('vc-b-resta', vcMoney(resta));
@@ -32590,7 +32599,7 @@ function vcGuardarBorrador() {
   const h = vcHotel.producto_id ? { producto_id: vcHotel.producto_id, nombre: vcHotel.nombre, plan: vcHotel.plan, hab: vcHotel.hab, hab_libre: vcHotel.hab_libre, hab_manual: vcHotel.hab_manual } : null;
   try {
     localStorage.setItem(vcBorradorClave(), JSON.stringify({ campos, servicios: vcServicios, lead: vcLead, sinReserva: vcSinReserva, hotel: h,
-      hospMonto: vcHospMonto, autoAplicado: vcAutoAplicado, diasManual: vcDiasManual, restaManual: vcRestaManual, planOtro: vcPlanOtro }));
+      hospMonto: vcHospMonto, hospTarifa: vcHospTarifa, hospManual: vcHospManual, autoAplicado: vcAutoAplicado, diasManual: vcDiasManual, restaManual: vcRestaManual, planOtro: vcPlanOtro }));
   } catch { /* sin storage */ }
 }
 async function vcRestaurarBorrador() {
@@ -32607,6 +32616,7 @@ async function vcRestaurarBorrador() {
   vcServicios = Array.isArray(b.servicios) ? b.servicios : [];
   vcServSuma = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
   vcHospMonto = Number(b.hospMonto) || 0; vcAutoAplicado = Number(b.autoAplicado) || 0;
+  vcHospTarifa = Number(b.hospTarifa) || 0; vcHospManual = b.hospManual ?? null;
   vcDiasManual = !!b.diasManual; vcRestaManual = !!b.restaManual; vcPlanOtro = !!b.planOtro;
   vcPintarServicios(); vcSyncChips();
   if (b.lead?.id) vcElegirLead(b.lead);
