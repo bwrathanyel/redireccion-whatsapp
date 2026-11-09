@@ -8517,7 +8517,7 @@ function inboxCardHtml(l) {
 async function atenderInboxLead(l) {
   if (leadSoloLectura()) return;
   // Número compartido: pasa a ATENDIDO cuando el asesor responde desde el chat.
-  if (l.whatsapp_perfil_compartido) { await waAbrirChatDeTelefono(l.telefono); return false; }
+  if (l.whatsapp_perfil_compartido) { await waAbrirChatDeTelefono(l.telefono, true); return false; }
   // window.open ANTES del await -- si va después, ya no corre dentro del
   // gesto síncrono del click y Chrome/Firefox lo bloquean como popup. Si de
   // todos modos vuelve null (ej. llamado async desde manejarDeepLinkLeadAccion
@@ -30150,7 +30150,7 @@ async function waCargarAnteriores() {
 // Número compartido: no hay bot ni teléfono del asesor, se responde desde acá.
 const waEsCompartido = () => !!waNumeros?.find(n => n.id === waCuenta)?.compartido;
 const waAtributosLead = (l, wa) => l.whatsapp_perfil_compartido ? `href="#" data-wa-compartido="${wa}"` : `href="https://wa.me/${wa}" target="_blank" rel="noopener"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}`;
-async function waAbrirChatDeTelefono(telefono) {
+async function waAbrirChatDeTelefono(telefono, conPlantilla) {
   const fin = String(telefono || '').replace(/\D/g, '').slice(-10);
   if (fin.length < 10) { errToast('Este lead no tiene un teléfono válido'); return; }
   if (!waNumeros) await loadWhatsapp();
@@ -30161,9 +30161,10 @@ async function waAbrirChatDeTelefono(telefono) {
   const buscar = () => waChats.find(c => String(c.telefono).replace(/\D/g, '').slice(-10) === fin);
   for (let pag = 0; pag < 4 && !buscar() && waChatsCursor; pag++) await waCargarChats(false, waChatsCursor);
   const chat = buscar();
-  if (!chat) { await waPlantillaAbrir(telefono); return; }
+  if (!chat && !conPlantilla) { await waPlantillaAbrir(telefono); return; }
   await new Promise(listo => trasCerrarDrawer(() => { activateSection('whatsapp'); listo(); }));
-  waAbrirChat(chat);
+  if (chat) waAbrirChat(chat);
+  if (conPlantilla) await waPlantillaAbrir(telefono, chat?.nombre);
 }
 // Plantillas de la WABA del número compartido. {{cliente}} = «Sr./Sra. + primer nombre»;
 // si el nombre parece usuario de IG va la variante sin nombre (dueño: nada de «estimado cliente»).
