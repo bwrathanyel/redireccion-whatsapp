@@ -24,7 +24,6 @@ const CSS = `
 .fe-bloque h3 small{margin-left:auto;color:var(--muted);font-weight:500;font-size:11.5px}
 .fe-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 11px}
 .fe-grid .fe-2{grid-column:span 2}
-.fe-grid .fe-3{grid-column:span 3}
 .fe-grid .fe-4{grid-column:1/-1}
 .fe-grid .field{margin-bottom:0}
 .fe-grid .fl,.fe-bloque .fl{margin:9px 0 4px}
@@ -77,7 +76,6 @@ const CSS = `
   .fe-layout{grid-template-columns:minmax(0,1fr)}
   .fe-lateral{position:static}
   .fe-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .fe-grid .fe-3{grid-column:1/-1}
 }
 `;
 
@@ -88,7 +86,6 @@ export const CONDICIONES_DEFECTO = [
   'Los precios solo se garantizan con la emisión del boleto o confirmación del voucher de servicio.',
   'Una vez confirmada la reserva, los cambios o cancelaciones estarán sujetos a las penalidades del proveedor.',
 ].join('\n');
-export const CONDICIONES_SIN_PRECIOS = 'Una vez confirmada la reserva, los cambios o cancelaciones estarán sujetos a las penalidades del proveedor.';
 const ATAJOS = [['Boleto aéreo', 'fa-plane'], ['Hospedaje', 'fa-bed'], ['Alquiler de vehículo', 'fa-car'], ['Traslado', 'fa-van-shuttle'], ['Tour', 'fa-map-location-dot']];
 const ERRORES = {
   empresa_requerida: 'Elige la empresa a la que va la factura.',
@@ -209,16 +206,16 @@ export async function construirPdf(f, c) {
   });
 
   // ---------- Conceptos ----------
-  const items = f.items || [], sin = !!f.sin_montos, ultima = sin ? 2 : 4;
+  const items = f.items || [];
   const textoItem = it => [limpiar(it.descripcion), limpiar(it.detalle)].filter(Boolean).join('\n');
   doc.autoTable({
     startY: yb + alto + 18, theme: 'plain', margin: { left: X0, right: 612 - X1, bottom: 70 }, rowPageBreak: 'avoid',
     styles: { font: F, fontStyle: st('medium'), fontSize: 8.8, textColor: P.navy, cellPadding: { top: 8, bottom: 8, left: 9, right: 9 }, valign: 'top' },
     headStyles: { fillColor: P.navy, lineColor: P.navy, lineWidth: .4, textColor: 255, fontStyle: st('semibold'), fontSize: 7.4, cellPadding: { top: 7, bottom: 7, left: 9, right: 9 } },
     alternateRowStyles: { fillColor: P.suave },
-    columnStyles: { 0: { cellWidth: 28, halign: 'center', textColor: P.gris }, 2: { cellWidth: 52, halign: 'right' }, ...(sin ? {} : { 3: { cellWidth: 82, halign: 'right' }, 4: { cellWidth: 92, halign: 'right', fontStyle: st('semibold') } }) },
-    head: [[{ content: '#', styles: { halign: 'center' } }, 'DESCRIPCIÓN', { content: 'CANT.', styles: { halign: 'right' } }, ...(sin ? [] : [{ content: 'TARIFA', styles: { halign: 'right' } }, { content: 'IMPORTE', styles: { halign: 'right' } }])]],
-    body: items.map((it, i) => [String(i + 1), textoItem(it), r2(it.cantidad).toLocaleString('es-VE'), ...(sin ? [] : [usd(it.tarifa), usd(it.importe)])]),
+    columnStyles: { 0: { cellWidth: 28, halign: 'center', textColor: P.gris }, 2: { cellWidth: 52, halign: 'right' }, 3: { cellWidth: 82, halign: 'right' }, 4: { cellWidth: 92, halign: 'right', fontStyle: st('semibold') } },
+    head: [[{ content: '#', styles: { halign: 'center' } }, 'DESCRIPCIÓN', { content: 'CANT.', styles: { halign: 'right' } }, { content: 'TARIFA', styles: { halign: 'right' } }, { content: 'IMPORTE', styles: { halign: 'right' } }]],
+    body: items.map((it, i) => [String(i + 1), textoItem(it), r2(it.cantidad).toLocaleString('es-VE'), usd(it.tarifa), usd(it.importe)]),
     // La descripción va en negrita y el detalle debajo en gris: autotable no mezcla estilos en
     // una celda, así que se mide con su texto y se dibuja a mano.
     willDrawCell: d => { if (d.section === 'body' && d.column.index === 1) { d.cell._lineas = d.cell.text; d.cell.text = []; } },
@@ -231,7 +228,7 @@ export async function construirPdf(f, c) {
         doc.text(ld, d.cell.x + 9, yy, { lineHeightFactor: 1.15 }); yy += ld.length * 8.8 * 1.15;
         if (it.detalle) { font('normal', 7.8, P.gris); doc.text(doc.splitTextToSize(limpiar(it.detalle), ancho), d.cell.x + 9, yy + 1, { lineHeightFactor: 1.15 }); }
       }
-      if (d.section === 'body' && d.column.index === ultima) { doc.setDrawColor(...P.linea); doc.setLineWidth(.6); doc.line(X0, d.cell.y + d.cell.height, X1, d.cell.y + d.cell.height); }
+      if (d.section === 'body' && d.column.index === 4) { doc.setDrawColor(...P.linea); doc.setLineWidth(.6); doc.line(X0, d.cell.y + d.cell.height, X1, d.cell.y + d.cell.height); }
     },
   });
   y = doc.lastAutoTable.finalY + 16;
@@ -242,33 +239,31 @@ export async function construirPdf(f, c) {
   if (Number(f.iva_pct) > 0) filas.push([`IVA (${pct(f.iva_pct)})`, usd(f.iva)]);
   const saldo = f.estado === 'pagada' || f.estado === 'anulada' ? 0 : f.total;
   const condiciones = String(f.condiciones || '').split('\n').map(s => s.trim()).filter(Boolean);
-  if (f.tasa_pago && !sin) condiciones.push(tasaTxt(f.tasa_pago));
+  if (f.tasa_pago) condiciones.push(tasaTxt(f.tasa_pago));
   const wNotas = 290, xTot = X0 + wNotas + 22, wTot = X1 - xTot;
   font('normal', 8, P.cuerpo);
   const notaLs = f.notas ? doc.splitTextToSize(limpiar(f.notas), wNotas - 14) : [];
   const condLs = condiciones.map(t => doc.splitTextToSize(limpiar(t), wNotas - 12));
   const altoNotas = (notaLs.length ? 22 + notaLs.length * 11 + 10 : 0) + (condLs.length ? 22 + condLs.reduce((s, l) => s + l.length * 10.5 + 4, 0) : 0);
-  const altoTot = (sin ? 0 : filas.length * 20 + 36 + 30) + (f.estado === 'pagada' ? 48 : 0);
+  const altoTot = filas.length * 20 + 36 + 30 + (f.estado === 'pagada' ? 48 : 0);
   if (y + Math.max(altoNotas, altoTot) > PIE) { doc.addPage(); y = 48; }
   const y0 = y;
-  if (!sin) {
-    filas.forEach(([k, v]) => {
-      font('normal', 8.8, P.gris); doc.text(k, xTot + 4, y + 12);
-      font('semibold', 9, P.navy); doc.text(v, X1 - 4, y + 12, { align: 'right' });
-      doc.setDrawColor(...P.linea); doc.setLineWidth(.6); doc.line(xTot, y + 20, X1, y + 20);
-      y += 20;
-    });
-    y += 6;
-    doc.setFillColor(...P.navy); doc.roundedRect(xTot, y, wTot, 32, 4, 4, 'F');
-    font('semibold', 8.5, [255, 255, 255]); doc.text(`TOTAL ${f.moneda || 'USD'}`, xTot + 12, y + 20, { charSpace: 1 });
-    font('bold', 14, [255, 255, 255]); doc.text(usd(f.total), X1 - 12, y + 21.5, { align: 'right' });
-    y += 32;
-    doc.setFillColor(...tinte(P.naranja, .9)); doc.rect(xTot, y + 4, wTot, 24, 'F');
-    font('semibold', 8.5, P.ambarOsc); doc.text('Saldo adeudado', xTot + 12, y + 20);
-    font('bold', 10.5, P.ambarOsc); doc.text(usd(saldo), X1 - 12, y + 20.5, { align: 'right' });
-  }
+  filas.forEach(([k, v]) => {
+    font('normal', 8.8, P.gris); doc.text(k, xTot + 4, y + 12);
+    font('semibold', 9, P.navy); doc.text(v, X1 - 4, y + 12, { align: 'right' });
+    doc.setDrawColor(...P.linea); doc.setLineWidth(.6); doc.line(xTot, y + 20, X1, y + 20);
+    y += 20;
+  });
+  y += 6;
+  doc.setFillColor(...P.navy); doc.roundedRect(xTot, y, wTot, 32, 4, 4, 'F');
+  font('semibold', 8.5, [255, 255, 255]); doc.text(`TOTAL ${f.moneda || 'USD'}`, xTot + 12, y + 20, { charSpace: 1 });
+  font('bold', 14, [255, 255, 255]); doc.text(usd(f.total), X1 - 12, y + 21.5, { align: 'right' });
+  y += 32;
+  doc.setFillColor(...tinte(P.naranja, .9)); doc.rect(xTot, y + 4, wTot, 24, 'F');
+  font('semibold', 8.5, P.ambarOsc); doc.text('Saldo adeudado', xTot + 12, y + 20);
+  font('bold', 10.5, P.ambarOsc); doc.text(usd(saldo), X1 - 12, y + 20.5, { align: 'right' });
   if (f.estado === 'pagada') {
-    const sx = xTot + wTot / 2, sy = sin ? y + 26 : y + 58;
+    const sx = xTot + wTot / 2, sy = y + 58;
     doc.setDrawColor(...P.verde); doc.setLineWidth(1.6); doc.roundedRect(sx - 56, sy - 18, 112, 28, 4, 4, 'S');
     font('bold', 13, P.verde); doc.text('PAGADA', sx, sy + 1, { align: 'center', charSpace: 2 });
   }
@@ -330,24 +325,19 @@ export function crearFacturasEmpresa(c) {
     const s = document.createElement('style'); s.id = 'fe-css'; s.textContent = CSS; document.head.appendChild(s);
   }
   const itemVacio = (descripcion = '') => ({ descripcion, detalle: '', cantidad: 1, tarifa: '' });
-  const nueva = (empresaId = null, sin = false) => {
+  const nueva = (empresaId = null) => {
     const e = empresa(empresaId);
-    d = { empresa_id: e?.id ?? null, fecha: hoy(), vence: sumarDias(hoy(), e?.dias_credito || 0), venceManual: false, referencia: '', reserva_id: null, sin_montos: sin,
-      items: [itemVacio()], descuento_pct: 0, iva_pct: 0, tasa_pago: '', notas: NOTA_DEFECTO, condiciones: sin ? CONDICIONES_SIN_PRECIOS : CONDICIONES_DEFECTO };
+    d = { empresa_id: e?.id ?? null, fecha: hoy(), vence: sumarDias(hoy(), e?.dias_credito || 0), venceManual: false, referencia: '', reserva_id: null,
+      items: [itemVacio()], descuento_pct: 0, iva_pct: 0, tasa_pago: '', notas: NOTA_DEFECTO, condiciones: CONDICIONES_DEFECTO };
     editando = null; aviso = ''; empQ = ''; empAbierta = false;
   };
-  // Al editar, la pestaña cambia el tipo de la misma factura; las condiciones solo se cambian si siguen siendo las de fábrica.
-  function cambiarTipo(sin) {
-    if ([CONDICIONES_DEFECTO, CONDICIONES_SIN_PRECIOS].includes(d.condiciones)) d.condiciones = sin ? CONDICIONES_SIN_PRECIOS : CONDICIONES_DEFECTO;
-    d.sin_montos = sin;
-  }
 
   function marco() {
     raiz.innerHTML = `<div class="fe-root">
       <div class="fe-cab">
         <div><h2><i class="fas fa-file-invoice"></i> Facturas</h2>
           <div class="csub">Facturas a las empresas a las que les vendemos · elige la empresa, carga los conceptos y sale el PDF con el membrete de Lotus.</div></div>
-        <div class="fe-tabs" role="tablist"><button type="button" role="tab" data-vista="lista">Facturas</button><button type="button" role="tab" data-vista="editor">Nueva factura</button><button type="button" role="tab" data-vista="editor" data-sin="1" title="Factura solo con conceptos: sin tarifas, precios ni totales">Sin precios</button></div>
+        <div class="fe-tabs" role="tablist"><button type="button" role="tab" data-vista="lista">Facturas</button><button type="button" role="tab" data-vista="editor">Nueva factura</button></div>
       </div>
       <div data-panel="lista"><div class="card">
         <div class="kpis bt-kpis lt-kpis lt-kpis-4" id="fe-kpis"></div>
@@ -362,7 +352,7 @@ export function crearFacturasEmpresa(c) {
           <div class="card fe-bloque"><h3><i class="fas fa-list"></i> Conceptos <small id="fe-items-res"></small></h3><div id="fe-items"></div>
             <div class="fe-atajos">${ATAJOS.map(([t, i]) => `<button type="button" data-acc="atajo" data-t="${esc(t)}"><i class="fas ${i}"></i> ${esc(t)}</button>`).join('')}
               <button type="button" class="fe-agregar" data-acc="item"><i class="fas fa-plus"></i> Otro concepto</button></div></div>
-          <div class="card fe-bloque" id="fe-bloque-totales"><h3><i class="fas fa-percent"></i> Descuento e impuestos</h3><div class="fe-grid" id="fe-totales"></div>
+          <div class="card fe-bloque"><h3><i class="fas fa-percent"></i> Descuento e impuestos</h3><div class="fe-grid" id="fe-totales"></div>
             <div class="fe-ayuda"><i class="fas fa-circle-info"></i> Son opcionales: si los dejas en 0, no aparecen en la factura.</div></div>
           <div class="card fe-bloque"><h3><i class="fas fa-note-sticky"></i> Notas y condiciones</h3><div class="fe-grid" id="fe-notas"></div></div>
         </div>
@@ -419,7 +409,7 @@ export function crearFacturasEmpresa(c) {
         <div class="lt-card-meta"><i class="fas fa-building"></i>${esc(f.empresa_datos?.nombre || 'Empresa')}</div>
         ${f.referencia ? `<div class="lt-card-meta"><i class="fas fa-users"></i>${esc(f.referencia)}</div>` : ''}
         <div class="lt-cifras">
-          ${f.sin_montos ? '<div><span>Tipo</span><b>Sin precios</b></div>' : `<div><span>Total</span><b>${usd(f.total)}</b></div>`}
+          <div><span>Total</span><b>${usd(f.total)}</b></div>
           <div><span>Emitida</span><b>${esc(fechaTxt(f.fecha))}</b></div>
           <div><span>Vence</span><b class="${venc ? 'lt-debe' : ''}">${esc(fechaTxt(f.vence))}</b></div>
         </div>
@@ -482,16 +472,15 @@ export function crearFacturasEmpresa(c) {
           ${reservas.map(r => `<option value="${r.id}" ${Number(d.reserva_id) === r.id ? 'selected' : ''}>${esc(r.codigo || '#' + r.id)}${r.referencia ? ' · ' + esc(r.referencia) : ''}${r.fecha_viaje_inicio ? ' · ' + esc(fechaTxt(r.fecha_viaje_inicio)) : ''}</option>`).join('')}</select></div>`;
   }
   function pintarItems() {
-    const sin = d.sin_montos;
     $('#fe-items').innerHTML = d.items.map((it, i) => {
       const imp = r2((Number(it.cantidad) || 0) * r2(it.tarifa));
       return `<div class="fe-item" data-i="${i}">
-        <div class="fe-item-cab"><b>Concepto ${i + 1}</b>${sin ? '<span style="margin-left:auto"></span>' : `<span class="fe-importe" data-importe>${usd(imp)}</span>`}
+        <div class="fe-item-cab"><b>Concepto ${i + 1}</b><span class="fe-importe" data-importe>${usd(imp)}</span>
           ${d.items.length > 1 ? `<button type="button" class="fe-quitar" data-acc="quitar" aria-label="Quitar concepto ${i + 1}" title="Quitar concepto"><i class="fas fa-trash"></i></button>` : ''}</div>
         <div class="fe-grid">
-          <div class="field ${sin ? 'fe-3' : 'fe-2'}${it.descripcion.trim() ? '' : ' fe-falta-campo'}"><label class="fl" for="fe-desc-${i}">Descripción</label><input class="ei" id="fe-desc-${i}" data-k="i.descripcion" value="${esc(it.descripcion)}" maxlength="300" placeholder="Ej. 2 boletos aéreos CCS-PMV-CCS"></div>
+          <div class="field fe-2${it.descripcion.trim() ? '' : ' fe-falta-campo'}"><label class="fl" for="fe-desc-${i}">Descripción</label><input class="ei" id="fe-desc-${i}" data-k="i.descripcion" value="${esc(it.descripcion)}" maxlength="300" placeholder="Ej. 2 boletos aéreos CCS-PMV-CCS"></div>
           <div class="field"><label class="fl" for="fe-cant-${i}">Cantidad</label><input class="ei" id="fe-cant-${i}" data-k="i.cantidad" value="${esc(it.cantidad)}" type="number" min="0.01" step="any" inputmode="decimal"></div>
-          ${sin ? '' : `<div class="field${Number(it.tarifa) > 0 ? '' : ' fe-falta-campo'}"><label class="fl" for="fe-tar-${i}">Tarifa (USD)</label><input class="ei" id="fe-tar-${i}" data-k="i.tarifa" value="${esc(it.tarifa)}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>`}
+          <div class="field${Number(it.tarifa) > 0 ? '' : ' fe-falta-campo'}"><label class="fl" for="fe-tar-${i}">Tarifa (USD)</label><input class="ei" id="fe-tar-${i}" data-k="i.tarifa" value="${esc(it.tarifa)}" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
           <div class="field fe-4"><label class="fl" for="fe-det-${i}">Detalle <span class="ef-opc">(opcional: fechas, ruta, hotel, localizador…)</span></label><input class="ei" id="fe-det-${i}" data-k="i.detalle" value="${esc(it.detalle)}" maxlength="500" placeholder="Ej. Extensión del 03/11 al 05/11"></div>
         </div></div>`;
     }).join('');
@@ -508,28 +497,25 @@ export function crearFacturasEmpresa(c) {
     const xs = [];
     if (!empresa(d.empresa_id)) xs.push('Elige la empresa');
     if (d.items.some(it => !it.descripcion.trim())) xs.push('Hay conceptos sin descripción');
-    if (d.sin_montos) { if (d.items.some(it => !(Number(it.cantidad) > 0))) xs.push('Revisa la cantidad'); }
-    else {
-      if (d.items.some(it => !(Number(it.cantidad) > 0) || !(Number(it.tarifa) >= 0) || it.tarifa === '')) xs.push('Revisa cantidad y tarifa');
-      if (calcular(d).subtotal <= 0) xs.push('El total está en $0');
-    }
+    if (d.items.some(it => !(Number(it.cantidad) > 0) || !(Number(it.tarifa) >= 0) || it.tarifa === '')) xs.push('Revisa cantidad y tarifa');
+    if (calcular(d).subtotal <= 0) xs.push('El total está en $0');
     if (!d.vence || d.vence < d.fecha) xs.push('El vencimiento es antes de la fecha');
     return xs;
   }
   function pintarPrevia() {
-    const f = calcular(d), e = empresa(d.empresa_id), xs = faltan(), sin = d.sin_montos;
-    $('#fe-estado').innerHTML = (editando ? `Editando <b>${numeroTxt(editando.numero)}</b> · se reemite con el mismo número` : 'Factura nueva · el número se asigna al emitir') + (sin ? ' · <b>sin precios</b>' : '');
-    $('#fe-items-res').textContent = `${f.items.length} ${f.items.length === 1 ? 'concepto' : 'conceptos'}` + (sin ? '' : ` · ${usd(f.subtotal)}`);
+    const f = calcular(d), e = empresa(d.empresa_id), xs = faltan();
+    $('#fe-estado').innerHTML = editando ? `Editando <b>${numeroTxt(editando.numero)}</b> · se reemite con el mismo número` : 'Factura nueva · el número se asigna al emitir';
+    $('#fe-items-res').textContent = `${f.items.length} ${f.items.length === 1 ? 'concepto' : 'conceptos'} · ${usd(f.subtotal)}`;
     $('#fe-previa').innerHTML = `<div class="fe-hoja">
         <div class="fe-hoja-cab"><b>FACTURA</b><span><strong>${editando ? numeroTxt(editando.numero) : 'INV-······'}</strong>${esc(fechaTxt(d.fecha))}</span></div>
         <div class="fe-hoja-a">Facturar a</div><div class="fe-hoja-emp">${esc(e?.nombre || '—')}</div>
         ${e?.rif ? `<div>RIF ${esc(e.rif)}</div>` : ''}
         <div class="fe-hoja-a">Conceptos</div>
-        ${f.items.map(it => `<div class="fe-hoja-lin"><span>${esc(it.descripcion || 'Sin descripción')}</span><span>${sin ? '× ' + esc(r2(it.cantidad).toLocaleString('es-VE')) : usd(it.importe)}</span></div>`).join('')}
-        ${sin ? '' : `<div class="fe-hoja-lin"><span>Subtotal</span><span>${usd(f.subtotal)}</span></div>
+        ${f.items.map(it => `<div class="fe-hoja-lin"><span>${esc(it.descripcion || 'Sin descripción')}</span><span>${usd(it.importe)}</span></div>`).join('')}
+        <div class="fe-hoja-lin"><span>Subtotal</span><span>${usd(f.subtotal)}</span></div>
         ${f.descuento_pct > 0 ? `<div class="fe-hoja-lin"><span>Descuento (${pct(f.descuento_pct)})</span><span>−${usd(f.descuento)}</span></div>` : ''}
         ${f.iva_pct > 0 ? `<div class="fe-hoja-lin"><span>IVA (${pct(f.iva_pct)})</span><span>${usd(f.iva)}</span></div>` : ''}
-        <div class="fe-hoja-tot"><span>Total</span><span>${usd(f.total)}</span></div>`}
+        <div class="fe-hoja-tot"><span>Total</span><span>${usd(f.total)}</span></div>
         <div style="margin-top:7px;color:#64748b">Vence ${esc(fechaTxt(d.vence))} · ${esc(condicionTxt(d.fecha, d.vence))}</div>
       </div>
       ${aviso ? `<div class="fe-faltan" style="color:var(--danger);list-style:none;padding:0">${esc(aviso)}</div>` : ''}
@@ -539,11 +525,11 @@ export function crearFacturasEmpresa(c) {
     g.disabled = ocupado || xs.length > 0;
     raiz.querySelector('[data-acc="ver"]').disabled = ocupado || xs.length > 0;
   }
-  function pintarEditor() { $('#fe-bloque-totales').hidden = d.sin_montos; pintarEmpresa(); pintarDatos(); pintarItems(); pintarTotales(); pintarPrevia(); }
+  function pintarEditor() { pintarEmpresa(); pintarDatos(); pintarItems(); pintarTotales(); pintarPrevia(); }
 
   function mostrarVista(v) {
     vista = v;
-    raiz.querySelectorAll('.fe-tabs button').forEach(b => { const on = b.dataset.vista === v && (v !== 'editor' || !!b.dataset.sin === !!d?.sin_montos); b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+    raiz.querySelectorAll('.fe-tabs button').forEach(b => { const on = b.dataset.vista === v; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
     raiz.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== v; });
     if (v === 'editor') pintarEditor(); else pintarLista();
   }
@@ -575,7 +561,7 @@ export function crearFacturasEmpresa(c) {
       const i = Number(el.closest('[data-i]').dataset.i), campoItem = k.slice(2);
       d.items[i][campoItem] = el.value;
       const imp = r2((Number(d.items[i].cantidad) || 0) * r2(d.items[i].tarifa));
-      const caja = el.closest('[data-i]').querySelector('[data-importe]'); if (caja) caja.textContent = usd(imp);
+      el.closest('[data-i]').querySelector('[data-importe]').textContent = usd(imp);
       el.closest('.field').classList.toggle('fe-falta-campo', campoItem === 'descripcion' ? !el.value.trim() : campoItem === 'tarifa' ? !(Number(el.value) > 0) : false);
       pintarPrevia();
       return;
@@ -601,7 +587,7 @@ export function crearFacturasEmpresa(c) {
   }
   async function alClic(ev) {
     const v = ev.target.closest('.fe-tabs button');
-    if (v) { const sin = !!v.dataset.sin; if (v.dataset.vista === 'editor') { if (editando) cambiarTipo(sin); else nueva(null, sin); } mostrarVista(v.dataset.vista); return; }
+    if (v) { if (v.dataset.vista === 'editor' && !editando) nueva(); mostrarVista(v.dataset.vista); return; }
     const chip = ev.target.closest('[data-filtro]');
     if (chip) { filtro = chip.dataset.filtro; pintarLista(); return; }
     if (ev.target.id === 'fe-emp-q') { empAbierta = true; pintarListaEmpresas(); return; }
@@ -616,7 +602,7 @@ export function crearFacturasEmpresa(c) {
       const vacio = d.items.findIndex(it => !it.descripcion.trim());
       if (vacio >= 0) d.items[vacio].descripcion = b.dataset.t; else d.items.push(itemVacio(b.dataset.t));
       pintarItems(); pintarPrevia();
-      raiz.querySelector(`#fe-${d.sin_montos ? 'det' : 'tar'}-${vacio >= 0 ? vacio : d.items.length - 1}`)?.focus();
+      raiz.querySelector(`#fe-tar-${vacio >= 0 ? vacio : d.items.length - 1}`)?.focus();
     } else if (acc === 'item') { d.items.push(itemVacio()); pintarItems(); pintarPrevia(); raiz.querySelector(`#fe-desc-${d.items.length - 1}`)?.focus(); }
     else if (acc === 'quitar') { d.items.splice(Number(b.closest('[data-i]').dataset.i), 1); pintarItems(); pintarPrevia(); }
     else if (acc === 'guardar') guardar();
@@ -646,8 +632,8 @@ export function crearFacturasEmpresa(c) {
     ocupado = true; aviso = ''; pintarPrevia();
     const datos = {
       empresa_id: d.empresa_id, fecha: d.fecha, vence: d.vence, referencia: d.referencia, reserva_id: d.reserva_id,
-      items: d.items.map(it => ({ descripcion: it.descripcion.trim(), detalle: it.detalle.trim(), cantidad: Number(it.cantidad), tarifa: d.sin_montos ? 0 : Number(it.tarifa) })),
-      descuento_pct: Number(d.descuento_pct) || 0, iva_pct: Number(d.iva_pct) || 0, tasa_pago: d.tasa_pago, notas: d.notas, condiciones: d.condiciones, sin_montos: d.sin_montos,
+      items: d.items.map(it => ({ descripcion: it.descripcion.trim(), detalle: it.detalle.trim(), cantidad: Number(it.cantidad), tarifa: Number(it.tarifa) })),
+      descuento_pct: Number(d.descuento_pct) || 0, iva_pct: Number(d.iva_pct) || 0, tasa_pago: d.tasa_pago, notas: d.notas, condiciones: d.condiciones,
     };
     const { data, error } = await sb.rpc('guardar_factura_empresa', { p_id: editando?.id ?? null, p_datos: datos });
     ocupado = false;
@@ -667,7 +653,7 @@ export function crearFacturasEmpresa(c) {
     const f = lista.find(x => x.id === id);
     if (!f || f.estado !== 'pendiente') return;
     editando = f; aviso = ''; empQ = ''; empAbierta = false;
-    d = { empresa_id: f.empresa_id, fecha: f.fecha, vence: f.vence, venceManual: true, referencia: f.referencia || '', reserva_id: f.reserva_id, sin_montos: !!f.sin_montos,
+    d = { empresa_id: f.empresa_id, fecha: f.fecha, vence: f.vence, venceManual: true, referencia: f.referencia || '', reserva_id: f.reserva_id,
       items: (f.items || []).map(it => ({ descripcion: it.descripcion || '', detalle: it.detalle || '', cantidad: it.cantidad, tarifa: it.tarifa })),
       descuento_pct: Number(f.descuento_pct) || 0, iva_pct: Number(f.iva_pct) || 0, tasa_pago: f.tasa_pago || '', notas: f.notas || '', condiciones: f.condiciones || '' };
     if (!d.items.length) d.items.push(itemVacio());
