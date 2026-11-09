@@ -8118,7 +8118,7 @@ function abrirAccionesLeadSheet(l) {
   const opciones = [
     { k: 'ficha', t: 'Abrir ficha', i: 'fa-id-card', go: () => openDrawer(l) },
     ROL !== 'administrativo' && { k: 'estado', t: 'Cambiar estado', i: 'fa-arrows-rotate', go: () => abrirEstadoLeadSheet(l) },
-    vende && wa && { k: 'wa-msg', t: 'Mensaje frecuente por WhatsApp', i: 'fa-comment-dots', go: () => waElegirMensaje(l) },
+    vende && wa && !l.whatsapp_perfil_compartido && { k: 'wa-msg', t: 'Mensaje frecuente por WhatsApp', i: 'fa-comment-dots', go: () => waElegirMensaje(l) },
     vende && cta !== 'cotizar' && { k: 'cotizar', t: 'Cotizar', i: 'fa-file-invoice-dollar', go: () => cbDesdeLead(l) },
     vende && !l.fecha_cotizacion_enviada && { k: 'reg-cot', t: 'Registrar cotización enviada', i: 'fa-file-circle-check', go: () => registrarCotizacionEnviada(l) },
     (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) && cta !== 'reserva' && { k: 'reserva', t: 'Crear reserva', i: 'fa-plus', go: () => abrirEnviarFacturacionSheet(l) },
@@ -8402,7 +8402,7 @@ function leadCardHtml(l) {
     <div class="lc-fill"></div>
     <div class="lc-foot">
       ${cta ? `<button type="button" class="lc-cta" data-accion="${cta.key}"><i class="fas ${cta.icono}"></i>${cta.texto}</button>` : '<span class="lc-cta-vacio"></span>'}
-      ${wa ? `<a class="wa-btn" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
+      ${wa ? `<a class="wa-btn" ${waAtributosLead(l, wa)} title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
       <button type="button" class="lc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
   </div>`;
@@ -8516,6 +8516,8 @@ function inboxCardHtml(l) {
 }
 async function atenderInboxLead(l) {
   if (leadSoloLectura()) return;
+  // Número compartido: pasa a ATENDIDO cuando el asesor responde desde el chat.
+  if (l.whatsapp_perfil_compartido) { await waAbrirChatDeTelefono(l.telefono); return false; }
   // window.open ANTES del await -- si va después, ya no corre dentro del
   // gesto síncrono del click y Chrome/Firefox lo bloquean como popup. Si de
   // todos modos vuelve null (ej. llamado async desde manejarDeepLinkLeadAccion
@@ -8793,7 +8795,7 @@ function openDrawer(l, opciones = {}) {
       <label class="dacc-estado" id="dacc-estado" style="--est:${estColor}"><span class="sr-only">Estado</span>
         <select id="e-estado" ${dis}>${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select><i class="fas fa-chevron-down"></i></label>
       <button type="button" class="dacc-cta" id="e-a-cta" ${cta ? `data-accion="${cta.key}"` : 'hidden'}>${cta ? `<i class="fas ${cta.icono}"></i>${cta.texto}` : ''}</button>
-      ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
+      ${wa ? `<a class="dacc-ic wa" ${waAtributosLead(l, wa)} title="Abrir WhatsApp" aria-label="Abrir WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
       ${postWa(l.telefono) && MI_ASESOR_INTEGRAL ? `<button type="button" class="dacc-ic" id="e-a-llamar" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i></button>` : ''}
       ${wa && vende ? `<button type="button" class="dacc-ic" id="e-a-wa-msg" title="Mensaje frecuente por WhatsApp" aria-label="Mensaje frecuente por WhatsApp"><i class="fas fa-comment-dots"></i></button>` : ''}
       <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
@@ -9158,6 +9160,12 @@ document.addEventListener('click', e => {
   const id = Number(a.dataset.atender);
   a.removeAttribute('data-atender');
   marcarLeadAtendido(id);
+}, true);
+document.addEventListener('click', e => {
+  const a = e.target.closest?.('a[data-wa-compartido]');
+  if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  waAbrirChatDeTelefono(a.dataset.waCompartido);
 }, true);
 function marcarLeadAtendido(id) {
   if (leadSoloLectura()) return;
@@ -30140,6 +30148,22 @@ async function waCargarAnteriores() {
 }
 // Número compartido: no hay bot ni teléfono del asesor, se responde desde acá.
 const waEsCompartido = () => !!waNumeros?.find(n => n.id === waCuenta)?.compartido;
+const waAtributosLead = (l, wa) => l.whatsapp_perfil_compartido ? `href="#" data-wa-compartido="${wa}"` : `href="https://wa.me/${wa}" target="_blank" rel="noopener"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}`;
+async function waAbrirChatDeTelefono(telefono) {
+  const fin = String(telefono || '').replace(/\D/g, '').slice(-10);
+  if (fin.length < 10) { errToast('Este lead no tiene un teléfono válido'); return; }
+  if (!waNumeros) await loadWhatsapp();
+  const numero = waNumeros?.find(n => n.compartido);
+  if (!numero) { errToast('Tu usuario no tiene acceso al número compartido'); return; }
+  if (waCuenta !== numero.id) { waCuenta = numero.id; waChats = []; waChatsCursor = null; document.getElementById('wa-numero').value = numero.id; }
+  await waCargarChats(true);
+  const buscar = () => waChats.find(c => String(c.telefono).replace(/\D/g, '').slice(-10) === fin);
+  for (let pag = 0; pag < 4 && !buscar() && waChatsCursor; pag++) await waCargarChats(false, waChatsCursor);
+  const chat = buscar();
+  if (!chat) { errToast('Este cliente aún no le ha escrito al número compartido. Su chat aparecerá aquí cuando escriba.'); return; }
+  await new Promise(listo => trasCerrarDrawer(() => { activateSection('whatsapp'); listo(); }));
+  waAbrirChat(chat);
+}
 function waPanelChat(abierto) {
   const compartido = waEsCompartido();
   document.getElementById('wa-conv-vacio').hidden = abierto;
