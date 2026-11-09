@@ -415,7 +415,7 @@ const EMAIL_DOMINIO = 'lotus360.local';
 const RESET_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/reset-password';
 const CLAIM_FN_URL = 'https://begbjhrdbsqftbbleecb.functions.supabase.co/claim-account';
 const OVERLAYS = ['login', 'setup', 'forgot', 'marketing-placeholder', 'claim-list', 'claim-form'];
-let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false, MI_ES_BOLETERIA = false, MI_ASESOR_INTEGRAL = false, MI_WA_COMPARTIDO = false;
+let booted = false, ROL = null, MI_NOMBRE = null, MI_USERNAME = null, MI_USUARIO_ID = null, JORNADA_ACTIVA = false, MI_AVATAR_URL = null, MI_PREFERENCIAS = {}, MI_VE_INFORME_DIARIO = false, MI_ES_FREELANCER = false, MI_BLOQUEADO = false, MI_ES_SUPERADMIN = false, MI_ES_BOLETERIA = false, MI_ASESOR_INTEGRAL = false;
 // Rol REAL del usuario logueado -- distinto de ROL cuando hay una vista
 // previa activa (ver "Vista previa de rol" más abajo). ROL_REAL nunca
 // cambia con la vista previa: el switcher lo usa para decidir si mostrarse
@@ -598,11 +598,8 @@ async function afterLogin() {
   MI_ASESOR_INTEGRAL = ROL === 'asesor' && !!u.asesor_integral;
   // Asesor + Boletería: Solicitudes y Boletería van en el menú normal, sin modo aparte (dueño 2026-10-15).
   document.body.classList.toggle('asesor-boleteria', ROL === 'asesor' && MI_ES_BOLETERIA);
-  // Asesor integral: Bandeja fija con solo WhatsApp empresa, sin Meta DM ni Correo (dueño 2026-11-09).
+  // Asesor integral: Bandeja fija convertida en sus chats por número, sin Meta DM ni Correo (dueño 2026-11-09).
   document.body.classList.toggle('asesor-integral', MI_ASESOR_INTEGRAL);
-  // Asesor en el número compartido: Bandeja pasa a ser sus chats por número (dueño 2026-11-09).
-  MI_WA_COMPARTIDO = MI_ASESOR_INTEGRAL && !!(await sb.from('whatsapp_perfil_compartido_asesores').select('usuario_id').eq('usuario_id', u.id).maybeSingle()).data;
-  document.body.classList.toggle('wa-por-numero', MI_WA_COMPARTIDO);
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   await entrarSegunRol();
 }
@@ -36063,7 +36060,7 @@ const NAV_ITEMS = [
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
   // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
-  { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-bandeja', roles: '', sub: 'Chats del número compartido' },
+  { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-bandeja', roles: '', sub: 'Chats de WhatsApp por número' },
   { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', padre: 'grp-bandeja', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
   { sec: 'wa-bandeja', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp empresa', padre: 'grp-bandeja', roles: '', sub: 'Clientes que respondieron al número de la empresa', badge: 'nav-wab-count', badgeDefault: '0' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-bandeja', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
@@ -36166,7 +36163,7 @@ function renderNavItems() {
       if (p.hoja) return htmlDesktop(NAV_ITEMS.find(it => it.sec === p.sec), 'nav-top', null, i);
       const hijas = NAV_ITEMS.filter(it => it.padre === p.sec);
       const roles = [...new Set(hijas.flatMap(h => h.roles.split(' ')))].filter(c => NAV_ROLES_HABILITAN.includes(c) && !(p.noHereda || []).includes(c)).join(' ');
-      return htmlDesktop({ ...p, ...(p.sec === 'grp-bandeja' && MI_WA_COMPARTIDO ? { icon: 'fa-brands fa-whatsapp', label: 'WhatsApp' } : {}), roles }, 'nav-top nav-padre', null, i) + hijas.map(h => htmlDesktop(h, 'nav-hijo', p.sec)).join('');
+      return htmlDesktop({ ...p, ...(p.sec === 'grp-bandeja' && MI_ASESOR_INTEGRAL ? { icon: 'fa-brands fa-whatsapp', label: 'WhatsApp' } : {}), roles }, 'nav-top nav-padre', null, i) + hijas.map(h => htmlDesktop(h, 'nav-hijo', p.sec)).join('');
     }).join('');
     ancoraDesktop.insertAdjacentHTML('beforebegin', bloque);
   }
@@ -36178,7 +36175,7 @@ function renderNavItems() {
   // menú limpia el style.display de cualquier item que matchea el texto
   // tipeado, y eso reaparecía el link aunque el usuario no tuviera permiso
   // (bug real, visto en vivo 2026-08-19).
-  const biWa = MI_WA_COMPARTIDO && document.querySelector('.bi-tab[data-bi="grp-bandeja"]');
+  const biWa = MI_ASESOR_INTEGRAL && document.querySelector('.bi-tab[data-bi="grp-bandeja"]');
   if (biWa) { biWa.querySelector('i').className = 'fa-brands fa-whatsapp'; biWa.lastChild.textContent = 'WhatsApp'; }
   document.body.classList.toggle('ve-informe-diario', MI_VE_INFORME_DIARIO);
   document.body.classList.toggle('puede-ver-voucher', esOficina() || ROL === 'asesor');
@@ -36240,7 +36237,7 @@ function navVisiblePorRol(el) {
 }
 // El sondeo no ve las reglas nav-ver-<sec>: una hija opcional (Meta DM) solo es pestaña si la persona la activó.
 const navOpcionalApagada = sec => NAV_OPCIONALES.some(o => o.sec === sec) && !navExtraActivas().includes(sec);
-function hijasVisibles(padre) { return NAV_ITEMS.filter(it => it.padre === padre && !(MI_WA_COMPARTIDO && it.sec === 'wa-bandeja') && !navOpcionalApagada(it.sec) && navVisiblePorRol(navItemDe(it.sec))); }
+function hijasVisibles(padre) { return NAV_ITEMS.filter(it => it.padre === padre && !(MI_ASESOR_INTEGRAL && it.sec === 'wa-bandeja') && !navOpcionalApagada(it.sec) && navVisiblePorRol(navItemDe(it.sec))); }
 function actualizarPadresNav() {
   document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => p.classList.toggle('nav-padre-vacio', !hijasVisibles(p.dataset.sec).length));
 }

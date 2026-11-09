@@ -4115,12 +4115,12 @@ body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-inicio) #sidebar-nav >
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-bandeja) #sidebar-nav > [data-sec="grp-bandeja"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-ia) #sidebar-nav > [data-sec="grp-ia"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-nav > [data-sec="grp-marketing"]{display:none}
-/* Asesor integral: en Bandeja solo WhatsApp empresa. Vale también en sondeo y buscador
+/* Asesor integral: en Bandeja solo sus chats por número. Vale también en sondeo y buscador
    para que usuarioPuedeAbrirSeccion niegue Meta DM y Correo. */
 body.asesor-integral #sidebar-nav > .nav-item:is([data-sec="dms"],[data-sec="correo"]){display:none}
-/* Número compartido: su entrada solo existe para quien lo atiende, y ahí no hay Meta DM al que volver. */
-body:not(.wa-por-numero) #sidebar-nav > .nav-item[data-sec="whatsapp"]{display:none}
-body.wa-por-numero #wa-volver-dm{display:none}
+/* La entrada WhatsApp solo existe para el asesor integral, y ahí no hay Meta DM al que volver. */
+body:not(.asesor-integral) #sidebar-nav > .nav-item[data-sec="whatsapp"]{display:none}
+body.asesor-integral #wa-volver-dm{display:none}
 /* Pestañas opcionales de Gestión de Personal: ocultas hasta que un admin las
    active en Mi Perfil (body.gp-ver-<tab>, ver aplicarPreferencias). El botón
    "Reasignaciones" de la pestaña Asesores se oculta junto con su pestaña. */
