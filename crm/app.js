@@ -243,6 +243,8 @@ function ejecutarAccionLead(l, key) {
     case 'ficha': return openDrawer(l);
   }
 }
+// Asesor: cuenta desde que le llegó el lead (lotes y reasignaciones traen fecha_creacion vieja).
+const fechaLlegadaLead = l => ROL !== 'asesor' ? l.fecha_creacion : [l.fecha_asignacion_actual, l.lote_asignado_at].filter(Boolean).reduce((a, b) => new Date(b) > new Date(a) ? b : a, l.fecha_creacion);
 function badgeNombreDudoso(l) {
   if (!l.nombre_dudoso) return '';
   return ` <span style="color:#f59e0b" title="No parece un Nombre propio, cuando tengas su nombre, edítalo">❓</span>`;
@@ -8385,7 +8387,7 @@ function leadCardHtml(l) {
         <button type="button" class="estado-arrow" data-dir="1" title="Siguiente estado" aria-label="Siguiente estado"><i class="fas fa-chevron-right"></i></button>
       </span>
       <button type="button" class="chip-estado" data-estado-chip="${l.id}" style="color:${estadoColor};background:${estadoColor}2e" aria-label="Cambiar estado">${esc(niceEstado(l.estado))} <i class="fas fa-chevron-down"></i></button>
-      <span class="lc-tiempo">${esc(tiempoRelativo(l.fecha_creacion))}</span>
+      <span class="lc-tiempo">${esc(tiempoRelativo(fechaLlegadaLead(l)))}</span>
       ${seguimientoActivo(l) ? chipSeguimiento(l) : ''}
     </div>
     <div class="ec-top">
@@ -8505,7 +8507,7 @@ function inboxCardHtml(l) {
     ${pc.avisos.length ? `<div class="lc-chips">${pc.avisos.map(a => `<span class="lc-chip aviso"><i class="fas fa-triangle-exclamation"></i>${esc(a)}</span>`).join('')}</div>` : ''}
     ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>Última oferta: ${esc(pc.oferta)}</span></div>` : ''}
     ${l.personas ? `<div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas)} persona(s)</div>` : ''}
-    <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(l.fecha_creacion)}</div>
+    <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(fechaLlegadaLead(l))}</div>
     ${l.no_reasignar ? `<div class="ec-row" style="color:var(--muted2)"><i class="fas fa-lock"></i> Llegó directo por WhatsApp -- no se reasigna</div>` : ''}
     <div class="inbox-actions">
       <button type="button" class="inbox-btn atender"><i class="fas fa-check"></i> Atender</button>
@@ -8787,7 +8789,7 @@ function openDrawer(l, opciones = {}) {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead dhead-lead" style="--est:${estColor}"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn"><span id="d-nombre">${esc(nombreLead(l))}</span>${badgePrioridadIA(l)}${badgeSeguidorIG(l)}</div>
-      <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}${l.destino ? `<span class="dm-chip"><i class="fas fa-location-dot"></i>${esc(l.destino)}</span>` : ''}<span class="dm-chip"><i class="fas fa-clock"></i>${esc(tiempoRelativo(l.fecha_creacion))}</span></div>
+      <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}${l.destino ? `<span class="dm-chip"><i class="fas fa-location-dot"></i>${esc(l.destino)}</span>` : ''}<span class="dm-chip"><i class="fas fa-clock"></i>${esc(tiempoRelativo(fechaLlegadaLead(l)))}</span></div>
       ${l.meta_ad_id || l.meta_ref ? '<div class="dm"><span class="dm-chip" id="d-origen-ad"><i class="fas fa-bullhorn"></i>Vino de un anuncio de Meta</span></div>' : ''}
       ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div></div>
 
