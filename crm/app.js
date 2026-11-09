@@ -596,6 +596,8 @@ async function afterLogin() {
   MI_ASESOR_INTEGRAL = ROL === 'asesor' && !!u.asesor_integral;
   // Asesor + Boletería: Solicitudes y Boletería van en el menú normal, sin modo aparte (dueño 2026-10-15).
   document.body.classList.toggle('asesor-boleteria', ROL === 'asesor' && MI_ES_BOLETERIA);
+  // Asesor integral: Bandeja fija con solo WhatsApp empresa, sin Meta DM ni Correo (dueño 2026-11-09).
+  document.body.classList.toggle('asesor-integral', MI_ASESOR_INTEGRAL);
   if (u.debe_cambiar_password) { showOverlay('setup'); return; }
   await entrarSegunRol();
 }
@@ -827,7 +829,10 @@ const NAV_OPCIONALES = [
   { sec: 'grp-ia', label: 'IA', desc: 'Rendimiento, asistente, prospectos y costos de IA' },
   { sec: 'grp-marketing', label: 'Marketing', desc: 'Redes y clientes de eventos' },
 ];
-const navExtraActivas = () => Array.isArray(MI_PREFERENCIAS.nav_extra) ? MI_PREFERENCIAS.nav_extra : (ROL === 'marketing' ? ['grp-marketing'] : []);
+const navExtraActivas = () => {
+  const extra = Array.isArray(MI_PREFERENCIAS.nav_extra) ? MI_PREFERENCIAS.nav_extra : (ROL === 'marketing' ? ['grp-marketing'] : []);
+  return MI_ASESOR_INTEGRAL && !extra.includes('grp-bandeja') ? [...extra, 'grp-bandeja'] : extra;
+};
 function pintarTogglesNavExtra() {
   const activas = navExtraActivas();
   document.querySelectorAll('[data-nav-extra]').forEach(btn => {
@@ -8789,7 +8794,7 @@ function openDrawer(l, opciones = {}) {
         <select id="e-estado" ${dis}>${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select><i class="fas fa-chevron-down"></i></label>
       <button type="button" class="dacc-cta" id="e-a-cta" ${cta ? `data-accion="${cta.key}"` : 'hidden'}>${cta ? `<i class="fas ${cta.icono}"></i>${cta.texto}` : ''}</button>
       ${wa ? `<a class="dacc-ic wa" href="https://wa.me/${wa}" target="_blank" rel="noopener" title="Abrir WhatsApp" aria-label="Abrir WhatsApp"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}><i class="fab fa-whatsapp"></i></a>` : ''}
-      ${postWa(l.telefono) && vende ? `<button type="button" class="dacc-ic" id="e-a-llamar" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i></button>` : ''}
+      ${postWa(l.telefono) && MI_ASESOR_INTEGRAL ? `<button type="button" class="dacc-ic" id="e-a-llamar" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i></button>` : ''}
       ${wa && vende ? `<button type="button" class="dacc-ic" id="e-a-wa-msg" title="Mensaje frecuente por WhatsApp" aria-label="Mensaje frecuente por WhatsApp"><i class="fas fa-comment-dots"></i></button>` : ''}
       <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
@@ -11414,7 +11419,7 @@ let WB = null;
 function loadWaBandeja() {
   if (!WB) {
     WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
-      abrirLead: id => abrirLeadDesdeMisVentas(id), cotizarLead: cbCotizarLeadId, crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
+      abrirLead: id => abrirLeadDesdeMisVentas(id), cotizarLead: cbCotizarLeadId, puedeLlamar: () => MI_ASESOR_INTEGRAL, llamarLead: c => llamadasApp?.llamar({ id: c.lead_id, nombre: c.nombre }, c.wa_id), crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
     WB.enlazar();
   }
   return WB.abrirSeccion();
@@ -29544,13 +29549,15 @@ function renderBotText(texto) {
    por la EF como Blob; las fotos que manda el bot son públicas (Worker de fotos). */
 const WA_POLL_MS = 20000;
 const WA_URL_PUBLICA = /^https:\/\/(?!(?:api\.)?zernio\.com\/)/i;
-let waNumeros = null, waCuenta = null, waChats = [], waChatsCursor = null, waActual = null, waMensajes = [], waMsgCursor = null, waPoll = null, waAbrirGen = 0;
+let waNumeros = null, waNumerosPidiendo = false, waCuenta = null, waChats = [], waChatsCursor = null, waActual = null, waMensajes = [], waMsgCursor = null, waPoll = null, waAbrirGen = 0;
 const waMedia = new Map();
 
 async function waInvocar(body) {
   const { data, error } = await sb.functions.invoke('whatsapp-inbox', { body });
-  if (error || !data?.ok) throw new Error(data?.error || error?.message || 'error');
-  return data;
+  if (!error && data?.ok) return data;
+  // Con status no-2xx invoke deja data en null y el código de error queda en el cuerpo de la respuesta.
+  const det = data || await error?.context?.json?.().catch(() => null);
+  throw new Error(det?.error || error?.message || 'error');
 }
 /* ---------- Meta DM: chats del bot en Instagram, Facebook y WhatsApp ----------
    Fuente: manychat_ia_sesiones (una fila por conversación, historial jsonb sin
@@ -29622,6 +29629,14 @@ function setupDms() {
   inbox.addEventListener('keydown', e => { const row = e.target.closest('[data-dm]'); if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); dmAbrir(row.dataset.dm); } });
   document.getElementById('dm-back').addEventListener('click', () => dmCerrarChat());
   document.getElementById('dm-btn-perfil').addEventListener('click', () => document.getElementById('dm-shell').classList.add('ver-perfil'));
+  document.getElementById('dm-pl-abrir').addEventListener('click', dmPlAbrir);
+  document.getElementById('dm-pl-cerrar').addEventListener('click', dmPlCerrar);
+  document.getElementById('dm-pl-sel').addEventListener('change', dmPlVariables);
+  document.getElementById('dm-pl-enviar').addEventListener('click', dmPlEnviar);
+  document.getElementById('dm-llamar').addEventListener('click', () => {
+    const s = dmActual, tel = s && dmTelLlamar(s);
+    if (tel) llamadasApp?.llamar({ id: s.lead_id, nombre: dmLeads.get(s.lead_id).nombre || dmNombre(s) }, tel);
+  });
   document.getElementById('dm-perfil-cerrar').addEventListener('click', () => document.getElementById('dm-shell').classList.remove('ver-perfil'));
   document.getElementById('dm-perfil-body').addEventListener('click', e => { const b = e.target.closest('[data-dm-lead]'); if (b) abrirLeadDesdeMisVentas(+b.dataset.dmLead); });
   document.getElementById('dm-wa-todos').addEventListener('click', () => activateSection('whatsapp'));
@@ -29658,7 +29673,12 @@ function dmPintarCanales() {
     const el = document.getElementById('dm-nuevo-' + c), n = dmPendientes[c].size;
     el.hidden = !n; el.textContent = n > 9 ? '9+' : String(n);
   }
-  document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && esOficina());
+  document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && (esOficina() || waNumeros?.length));
+  // Asesor con su WhatsApp en coexistencia: el botón aparece solo si la EF le devuelve su número.
+  if (dmCanal === 'whatsapp' && !esOficina() && waNumeros === null && !waNumerosPidiendo) {
+    waNumerosPidiendo = true;
+    waInvocar({ accion: 'numeros' }).then(r => { waNumeros = r.numeros; document.getElementById('dm-wa-todos').hidden = !(dmCanal === 'whatsapp' && waNumeros.length); }).catch(() => {}).finally(() => { waNumerosPidiendo = false; });
+  }
   document.getElementById('dm-filtro-ia').hidden = !(dmCanal === 'whatsapp' && esOficina());
   document.getElementById('dm-buscar').placeholder = dmCanal === 'whatsapp' ? 'Buscar nombre o teléfono' : dmCanal === 'instagram' ? 'Buscar @usuario, nombre o teléfono' : 'Buscar perfil, nombre o teléfono';
 }
@@ -29784,7 +29804,13 @@ function dmPintarHead() {
   document.getElementById('dm-app-chip').innerHTML = `<i class="fa-brands ${dmIcoCanal(canal)}"></i><span>${dmLabelCanal(canal)}</span>`;
   const m = dmModelos.get(s.external_id);
   if (m?.brazo) document.getElementById('dm-chat-sub').textContent += ' · IA: ' + (RIA_BRAZOS[m.brazo] || m.brazo);
+  document.getElementById('dm-llamar').style.display = dmTelLlamar(s) ? '' : 'none';
 }
+// Solo con el lead ya cargado: dmLeads lee con la RLS del asesor, así que un lead ajeno no queda.
+const dmTelLlamar = s => {
+  const l = MI_ASESOR_INTEGRAL && dmCanalDe(s) === 'whatsapp' && s.lead_id && dmLeads.get(s.lead_id);
+  return l ? postWa(l.telefono || dmTelefonoWa(s)) : '';
+};
 // previos: cuántos mensajes ya estaban pintados; los siguientes entran animados.
 // Mensajes seguidos del mismo lado se agrupan como en WhatsApp (colita en el primero, «Bot» en el último).
 function dmPintarLog(inicio, previos = 0) {
@@ -29822,6 +29848,7 @@ async function dmWaAbrir() {
 }
 function dmWaCerrar() {
   dmWaGen++; dmWa = null;
+  document.getElementById('dm-pl').hidden = document.getElementById('dm-pl-abrir').hidden = true;
   clearInterval(dmWaPoll); dmWaPoll = null;
   waMedia.forEach(p => p.then(u => u && URL.revokeObjectURL(u)));
   waMedia.clear();
@@ -29858,6 +29885,60 @@ function dmWaPintar(alFinal) {
   log.innerHTML = waHtmlMensajes(dmWa.mensajes, dmWa.cursor && 'dm-wa-anteriores') || '<div class="msg-empty">Sin mensajes todavía</div>';
   waEnlazarLog(log);
   if (abajo) log.scrollTop = log.scrollHeight;
+  dmPlBoton();
+}
+// Plantillas por Zernio: solo fuera de las 24 h desde el último mensaje del cliente, cuando el bot ya no puede escribirle.
+const DM_PL_VARS = { retomar_contacto_cliente: ['nombre', 'asesor', 'destino'], aviso_continuar_whatsapp_business: ['nombre', 'destino'] };
+const DM_PL_ERR = {
+  ya_enviada_hoy: 'Esa plantilla ya se le envió a este cliente en las últimas 24 h', plantilla_no_aprobada: 'Meta todavía no aprueba esa plantilla',
+  variables_invalidas: 'Complete cada dato (máximo 60 caracteres)', sin_chat_zernio: 'Este chat no está en el número principal de WhatsApp',
+  envio_fallido: 'WhatsApp no aceptó el envío. Intente de nuevo en unos minutos', no_autorizado: 'No tiene acceso a este chat',
+};
+let dmPlLista = null, dmPlHasta = 0;
+const dmPlPuede = () => !!dmWa && !dmWa.sinZernio && ['admin', 'administrativo', 'asesor'].includes(ROL)
+  && !dmWa.mensajes.some(m => !m.saliente && Date.now() - new Date(m.fecha) < 864e5);
+const dmPlBoton = () => { document.getElementById('dm-pl-abrir').hidden = !document.getElementById('dm-pl').hidden || !dmPlPuede(); };
+const dmPrimerNombre = n => { const p = String(n || '').trim().split(/\s+/)[0] || ''; return /^\p{L}{2,}$/u.test(p) ? p[0].toLocaleUpperCase('es') + p.slice(1).toLocaleLowerCase('es') : ''; };
+function dmPlValor(clave) {
+  const c = dmCamposVista(dmActual);
+  return clave === 'nombre' ? dmPrimerNombre(c.nombre || dmNombre(dmActual)) : clave === 'asesor' ? dmPrimerNombre(MI_NOMBRE) : clave === 'destino' ? String(c.destino || c.destino_consulta || '').trim() : '';
+}
+async function dmPlAbrir() {
+  const sel = document.getElementById('dm-pl-sel');
+  document.getElementById('dm-pl').hidden = false;
+  document.getElementById('dm-pl-abrir').hidden = true;
+  if (!dmPlLista || Date.now() > dmPlHasta) {
+    dmPlLista = null; sel.innerHTML = '<option value="">Cargando plantillas…</option>'; dmPlVariables();
+    try { dmPlLista = (await waInvocar({ accion: 'plantillas' })).plantillas || []; } catch { sel.innerHTML = '<option value="">No se pudieron cargar las plantillas</option>'; return; }
+    dmPlHasta = Date.now() + 6e5;
+  }
+  sel.innerHTML = dmPlLista.length
+    ? '<option value="">Elegir plantilla…</option>' + dmPlLista.map((p, i) => `<option value="${i}"${p.estado === 'APPROVED' ? '' : ' disabled'}>${esc(p.nombre.replace(/_/g, ' '))}${p.estado === 'APPROVED' ? '' : ' (en revisión de Meta)'}</option>`).join('')
+    : '<option value="">No hay plantillas aprobadas todavía</option>';
+  dmPlVariables();
+}
+function dmPlCerrar() {
+  document.getElementById('dm-pl').hidden = true;
+  dmPlBoton();
+}
+function dmPlVariables() {
+  const p = dmPlLista?.[Number(document.getElementById('dm-pl-sel').value)] || null, claves = p && DM_PL_VARS[p.nombre] || [];
+  document.getElementById('dm-pl-cuerpo').textContent = p ? p.cuerpo : '';
+  document.getElementById('dm-pl-vars').innerHTML = p ? Array.from({ length: p.variables }, (_, i) => `<input type="text" data-dm-pl-var="${i}" maxlength="60" placeholder="{{${i + 1}}} ${esc(claves[i] || 'dato')}" aria-label="${esc(claves[i] || `Dato ${i + 1}`)}" value="${esc(claves[i] ? dmPlValor(claves[i]) : '')}">`).join('') : '';
+  document.getElementById('dm-pl-enviar').disabled = !p;
+}
+async function dmPlEnviar() {
+  const p = dmPlLista?.[Number(document.getElementById('dm-pl-sel').value)], wa = dmWa, btn = document.getElementById('dm-pl-enviar');
+  if (!p || !wa) return;
+  const params = [...document.querySelectorAll('#dm-pl-vars [data-dm-pl-var]')].map(el => el.value.trim());
+  if (params.some(v => !v)) { errToast('Complete todos los datos de la plantilla'); return; }
+  btn.disabled = true;
+  try { await waInvocar({ accion: 'enviar_plantilla', external_id: wa.id, plantilla: p.nombre, params }); }
+  catch (e) { btn.disabled = false; errToast(DM_PL_ERR[e.message] || 'No se pudo enviar la plantilla'); return; }
+  btn.disabled = false;
+  okToast('Plantilla enviada. Si el cliente responde, el bot retoma con ese contexto.');
+  dmPlCerrar();
+  dmWaRefrescar();
 }
 // antes: versión previa de la sesión, para resaltar lo recién llenado y animar la barra.
 function dmPintarPerfil(antes) {
@@ -29948,7 +30029,6 @@ function setupWhatsapp() {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
 }
 async function loadWhatsapp() {
-  if (!esOficina()) return;
   if (!waNumeros) {
     try { waNumeros = (await waInvocar({ accion: 'numeros' })).numeros; } catch { errToast('No se pudo conectar con WhatsApp'); return; }
     let guardado = null;
@@ -36454,6 +36534,8 @@ function setupBarraInf() {
     if (!t) return;
     if (t.id === 'bi-mas') { abrirMenuMovil(); return; }
     const sec = t.dataset.bi.startsWith('grp-') ? destinoDePadre(t.dataset.bi) : t.dataset.bi;
+    // activateSection ignora la sección actual: con un chat abierto, su pestaña vuelve a la lista.
+    if (sec === currentSec) { document.querySelector('.section.active .dm-chat-head:not([hidden]) .msg-conv-back')?.click(); return; }
     incrementarUsoSeccion(sec);
     activateSection(sec);
   });
@@ -38863,6 +38945,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-09', emoji: '💬', titulo: 'Bandeja de WhatsApp en tu menú', texto: 'En el menú de la izquierda (y abajo en el teléfono) ahora tienes Bandeja con los chats de WhatsApp de tus clientes: contestas desde ahí y los llamas con el botón de teléfono.', roles: ['asesor'] },
   { fecha: '2026-11-08', emoji: '📋', titulo: 'Nueva sección Llamadas', texto: 'En Leads › Llamadas ves las llamadas por WhatsApp que quedaron sin resultado y puedes completarlas con «Poner resultado». Arriba están tus números de hoy, 7 o 30 días: llamadas, contacto e interesados.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-08', emoji: '📞', titulo: 'Botón Llamar en la ficha del lead', texto: 'En la ficha del lead hay un botón de teléfono que abre el WhatsApp del cliente para llamarlo. A los pocos segundos aparece una tarjeta para anotar cómo salió la llamada, si quieres una tarea para volver a llamar y una nota. La llamada no se graba.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-07', emoji: '📣', titulo: 'Campañas de WhatsApp más seguras', texto: 'Las campañas ahora usan la misma regla que el número de «Elegibles»: solo clientes con viaje terminado hace los días que elijas y sin incidencias abiertas. Antes de aprobar hay que enviar una prueba a tu teléfono, y verás cuánto va a costar y cuántos días va a tardar. Si WhatsApp empieza a rechazar mensajes o la plantilla deja de estar aprobada, la campaña se pausa sola y te dice por qué. En los borradores tienes «Recalcular lista».', roles: ['admin', 'administrativo'] },

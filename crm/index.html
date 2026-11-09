@@ -2940,6 +2940,17 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 .dm-modelo[data-brazo="haiku"]{color:#d97706;border-color:color-mix(in srgb,#d97706 40%,transparent)}
 .dm-chat{position:relative}
 .dm-chat-head{display:flex;align-items:center;gap:11px;padding:0 0 11px;border-bottom:1px solid var(--line);flex-shrink:0}
+#dm-nota{flex-wrap:wrap}
+#dm-pl-abrir[hidden],#dm-pl[hidden]{display:none}
+#dm-pl-abrir i{color:var(--wa)}
+.dm-pl{padding:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;flex-shrink:0;max-height:48%;overflow-y:auto}
+.dm-pl-top{display:flex;gap:8px;align-items:center}
+.dm-pl select,.dm-pl input{padding:9px 11px;border-radius:10px;border:1px solid var(--line2);background:var(--bg2);color:var(--txt);font:inherit;min-width:0}
+.dm-pl select{flex:1}
+.dm-pl-vars{display:flex;flex-direction:column;gap:8px}
+.dm-pl-cuerpo{font-size:13px;color:var(--muted);white-space:pre-wrap}
+.dm-pl-enviar{align-self:flex-end;display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 18px;border:none;border-radius:20px;background:var(--wa);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.dm-pl-enviar:disabled{opacity:.5;cursor:default}
 .dm-chat-head .dm-avatar{width:40px;height:40px;font-size:14px}
 .dm-chat-titulos{flex:1;min-width:0}
 .dm-chat-titulos .msg-conv-titulo,.dm-chat-titulos .msg-conv-sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -4099,6 +4110,9 @@ body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-inicio) #sidebar-nav >
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-bandeja) #sidebar-nav > [data-sec="grp-bandeja"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-ia) #sidebar-nav > [data-sec="grp-ia"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-nav > [data-sec="grp-marketing"]{display:none}
+/* Asesor integral: en Bandeja solo WhatsApp empresa. Vale también en sondeo y buscador
+   para que usuarioPuedeAbrirSeccion niegue Meta DM y Correo. */
+body.asesor-integral #sidebar-nav > .nav-item:is([data-sec="dms"],[data-sec="correo"]){display:none}
 /* Pestañas opcionales de Gestión de Personal: ocultas hasta que un admin las
    active en Mi Perfil (body.gp-ver-<tab>, ver aplicarPreferencias). El botón
    "Reasignaciones" de la pestaña Asesores se oculta junto con su pestaña. */
@@ -8017,24 +8031,36 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   body.en-cotiz-boletos :is(.lyra-fab,.chat-fab){bottom:calc(132px + var(--safe-b) + var(--bi-h,0px))}
   body.teclado #sec-cotizacion-boletos .cb-resumen-col,body.teclado #sec-voucher .vc-pie{display:none}
 
-  /* Chat abierto a pantalla completa: los FABs, la barra y las pestañas vuelven con ← o Atrás */
+  /* Chat abierto a pantalla completa: los FABs y las pestañas vuelven con ← o Atrás; la barra inferior se queda salvo con teclado (--chat-pie) */
   body.ver-chat-on :is(.chat-fab,.lyra-fab,.chat-globo,.lyra-globo,.mobile-brand,.nav-tabs-sec,.foot-note,#recordatorios-banner-m){display:none!important}
   body.ver-chat-on .main{padding:0!important}
-  .dm-shell.ver-chat,.dm-shell.wa-shell.ver-chat{height:100vh;height:100dvh;min-height:0;margin:0;padding-top:env(safe-area-inset-top,0px);box-sizing:border-box}
-  body.con-vp .dm-shell.ver-chat{height:calc(100dvh - var(--vp-h,56px));padding-top:0}
+  .dm-shell.ver-chat,.dm-shell.wa-shell.ver-chat{height:calc(100vh - var(--chat-pie,0px));height:calc(100dvh - var(--chat-pie,0px));min-height:0;margin:0;padding-top:env(safe-area-inset-top,0px);box-sizing:border-box}
+  body.con-vp .dm-shell.ver-chat{height:calc(100dvh - var(--vp-h,56px) - var(--chat-pie,0px));padding-top:0}
+  body.ver-chat-on .dm-shell.ver-chat .dm-log{padding:9px 7px}
+  body.ver-chat-on .dm-shell.ver-chat .dm-log .chat-msg{max-width:84%}
   .dm-shell.ver-chat>.dm-chat{border:0;border-radius:0;box-shadow:none}
   .dm-shell>.dm-chat{padding:8px 8px 0}
   #sec-wa-bandeja .wb-compose{padding:8px 4px calc(8px + var(--safe-b));gap:6px}
   #sec-wa-bandeja :is(.wb-ico,.wb-send){width:var(--tap,44px);height:var(--tap,44px);flex:none}
   #sec-wa-bandeja .wb-compose textarea,body.pc-wa #sec-wa-bandeja .wb-compose textarea{min-width:0;min-height:44px;border-radius:22px;line-height:1.35}
-  #sec-wa-bandeja .wb-plantilla{padding-bottom:calc(10px + var(--safe-b))}
+  #sec-wa-bandeja .wb-plantilla{padding-bottom:calc(10px + var(--safe-b));max-height:42dvh;overflow-y:auto}
+  body.bi-on:not(.prueba-guiada,.teclado) #sec-wa-bandeja :is(.wb-compose,.wb-plantilla){padding-bottom:9px}
   .msg-conv-back{width:var(--tap,44px);height:var(--tap,44px)}
   .chat-tool-btn{min-height:var(--tap,44px)}
   .dm-filtro{min-height:40px}
   .tk-compose .tk-input{height:44px}
   .dm-app-chip{display:none}
-  #wb-ver-lead,#wb-cotizar,#dm-btn-perfil{font-size:0;gap:0;width:44px;height:44px;padding:0;justify-content:center}
-  #wb-ver-lead i,#wb-cotizar i,#dm-btn-perfil i{font-size:16px}
+  :is(#dm-btn-perfil,#dm-llamar){font-size:0;gap:0;width:44px;height:44px;padding:0;justify-content:center;flex:none}
+  :is(#dm-btn-perfil,#dm-llamar) i{font-size:16px}
+  #dm-llamar i{color:var(--wa)}
+  /* Cabecera de WhatsApp empresa: el nombre usa todo el ancho y las acciones van debajo, con rótulo */
+  #wb-head:not([hidden]){display:grid;grid-template-columns:auto auto minmax(0,1fr);align-items:center;gap:7px 9px;padding:2px 0 9px}
+  #wb-head .wb-acciones{display:flex;grid-column:1/-1;gap:7px}
+  #wb-head .chat-tool-btn{flex:1 1 0;min-width:0;justify-content:center;gap:7px;padding:0 7px;white-space:nowrap}
+  #wb-head #wb-llamar i{color:var(--wa)}
+  #wb-head .wb-ventana{font-size:12px}
+  #wb-head #pc-wa-resumen:not(:empty){display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  body.teclado #wb-head .wb-acciones{display:none}
   .msg-doc-nombre{max-width:none;white-space:normal;overflow-wrap:anywhere}
   .dm-shell[data-canal="whatsapp"] .wa-audio{color-scheme:dark}
   :root[data-theme="light"] .dm-shell[data-canal="whatsapp"] .wa-audio{color-scheme:light}
@@ -8172,9 +8198,12 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 .barra-inf{display:none}
 @media (max-width:760px){
   body.bi-on:not(.prueba-guiada){--bi-h:56px}
-  body.bi-on:not(.prueba-guiada,.teclado,.ver-chat-on) .barra-inf{display:flex}
+  body.bi-on.ver-chat-on:not(.prueba-guiada){--bi-h:48px}
+  body.bi-on:not(.prueba-guiada,.teclado){--chat-pie:calc(var(--bi-h) + var(--safe-b))}
+  body.bi-on:not(.prueba-guiada,.teclado) .barra-inf{display:flex}
+  body.ver-chat-on .bi-tab{gap:2px}
   .barra-inf{position:fixed;inset:auto 0 0;z-index:50;padding-bottom:var(--safe-b);background:var(--panel-solid);border-top:1px solid var(--line2)}
-  .bi-tab{flex:1 1 0;min-width:0;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:none;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+  .bi-tab{flex:1 1 0;min-width:0;height:var(--bi-h,56px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;border:0;background:none;color:var(--muted);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
   .bi-tab[hidden]{display:none}
   .bi-tab:active{background:var(--line)}
   .bi-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
@@ -9191,8 +9220,11 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
               <div class="msg-conv-titulo" id="wb-titulo"></div>
               <div class="msg-conv-sub" id="wb-sub"></div>
             </div>
-            <button class="chat-tool-btn" id="wb-cotizar" type="button" aria-label="Cotizar"><i class="fas fa-file-invoice-dollar"></i> Cotizar</button>
-            <button class="chat-tool-btn" id="wb-ver-lead" type="button" aria-label="Ver lead"><i class="fas fa-user"></i> Ver lead</button>
+            <div class="wb-acciones" id="wb-acciones">
+              <button class="chat-tool-btn" id="wb-llamar" type="button" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i> Llamar</button>
+              <button class="chat-tool-btn" id="wb-cotizar" type="button" aria-label="Cotizar"><i class="fas fa-file-invoice-dollar"></i> Cotizar</button>
+              <button class="chat-tool-btn" id="wb-ver-lead" type="button" aria-label="Ver lead"><i class="fas fa-user"></i> Ver lead</button>
+            </div>
           </div>
           <div class="msg-conv-log dm-log" id="wb-log" role="log" aria-live="polite" hidden></div>
           <div class="wb-compose" id="wb-compose" hidden>
@@ -9242,10 +9274,22 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
               <div class="msg-conv-sub" id="dm-chat-sub"></div>
             </div>
             <span class="dm-app-chip" id="dm-app-chip"></span>
+            <button class="chat-tool-btn" id="dm-llamar" type="button" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp" style="display:none"><i class="fas fa-phone"></i> Llamar</button>
             <button class="chat-tool-btn dm-btn-perfil" id="dm-btn-perfil" type="button" aria-label="Perfil"><i class="fas fa-id-card"></i> Perfil</button>
           </div>
           <div class="msg-conv-log dm-log" id="dm-log" hidden></div>
-          <div class="msg-readonly-note" id="dm-nota" hidden><i class="fas fa-robot"></i> Solo lectura — responde el bot de ventas</div>
+          <div class="msg-readonly-note" id="dm-nota" hidden><i class="fas fa-robot"></i> Solo lectura — responde el bot de ventas
+            <button class="chat-tool-btn" id="dm-pl-abrir" type="button" title="Pasaron 24 h sin mensajes del cliente: solo se le puede escribir con plantilla" hidden><i class="fa-brands fa-whatsapp"></i> Enviar plantilla</button>
+          </div>
+          <div class="dm-pl" id="dm-pl" hidden>
+            <div class="dm-pl-top">
+              <select id="dm-pl-sel" aria-label="Plantilla"></select>
+              <button class="msg-conv-back" id="dm-pl-cerrar" type="button" aria-label="Cerrar plantilla"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="dm-pl-cuerpo" id="dm-pl-cuerpo"></div>
+            <div class="dm-pl-vars" id="dm-pl-vars"></div>
+            <button class="dm-pl-enviar" id="dm-pl-enviar" type="button" disabled><i class="fas fa-paper-plane"></i> Enviar plantilla</button>
+          </div>
         </div>
 
         <aside class="card dm-perfil" id="dm-perfil" aria-label="Ficha del cliente">
