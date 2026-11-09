@@ -29783,7 +29783,7 @@ function dmPintarHead() {
   if (m?.brazo) document.getElementById('dm-chat-sub').textContent += ' · IA: ' + (RIA_BRAZOS[m.brazo] || m.brazo);
 }
 // previos: cuántos mensajes ya estaban pintados; los siguientes entran animados.
-// Mensajes seguidos del mismo lado se agrupan como en la app (la colita va en el último).
+// Mensajes seguidos del mismo lado se agrupan como en WhatsApp (colita en el primero, «Bot» en el último).
 function dmPintarLog(inicio, previos = 0) {
   const log = document.getElementById('dm-log'), h = dmHistorial(dmActual);
   const pegado = inicio || log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -29792,7 +29792,7 @@ function dmPintarLog(inicio, previos = 0) {
     const agrupado = antes && (antes.rol === 'ia') === ia, cola = !despues || (despues.rol === 'ia') !== ia;
     const fotos = ia && Array.isArray(m.fotos) ? m.fotos.filter(u => /^https:\/\//.test(u)) : [], video = ia && /^https:\/\//.test(m.video || '') ? m.video : '';
     const media = fotos.map((u, k) => `<img class="msg-img dm-foto" src="${esc(dmFotoMini(u))}" data-dm-msg="${i}" data-dm-foto="${k}" loading="lazy" alt="Foto">`).join('') + (video ? `<video class="msg-img dm-foto" controls preload="metadata" src="${esc(video)}"></video>` : '');
-    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${media ? ' adjunto' : ''}${!inicio && i >= previos ? ' msg-new' : ''}">${ia && !agrupado ? '<div class="dm-burbuja-ia"><i class="fas fa-robot"></i> Bot</div>' : ''}${!ia && m.voz ? '<div class="dm-voz"><i class="fas fa-microphone"></i> Nota de voz</div>' : ''}${m.texto ? `<div>${esc(m.texto)}</div>` : ''}${media ? `<div class="dm-fotos">${media}</div>` : ''}</div>`;
+    return `<div class="chat-msg ${ia ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${media ? ' adjunto' : ''}${!inicio && i >= previos ? ' msg-new' : ''}">${!ia && m.voz ? '<div class="dm-voz"><i class="fas fa-microphone"></i> Nota de voz</div>' : ''}${media ? `<div class="dm-fotos">${media}</div>` : ''}${m.texto ? `<div>${esc(m.texto)}</div>` : ''}${ia && cola ? '<div class="msg-meta"><span>Bot</span></div>' : ''}</div>`;
   }).join('') : '<div class="msg-empty">Sin mensajes todavía</div>';
   log.querySelectorAll('[data-dm-foto]').forEach(el => el.addEventListener('click', () => {
     const lista = (h[Number(el.dataset.dmMsg)]?.fotos || []).map(dmFotoGrande);
