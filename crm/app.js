@@ -2171,7 +2171,7 @@ let AP_CANDIDATOS_SEL = null;
 // Grupo de etiquetas seleccionables. Un solo helper para los cuatro grupos del
 // panel (asesor, estados, destino, plazo): `multi` decide si conviven varias
 // marcadas o si marcar una desmarca al resto.
-function renderChipGroup(contenedorId, opciones, { multi = true, seleccion = [], onChange } = {}) {
+function renderChipGroup(contenedorId, opciones, { multi = true, seleccion = [], onChange, deseleccionable = false } = {}) {
   const cont = document.getElementById(contenedorId);
   if (!cont) return;
   cont.innerHTML = opciones.map(o => {
@@ -2181,7 +2181,7 @@ function renderChipGroup(contenedorId, opciones, { multi = true, seleccion = [],
   cont.querySelectorAll('.ap-chip').forEach(btn => btn.addEventListener('click', e => {
     e.preventDefault();
     if (multi) btn.classList.toggle('on');
-    else { cont.querySelectorAll('.ap-chip').forEach(b => { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); }); btn.classList.add('on'); }
+    else { const estaba = btn.classList.contains('on'); cont.querySelectorAll('.ap-chip').forEach(b => { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); }); if (!estaba || !deseleccionable) btn.classList.add('on'); }
     btn.setAttribute('aria-pressed', btn.classList.contains('on'));
     onChange?.(chipGroupValores(contenedorId));
   }));
@@ -2189,14 +2189,22 @@ function renderChipGroup(contenedorId, opciones, { multi = true, seleccion = [],
 function chipGroupValores(contenedorId) {
   return [...(document.getElementById(contenedorId)?.querySelectorAll('.ap-chip.on') || [])].map(b => b.dataset.valor);
 }
+const AP_PERIODOS = [
+  { valor: 'q1_2026', etiqueta: 'Primer trimestre 2026', titulo: 'Enero a marzo de 2026', desde: '2026-01-01', hasta: '2026-03-31' },
+  { valor: 'mitad_2026', etiqueta: 'Mitad 2026', titulo: 'Abril a septiembre de 2026', desde: '2026-04-01', hasta: '2026-09-30' },
+  { valor: 'finales_2025', etiqueta: 'Finales 2025', titulo: 'Octubre a diciembre de 2025', desde: '2025-10-01', hasta: '2025-12-31' },
+  { valor: 'mediados_2025', etiqueta: 'Mediados 2025', titulo: 'Abril a septiembre de 2025', desde: '2025-04-01', hasta: '2025-09-30' },
+  { valor: 'historico', etiqueta: 'Histórico', titulo: 'Antes de abril de 2025', desde: '', hasta: '2025-03-31' }
+];
 function apFiltros() {
-  const desdeRaw = document.getElementById('ap-desde').value;
-  const hastaRaw = document.getElementById('ap-hasta').value;
+  const periodo = AP_PERIODOS.find(p => p.valor === chipGroupValores('ap-periodo-chips')[0]);
+  const desdeRaw = periodo ? periodo.desde : document.getElementById('ap-desde').value;
+  const hastaRaw = periodo ? periodo.hasta : document.getElementById('ap-hasta').value;
   const hastaFin = hastaRaw ? new Date(hastaRaw + 'T00:00:00') : null;
   if (hastaFin) hastaFin.setDate(hastaFin.getDate() + 1); // el RPC excluye p_fecha_hasta y el día elegido debe entrar
   return {
     p_antiguedad_dias: null,
-    p_estados: chipGroupValores('ap-estados-chips'),
+    p_estados: ['ATENDIDO'],
     p_fecha_desde: desdeRaw ? new Date(desdeRaw + 'T00:00:00').toISOString() : null,
     p_fecha_hasta: hastaFin ? hastaFin.toISOString() : null,
     p_destinos: chipGroupValores('ap-destinos-chips')
@@ -2223,8 +2231,10 @@ function apInvalidar() {
   AP_CANDIDATOS_SEL = null;
 }
 function setupAsesoresPrueba() {
-  renderChipGroup('ap-estados-chips', ESTADOS_EDIT.map(e => ({ valor: e, etiqueta: niceEstado(e) })),
-    { seleccion: [...ESTADOS_EDIT], onChange: apInvalidar });
+  renderChipGroup('ap-periodo-chips', AP_PERIODOS, { multi: false, deseleccionable: true, onChange: vals => {
+    document.getElementById('ap-fechas').style.display = vals.length ? 'none' : 'grid';
+    apInvalidar();
+  } });
   renderChipGroup('ap-sla-chips', AP_SLA_OPCIONES.map(o => ({ valor: o.valor, etiqueta: o.etiqueta })),
     { multi: false, seleccion: ['48h'] });
   document.getElementById('ap-contar')?.addEventListener('click', contarLotePrueba);
