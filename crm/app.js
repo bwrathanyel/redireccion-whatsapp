@@ -8518,8 +8518,8 @@ function inboxCardHtml(l) {
 }
 async function atenderInboxLead(l) {
   if (leadSoloLectura()) return;
-  // Número compartido: pasa a ATENDIDO cuando el asesor responde desde el chat.
-  if (l.whatsapp_perfil_compartido) { await waAbrirChatDeTelefono(l.telefono, true); return false; }
+  // Número compartido: Atender envía la plantilla y ese envío lo pasa a ATENDIDO.
+  if (l.whatsapp_perfil_compartido) { await waAbrirChatDeTelefono(l.telefono, l); return false; }
   // window.open ANTES del await -- si va después, ya no corre dentro del
   // gesto síncrono del click y Chrome/Firefox lo bloquean como popup. Si de
   // todos modos vuelve null (ej. llamado async desde manejarDeepLinkLeadAccion
@@ -30152,7 +30152,7 @@ async function waCargarAnteriores() {
 // Número compartido: no hay bot ni teléfono del asesor, se responde desde acá.
 const waEsCompartido = () => !!waNumeros?.find(n => n.id === waCuenta)?.compartido;
 const waAtributosLead = (l, wa) => l.whatsapp_perfil_compartido ? `href="#" data-wa-compartido="${wa}"` : `href="https://wa.me/${wa}" target="_blank" rel="noopener"${l.estado === 'POR ATENDER' ? ` data-atender="${l.id}"` : ''}`;
-async function waAbrirChatDeTelefono(telefono, conPlantilla) {
+async function waAbrirChatDeTelefono(telefono, leadAtender) {
   const fin = String(telefono || '').replace(/\D/g, '').slice(-10);
   if (fin.length < 10) { errToast('Este lead no tiene un teléfono válido'); return; }
   if (!waNumeros) await loadWhatsapp();
@@ -30163,10 +30163,10 @@ async function waAbrirChatDeTelefono(telefono, conPlantilla) {
   const buscar = () => waChats.find(c => String(c.telefono).replace(/\D/g, '').slice(-10) === fin);
   for (let pag = 0; pag < 4 && !buscar() && waChatsCursor; pag++) await waCargarChats(false, waChatsCursor);
   const chat = buscar();
-  if (!chat && !conPlantilla) { await waPlantillaAbrir(telefono); return; }
+  if (!chat && !leadAtender) { await waPlantillaAbrir(telefono); return; }
   await new Promise(listo => trasCerrarDrawer(() => { activateSection('whatsapp'); listo(); }));
   if (chat) waAbrirChat(chat);
-  if (conPlantilla) await waPlantillaAbrir(telefono, chat?.nombre);
+  if (leadAtender) await waPlantillaAutomatica(leadAtender, fin);
 }
 // Plantillas de la WABA del número compartido. {{cliente}} = «Sr./Sra. + primer nombre»;
 // si el nombre parece usuario de IG va la variante sin nombre (dueño: nada de «estimado cliente»).
@@ -30216,6 +30216,34 @@ async function waPlantillaAbrir(telefono, nombrePerfil) {
   catch (e) { errToast(WA_CO_ERR[e.message] || 'No se pudo enviar la plantilla'); return; }
   okToast('Plantilla enviada. El chat aparecerá en unos segundos.');
   setTimeout(() => { if (currentSec === 'whatsapp') { waCargarChats(true); if (waActual) waRefrescarChat(); } }, 3000);
+}
+// Regla del dueño: el CRM elige sola la plantilla; el asesor solo toca Atender.
+const WA_FRIO_MS = 30 * 864e5;
+const WA_NOMBRES_SRA = /^(carmen|mercedes|beatriz|ines|isabel|raquel|ruth|esther|ester|luz|pilar|dolores|yasmin|jazmin|karen|evelyn|noemi|nohemi|maribel|marisol|soledad|rosmary|yusmary|milagros|consuelo|amparo|rocio|socorro|nancy|betty|jenny|mary|gladys|doris|iris|lourdes|nelly|sol|abigail|miriam)$/;
+const WA_NOMBRES_SR = /^(carlos|luis|jose|juan|miguel|jesus|angel|daniel|manuel|rafael|gabriel|samuel|ismael|israel|victor|hector|oscar|cesar|edgar|omar|ivan|julian|sebastian|martin|agustin|joaquin|ramon|simon|andres|tomas|nicolas|marcos|felix|alexander|jorge|felipe|enrique|vicente|nelson|wilson|edwin|elvis|ronald|franklin|hernan|adrian|cristian|christian|fabian|wilmer|yorman|jhon|john|richard|robert|william|freddy|henry|kevin|brayan|bryan|jonathan|luca|joshua|nicola|borja)$/;
+// Sin certeza (Rosario, Alexis, nombres raros) devuelve '' y va la variante sin nombre.
+function waTratamiento(nombre) {
+  const n = nombre.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if (WA_NOMBRES_SRA.test(n)) return 'Sra.';
+  if (WA_NOMBRES_SR.test(n)) return 'Sr.';
+  if (n === 'rosario') return '';
+  return n.endsWith('a') ? 'Sra.' : n.endsWith('o') ? 'Sr.' : '';
+}
+async function waPlantillaAutomatica(l, fin) {
+  const base = Date.now() - new Date(l.fecha_creacion) > WA_FRIO_MS ? 'reactivacion_lead_frio' : 'contacto_lead_caliente';
+  const nombre = waNombreReal(l.nombre), trato = nombre && waTratamiento(nombre), cliente = trato ? `${trato} ${nombre}` : '';
+  const destino = String(l.destino || '').replace(/\s+/g, ' ').trim();
+  const params = [...(cliente ? [cliente] : []), l.asesor || MI_NOMBRE, destino && destino.length <= 60 ? destino : 'su próximo viaje'];
+  try { await waInvocar({ accion: 'enviar_plantilla_compartido', accountId: waCuenta, telefono: `+${String(l.telefono).replace(/\D/g, '')}`, plantilla: cliente ? base : `${base}_sin_nombre`, params }); }
+  catch (e) { errToast(WA_CO_ERR[e.message] || 'No se pudo enviar el mensaje al cliente'); return; }
+  okToast('Mensaje enviado al cliente');
+  setTimeout(async () => {
+    if (currentSec !== 'whatsapp') return;
+    await waCargarChats(true);
+    if (waActual) return waRefrescarChat();
+    const chat = waChats.find(c => String(c.telefono).replace(/\D/g, '').slice(-10) === fin);
+    if (chat) waAbrirChat(chat);
+  }, 3000);
 }
 function waPanelChat(abierto) {
   const compartido = waEsCompartido();
