@@ -1793,16 +1793,20 @@ function pushForzado() { return ROL === 'asesor' && MI_USERNAME !== 'ambar' && !
 const PUSH_PRUEBA_MS = 20000, PUSH_INTENTOS_SALIDA = 3;
 let pushIntentos = 0;
 const pushBloqueoCerrar = () => { const box = document.getElementById('push-bloqueo'); if (box) box.hidden = true; };
-async function pushBloqueoRevisar() {
+async function pushBloqueoRevisar(btn) {
   if (!pushForzado()) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Revisando…'; }
   const faltan = Object.fromEntries(['notificaciones_leads', 'notificaciones_asistencia'].filter(k => MI_PREFERENCIAS[k] === false).map(k => [k, true]));
   if (Object.keys(faltan).length) {
     MI_PREFERENCIAS = { ...MI_PREFERENCIAS, ...faltan };
     Promise.resolve(sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS })).catch(() => {});
   }
   const { data, error } = await sb.rpc('mi_push_estado');
-  if (error || !data?.ok || data.movil_acuse_7d) { pushBloqueoCerrar(); return; }
-  await pushBloqueoPintar();
+  if (error || !data?.ok || data.movil_acuse_7d) { pushBloqueoCerrar(); if (btn && data?.movil_acuse_7d) okToast('Listo: tus avisos funcionan'); return; }
+  // Sin aviso el modal se repinta idéntico y el botón parece muerto.
+  const movil = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  await pushBloqueoPintar(!btn ? '' : movil ? 'Todavía no está listo. Sigue el paso de arriba y vuelve a tocar el botón.'
+    : 'Tu teléfono todavía no recibió ningún aviso. Abre ahí el CRM, toca «Activar y probar» y espera la prueba; luego vuelve aquí.');
 }
 async function pushBloqueoPintar(aviso = '') {
   const box = document.getElementById('push-bloqueo');
@@ -1841,7 +1845,7 @@ function setupPushBloqueo() {
     if (a === 'probar') pushBloqueoProbar(b);
     else if (a === 'recargar') location.reload();
     else if (a === 'seguir') pushBloqueoCerrar();
-    else pushBloqueoRevisar();
+    else pushBloqueoRevisar(b);
   });
   return pushBloqueoRevisar();
 }
