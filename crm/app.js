@@ -32168,7 +32168,7 @@ async function drAbrirEditor(tipo, d) {
     Object.entries(campos).forEach(([id, k]) => { document.getElementById(id).value = d[k] ?? ''; });
     document.getElementById('vc-fecha-entrada').min = '';
     vcServicios = structuredClone(d.servicios || []); vcServSuma = vcAutoAplicado = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
-    vcDiasManual = vcRestaManual = true; vcPlanOtro = true; vcPintarServicios(); vcSyncChips(); vcActualizarPreview();
+    vcDiasManual = vcRestaManual = true; vcPlanOtro = true; vcReciboSimple = !!d.recibo_simple; vcPintarServicios(); vcSyncChips(); vcActualizarPreview();
   } else if (tipo === 'cotizacion') {
     activateSection('cotizacion-boletos'); await cbCargarSeccion(); cbResetForm();
     cbRestaurarBorrador({ ...d, asesor: d.enviado_a }, document.getElementById('cb-asesor'));
@@ -32232,6 +32232,7 @@ function setupVoucher() {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
     if (d.pago) vcTogglePago(d.pago);
+    else if (d.vcTipo) { if (!DR?.edicion('voucher')) { vcReciboSimple = d.vcTipo === 'recibo'; vcActualizarPreview(); } }
     else if ('plan' in d) vcElegirPlan(d.plan);
     else if (d.vcAdd) vcAgregarServicio(d.vcAdd);
     else if ('vcSquitar' in d) { vcServicios.splice(Number(d.vcSquitar), 1); vcPintarServicios(); vcAjustarTotal(); vcActualizarPreview(); }
@@ -32783,7 +32784,7 @@ function vcBolLimpio(s) {
 
 // Lead elegido + sus reservas activas. vcReservas null = cargando (o sin lead pagado).
 let vcLead = null, vcReservas = null, vcReservasError = false, vcConVoucher = new Set(), vcUltimaVinculada = null;
-let vcSinReserva = false, vcDiasManual = false, vcRestaManual = false;
+let vcSinReserva = false, vcDiasManual = false, vcRestaManual = false, vcReciboSimple = false;
 let vcLeadTimer = null, vcLeadTk = 0, vcLeadsRes = [], vcLeadIdx = -1;
 let vcSugTimer = null, vcSugCand = null;
 const vcSugDescartados = new Set();
@@ -32936,8 +32937,12 @@ function vcActualizarPreview() {
   vcSyncPlanes();
   txt('vc-b-hab', val('vc-habitaciones').trim() || '—'); txt('vc-b-plan', val('vc-modalidad').trim() || '—');
   const servs = vcServicios.filter(s => String(s.nombre || '').trim());
-  $('vc-b-servs').innerHTML = servs.map(s => `<div><i class="fas ${(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).icono}"></i><span>${esc(s.nombre.trim())}</span><em>${esc([s.tipo === 'seguro' ? vcSeguroVigencia(s) : s.tipo === 'hotel' ? vcHotelEstadia(s) : s.fecha ? vcFechaCorta(s.fecha) : '', s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''].filter(Boolean).join(' · '))}</em></div>`).join('');
+  $('vc-b-servs').innerHTML = servs.map(s => `<div><i class="fas ${(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).icono}"></i><span>${esc(s.nombre.trim())}</span><em>${esc([s.tipo === 'seguro' ? vcSeguroVigencia(s) : s.tipo === 'hotel' ? vcHotelEstadia(s) : s.fecha ? vcFechaCorta(s.fecha) : '', !vcReciboSimple && s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''].filter(Boolean).join(' · '))}</em></div>`).join('');
   $('vc-b-servs').hidden = !servs.length;
+  // Recibo simple: la vista previa y el PDF van sin montos; la marca no cambia al corregir una revisión.
+  document.querySelectorAll('#vc-tipo [data-vc-tipo]').forEach(b => { const on = (b.dataset.vcTipo === 'recibo') === vcReciboSimple; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); b.disabled = !!DR?.edicion('voucher'); });
+  $('vc-tipo-nota').hidden = !vcReciboSimple; $('vc-boleto').classList.toggle('vc-recibo', vcReciboSimple);
+  $('vc-boleto').querySelector('.vc-b-cab small').textContent = vcReciboSimple ? 'Recibo simple' : 'Voucher de servicio';
   const pm = vcEsPagoMovil(), ref = val('vc-referencia').trim(), forma = val('vc-forma-pago').trim();
   $('vc-ref-box').hidden = !pm;
   $('vc-b-ref').innerHTML = forma ? `<i class="fas fa-receipt"></i> ${esc(forma)}${pm && ref ? ` · Ref. <b>${esc(ref)}</b>` : ''}` : '';
@@ -32957,7 +32962,7 @@ function vcActualizarPreview() {
     : { cerrar: 'Venta nueva · ficha en Reservas', nueva: 'Reserva nueva (otro viaje)', vincular: 'Ficha ' + (p.reserva?.codigo || ''), cargando: 'Buscando reservas...', solo: 'Solo PDF, sin ficha' }[p.modo];
   const btn = $('vc-generar-btn');
   if (!btn.disabled && DR?.edicion('voucher')) btn.innerHTML = '<i class="fas fa-file-pdf"></i> Guardar revisión';
-  else if (!btn.disabled) btn.innerHTML = `<i class="fas fa-file-pdf"></i> ${{ cerrar: 'Generar y cerrar venta', nueva: 'Generar y crear reserva', vincular: 'Generar y vincular' }[p.modo] || 'Generar voucher'}`;
+  else if (!btn.disabled) btn.innerHTML = `<i class="fas fa-file-pdf"></i> ${{ cerrar: 'Generar y cerrar venta', nueva: 'Generar y crear reserva', vincular: 'Generar y vincular' }[p.modo] || (vcReciboSimple ? 'Generar recibo' : 'Generar voucher')}`;
 }
 function vcSyncChips() {
   const partes = val('vc-forma-pago').toLowerCase().split('+').map(s => s.trim());
@@ -32980,7 +32985,7 @@ function vcReset() {
   document.getElementById('vc-fecha-entrada').min = cbHoy();
   document.getElementById('vc-ref-box').classList.remove('falta');
   document.getElementById('vc-check-in').value = '3:00 PM'; document.getElementById('vc-check-out').value = '12:00 PM';
-  vcLead = null; vcReservas = null; vcReservasError = false; vcSinReserva = vcDiasManual = vcRestaManual = false; vcSugCand = null; vcSugDescartados.clear();
+  vcLead = null; vcReservas = null; vcReservasError = false; vcSinReserva = vcDiasManual = vcRestaManual = vcReciboSimple = false; vcSugCand = null; vcSugDescartados.clear();
   document.getElementById('vc-sugerencia').hidden = true;
   vcCerrarRes(); vcPintarLead(); vcSyncChips(); vcActualizarPreview();
 }
@@ -33000,7 +33005,7 @@ function vcGuardarBorrador() {
   const h = vcHotel.producto_id ? { producto_id: vcHotel.producto_id, nombre: vcHotel.nombre, plan: vcHotel.plan, hab: vcHotel.hab, hab_libre: vcHotel.hab_libre, hab_manual: vcHotel.hab_manual } : null;
   try {
     localStorage.setItem(vcBorradorClave(), JSON.stringify({ campos, servicios: vcServicios, lead: vcLead, sinReserva: vcSinReserva, hotel: h,
-      hospMonto: vcHospMonto, hospTarifa: vcHospTarifa, hospManual: vcHospManual, autoAplicado: vcAutoAplicado, diasManual: vcDiasManual, restaManual: vcRestaManual, planOtro: vcPlanOtro }));
+      hospMonto: vcHospMonto, hospTarifa: vcHospTarifa, hospManual: vcHospManual, autoAplicado: vcAutoAplicado, diasManual: vcDiasManual, restaManual: vcRestaManual, planOtro: vcPlanOtro, reciboSimple: vcReciboSimple }));
   } catch { /* sin storage */ }
 }
 async function vcRestaurarBorrador() {
@@ -33018,7 +33023,7 @@ async function vcRestaurarBorrador() {
   vcServSuma = vcServicios.reduce((n, s) => n + (Number(s.monto) || 0), 0);
   vcHospMonto = Number(b.hospMonto) || 0; vcAutoAplicado = Number(b.autoAplicado) || 0;
   vcHospTarifa = Number(b.hospTarifa) || 0; vcHospManual = b.hospManual ?? null;
-  vcDiasManual = !!b.diasManual; vcRestaManual = !!b.restaManual; vcPlanOtro = !!b.planOtro;
+  vcDiasManual = !!b.diasManual; vcRestaManual = !!b.restaManual; vcPlanOtro = !!b.planOtro; vcReciboSimple = !!b.reciboSimple;
   vcPintarServicios(); vcSyncChips();
   if (b.lead?.id) vcElegirLead(b.lead);
   vcSinReserva = !!b.sinReserva;
@@ -33365,7 +33370,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     referencia_pago: pagoMovil ? referencia : null,
     monto_pagado: val('vc-monto-pagado') ? parseFloat(val('vc-monto-pagado')) : null,
     resta: val('vc-resta') ? parseFloat(val('vc-resta')) : null,
-    servicios: vcServicios.map(vcServLimpio),
+    servicios: vcServicios.map(vcServLimpio), recibo_simple: vcReciboSimple,
   };
   if (DR?.edicion('voucher')) { await DR.guardar('voucher', fila); return; }
   btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Revisando...';
@@ -33381,7 +33386,7 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     await ensureVoucherLibs();
     const blob = new Blob([await construirVoucherPdf(registro)], { type: 'application/pdf' });
     const nombreArchivo = docNombre([
-      `Voucher ${String(registro.numero_factura).padStart(6, '0')}`,
+      `${registro.recibo_simple ? 'Recibo simple' : 'Voucher'} ${String(registro.numero_factura).padStart(6, '0')}`,
       clienteNombre, registro.destino_hospedaje, docFecha(registro.fecha_entrada),
     ]);
     // Guarda el PDF real en Storage -- el historial siempre muestra este
@@ -33531,10 +33536,10 @@ function vcpDibujarVoucher(doc, v, ctx) {
   const servs = Array.isArray(v.servicios) ? v.servicios : [];
   const conHosp = !servs.length || [v.destino_hospedaje, v.fecha_entrada, v.fecha_salida, v.modalidad, v.habitaciones].some(Boolean);
   const boletos = Array.isArray(v.boletos) ? v.boletos : [];
-  const titulo = txt(v.titulo_voucher) || (conHosp ? 'VOUCHER DE HOSPEDAJE' : boletos.length === servs.length ? 'VOUCHER DE BOLETO AÉREO' : 'VOUCHER DE SERVICIO');
+  const titulo = txt(v.titulo_voucher) || (v.recibo_simple ? 'RECIBO SIMPLE' : conHosp ? 'VOUCHER DE HOSPEDAJE' : boletos.length === servs.length ? 'VOUCHER DE BOLETO AÉREO' : 'VOUCHER DE SERVICIO');
   doc.setFillColor(...VCP.navy); doc.rect(VCP_X0, 114, VCP_W, 42, 'F');
   font('bold', 14.5, [255, 255, 255]); doc.text(titulo, VCP_X0 + 14, 140.5, { charSpace: .6 });
-  font('semibold', 10, [255, 255, 255]); doc.text(v.numero_factura ? `FACTURA N° ${txt(v.numero_factura)}` : `RESERVA N° ${txt(v.codigo_reserva)}`, VCP_X1 - 14, 132, { align: 'right' });
+  font('semibold', 10, [255, 255, 255]); doc.text(v.numero_factura ? `${v.recibo_simple ? 'RECIBO' : 'FACTURA'} N° ${txt(v.numero_factura)}` : `RESERVA N° ${txt(v.codigo_reserva)}`, VCP_X1 - 14, 132, { align: 'right' });
   font('normal', 8, vcpTinte(VCP.navy, .7)); doc.text(`Fecha de emisión: ${v.fecha_emision}`, VCP_X1 - 14, 146, { align: 'right' });
 
   // ---------- Saludo ----------
@@ -33581,7 +33586,9 @@ function vcpDibujarVoucher(doc, v, ctx) {
   }, VCP_X0, VCP_W);
 
   // ---------- Servicios adicionales ----------
-  if (servs.length) {
+  if (servs.length && v.recibo_simple) {
+    y = listado([txt(v.etiqueta_servicios) || 'SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS'], servs.map(s => [s.nombre, s.fecha, s.pax]), y, { 0: { cellWidth: 290 } }) + gap;
+  } else if (servs.length) {
     y = listado([txt(v.etiqueta_servicios) || 'SERVICIOS ADICIONALES', 'FECHA', 'PASAJEROS', 'MONTO'], servs.map(s => [s.nombre, s.fecha, s.pax, usd(s.monto)]), y,
       { 0: { cellWidth: 250 }, 3: { halign: 'right', fontStyle: st('semibold') } }) + gap;
   }
@@ -33625,6 +33632,7 @@ function vcpDibujarVoucher(doc, v, ctx) {
   }
 
   // ---------- Pago ----------
+  if (v.recibo_simple) return;
   // Con abonos (pedido del dueño 30-oct): primero lo que el cliente pagó, abono por abono, y abajo el
   // resumen con el total. Sin el cuadro «Forma de pago»: cada abono ya dice su método y referencia.
   const resumen = (yR, opt) => tabla('RESUMEN DE PAGO', [
@@ -33659,14 +33667,14 @@ function vcpDibujarVoucher(doc, v, ctx) {
 }
 
 // Pie común a las 4 páginas; se dibuja al final, cuando ya se sabe el total.
-function vcpPie(doc, { F, st }, nVoucher = 1) {
+function vcpPie(doc, { F, st, recibo }, nVoucher = 1) {
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) {
     doc.setPage(i);
     doc.setDrawColor(...VCP.linea); doc.setLineWidth(.7); doc.line(VCP_X0, 750, VCP_X1, 750);
     doc.setFont(F, st('normal')); doc.setFontSize(6.8); doc.setTextColor(...VCP.gris);
     doc.text(`Destino y Eventos Lotus 360  ·  RIF ${VCP_RIF}  ·  0241-5144470  ·  Destinoyeventoslotus360@gmail.com`, 306, 763, { align: 'center' });
-    doc.text(i <= nVoucher ? 'Las condiciones generales de contratación forman parte de este voucher (páginas siguientes).' : 'Condiciones generales de la contratación de servicios turísticos', 306, 773, { align: 'center' });
+    doc.text(i <= nVoucher ? `Las condiciones generales de contratación forman parte de este ${recibo ? 'recibo' : 'voucher'} (páginas siguientes).` : 'Condiciones generales de la contratación de servicios turísticos', 306, 773, { align: 'center' });
     doc.text(`Página ${i} de ${n}`, VCP_X1, 763, { align: 'right' });
     vcpFranja(doc, 0, 788, 612, 4);
   }
@@ -33787,7 +33795,7 @@ async function construirVoucherPdf(v) {
   };
   let logo = null;
   try { const d = await cargarImagenBase64('logo-color.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
-  const ctx = { F, st, logo };
+  const ctx = { F, st, logo, recibo: !!v.recibo_simple };
   const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
   const lista = Array.isArray(v.servicios) ? v.servicios : [], boletos = lista.filter(s => s.tipo === 'boleto');
   const servicios = lista.map(s => ({
@@ -33813,7 +33821,7 @@ async function construirVoucherPdf(v) {
   doc.addPage();
   vcpDibujarTerminos(doc, ctx, VC_TERMINOS);
   vcpPie(doc, ctx, nVoucher);
-  drRotularPdf(doc, v.rotulo || v.numero_factura ? v.rotulo || `Voucher ${v.numero_factura} · revisión ${v.revision || 1}` : `Voucher ${v.codigo_reserva || ''}`);
+  drRotularPdf(doc, v.rotulo || v.numero_factura ? v.rotulo || `${v.recibo_simple ? 'Recibo simple' : 'Voucher'} ${v.numero_factura} · revisión ${v.revision || 1}` : `Voucher ${v.codigo_reserva || ''}`);
   return doc.output('arraybuffer');
 }
 
