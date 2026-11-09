@@ -5302,6 +5302,57 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .ap-chip-todos{background:none;border:0;color:var(--accent-ink);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;padding:0 6px;text-decoration:underline}
 .ap-hint{color:var(--muted2);font-weight:400;font-size:11px;margin-left:4px}
 .chip-group:empty::after{content:"Cargando…";color:var(--muted2);font-size:12px}
+/* Asignar lote: 3 pasos + barra de resumen con el reparto por asesor */
+.ap-paso{padding:14px 0;border-top:1px solid var(--line)}
+.ap-paso:first-of-type{border-top:0;padding-top:2px}
+.ap-paso-cab{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.ap-paso-n{flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);font-size:11px;font-weight:800}
+.ap-paso-t{font-size:13px;font-weight:700;color:var(--txt);margin-right:auto}
+.ap-paso-cab .ap-chip-todos{min-height:28px}
+.ap-paso>.fl:first-of-type{margin-top:0}
+.ap-asesores{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:9px}
+.ap-asesores .ap-chip{justify-content:flex-start;gap:11px;min-height:54px;padding:9px 11px;border-radius:12px;background:var(--panel-solid);border-color:var(--line2);white-space:normal;text-align:left;transition:background .16s,border-color .16s,box-shadow .16s}
+.ap-asesores .ap-chip:hover{border-color:rgba(var(--accent-rgb),.55);background:var(--panel-solid)}
+.ap-asesores .ap-chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--txt);box-shadow:inset 0 0 0 1px var(--accent)}
+.ap-ava{flex:none;display:grid;place-items:center;width:32px;height:32px;border-radius:999px;background:rgba(var(--ink-rgb),.08);color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.02em;transition:background .16s,color .16s}
+.ap-asesores .ap-chip.on .ap-ava{background:var(--accent);color:var(--on-accent)}
+.ap-as-txt{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.ap-as-nom{font-size:12.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ap-as-meta{font-size:11px;font-weight:500;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ap-as-check{flex:none;font-size:15px;color:var(--accent-ink);opacity:0;transform:scale(.7);transition:opacity .16s,transform .16s}
+.ap-asesores .ap-chip.on .ap-as-check{opacity:1;transform:none}
+.ap-fechas{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 11px;margin-bottom:4px}
+.ap-fila{display:grid;grid-template-columns:minmax(130px,170px) 1fr;gap:0 22px;align-items:start}
+.ap-fila .fl{margin-top:0}
+.ap-fila .chip-group{margin-bottom:0}
+.ap-prev{max-height:340px;overflow:auto;margin-top:4px;border:1px solid var(--line);border-radius:12px}
+.ap-prev th{position:sticky;top:0;z-index:1;background:var(--panel-solid)}
+.ap-prev input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.ap-va{color:var(--accent-ink);font-weight:700;white-space:nowrap}
+.ap-va:empty::after{content:"—";color:var(--muted2);font-weight:400}
+.ap-prev-pie{font-size:11.5px;color:var(--muted2);margin:7px 2px 0}
+.ap-resumen{position:sticky;bottom:calc(var(--safe-b) + 14px);z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:11px 14px;margin-top:14px;padding:14px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow,0 10px 28px rgba(0,0,0,.22))}
+.ap-resumen-info{flex:1 1 260px;min-width:0}
+.ap-resumen-cifras{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted)}
+.ap-resumen-cifras b{color:var(--txt);font-weight:800}
+.ap-resumen-cifras .ap-aviso{color:var(--amber)}
+.ap-reparto{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.ap-reparto:empty{display:none}
+.ap-rep-chip{display:inline-flex;align-items:center;gap:7px;padding:3px 3px 3px 11px;border-radius:999px;background:rgba(var(--ink-rgb),.05);border:1px solid var(--line);font-size:11.5px;font-weight:600;color:var(--txt)}
+.ap-rep-chip b{min-width:26px;padding:2px 7px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-weight:800;text-align:center}
+.ap-resumen-acc{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+.ap-resumen-acc .btn-sm{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 14px}
+.ap-resumen-acc .dbtn{width:auto;flex:0 1 auto;min-height:44px;margin-top:0;padding:0 16px}
+.ap-resumen .edit-err{flex-basis:100%;min-height:0;margin:0}
+.ap-resumen .edit-err:empty{display:none}
+@media (max-width:760px){
+  .ap-asesores{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .ap-fila{grid-template-columns:1fr}
+  .ap-fila>div+div{margin-top:11px}
+  .ap-resumen{position:static;box-shadow:none}
+  .ap-resumen-acc{flex:1 1 100%}
+  .ap-resumen-acc>*{flex:1 1 100%;justify-content:center}
+}
 .tl-ev{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line2)}
 .tl-ev:last-child{border-bottom:0}
 .tl-ev-hora{flex:0 0 52px;color:var(--muted2);font-size:12px;font-variant-numeric:tabular-nums}
@@ -9476,40 +9527,52 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
       </div>
 
-      <!-- ASIGNACIÓN DE LOTES -- reparto manual de leads viejos a un asesor
-           comercial, más el seguimiento de su progreso. -->
+      <!-- ASIGNACIÓN DE LOTES -- reparto manual de leads viejos entre uno o
+           varios asesores comerciales, más el seguimiento de su progreso. -->
       <div class="gp-tab-panel" data-gp-panel="prueba" style="display:none">
-        <div class="card">
+        <div class="card ap-card">
           <h2><i class="fas fa-layer-group"></i> Asignar lote de leads</h2>
-          <div class="csub">Leads viejos que el asesor tiene que contactar dejando nota y resultado por cada uno. El lead pasa a ser suyo.</div>
-          <label class="fl">Asesor</label>
-          <div id="ap-usuario-chips" class="chip-group"></div>
-          <label class="fl">Período</label>
-          <div id="ap-periodo-chips" class="chip-group"></div>
-          <div id="ap-fechas" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 10px">
-            <div><label class="fl">Lead creado desde <span class="ap-hint">(opcional)</span></label><input id="ap-desde" class="ei" type="date"></div>
-            <div><label class="fl">Lead creado hasta <span class="ap-hint">(opcional)</span></label><input id="ap-hasta" class="ei" type="date"></div>
-          </div>
-          <label class="fl">Destino <span class="ap-hint">(ninguno marcado = todos)</span><button type="button" class="ap-chip-todos" data-chips-ninguno="ap-destinos-chips">Limpiar</button></label>
-          <div id="ap-destinos-chips" class="chip-group"></div>
-          <label class="fl">Cantidad</label>
-          <input id="ap-cantidad" class="ei" type="number" min="1" max="100" value="5">
-          <label class="fl">Plazo para contactarlos</label>
-          <div id="ap-sla-chips" class="chip-group"></div>
-          <div class="edit-err" id="ap-err"></div>
-          <div class="tbar" style="margin-top:12px">
-            <button class="btn-sm" id="ap-contar" type="button"><i class="fas fa-magnifying-glass"></i> Ver cuántos matchean</button>
-            <button class="btn-sm" id="ap-preview-btn" type="button"><i class="fas fa-list-check"></i> Ver leads y elegir</button>
-            <span id="ap-conteo" style="margin-left:10px;font-size:13px;color:var(--muted2)"></span>
-          </div>
+          <div class="csub">Leads viejos para recontactar dejando nota y resultado por cada uno. El total se reparte en partes iguales entre los asesores elegidos y cada lead pasa a ser de quien lo recibe.</div>
+          <section class="ap-paso">
+            <div class="ap-paso-cab"><span class="ap-paso-n">1</span><span class="ap-paso-t">Quiénes reciben</span><button type="button" class="ap-chip-todos" data-chips-todos="ap-usuario-chips">Todos</button><button type="button" class="ap-chip-todos" data-chips-ninguno="ap-usuario-chips">Ninguno</button></div>
+            <div id="ap-usuario-chips" class="chip-group ap-asesores"></div>
+          </section>
+          <section class="ap-paso">
+            <div class="ap-paso-cab"><span class="ap-paso-n">2</span><span class="ap-paso-t">Qué leads</span></div>
+            <label class="fl">Período</label>
+            <div id="ap-periodo-chips" class="chip-group"></div>
+            <div id="ap-fechas" class="ap-fechas">
+              <div><label class="fl" for="ap-desde">Lead creado desde <span class="ap-hint">(opcional)</span></label><input id="ap-desde" class="ei" type="date"></div>
+              <div><label class="fl" for="ap-hasta">Lead creado hasta <span class="ap-hint">(opcional)</span></label><input id="ap-hasta" class="ei" type="date"></div>
+            </div>
+            <label class="fl">Destino <span class="ap-hint">(ninguno marcado = todos)</span><button type="button" class="ap-chip-todos" data-chips-ninguno="ap-destinos-chips">Limpiar</button></label>
+            <div id="ap-destinos-chips" class="chip-group"></div>
+          </section>
+          <section class="ap-paso">
+            <div class="ap-paso-cab"><span class="ap-paso-n">3</span><span class="ap-paso-t">Cuántos y en qué plazo</span></div>
+            <div class="ap-fila">
+              <div><label class="fl" for="ap-cantidad">Total a repartir</label><input id="ap-cantidad" class="ei" type="number" min="1" max="100" value="20" inputmode="numeric"></div>
+              <div><label class="fl">Plazo para contactarlos</label><div id="ap-sla-chips" class="chip-group"></div></div>
+            </div>
+          </section>
           <div id="ap-preview-wrap"></div>
-          <button class="dbtn save" id="ap-asignar" type="button" style="margin-top:12px" disabled><i class="fas fa-check"></i> Asignar lote</button>
+          <div class="ap-resumen">
+            <div class="ap-resumen-info">
+              <div class="ap-resumen-cifras" id="ap-conteo" aria-live="polite"></div>
+              <div class="ap-reparto" id="ap-reparto"></div>
+            </div>
+            <div class="ap-resumen-acc">
+              <button class="btn-sm" id="ap-preview-btn" type="button"><i class="fas fa-list-check"></i> Ver leads y elegir</button>
+              <button class="dbtn save" id="ap-asignar" type="button" disabled><i class="fas fa-check"></i> <span id="ap-asignar-txt">Asignar lote</span></button>
+            </div>
+            <div class="edit-err" id="ap-err" role="alert"></div>
+          </div>
         </div>
         <div class="card" style="margin-top:16px">
           <h2><i class="fas fa-sun"></i> Lote diario automático</h2>
           <p style="color:var(--muted);font-size:12px;margin:4px 0 10px">Cada mañana (7:30) se le completa al asesor la cola de recontacto hasta la cantidad elegida: leads de los últimos 90 días sin cotizar, con teléfono, los más recientes primero. Lo que no trabajó ayer no se acumula.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <span style="font-size:12px;color:var(--muted)">Para el asesor elegido arriba:</span>
+            <span style="font-size:12px;color:var(--muted)">Para los asesores elegidos arriba:</span>
             <input type="number" id="ld-cantidad" min="1" max="50" value="15" style="width:72px" aria-label="Leads por día">
             <span style="font-size:12px;color:var(--muted)">por día</span>
             <button class="dbtn save" id="ld-activar" type="button"><i class="fas fa-play"></i> Activar</button>

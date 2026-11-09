@@ -2176,7 +2176,7 @@ function renderChipGroup(contenedorId, opciones, { multi = true, seleccion = [],
   if (!cont) return;
   cont.innerHTML = opciones.map(o => {
     const marcado = seleccion.includes(o.valor);
-    return `<button type="button" class="ap-chip${marcado ? ' on' : ''}" data-valor="${esc(o.valor)}" aria-pressed="${marcado}" title="${esc(o.titulo || o.etiqueta)}">${esc(o.etiqueta)}</button>`;
+    return `<button type="button" class="ap-chip${marcado ? ' on' : ''}" data-valor="${esc(o.valor)}" aria-pressed="${marcado}" title="${esc(o.titulo || o.etiqueta)}">${o.html ?? esc(o.etiqueta)}</button>`;
   }).join('');
   cont.querySelectorAll('.ap-chip').forEach(btn => btn.addEventListener('click', e => {
     e.preventDefault();
@@ -2224,11 +2224,75 @@ function apVenceAt() {
   const horas = AP_SLA_OPCIONES.find(o => o.valor === sel)?.horas ?? null;
   return horas ? new Date(Date.now() + horas * 3600 * 1000).toISOString() : null;
 }
+// Cambio de filtro: la vista previa y el conteo dejan de valer. Cambiar asesores,
+// total o tildados no invalida nada: solo se recalcula el reparto.
 function apInvalidar() {
-  document.getElementById('ap-asignar').disabled = true;
-  document.getElementById('ap-conteo').textContent = '';
   document.getElementById('ap-preview-wrap').innerHTML = '';
   AP_CANDIDATOS_SEL = null;
+  apProgramarConteo();
+}
+const AP_MAX_POR_ASESOR = 100; // tope de p_cantidad en asignar_lote_prueba
+let apAsesoresInfo = new Map(), apMatch = null, apContarTimer = 0, apContarGen = 0;
+const apAsesoresSel = () => chipGroupValores('ap-usuario-chips');
+// Total en partes iguales; el resto va a los primeros de la lista (61 entre 3 = 21/20/20).
+function apReparto(total, ids) {
+  if (!ids.length || !(total > 0)) return [];
+  const base = Math.floor(total / ids.length), resto = total % ids.length;
+  return ids.map((id, i) => ({ usuario_id: id, nombre: apAsesoresInfo.get(id)?.nombre || 'Asesor', cantidad: base + (i < resto ? 1 : 0) }))
+    .filter(r => r.cantidad > 0);
+}
+function apPlan() {
+  const sel = apAsesoresSel();
+  const total = parseInt(document.getElementById('ap-cantidad').value, 10);
+  const tildados = AP_CANDIDATOS_SEL ? [...document.querySelectorAll('[data-ap-lead]:checked')].map(c => Number(c.dataset.apLead)) : null;
+  const disponible = tildados ? tildados.length : apMatch;
+  const efectivo = isNaN(total) ? 0 : (disponible == null ? total : Math.min(total, disponible));
+  const reparto = apReparto(efectivo, sel);
+  let motivo = '';
+  if (!sel.length) motivo = 'Elige al menos un asesor';
+  else if (isNaN(total) || total < 1) motivo = 'Indica cuántos leads repartir';
+  else if (disponible == null) motivo = 'Contando leads…';
+  else if (disponible === 0) motivo = tildados ? 'Tilda al menos un lead' : 'Ningún lead matchea el filtro';
+  else if (reparto.some(r => r.cantidad > AP_MAX_POR_ASESOR)) motivo = `Máximo ${AP_MAX_POR_ASESOR} por asesor`;
+  return { sel, total, tildados, disponible, efectivo, reparto, motivo };
+}
+function apRenderResumen() {
+  const p = apPlan();
+  const cant = document.getElementById('ap-cantidad');
+  if (cant) cant.max = AP_MAX_POR_ASESOR * Math.max(1, p.sel.length);
+  const cifras = [];
+  if (p.disponible == null) cifras.push('<span><i class="fas fa-spinner fa-spin"></i> Contando leads…</span>');
+  else {
+    cifras.push(`<span><b>${fmt(apMatch ?? 0)}</b> matchean</span>`);
+    if (p.tildados) cifras.push(`<span><b>${fmt(p.tildados.length)}</b> tildados</span>`);
+    if (p.sel.length && p.efectivo > 0) cifras.push(`<span><b>${fmt(p.efectivo)}</b> a repartir</span>`);
+    if (p.total > p.disponible && p.disponible > 0) cifras.push(`<span class="ap-aviso"><i class="fas fa-circle-info"></i> Hay menos de ${fmt(p.total)}: se reparten los ${fmt(p.disponible)}</span>`);
+  }
+  document.getElementById('ap-conteo').innerHTML = cifras.join('');
+  document.getElementById('ap-reparto').innerHTML = p.reparto.map(r =>
+    `<span class="ap-rep-chip">${esc(r.nombre.split(' ')[0])} <b>${r.cantidad}</b></span>`).join('');
+  const btn = document.getElementById('ap-asignar');
+  if (!btn.dataset.ocupado) {
+    btn.disabled = !!p.motivo;
+    document.getElementById('ap-asignar-txt').textContent = p.motivo ||
+      `Asignar ${p.efectivo} lead${p.efectivo === 1 ? '' : 's'} a ${p.reparto.length} asesor${p.reparto.length === 1 ? '' : 'es'}`;
+  }
+  if (p.tildados) {
+    const destino = new Map();
+    let i = 0;
+    p.reparto.forEach(r => { for (let k = 0; k < r.cantidad; k++) destino.set(p.tildados[i++], r.nombre.split(' ')[0]); });
+    document.querySelectorAll('[data-ap-va]').forEach(td => { td.textContent = destino.get(Number(td.dataset.apVa)) || ''; });
+    const todos = document.getElementById('ap-sel-todos');
+    const marcables = document.querySelectorAll('[data-ap-lead]').length;
+    if (todos) { todos.checked = p.tildados.length === marcables; todos.indeterminate = p.tildados.length > 0 && p.tildados.length < marcables; }
+  }
+}
+function apProgramarConteo() {
+  clearTimeout(apContarTimer);
+  apMatch = null; apContarGen++;
+  document.getElementById('ap-err').textContent = '';
+  apRenderResumen();
+  apContarTimer = setTimeout(contarLotePrueba, 400);
 }
 function setupAsesoresPrueba() {
   renderChipGroup('ap-periodo-chips', AP_PERIODOS, { multi: false, deseleccionable: true, onChange: vals => {
@@ -2237,14 +2301,16 @@ function setupAsesoresPrueba() {
   } });
   renderChipGroup('ap-sla-chips', AP_SLA_OPCIONES.map(o => ({ valor: o.valor, etiqueta: o.etiqueta })),
     { multi: false, seleccion: ['48h'] });
-  document.getElementById('ap-contar')?.addEventListener('click', contarLotePrueba);
   document.getElementById('ap-preview-btn')?.addEventListener('click', previewLotePrueba);
   document.getElementById('ap-asignar')?.addEventListener('click', asignarLotePrueba);
   document.getElementById('ld-activar')?.addEventListener('click', () => guardarLoteDiario(true));
   document.getElementById('ld-pausar')?.addEventListener('click', () => guardarLoteDiario(false));
   document.getElementById('ld-ahora')?.addEventListener('click', repartirLoteDiarioAhora);
-  ['ap-desde', 'ap-hasta', 'ap-cantidad'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', apInvalidar);
+  ['ap-desde', 'ap-hasta'].forEach(id => document.getElementById(id)?.addEventListener('change', apInvalidar));
+  document.getElementById('ap-cantidad')?.addEventListener('input', apRenderResumen);
+  document.getElementById('ap-preview-wrap')?.addEventListener('change', e => {
+    if (e.target.id === 'ap-sel-todos') document.querySelectorAll('[data-ap-lead]').forEach(c => { c.checked = e.target.checked; });
+    apRenderResumen();
   });
   document.querySelectorAll('[data-chips-todos],[data-chips-ninguno]').forEach(b => b.addEventListener('click', e => {
     e.preventDefault();
@@ -2254,7 +2320,7 @@ function setupAsesoresPrueba() {
       chip.classList.toggle('on', encender);
       chip.setAttribute('aria-pressed', encender);
     });
-    apInvalidar();
+    if (id === 'ap-usuario-chips') apRenderResumen(); else apInvalidar();
   }));
 }
 async function cargarDestinosLotePrueba() {
@@ -2263,23 +2329,24 @@ async function cargarDestinosLotePrueba() {
   renderChipGroup('ap-destinos-chips', Object.keys(data || {}).sort().map(d => ({ valor: d, etiqueta: d })),
     { onChange: apInvalidar });
 }
-let asesorPruebaSeleccionado = null;
+const apIniciales = nombre => (nombre || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
 async function loadAsesoresPruebaTab() {
   const hastaEl = document.getElementById('ap-hasta');
   if (hastaEl && !hastaEl.value) { const d = new Date(); d.setDate(d.getDate() - 90); hastaEl.value = d.toLocaleDateString('en-CA'); }
   const container = document.getElementById('ap-usuario-chips');
   if (container) {
     const asesores = personalCache.filter(u => u.rol === 'asesor' && u.asesor_integral);
+    apAsesoresInfo = new Map(asesores.map(u => [String(u.usuario_id), { nombre: u.nombre, username: u.username || '' }]));
     if (asesores.length) {
       renderChipGroup('ap-usuario-chips',
-        asesores.map(u => ({ valor: String(u.usuario_id), etiqueta: `${u.nombre} (@${u.username || ''})` })),
-        { multi: false, onChange: vals => { asesorPruebaSeleccionado = vals[0] || null; apInvalidar(); } });
-      asesorPruebaSeleccionado = null;
+        asesores.map(u => ({ valor: String(u.usuario_id), etiqueta: u.nombre, html:
+          `<span class="ap-ava">${esc(apIniciales(u.nombre))}</span><span class="ap-as-txt"><span class="ap-as-nom">${esc(u.nombre)}</span><span class="ap-as-meta" data-ap-pend="${esc(u.username || '')}">@${esc(u.username || '')}</span></span><i class="fas fa-circle-check ap-as-check" aria-hidden="true"></i>` })),
+        { onChange: apRenderResumen });
     } else {
       container.innerHTML = '<span style="color:var(--muted);font-size:12px">No hay asesores integrales dados de alta</span>';
-      asesorPruebaSeleccionado = null;
     }
   }
+  apInvalidar();
   await cargarDestinosLotePrueba();
   await Promise.all([cargarProgresoLotesPrueba(), cargarLotesDiarios()]);
 }
@@ -2293,81 +2360,117 @@ async function cargarLotesDiarios() {
       <td>${esc(r.nombre)}</td><td>${r.cantidad}</td><td>${r.pendientes}</td><td>${r.activo ? 'Activo' : 'Pausado'}</td></tr>`).join('')}</tbody></table>`
     : '<div class="pc-vacio">Ningún asesor recibe lote diario todavía.</div>');
 }
+const apNombre = id => apAsesoresInfo.get(id)?.nombre || 'Asesor';
 async function guardarLoteDiario(activo) {
   const err = document.getElementById('ld-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor arriba.'; return; }
+  const sel = apAsesoresSel();
+  if (!sel.length) { err.textContent = 'Elige al menos un asesor arriba.'; return; }
   const cantidad = parseInt(document.getElementById('ld-cantidad').value, 10);
   if (isNaN(cantidad) || cantidad < 1 || cantidad > 50) { err.textContent = 'Cantidad entre 1 y 50.'; return; }
-  const { data, error } = await sb.rpc('lote_diario_guardar', { p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, p_activo: activo });
-  if (error || !data?.ok) { err.textContent = data?.error === 'no_integral' ? 'Solo para asesores integrales: actívalo en Personal › Permisos.' : (error?.message || data?.error || 'No se pudo guardar.'); return; }
-  okToast(activo ? `Lote diario activo: ${cantidad} por día` : 'Lote diario en pausa');
+  const fallos = [];
+  for (const id of sel) {
+    const { data, error } = await sb.rpc('lote_diario_guardar', { p_usuario_id: id, p_cantidad: cantidad, p_activo: activo });
+    if (error || !data?.ok) fallos.push(`${apNombre(id)}: ${data?.error === 'no_integral' ? 'no es asesor integral (Personal › Permisos)' : (error?.message || data?.error || 'no se pudo guardar')}`);
+  }
+  if (fallos.length) err.textContent = fallos.join(' · ');
+  if (fallos.length < sel.length) okToast(activo ? `Lote diario activo: ${cantidad} por día` : 'Lote diario en pausa');
   await cargarLotesDiarios();
 }
 async function repartirLoteDiarioAhora() {
   const err = document.getElementById('ld-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor arriba.'; return; }
-  if (!(await confirmarSheet({ titulo: '¿Repartir el lote de hoy ya?', detalle: 'Se le completa la cola al asesor elegido sin esperar a la mañana. Los leads pasan a ser suyos, con tarea de contacto.', textoOk: 'Repartir' }))) return;
-  const { data, error } = await sb.rpc('lote_diario_repartir_ahora', { p_usuario_id: asesorPruebaSeleccionado });
-  if (error || !data?.ok) { err.textContent = data?.error === 'no_habilitado' ? 'Primero activa el lote diario para este asesor.' : (error?.message || 'No se pudo repartir.'); return; }
-  okToast(`Repartidos: ${data.asignados} lead(s)`);
+  const sel = apAsesoresSel();
+  if (!sel.length) { err.textContent = 'Elige al menos un asesor arriba.'; return; }
+  if (!(await confirmarSheet({ titulo: '¿Repartir el lote de hoy ya?', detalle: `Se le completa la cola a ${sel.map(apNombre).join(', ')} sin esperar a la mañana. Los leads pasan a ser suyos, con tarea de contacto.`, textoOk: 'Repartir' }))) return;
+  const fallos = [];
+  let total = 0;
+  for (const id of sel) {
+    const { data, error } = await sb.rpc('lote_diario_repartir_ahora', { p_usuario_id: id });
+    if (error || !data?.ok) fallos.push(`${apNombre(id)}: ${data?.error === 'no_habilitado' ? 'primero activa su lote diario' : (error?.message || 'no se pudo repartir')}`);
+    else total += data.asignados || 0;
+  }
+  if (fallos.length) err.textContent = fallos.join(' · ');
+  if (fallos.length < sel.length) okToast(`Repartidos: ${total} lead(s)`);
   await Promise.all([cargarLotesDiarios(), cargarProgresoLotesPrueba()]);
 }
+// contar_lote_prueba solo usa p_usuario_id para validar que sea asesor activo:
+// sirve cualquiera del listado, así el conteo sale antes de elegir asesores.
 async function contarLotePrueba() {
-  const err = document.getElementById('ap-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor.'; return; }
-  const f = apFiltros();
-  if (!f.p_estados.length) { err.textContent = 'Elige al menos un estado.'; return; }
-  const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: asesorPruebaSeleccionado, ...f, p_estados: f.p_estados, p_destinos: f.p_destinos.length ? f.p_destinos : null });
-  if (error || !data?.ok) { err.textContent = error?.message || 'No se pudo contar.'; return; }
-  document.getElementById('ap-conteo').textContent = `${data.cantidad} lead(s) matchean el filtro.`;
-  document.getElementById('ap-asignar').disabled = data.cantidad < 1;
+  const ref = apAsesoresSel()[0] || apAsesoresInfo.keys().next().value;
+  if (!ref) return;
+  const gen = apContarGen, f = apFiltros();
+  const { data, error } = await sb.rpc('contar_lote_prueba', { p_usuario_id: ref, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null });
+  if (gen !== apContarGen) return;
+  if (error || !data?.ok) {
+    document.getElementById('ap-err').textContent = error?.message || 'No se pudo contar.';
+    document.getElementById('ap-conteo').textContent = '';
+    document.getElementById('ap-asignar-txt').textContent = 'Revisa el filtro';
+    return;
+  }
+  apMatch = data.cantidad;
+  apRenderResumen();
 }
 async function previewLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
   const f = apFiltros();
-  if (!f.p_estados.length) { err.textContent = 'Elige al menos un estado.'; return; }
+  const btn = document.getElementById('ap-preview-btn'); btn.disabled = true;
   const { data, error } = await sb.rpc('listar_candidatos_lote_prueba', { ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null });
+  btn.disabled = false;
   const wrap = document.getElementById('ap-preview-wrap');
   if (error) { err.textContent = error.message || 'No se pudo listar.'; return; }
   const leads = data || [];
-  if (!leads.length) { wrap.innerHTML = '<div class="pc-vacio">Ningún lead matchea el filtro.</div>'; document.getElementById('ap-asignar').disabled = true; return; }
-  wrap.innerHTML = `<div style="max-height:320px;overflow:auto;margin-top:10px"><table>
-    <thead><tr><th></th><th>Nombre</th><th>Destino</th><th>Estado</th><th>Fecha</th></tr></thead>
+  if (!leads.length) { wrap.innerHTML = '<div class="pc-vacio">Ningún lead matchea el filtro.</div>'; AP_CANDIDATOS_SEL = null; apRenderResumen(); return; }
+  wrap.innerHTML = `<div class="ap-prev"><table>
+    <thead><tr><th><input type="checkbox" id="ap-sel-todos" checked aria-label="Tildar todos"></th><th>Nombre</th><th>Destino</th><th>Estado</th><th>Fecha</th><th>Va a</th></tr></thead>
     <tbody>${leads.map(l => `<tr>
-      <td><input type="checkbox" data-ap-lead="${l.id}" checked></td>
+      <td><input type="checkbox" data-ap-lead="${l.id}" checked aria-label="Incluir ${esc(l.nombre || 'lead')}"></td>
       <td>${esc(l.nombre || '')}</td><td>${esc(l.destino || '')}</td><td>${esc(l.estado || '')}</td>
-      <td>${esc((l.fecha_creacion || '').slice(0, 10))}</td>
-    </tr>`).join('')}</tbody></table></div>`;
+      <td>${esc((l.fecha_creacion || '').slice(0, 10))}</td><td class="ap-va" data-ap-va="${l.id}"></td>
+    </tr>`).join('')}</tbody></table></div>
+    <div class="ap-prev-pie">Destilda los que no quieras incluir. Se reparten en el orden de la lista hasta completar el total.</div>`;
   AP_CANDIDATOS_SEL = leads.map(l => l.id);
-  document.getElementById('ap-conteo').textContent = `${leads.length} lead(s) en la lista (desmarca los que no quieras incluir).`;
-  document.getElementById('ap-asignar').disabled = false;
+  apRenderResumen();
 }
+// Una llamada por asesor, en secuencia: cada una marca lote_asignado_at, así la
+// siguiente ya no puede tomar esos leads. Con vista previa, cada asesor recibe
+// su bloque de ids tildados; sin ella, los primeros `cantidad` del filtro.
 async function asignarLotePrueba() {
   const err = document.getElementById('ap-err'); err.textContent = '';
-  if (!asesorPruebaSeleccionado) { err.textContent = 'Elige un asesor.'; return; }
   const venceAt = apVenceAt();
   if (venceAt === undefined) { err.textContent = 'Elige el plazo para contactarlos.'; return; }
-  const f = apFiltros();
-  const cantidad = parseInt(document.getElementById('ap-cantidad').value, 10);
-  if (isNaN(cantidad) || cantidad < 1) { err.textContent = 'Elige una cantidad válida (mínimo 1).'; return; }
-  // Los destildados de la vista previa viajan como p_lead_ids: sin esto la
-  // selección manual no salía del navegador y el RPC repartía los primeros
-  // `cantidad` del filtro, no los que quedaron tildados.
-  const seleccion = [...document.querySelectorAll('[data-ap-lead]:checked')].map(c => Number(c.dataset.apLead));
-  const aAsignar = seleccion.length ? Math.min(cantidad, seleccion.length) : cantidad;
-  if (!(await confirmarSheet({ titulo: '¿Asignar este lote?', detalle: `${aAsignar} lead(s) pasan a ser del asesor elegido, con tarea de contacto por cada uno. Vuelven a POR ATENDER si todavía no tenían venta en curso.`, textoOk: 'Asignar' }))) return;
-  const btn = document.getElementById('ap-asignar'); btn.disabled = true;
-  const body ={ p_usuario_id: asesorPruebaSeleccionado, p_cantidad: cantidad, ...f, p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: venceAt, p_lead_ids: seleccion.length ? seleccion : null };
-  const { data, error } = await sb.rpc('asignar_lote_prueba', body);
-  if (error || !data?.ok) { err.textContent = error?.message || data?.error || 'No se pudo asignar.'; btn.disabled = false; return; }
-  okToast(`Lote asignado: ${data.cantidad} lead(s)`);
+  const p = apPlan();
+  if (p.motivo) { err.textContent = p.motivo + '.'; return; }
+  const n = p.reparto.length;
+  if (!(await confirmarSheet({ titulo: `¿Asignar ${p.efectivo} lead${p.efectivo === 1 ? '' : 's'} a ${n} asesor${n === 1 ? '' : 'es'}?`,
+    detalle: p.reparto.map(r => `• ${r.nombre}: ${r.cantidad}`).join('\n') + '\n\nCada uno recibe tarea de contacto por lead. Vuelven a POR ATENDER si todavía no tenían venta en curso.',
+    textoOk: 'Asignar' }))) return;
+  const btn = document.getElementById('ap-asignar'), txt = document.getElementById('ap-asignar-txt');
+  btn.disabled = true; btn.dataset.ocupado = '1';
+  const f = apFiltros(), fallos = [];
+  let asignados = 0, desde = 0;
+  for (const [i, r] of p.reparto.entries()) {
+    txt.textContent = `Asignando ${i + 1}/${n}…`;
+    const ids = p.tildados ? p.tildados.slice(desde, desde + r.cantidad) : null;
+    desde += r.cantidad;
+    const { data, error } = await sb.rpc('asignar_lote_prueba', { p_usuario_id: r.usuario_id, p_cantidad: r.cantidad, ...f,
+      p_destinos: f.p_destinos.length ? f.p_destinos : null, p_vence_at: venceAt, p_lead_ids: ids });
+    if (error || !data?.ok) fallos.push(`${r.nombre} (${error?.message || data?.error || 'error'})`);
+    else asignados += data.cantidad;
+  }
+  delete btn.dataset.ocupado;
+  if (asignados) okToast(`Lote asignado: ${asignados} lead(s) a ${n - fallos.length} asesor(es)`);
   apInvalidar();
+  if (fallos.length) err.textContent = `No se pudo asignar a: ${fallos.join(', ')}.${asignados ? ' Lo demás quedó asignado.' : ''}`;
   await cargarProgresoLotesPrueba();
 }
 async function cargarProgresoLotesPrueba() {
   const wrap = document.getElementById('ap-progreso-wrap');
   const { data, error } = await sb.rpc('resumen_lotes_prueba');
   if (error || !wrap) return;
+  const pend = new Map((data || []).map(r => [r.username || '', r.pendientes]));
+  document.querySelectorAll('[data-ap-pend]').forEach(s => {
+    const n = pend.get(s.dataset.apPend);
+    s.textContent = n ? `${n} pendiente${n === 1 ? '' : 's'} de lote` : 'Sin lote pendiente';
+  });
   if (!data?.length) { wrap.innerHTML = '<div class="pc-vacio">Todavía no hay asesores con lotes asignados.</div>'; return; }
   wrap.innerHTML = data.map(r => `
     <div class="card" style="margin-top:12px">
