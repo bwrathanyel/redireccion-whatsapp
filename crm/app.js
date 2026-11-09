@@ -33794,7 +33794,7 @@ async function construirVoucherPdf(v) {
     return d;
   };
   let logo = null;
-  try { const d = await cargarImagenBase64('logo-color.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
+  try { const d = await cargarImagenBase64('logo-bn.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
   const ctx = { F, st, logo, recibo: !!v.recibo_simple };
   const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
   const lista = Array.isArray(v.servicios) ? v.servicios : [], boletos = lista.filter(s => s.tipo === 'boleto');
