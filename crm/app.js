@@ -7524,86 +7524,135 @@ function renderEstDestinos(dest) {
   </div></div>`).join('');
 }
 
-/* ---------- Reparto objetivo: editor de pesos que siempre suma 100% ----------
-   Tres dimensiones: Nacional, Internacional y Por destino (los grupos de
-   `destinos.grupo`). Un grupo sin reparto propio hereda el pool de siempre;
-   activarlo le da su propio sorteo con estado aparte ('destino:<grupo>') y un
-   preview del % efectivo por asesor con el volumen real de 90 días, para que
-   no se mueva la carga de nadie sin que se vea. Los pools Nacional e
-   Internacional nunca se reescriben desde acá. */
-let repartoPool = 'domestico';            // domestico | internacional | destino
-let repartoGrupo = null;                  // grupo elegido cuando repartoPool === 'destino'
-let repartoDestino = null;                // respuesta de reparto_destino_listar()
-let repartoAsesores = [];                 // activos: {nombre, peso_asignacion, peso_internacional, es_cuenta_sistema}
-let repartoDraft = { domestico: [], internacional: [] }; // + 'destino:<grupo>'
-let repartoHereda = {};                   // 'destino:<grupo>' -> true cuando usa el pool general
-let repartoDirty = { domestico: false, internacional: false }; // + 'destino:<grupo>'
+/* ---------- Reparto de leads: una tabla, peso por asesor + destinos que atiende ----------
+   Cada asesor tiene un peso (la tabla suma 100) y marca los destinos que
+   atiende, más "Sin destino" (leads sin grupo identificado). En cada destino el
+   sorteo es solo entre quienes lo atienden, en proporción a su peso. Guardar
+   (admin_guardar_reparto_principal) deriva reparto_destino y
+   peso_asignacion/peso_internacional: el motor de sorteo no cambia.
+   "Real estimado" cruza la tabla con el volumen de 90 días y lo compara con
+   el reparto que rige hoy. Mientras nadie guardó, la tabla se arma desde la
+   configuración vieja (repartoSemilla). */
+const REP_SIN = 'Sin destino';
+const REP_CORTO = { 'Isla de Margarita': 'Margarita', 'Otros nacionales': 'Otros nac.', 'Internacional': 'Internac.' };
+let repartoDatos = null;      // respuesta de reparto_principal_listar()
+let repartoAsesores = [];     // activos: {nombre, peso_asignacion, peso_internacional, es_cuenta_sistema}
+let repartoFilas = [];        // borrador: {nombre, peso, grupos:Set, sin_destino, fijo}
+let repartoDirty = false;
+let repartoSemilla = false;
 
-function repartoClave() { return repartoPool === 'destino' ? 'destino:' + repartoGrupo : repartoPool; }
-function repartoHayCambios() { return Object.values(repartoDirty).some(Boolean); }
-function repartoGrupoDe(nombre) { return (repartoDestino?.grupos || []).find(g => g.grupo === nombre) || null; }
+function repartoHayCambios() { return repartoDirty || repartoSemilla; }
 function repartoNumero(n) { return Number(n || 0).toLocaleString('es-VE'); }
-// Quiénes están hoy en la rotación: peso propio en algún pool o en el reparto
-// de algún destino. Los que ya no están (bajas, cuentas viejas) no se muestran
-// en la foto de los últimos 90 días aunque tengan leads en la ventana.
-function repartoEnRotacion() {
-  const set = new Set();
-  repartoAsesores.forEach(a => {
-    if (Number(a.peso_asignacion) > 0 || Number(a.peso_internacional) > 0) set.add(a.nombre);
-  });
-  (repartoDestino?.grupos || []).forEach(g => (g.pesos || []).forEach(p => set.add(p.nombre)));
-  return set;
+const repartoSumaMapa = m => [...m.values()].reduce((s, p) => s + p, 0);
+
+// Columna de cada lead con el mismo ruteo del motor: su grupo; sin grupo,
+// Internacional si el lead lo es y si no "Sin destino".
+function repartoVolumenes() {
+  const v = {};
+  (repartoDatos?.volumen || []).forEach(b => { const k = b.grupo || (b.intl ? 'Internacional' : REP_SIN); v[k] = (v[k] || 0) + (Number(b.n) || 0); });
+  return v;
+}
+function repartoColumnas() {
+  const vol = repartoVolumenes(), total = Number(repartoDatos?.total_90d) || 0;
+  const todos = repartoDatos?.grupos || [];
+  const claves = todos.filter(g => g !== 'Internacional').sort((a, b) => (vol[b] || 0) - (vol[a] || 0) || a.localeCompare(b));
+  if (todos.includes('Internacional')) claves.push('Internacional');
+  claves.push(REP_SIN);
+  return claves.map(clave => ({ clave, corto: REP_CORTO[clave] || clave, vol: vol[clave] || 0, pct: total ? 100 * (vol[clave] || 0) / total : 0 }));
 }
 
-function draftDesdeAsesores(pool) {
-  const col = pool === 'domestico' ? 'peso_asignacion' : 'peso_internacional';
-  return repartoAsesores.filter(a => a[col] !== null).map(a => ({ nombre: a.nombre, peso: Number(a[col]), fijo: false }));
+// Configuración = pesos por grupo propio + pool Nacional (sin destino) e Internacional.
+function repartoConfigHoy() {
+  const cfg = { grupos: {}, nac: new Map(), intl: new Map() };
+  repartoAsesores.forEach(a => {
+    if (Number(a.peso_asignacion) > 0) cfg.nac.set(a.nombre, Number(a.peso_asignacion));
+    if (Number(a.peso_internacional) > 0) cfg.intl.set(a.nombre, Number(a.peso_internacional));
+  });
+  (repartoDatos?.actual || []).forEach(r => { const m = (cfg.grupos[r.grupo] ||= new Map()); if (Number(r.peso) > 0) m.set(r.nombre, Number(r.peso)); });
+  return cfg;
 }
-function draftDesdeGrupo(g) {
-  if (!g) return [];
-  if (g.con_reparto) return (g.pesos || []).map(p => ({ nombre: p.nombre, peso: Number(p.peso), fijo: false }));
-  return draftDesdeAsesores(g.grupo === 'Internacional' ? 'internacional' : 'domestico');
+function repartoConfigBorrador() {
+  const cfg = { grupos: {}, nac: new Map(), intl: new Map() };
+  repartoFilas.forEach(f => {
+    if (!(f.peso > 0)) return;
+    if (f.sin_destino) cfg.nac.set(f.nombre, f.peso);
+    if (f.grupos.has('Internacional')) cfg.intl.set(f.nombre, f.peso);
+    f.grupos.forEach(g => (cfg.grupos[g] ||= new Map()).set(f.nombre, f.peso));
+  });
+  return cfg;
 }
+// Igual que elegir_asesor_rotacion: grupo con reparto propio y alguien con peso
+// -> ese; si no, el pool Nacional o Internacional según el lead.
+function repartoPoolDe(cfg, grupo, intl) {
+  const propio = grupo && cfg.grupos[grupo];
+  return propio && repartoSumaMapa(propio) > 0 ? propio : (intl ? cfg.intl : cfg.nac);
+}
+function repartoMapaColumna(cfg, clave) { return clave === REP_SIN ? cfg.nac : (cfg.grupos[clave] || new Map()); }
+function repartoLeads(cfg) {
+  const acc = new Map();
+  (repartoDatos?.volumen || []).forEach(b => {
+    const n = Number(b.n) || 0, m = repartoPoolDe(cfg, b.grupo, !!b.intl), s = repartoSumaMapa(m);
+    if (n && s) m.forEach((p, nombre) => acc.set(nombre, (acc.get(nombre) || 0) + n * p / s));
+  });
+  return acc;
+}
+
+// Enteros que suman 100 por mayor residuo.
+function repartoA100(filas) {
+  const tot = filas.reduce((s, f) => s + f.exacto, 0) || 1;
+  filas.forEach(f => { f.exacto = 100 * f.exacto / tot; f.peso = Math.floor(f.exacto); });
+  let resto = 100 - filas.reduce((s, f) => s + f.peso, 0);
+  [...filas].sort((a, b) => (b.exacto - b.peso) - (a.exacto - a.peso)).forEach(f => { if (resto > 0) { f.peso++; resto--; } });
+  filas.forEach(f => delete f.exacto);
+  return filas;
+}
+// Primera vez: atiende lo que hoy le da leads, y su peso es su parte promedio
+// en esos destinos ponderada por volumen. No reproduce exacto un reparto que
+// era distinto en cada destino; el real estimado muestra la diferencia.
+function repartoSemillaFilas() {
+  const cfg = repartoConfigHoy(), acc = new Map();
+  const elegible = new Set(repartoAsesores.filter(a => !a.es_cuenta_sistema).map(a => a.nombre));
+  repartoColumnas().forEach(c => {
+    const m = c.clave === REP_SIN ? cfg.nac : repartoPoolDe(cfg, c.clave, c.clave === 'Internacional');
+    const s = repartoSumaMapa(m), w = Math.max(c.vol, 1);
+    if (!s) return;
+    m.forEach((p, nombre) => {
+      if (!elegible.has(nombre)) return;
+      const x = acc.get(nombre) || { pond: 0, vol: 0, grupos: new Set(), sin_destino: false };
+      x.pond += w * p / s; x.vol += w;
+      if (c.clave === REP_SIN) x.sin_destino = true; else x.grupos.add(c.clave);
+      acc.set(nombre, x);
+    });
+  });
+  return repartoA100([...acc].map(([nombre, x]) => ({ nombre, exacto: x.pond / x.vol, grupos: x.grupos, sin_destino: x.sin_destino, fijo: false })));
+}
+
 async function cargarReparto() {
   const box = document.getElementById('repRows');
   if (!box) return;
-  const [{ data, error }, rd] = await Promise.all([
+  const [{ data, error }, rp] = await Promise.all([
     sb.from('asesores').select('nombre,peso_asignacion,peso_internacional,es_cuenta_sistema').eq('activo', true).order('nombre'),
-    sb.rpc('reparto_destino_listar'),
+    sb.rpc('reparto_principal_listar'),
   ]);
-  if (error) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar</div>'; return; }
+  if (error || rp.error || !rp.data?.ok) { box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar</div>'; return; }
   repartoAsesores = data || [];
-  repartoDestino = (!rd.error && rd.data?.ok) ? rd.data : null;
-  // Los destinos que más volumen mueven primero: es el orden en el que se
-  // piensa el reparto (y define cuál abre por defecto).
-  repartoDestino?.grupos?.sort((a, b) => (Number(b.volumen_90d) || 0) - (Number(a.volumen_90d) || 0) || a.grupo.localeCompare(b.grupo));
-  repartoDraft.domestico = draftDesdeAsesores('domestico');
-  repartoDraft.internacional = draftDesdeAsesores('internacional');
-  repartoHereda = {};
-  if (repartoDestino?.grupos?.length) {
-    const nombres = repartoDestino.grupos.map(g => g.grupo);
-    if (!repartoGrupo || !nombres.includes(repartoGrupo)) repartoGrupo = nombres[0];
-    repartoDestino.grupos.forEach(g => {
-      const k = 'destino:' + g.grupo;
-      repartoDraft[k] = draftDesdeGrupo(g);
-      repartoHereda[k] = !g.con_reparto;
-      repartoDirty[k] = false;
-    });
-  }
-  const tabDestino = document.querySelector('#repPool [data-pool="destino"]');
-  if (tabDestino) tabDestino.hidden = !repartoDestino?.grupos?.length;
-  if (!repartoDestino?.grupos?.length && repartoPool === 'destino') repartoPool = 'domestico';
-  repartoDirty.domestico = false; repartoDirty.internacional = false;
-  document.querySelectorAll('#repPool .seg').forEach(x => x.classList.toggle('on', x.dataset.pool === repartoPool));
+  repartoDatos = rp.data;
+  repartoDescartar();
+}
+function repartoDescartar() {
+  const guardadas = repartoDatos?.filas || [];
+  repartoSemilla = !guardadas.length;
+  repartoFilas = repartoSemilla ? repartoSemillaFilas()
+    : guardadas.map(f => ({ nombre: f.nombre, peso: Number(f.peso), grupos: new Set(f.grupos || []), sin_destino: !!f.sin_destino, fijo: false }));
+  repartoFilas.sort((a, b) => b.peso - a.peso || a.nombre.localeCompare(b.nombre));
+  repartoDirty = false;
   renderReparto();
 }
-function repartoSuma(pool) { return repartoDraft[pool].reduce((s, a) => s + a.peso, 0); }
 
 // Auto-balance: clampea el valor editado al espacio libre (100 - fijados) y
 // reparte el resto proporcionalmente entre los no fijados distintos del
 // editado, redondeando por mayor residuo para que la suma quede exacta en 100.
-function rebalancear(pool, indice, nuevoValor) {
-  const filas = repartoDraft[pool];
+function rebalancear(filas, indice, nuevoValor) {
   const fila = filas[indice];
   const sumaFijos = filas.reduce((s, a, i) => s + (i !== indice && a.fijo ? a.peso : 0), 0);
   const libre = Math.max(0, 100 - sumaFijos);
@@ -7625,248 +7674,173 @@ function rebalancear(pool, indice, nuevoValor) {
   for (const b of brutos) { if (sobrante <= 0) break; filas[b.i].peso += 1; sobrante--; }
   fila.peso = valor;
 }
-function repartoQuitar(pool, indice) {
-  const filas = repartoDraft[pool];
-  if (filas.length <= 1) { errToast('Un reparto no puede quedar vacío'); return; }
-  const liberado = filas[indice].peso;
-  filas.splice(indice, 1);
-  const destino = filas.findIndex(a => !a.fijo);
-  if (liberado > 0 && destino !== -1) rebalancear(pool, destino, filas[destino].peso + liberado);
-  repartoDirty[pool] = true;
+function repartoPeso(i, valor) {
+  if (!repartoFilas[i]) return;
+  rebalancear(repartoFilas, i, valor);
+  repartoDirty = true;
+  repartoRefrescar();
+}
+function repartoToggle(i, clave) {
+  const f = repartoFilas[i];
+  if (!f) return;
+  if (clave === REP_SIN) f.sin_destino = !f.sin_destino;
+  else if (f.grupos.has(clave)) f.grupos.delete(clave);
+  else f.grupos.add(clave);
+  repartoDirty = true;
+  repartoRefrescar();
+}
+function repartoQuitar(i) {
+  if (repartoFilas.length <= 1) { errToast('El reparto no puede quedar vacío'); return; }
+  const liberado = repartoFilas[i].peso;
+  repartoFilas.splice(i, 1);
+  const destino = repartoFilas.findIndex(a => !a.fijo);
+  if (liberado > 0 && destino !== -1) rebalancear(repartoFilas, destino, repartoFilas[destino].peso + liberado);
+  repartoDirty = true;
   renderReparto();
 }
-function repartoAgregar(pool, nombre) {
-  const filas = repartoDraft[pool];
-  if (!filas.length) { filas.push({ nombre, peso: 100, fijo: false }); }
-  else { filas.push({ nombre, peso: 0, fijo: false }); }
-  repartoDirty[pool] = true;
+// Asesor nuevo: peso 0 con los destinos nacionales y "Sin destino", que es lo habitual.
+function repartoAgregar(nombre) {
+  const grupos = new Set(repartoColumnas().map(c => c.clave).filter(k => k !== REP_SIN && k !== 'Internacional'));
+  repartoFilas.push({ nombre, peso: repartoFilas.length ? 0 : 100, grupos, sin_destino: true, fijo: false });
+  repartoDirty = true;
   renderReparto();
 }
-function repartoBarHtml(pool) {
-  const filas = repartoDraft[pool];
-  return filas.map((a, i) => `<span style="flex-grow:${Math.max(a.peso, 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(a.nombre)}: ${a.peso}%"></span>`).join('');
+function repartoSinNadie(cfg = repartoConfigBorrador()) {
+  return repartoColumnas().filter(c => !repartoSumaMapa(repartoMapaColumna(cfg, c.clave))).map(c => c.clave);
 }
-function repartoRowHtml(a, i, bloqueado) {
-  const c = ADV_COLORS[i % ADV_COLORS.length];
-  const dis = a.fijo || bloqueado;
-  return `<div class="rep-row" data-i="${i}">
-    <span class="rep-dot" style="background:${c}"></span>
-    <span class="rep-nombre" title="${esc(a.nombre)}">${esc(a.nombre)}</span>
-    <input type="range" min="0" max="100" step="1" value="${a.peso}" ${dis ? 'disabled' : ''} data-rep-slider>
-    <div class="rep-actions-row">
-      <span class="rep-num"><input type="number" min="0" max="100" step="1" value="${a.peso}" ${dis ? 'disabled' : ''} data-rep-num><span class="rep-pct">%</span></span>
-      <button type="button" class="${a.fijo ? 'on' : ''}" ${bloqueado ? 'disabled' : ''} data-rep-fijo title="${a.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)'}"><i class="fas fa-${a.fijo ? 'lock' : 'lock-open'}"></i></button>
-      <button type="button" class="rep-quitar" ${bloqueado ? 'disabled' : ''} data-rep-quitar title="Quitar del reparto"><i class="fas fa-xmark"></i></button>
-    </div>
-  </div>`;
-}
-function repartoPesosMapa(key) {
-  const m = new Map();
-  (repartoDraft[key] || []).forEach(f => m.set(f.nombre, Number(f.peso) || 0));
-  return m;
-}
-// % efectivo por asesor con el volumen real de 90 días: hoy (todo heredado) y
-// con los borradores actuales. Las barras dicen el largo plazo; esto dice en
-// qué se traduce cuando convive con el resto de los destinos.
-function repartoEfectivo(conDestino) {
-  const rd = repartoDestino;
-  if (!rd) return [];
-  const nac = repartoPesosMapa('domestico'), intl = repartoPesosMapa('internacional');
-  const acc = new Map();
-  let total = 0;
-  const sumar = (mapa, vol) => {
-    if (!vol) return;
-    total += vol;
-    mapa.forEach((peso, nombre) => acc.set(nombre, (acc.get(nombre) || 0) + vol * peso / 100));
-  };
-  (rd.grupos || []).forEach(g => {
-    const propio = conDestino && !repartoHereda['destino:' + g.grupo];
-    const pesos = propio ? repartoPesosMapa('destino:' + g.grupo) : null;
-    const v = Number(g.volumen_90d) || 0;
-    const vIntl = Math.min(Number(g.volumen_intl_90d) || 0, v);
-    sumar(pesos || nac, v - vIntl);
-    sumar(pesos || intl, vIntl);
-  });
-  sumar(nac, Number(rd.cobertura?.sin_grupo_90d) || 0);
-  if (!total) return [];
-  return [...acc].map(([nombre, puntos]) => ({ nombre, pct: 100 * puntos / total }))
-    .filter(x => x.pct > 0.05)
-    .sort((a, b) => b.pct - a.pct);
-}
-function repartoPreviewHtml() {
-  const ahora = repartoEfectivo(true);
-  if (!ahora.length) return '';
-  const antes = new Map(repartoEfectivo(false).map(x => [x.nombre, x.pct]));
-  const filas = ahora.map(x => {
-    const d = x.pct - (antes.get(x.nombre) || 0);
-    const mov = Math.abs(d) < 0.05 ? '' : ` <span class="${d > 0 ? 'sube' : 'baja'}">${d > 0 ? '+' : ''}${d.toFixed(1)}</span>`;
-    return `<b>${esc(x.nombre)}</b> ${x.pct.toFixed(1)}%${mov}`;
-  }).join(' · ');
-  const grandes = ahora.filter(x => Math.abs(x.pct - (antes.get(x.nombre) || 0)) >= 3);
-  const aviso = grandes.length
-    ? `<div class="aviso">Ojo: este cambio mueve más de 3 puntos la carga de ${grandes.map(x => esc(x.nombre)).join(', ')}.</div>`
-    : '';
-  const cob = repartoDestino?.cobertura;
-  const nota = cob
-    ? `<div class="muted" style="margin-top:6px">${cob.pct}% de los leads de 90 días tiene grupo identificado; el resto hereda Nacional.</div>`
-    : '';
-  return `<div><span class="muted">Efectivo con el volumen de 90 días:</span> ${filas}</div>${aviso}${nota}`;
-}
-async function repartoCambiarGrupo(nombre) {
-  if (nombre === repartoGrupo) return;
-  if (repartoDirty[repartoClave()] && !(await confirmarSheet({ titulo: '¿Cambiar de destino sin guardar?', detalle: 'Hay cambios sin guardar en este reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
-  repartoGrupo = nombre;
-  renderReparto();
-}
-function repartoActivarGrupo() {
-  const key = repartoClave();
-  if (!repartoHereda[key]) return;
-  repartoHereda[key] = false;
-  repartoDirty[key] = true;
-  renderReparto();
-}
-async function repartoQuitarPropio() {
-  if (!repartoGrupo) return;
-  const pool = repartoGrupo === 'Internacional' ? 'Internacional' : 'Nacional';
-  if (!(await confirmarSheet({ titulo: '¿Quitar el reparto propio de ' + repartoGrupo + '?', detalle: 'Ese destino vuelve a sortearse con el reparto ' + pool + '. Los leads que lleguen después se reparten como antes.', textoOk: 'Quitar', destructivo: true }))) return;
-  const { data, error } = await sb.rpc('admin_quitar_reparto_destino', { p_grupo: repartoGrupo });
-  if (error || !data?.ok) { errToast('No se pudo quitar: ' + (data?.error || error?.message || '')); return; }
-  okToast('Reparto del destino quitado');
-  await cargarReparto();
-}
-function repartoDescartar() {
-  const key = repartoClave();
-  if (repartoPool === 'destino') {
-    const g = repartoGrupoDe(repartoGrupo);
-    repartoDraft[key] = draftDesdeGrupo(g);
-    repartoHereda[key] = g ? !g.con_reparto : true;
-  } else {
-    repartoDraft[key] = draftDesdeAsesores(repartoPool);
-  }
-  repartoDirty[key] = false;
-  renderReparto();
-}
+
+// Estructura (filas, columnas, select). Los valores los pone repartoRefrescar,
+// que no reconstruye nada: así el slider no se corta mientras se arrastra.
 function renderReparto() {
-  const rowsBox = document.getElementById('repRows');
-  const barBox = document.getElementById('repBar');
-  const totalChip = document.getElementById('repTotal');
-  const saveWrap = document.getElementById('repGuardarWrap');
+  const box = document.getElementById('repRows');
   const selectAgregar = document.getElementById('repAgregar');
-  const gruposBox = document.getElementById('repGrupos');
-  const grupoInfo = document.getElementById('repGrupoInfo');
-  const efectivo = document.getElementById('repEfectivo');
-  if (!rowsBox) return;
+  if (!box) return;
+  const cols = repartoColumnas();
+  box.style.setProperty('--rep-cols', cols.length);
+  const cab = `<div class="rep-fila rep-cab" role="row">
+    <span role="columnheader">Asesor</span><span role="columnheader">Peso</span>
+    ${cols.map(c => `<span role="columnheader" class="rep-col" data-col="${esc(c.clave)}" title="${esc(c.clave)} · ${repartoNumero(c.vol)} leads en 90 días">${esc(c.corto)}<small>${c.pct < 1 && c.vol ? '<1' : Math.round(c.pct)}% de leads</small></span>`).join('')}
+    <span role="columnheader" class="rep-est-cab">Real estimado</span>
+  </div>`;
+  const filas = repartoFilas.map((f, i) => `<div class="rep-fila" role="row" data-i="${i}">
+    <span class="rep-quien" role="cell">
+      <span class="rep-dot" style="background:${ADV_COLORS[i % ADV_COLORS.length]}"></span>
+      <span class="rep-nombre" title="${esc(f.nombre)}">${esc(f.nombre)}</span>
+      <button type="button" class="rep-ico rep-quitar" data-rep-quitar title="Quitar del reparto" aria-label="Quitar a ${esc(f.nombre)} del reparto"><i class="fas fa-xmark"></i></button>
+    </span>
+    <span class="rep-peso" role="cell">
+      <input type="range" min="0" max="100" step="1" data-rep-slider aria-label="Peso de ${esc(f.nombre)}">
+      <input type="number" min="0" max="100" step="1" inputmode="numeric" data-rep-num aria-label="Peso de ${esc(f.nombre)}">
+      <button type="button" class="rep-ico" data-rep-fijo></button>
+    </span>
+    <span class="rep-celdas" role="cell">${cols.map(c => `<button type="button" class="rep-cel" data-rep-cel="${esc(c.clave)}"><span class="rep-cel-lbl">${esc(c.corto)}</span><span class="rep-cel-val"></span></button>`).join('')}</span>
+    <span class="rep-est" role="cell"></span>
+  </div>`).join('');
+  box.innerHTML = cab + (filas || '<div class="muted" style="font-size:12.5px;padding:11px 0">Sin asesores en el reparto</div>');
 
-  const key = repartoClave();
-  const esDestino = repartoPool === 'destino';
-  const bloqueado = esDestino && !!repartoHereda[key];
-  const filas = repartoDraft[key] || [];
+  const enTabla = new Set(repartoFilas.map(f => f.nombre));
+  const disponibles = repartoAsesores.filter(a => !enTabla.has(a.nombre) && !a.es_cuenta_sistema);
+  selectAgregar.innerHTML = '<option value="">+ Añadir asesor…</option>' + disponibles.map(a => `<option value="${esc(a.nombre)}">${esc(a.nombre)}</option>`).join('');
+  repartoRefrescar();
+}
+function repartoRefrescar() {
+  const box = document.getElementById('repRows');
+  if (!box) return;
+  const cfg = repartoConfigBorrador();
+  const total = Number(repartoDatos?.total_90d) || 0;
+  const despues = repartoLeads(cfg), antes = repartoLeads(repartoConfigHoy());
+  const pct = (m, n) => total ? 100 * (m.get(n) || 0) / total : 0;
+  const sinNadie = new Set(repartoSinNadie(cfg));
+  const grandes = [];
 
-  if (gruposBox) {
-    gruposBox.hidden = !esDestino;
-    if (esDestino) {
-      gruposBox.innerHTML = (repartoDestino?.grupos || []).map(g => {
-        const propio = !repartoHereda['destino:' + g.grupo];
-        const on = g.grupo === repartoGrupo;
-        return `<button type="button" class="seg${on ? ' on' : ''}" data-rep-grupo="${esc(g.grupo)}" title="${esc(g.grupo)}${propio ? ' · reparto propio' : ' · hereda'}">${esc(g.grupo)}${propio ? ' •' : ''}</button>`;
-      }).join('');
-      gruposBox.querySelectorAll('[data-rep-grupo]').forEach(b => b.onclick = () => repartoCambiarGrupo(b.dataset.repGrupo));
-    }
-  }
-
-  if (grupoInfo) {
-    grupoInfo.hidden = !esDestino;
-    if (esDestino && repartoGrupo) {
-      const g = repartoGrupoDe(repartoGrupo);
-      const vol = Number(g?.volumen_90d) || 0;
-      const totalVol = Number(repartoDestino?.cobertura?.total_90d) || 0;
-      const detalle = `${repartoNumero(vol)} leads en 90 días${totalVol ? ' · ' + Math.round(100 * vol / totalVol) + '% del volumen' : ''}`;
-      const enRotacion = repartoEnRotacion();
-      const real = (repartoDestino?.realidad || []).filter(r => r.grupo === repartoGrupo && enRotacion.has(r.asesor));
-      const totalReal = real.reduce((s, r) => s + (Number(r.n) || 0), 0);
-      const realTxt = totalReal
-        ? `<div class="rep-real">Cómo está cayendo de verdad en 90 días (asesores en rotación): ${real.map(r => `${esc(r.asesor)} ${Math.round(100 * (Number(r.n) || 0) / totalReal)}%`).join(' · ')}</div>`
-        : '';
-      if (bloqueado) {
-        grupoInfo.innerHTML = `<span><b>${esc(repartoGrupo)}</b> · ${detalle} · hereda <b>${repartoGrupo === 'Internacional' ? 'Internacional' : 'Nacional'}</b></span><button type="button" data-rep-activar>Reparto propio</button>${realTxt}`;
-        grupoInfo.querySelector('[data-rep-activar]').onclick = repartoActivarGrupo;
-      } else {
-        grupoInfo.innerHTML = `<span><b>${esc(repartoGrupo)}</b> · ${detalle} · reparto propio activo</span><button type="button" data-rep-quitar-propio>Quitar reparto propio</button>${realTxt}`;
-        grupoInfo.querySelector('[data-rep-quitar-propio]').onclick = repartoQuitarPropio;
-      }
-    }
-  }
-
-  rowsBox.innerHTML = filas.map((a, i) => repartoRowHtml(a, i, bloqueado)).join('') || '<div class="muted" style="font-size:12.5px">Sin asesores en este reparto</div>';
-  barBox.innerHTML = repartoBarHtml(key);
-  const total = repartoSuma(key);
-  totalChip.textContent = total + '%';
-  totalChip.className = 'rep-total ' + (total === 100 ? 'ok' : 'bad');
-  saveWrap.style.display = repartoDirty[key] ? 'flex' : 'none';
-
-  const col = repartoPool === 'domestico' ? 'peso_asignacion' : 'peso_internacional';
-  const enPool = new Set(filas.map(f => f.nombre));
-  const disponibles = repartoAsesores.filter(x => {
-    if (enPool.has(x.nombre)) return false;
-    if (esDestino) return true;
-    return x[col] === null;
+  box.querySelectorAll('.rep-cab [data-col]').forEach(el => el.classList.toggle('falta', sinNadie.has(el.dataset.col)));
+  box.querySelectorAll('.rep-fila[data-i]').forEach(row => {
+    const f = repartoFilas[Number(row.dataset.i)];
+    if (!f) return;
+    const slider = row.querySelector('[data-rep-slider]'), num = row.querySelector('[data-rep-num]'), fijo = row.querySelector('[data-rep-fijo]');
+    slider.value = f.peso; num.value = f.peso;
+    slider.disabled = num.disabled = f.fijo;
+    fijo.classList.toggle('on', f.fijo);
+    fijo.title = f.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)';
+    fijo.setAttribute('aria-label', fijo.title);
+    fijo.innerHTML = `<i class="fas fa-${f.fijo ? 'lock' : 'lock-open'}"></i>`;
+    row.querySelectorAll('[data-rep-cel]').forEach(b => {
+      const clave = b.dataset.repCel;
+      const on = clave === REP_SIN ? f.sin_destino : f.grupos.has(clave);
+      const s = repartoSumaMapa(repartoMapaColumna(cfg, clave));
+      const parte = on && s ? Math.round(100 * f.peso / s) : 0;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on);
+      b.title = on ? `${f.nombre} atiende ${clave}: le toca el ${parte}% de esos leads` : `${f.nombre} no atiende ${clave} · tocar para sumarlo`;
+      b.querySelector('.rep-cel-val').textContent = on ? parte + '%' : '';
+    });
+    const est = pct(despues, f.nombre), hoy = pct(antes, f.nombre), d = est - hoy;
+    if (Math.abs(d) >= 3) grandes.push(f.nombre);
+    const mov = Math.abs(d) < 0.05 ? '' : `<span class="${d > 0 ? 'sube' : 'baja'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}</span>`;
+    row.querySelector('.rep-est').innerHTML = `<b>${est.toFixed(1)}%</b>${mov}<small>hoy ${hoy.toFixed(1)}%</small>`;
   });
-  selectAgregar.innerHTML = '<option value="">+ Añadir asesor…</option>' + disponibles.map(x => `<option value="${esc(x.nombre)}">${esc(x.nombre)}</option>`).join('');
 
-  rowsBox.querySelectorAll('[data-rep-slider]').forEach(el => el.oninput = () => {
-    const i = Number(el.closest('.rep-row').dataset.i);
-    rebalancear(key, i, Number(el.value));
-    repartoDirty[key] = true;
-    renderReparto();
-  });
-  rowsBox.querySelectorAll('[data-rep-num]').forEach(el => el.onchange = () => {
-    const i = Number(el.closest('.rep-row').dataset.i);
-    rebalancear(key, i, Number(el.value) || 0);
-    repartoDirty[key] = true;
-    renderReparto();
-  });
-  rowsBox.querySelectorAll('[data-rep-fijo]').forEach(el => el.onclick = () => {
-    const i = Number(el.closest('.rep-row').dataset.i);
-    repartoDraft[key][i].fijo = !repartoDraft[key][i].fijo;
-    renderReparto();
-  });
-  rowsBox.querySelectorAll('[data-rep-quitar]').forEach(el => el.onclick = () => {
-    const i = Number(el.closest('.rep-row').dataset.i);
-    repartoQuitar(key, i);
-  });
-  if (efectivo) efectivo.innerHTML = repartoPreviewHtml();
+  document.getElementById('repBar').innerHTML = repartoFilas.map((f, i) => `<span style="flex-grow:${Math.max(f.peso, 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(f.nombre)}: peso ${f.peso}"></span>`).join('');
+  const suma = repartoFilas.reduce((s, f) => s + f.peso, 0);
+  const chip = document.getElementById('repTotal');
+  chip.textContent = 'suma ' + suma;
+  chip.className = 'rep-total ' + (suma === 100 ? 'ok' : 'bad');
+
+  const enTabla = new Set(repartoFilas.map(f => f.nombre));
+  const fuera = [...antes.keys()].filter(n => !enTabla.has(n) && pct(antes, n) >= 0.5);
+  const avisos = [];
+  if (sinNadie.size) avisos.push(`<div class="mal"><i class="fas fa-circle-exclamation"></i><span>Nadie atiende <b>${[...sinNadie].map(esc).join(', ')}</b>. Marcá al menos un asesor para poder guardar.</span></div>`);
+  if (repartoSemilla) avisos.push(`<div class="info"><i class="fas fa-circle-info"></i><span>Esta tabla todavía no está activa: se armó a partir del reparto que rige hoy. Revisá el real estimado y guardá para activarla.</span></div>`);
+  if (grandes.length) avisos.push(`<div class="ojo"><i class="fas fa-triangle-exclamation"></i><span>Cambia 3 puntos o más la carga de ${grandes.map(n => `<b>${esc(n)}</b>`).join(', ')}.</span></div>`);
+  if (fuera.length) avisos.push(`<div class="ojo"><i class="fas fa-user-minus"></i><span>Quedan fuera del reparto: ${fuera.map(n => `<b>${esc(n)}</b> (hoy ${pct(antes, n).toFixed(1)}%)`).join(', ')}.</span></div>`);
+  const avisosBox = document.getElementById('repAvisos');
+  avisosBox.innerHTML = avisos.join('');
+  avisosBox.hidden = !avisos.length;
+
+  document.getElementById('repNota').textContent = total
+    ? `Real estimado: qué parte del total le tocaría a cada uno con los ${repartoNumero(total)} leads de los últimos 90 días; «hoy» es con el reparto vigente. El % de cada casilla es su parte de ese destino.`
+    : '';
+  document.getElementById('repGuardarWrap').style.display = repartoHayCambios() ? 'flex' : 'none';
+  document.getElementById('repGuardar').disabled = suma !== 100 || sinNadie.size > 0;
 }
 function setupReparto() {
-  document.querySelectorAll('#repPool .seg').forEach(b => b.onclick = async () => {
-    if (repartoPool === b.dataset.pool) return;
-    if (repartoDirty[repartoClave()] && !(await confirmarSheet({ titulo: '¿Cambiar de pestaña sin guardar?', detalle: 'Hay cambios sin guardar en este reparto.', textoOk: 'Cambiar', destructivo: true }))) return;
-    repartoPool = b.dataset.pool;
-    document.querySelectorAll('#repPool .seg').forEach(x => x.classList.toggle('on', x === b));
-    renderReparto();
-  });
+  const box = document.getElementById('repRows');
+  if (box) {
+    const indice = el => Number(el.closest('.rep-fila')?.dataset.i);
+    box.addEventListener('input', e => { if (e.target.matches('[data-rep-slider]')) repartoPeso(indice(e.target), Number(e.target.value)); });
+    box.addEventListener('change', e => { if (e.target.matches('[data-rep-num]')) repartoPeso(indice(e.target), Number(e.target.value) || 0); });
+    box.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b || !box.contains(b)) return;
+      const i = indice(b);
+      if (b.matches('[data-rep-cel]')) repartoToggle(i, b.dataset.repCel);
+      else if (b.matches('[data-rep-fijo]')) { repartoFilas[i].fijo = !repartoFilas[i].fijo; repartoRefrescar(); }
+      else if (b.matches('[data-rep-quitar]')) repartoQuitar(i);
+    });
+  }
   document.getElementById('repAgregar')?.addEventListener('change', e => {
-    if (e.target.value) { repartoAgregar(repartoClave(), e.target.value); e.target.value = ''; }
+    if (e.target.value) { repartoAgregar(e.target.value); e.target.value = ''; }
   });
   document.getElementById('repDescartar')?.addEventListener('click', repartoDescartar);
   document.getElementById('repGuardar')?.addEventListener('click', guardarReparto);
 }
 async function guardarReparto() {
-  const key = repartoClave();
-  const total = repartoSuma(key);
-  if (total !== 100) { errToast('El reparto tiene que sumar 100% (va en ' + total + '%)'); return; }
+  const suma = repartoFilas.reduce((s, f) => s + f.peso, 0);
+  if (suma !== 100) { errToast('Los pesos tienen que sumar 100 (van ' + suma + ')'); return; }
+  const faltan = repartoSinNadie();
+  if (faltan.length) { errToast('Falta quién atienda: ' + faltan.join(', ')); return; }
+  if (!(await confirmarSheet({ titulo: '¿Aplicar este reparto?', detalle: 'Rige para los leads que entren desde ahora y el turno de cada destino arranca de cero. Los leads ya asignados no cambian.', textoOk: 'Aplicar' }))) return;
   const btn = document.getElementById('repGuardar');
   btn.disabled = true;
-  const p_pesos = repartoDraft[key].map(a => ({ nombre: a.nombre, peso: a.peso }));
-  const { data, error } = repartoPool === 'destino'
-    ? await sb.rpc('admin_guardar_reparto_destino', { p_grupo: repartoGrupo, p_pesos })
-    : await sb.rpc('admin_guardar_reparto', { p_pool: repartoPool, p_pesos });
+  const p_filas = repartoFilas.map(f => ({ nombre: f.nombre, peso: f.peso, grupos: [...f.grupos], sin_destino: f.sin_destino }));
+  const { data, error } = await sb.rpc('admin_guardar_reparto_principal', { p_filas });
   btn.disabled = false;
   if (error || !data?.ok) {
-    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'La suma no dio 100%', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe o está inactivo', pool_invalido: 'Pool inválido', grupo_invalido: 'Ese destino ya no existe', nombre_invalido: 'Falta el nombre de un asesor', nombre_duplicado: 'Hay un asesor repetido' };
+    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'Los pesos no suman 100', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe o está inactivo', no_elegible: 'Hay un asesor de boletería en la tabla', grupo_invalido: 'Algún destino ya no existe', nombre_invalido: 'Falta el nombre de un asesor', nombre_duplicado: 'Hay un asesor repetido', fila_invalida: 'Hay una fila incompleta', destino_sin_asesor: 'Nadie atiende ' + (data?.grupo || 'un destino') };
     errToast('No se pudo guardar: ' + (msgs[data?.error] || data?.error || error?.message || ''));
     return;
   }
-  okToast(repartoPool === 'destino' ? 'Reparto del destino guardado' : 'Reparto guardado');
+  okToast('Reparto guardado');
   await cargarReparto();
 }
 

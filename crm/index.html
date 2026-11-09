@@ -693,6 +693,53 @@ body.menu-arrastrando .side-scrim{transition:none}
 .rep-total.bad{background:color-mix(in srgb, #ef4444 20%, transparent);color:#ef4444}
 .rep-bar{display:flex;height:14px;border-radius:8px;overflow:hidden;margin:12px 0 14px;background:rgba(255,255,255,.05)}
 .rep-bar span{transition:flex-grow .18s ease;min-width:2px}
+.rep-card .csub{max-width:780px}
+.rep-tabla{overflow-x:auto;scrollbar-width:thin}
+.rep-fila{display:grid;grid-template-columns:168px 196px repeat(var(--rep-cols,8),66px) 104px;align-items:center;column-gap:4px;padding:7px 0;border-bottom:1px solid var(--line);width:max-content;min-width:100%}
+.rep-fila:last-child{border-bottom:none}
+.rep-cab{padding:0 0 9px;align-items:end;font-size:9.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.rep-cab .rep-col{text-align:center;line-height:1.3;letter-spacing:.04em;transition:color .16s}
+.rep-cab .rep-col small{display:block;margin-top:2px;font-size:9.5px;font-weight:600;letter-spacing:0;text-transform:none}
+.rep-cab .rep-col.falta{color:var(--danger)}
+.rep-cab .rep-est-cab{text-align:right}
+.rep-celdas{display:contents}
+.rep-quien{display:flex;align-items:center;gap:7px;min-width:0}
+.rep-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.rep-nombre{flex:1;min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-peso{display:flex;align-items:center;gap:4px;min-width:0}
+.rep-peso input[type=range]{flex:1;min-width:0;accent-color:var(--accent);cursor:pointer}
+.rep-peso input[type=range]:disabled{opacity:.35;cursor:default}
+.rep-peso input[type=number]{width:46px;flex-shrink:0;background:rgba(var(--ink-rgb),.05);border:1px solid var(--line2);border-radius:8px;color:var(--txt);padding:5px 6px;font-size:12.5px;font-family:inherit;text-align:right;font-variant-numeric:tabular-nums}
+.rep-peso input[type=number]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.rep-peso input[type=number]:disabled{opacity:.5}
+.rep-fila .rep-ico{background:transparent;border:none;color:var(--muted2);cursor:pointer;font-size:12.5px;padding:7px;flex-shrink:0;transition:color .16s}
+.rep-fila .rep-ico:hover,.rep-fila .rep-ico.on{color:var(--accent-ink)}
+.rep-fila .rep-quitar{opacity:.55}
+.rep-fila .rep-quitar:hover{color:var(--danger);opacity:1}
+.rep-cel{height:34px;margin:0 4px;border-radius:8px;border:1px dashed var(--line2);background:transparent;color:var(--muted2);font-family:inherit;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;cursor:pointer;transition:background .16s,border-color .16s,color .16s}
+.rep-cel:hover{border-color:var(--accent);color:var(--accent-ink)}
+.rep-cel:not(.on):hover .rep-cel-val::before{content:'+'}
+.rep-cel.on{border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);background:var(--accent-soft);color:var(--accent-ink)}
+.rep-cel-lbl{display:none}
+.rep-est{text-align:right;line-height:1.3;font-variant-numeric:tabular-nums}
+.rep-est b{font-size:13.5px;font-weight:800;color:var(--txt)}
+.rep-est .sube,.rep-est .baja{margin-left:4px;font-size:11px;font-weight:700}
+.rep-est .sube{color:var(--green)}
+.rep-est .baja{color:var(--danger)}
+.rep-est small{display:block;font-size:10.5px;color:var(--muted2)}
+.rep-avisos{display:grid;gap:7px;margin:0 0 11px}
+.rep-avisos[hidden]{display:none}
+.rep-avisos>div{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border-radius:10px;font-size:12px;line-height:1.45;background:rgba(var(--ink-rgb),.04);color:var(--muted)}
+.rep-avisos>div i{margin-top:2px;flex-shrink:0}
+.rep-avisos b{color:var(--txt);font-weight:700}
+.rep-avisos .info i{color:var(--blue)}
+.rep-avisos .ojo i{color:var(--amber)}
+.rep-avisos .mal{background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.rep-avisos .mal i{color:var(--danger)}
+.rep-nota{margin-top:11px;font-size:11.5px;line-height:1.5;color:var(--muted2)}
+.rep-nota:empty{display:none}
+:root[data-theme="light"] .rep-est .sube{color:#067647}
+:root[data-theme="light"] .rep-est .baja,:root[data-theme="light"] .rep-avisos .mal i{color:#961d1d}
 .rep-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .rep-row:last-child{border-bottom:none}
 .rep-row .rep-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
@@ -712,19 +759,6 @@ body.menu-arrastrando .side-scrim{transition:none}
 .rep-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
 .rep-actions select{background:var(--panel-solid);border:1px solid var(--line2);border-radius:8px;color:var(--txt);padding:7px 10px;font-size:12px;font-family:inherit}
 .rep-actions-save{display:flex;gap:8px}
-.rep-grupos{flex-wrap:wrap;margin-top:10px}
-.rep-grupo-info{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:10px 0 2px;font-size:12px;color:var(--muted);line-height:1.4}
-.rep-grupo-info b{color:var(--txt);font-weight:600}
-.rep-grupo-info button{background:transparent;border:1px solid var(--line2);border-radius:8px;color:var(--txt);padding:5px 10px;font-size:11.5px;font-family:inherit;cursor:pointer}
-.rep-grupo-info button:hover{border-color:var(--accent);color:var(--accent-ink)}
-.rep-grupo-info .rep-real{flex-basis:100%;margin-top:2px;font-size:11.5px;color:var(--muted2)}
-.rep-grupos[hidden],.rep-grupo-info[hidden]{display:none}
-.rep-efectivo{margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);font-size:11.5px;line-height:1.6;color:var(--muted)}
-.rep-efectivo b{color:var(--txt)}
-.rep-efectivo .sube{color:#34d399;font-weight:700}
-.rep-efectivo .baja{color:#f87171;font-weight:700}
-.rep-efectivo .aviso{margin-top:6px;color:#f87171}
-.rep-efectivo:empty{display:none}
 .btn-sec{background:transparent;border:1px solid var(--line2);border-radius:8px;padding:7px 13px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
 .btn-sec:hover{color:var(--txt);border-color:var(--muted)}
 .btn-acc{background:var(--accent);border:none;border-radius:8px;padding:7px 13px;font-size:11.5px;font-weight:700;color:var(--on-accent);cursor:pointer;font-family:inherit}
@@ -1863,6 +1897,16 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .rep-row input[type=range]{flex:1 1 100%;order:4;height:32px}
   .rep-row .rep-num input{width:52px;padding:8px 6px}
   .rep-row button{min-width:44px;min-height:44px}
+  .rep-cab{display:none}
+  .rep-fila{grid-template-columns:1fr auto;row-gap:7px;padding:11px 0;width:auto}
+  .rep-est{grid-column:2;grid-row:1}
+  .rep-peso{grid-column:1/-1}
+  .rep-peso input[type=range]{height:32px}
+  .rep-peso input[type=number]{width:52px;padding:8px 6px}
+  .rep-fila .rep-ico{min-width:44px;min-height:44px}
+  .rep-celdas{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:7px}
+  .rep-cel{margin:0;height:auto;min-height:38px;padding:0 11px;display:inline-flex;align-items:center;gap:7px}
+  .rep-cel-lbl{display:inline;font-weight:600}
   .rep-actions{flex-direction:column;align-items:stretch}
   .rep-actions select{width:100%}
   .rep-actions-save{width:100%}
@@ -9495,27 +9539,19 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="csub">De los leads que recibió cada asesor: cuántos atendió a tiempo y cuántos perdió por no responder (el sistema se los pasó a otro)</div>
           <div class="adv" id="rendList"></div>
         </div>
-        <div class="grid g-2b">
-          <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
-          <div class="card">
-            <h2><i class="fas fa-scale-balanced"></i> Reparto objetivo <span class="rep-total" id="repTotal">100%</span></h2>
-            <div class="csub">Cómo se sortean los leads nuevos entre asesores; cada destino puede tener su propio reparto</div>
-            <div class="seg-group seg-group-sm" id="repPool">
-              <button class="seg on" data-pool="domestico">Nacional</button>
-              <button class="seg" data-pool="internacional">Internacional</button>
-              <button class="seg" data-pool="destino" hidden>Por destino</button>
-            </div>
-            <div class="seg-group seg-group-sm rep-grupos" id="repGrupos" hidden></div>
-            <div class="rep-grupo-info" id="repGrupoInfo" hidden></div>
-            <div class="rep-bar" id="repBar"></div>
-            <div id="repRows"></div>
-            <div class="rep-efectivo" id="repEfectivo"></div>
-            <div class="rep-actions">
-              <select id="repAgregar"><option value="">+ Añadir asesor…</option></select>
-              <div class="rep-actions-save" id="repGuardarWrap" style="display:none">
-                <button type="button" class="btn-sec" id="repDescartar">Descartar</button>
-                <button type="button" class="btn-acc" id="repGuardar">Guardar</button>
-              </div>
+        <div class="card"><h2><i class="fas fa-user-tie"></i> Carga por asesor</h2><div class="csub">Toca un asesor para ver su cartera</div><div class="adv" id="advList"></div></div>
+        <div class="card rep-card" style="margin-top:16px">
+          <h2><i class="fas fa-scale-balanced"></i> Reparto de leads <span class="rep-total" id="repTotal">suma 100</span></h2>
+          <div class="csub">Cada asesor tiene un peso y marca los destinos que atiende. En cada destino, los leads nuevos se sortean solo entre quienes lo atienden, según su peso.</div>
+          <div class="rep-bar" id="repBar"></div>
+          <div class="rep-avisos" id="repAvisos" hidden></div>
+          <div class="rep-tabla" id="repRows" role="table" aria-label="Reparto de leads por asesor y destino"></div>
+          <div class="rep-nota" id="repNota"></div>
+          <div class="rep-actions">
+            <select id="repAgregar" aria-label="Añadir asesor al reparto"><option value="">+ Añadir asesor…</option></select>
+            <div class="rep-actions-save" id="repGuardarWrap" style="display:none">
+              <button type="button" class="btn-sec" id="repDescartar">Descartar</button>
+              <button type="button" class="btn-acc" id="repGuardar">Guardar</button>
             </div>
           </div>
         </div>
