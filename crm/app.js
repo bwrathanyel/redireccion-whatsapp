@@ -1788,10 +1788,10 @@ async function renderAvisosPushUI() {
 /* ---------- Avisos obligatorios para el rol asesor (dueño 2026-11-06) ----------
    Criterio por persona: un teléfono que haya acusado un aviso en los últimos 7 días. Un PC no
    alcanza porque con Chrome cerrado no recibe. Si la consulta o la prueba fallan por el sistema,
-   no se bloquea a nadie: vender pesa más que el aviso. Comprueba el momento, no garantiza el futuro. */
+   no se bloquea a nadie: vender pesa más que el aviso. Comprueba el momento, no garantiza el futuro.
+   «Saltar por ahora» siempre visible (dueño 2026-11-09): cierra solo esta vez, en la próxima entrada vuelve. */
 function pushForzado() { return ROL === 'asesor' && MI_USERNAME !== 'ambar' && !window.PRUEBA_DATOS; }
-const PUSH_PRUEBA_MS = 20000, PUSH_INTENTOS_SALIDA = 3;
-let pushIntentos = 0;
+const PUSH_PRUEBA_MS = 20000;
 const pushBloqueoCerrar = () => { const box = document.getElementById('push-bloqueo'); if (box) box.hidden = true; };
 async function pushBloqueoRevisar(btn) {
   if (!pushForzado()) return;
@@ -1819,7 +1819,7 @@ async function pushBloqueoPintar(aviso = '') {
     : { t: 'Para atender a tus clientes a tiempo necesitas los avisos del CRM. Te mandaremos uno de prueba.', b: ['probar', 'Activar y probar'] };
   box.querySelector('.pb-texto').textContent = caso.t;
   box.querySelector('.pb-aviso').textContent = aviso;
-  box.querySelector('.pb-acciones').innerHTML = `<button class="dbtn pb-ok" type="button" data-pb="${caso.b[0]}">${esc(caso.b[1])}</button>${pushIntentos >= PUSH_INTENTOS_SALIDA ? '<button class="dseg-btn" type="button" data-pb="seguir">Seguir por ahora</button>' : ''}`;
+  box.querySelector('.pb-acciones').innerHTML = `<button class="dbtn pb-ok" type="button" data-pb="${caso.b[0]}">${esc(caso.b[1])}</button><button class="dseg-btn" type="button" data-pb="seguir">Saltar por ahora</button>`;
   box.hidden = false;
 }
 async function pushBloqueoProbar(btn) {
@@ -1834,7 +1834,6 @@ async function pushBloqueoProbar(btn) {
     const { data: e } = await sb.rpc('mi_push_estado');
     if (e?.movil_acuse_7d) { pushBloqueoCerrar(); okToast('Listo: tus avisos funcionan'); return; }
   }
-  pushIntentos++;
   await pushBloqueoPintar('No llegó el aviso. Revisa: internet activo; Ajustes, Apps, Chrome, Batería, «Sin restricciones»; y notificaciones permitidas. Luego vuelve a intentar.');
 }
 function setupPushBloqueo() {
