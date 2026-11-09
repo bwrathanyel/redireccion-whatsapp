@@ -31943,7 +31943,6 @@ function vcHospDesde(hab) {
   const it = vcHospItem(hab, 2), porHab = cbPorHabitacion(it);
   let mejor = null;
   for (const t of cbTarDelPlan(cbHotelFilas(it), it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(hab))) {
-    if (String(t.moneda || 'USD').toUpperCase() !== 'USD') continue;
     const p = porHab ? cbTarPrecioHabitacion(t, it.tarifa_variante, TAR_OCUPACION) : cbTarPrecioAdulto(t, it.adultos, TAR_OCUPACION);
     if (p !== null && (!mejor || p < mejor.precio)) mejor = { precio: p, t, porHab, adultos: it.adultos };
   }
@@ -31979,7 +31978,7 @@ function vcHospRecalc() {
     if (!conFechas) {
       const d = vcHospDesde(vcHotel.hab), w = d && ((d.t.ventanas || []).find(w => !w.hasta || w.hasta >= cbHoy()) || { desde: d.t.disfrute_desde, hasta: d.t.fecha_fin });
       html = d ? `Desde <b>${vcMoney(d.precio)}</b> ${unidad(d.porHab)}${d.porHab ? '' : ` (${d.adultos} adultos)`} · ${esc([vcHotel.hab, vcHotel.plan].filter(Boolean).join(' · '))}${w?.desde || w?.hasta ? ` · válida ${w.desde ? 'del ' + vcFechaCorta(w.desde) : ''}${w.hasta ? ' al ' + vcFechaCorta(w.hasta) : ''}` : ''}. Elige las fechas para calcular el total.`
-        : 'Sin tarifa en USD para esta habitación: carga el total a mano.';
+        : 'Sin tarifa para esta habitación: carga el total a mano.';
     } else {
       const c = vcHospCotizar(vcHotel.hab);
       if (c.ok) {
@@ -32233,11 +32232,11 @@ const vcTarifaTxt = x => { const s = [x.titulo, x.plan, x.habitacion].filter(Boo
 const vcServProd = s => vcTarifario?.prods.get(s.producto_id) || null;
 const vcServTarifa = s => vcServProd(s)?.tarifas.find(x => x.id === s.tarifa_id) || null;
 const vcServKey = s => `${s.producto_id || ''}|${s.nombre ? 1 : 0}`;
-// Precio por persona (adulto/niño, niño fijo o en %) o por unidad. Moneda distinta de USD o niños
-// sin tarifa conocida quedan en manual: mejor vacío que un monto inventado.
+// Precio por persona (adulto/niño, niño fijo o en %) o por unidad. Niños sin tarifa conocida quedan
+// en manual: mejor vacío que un monto inventado. «EUR» vale lo mismo que USD: solo marca que en Bs va a tasa euro.
 function vcPrecioTarifa(t, a, n) {
   const p = t?.precios;
-  if (!p || (t.moneda && t.moneda !== 'USD') || (p.moneda && p.moneda !== 'USD') || a + n <= 0) return null;
+  if (!p || a + n <= 0) return null;
   if (p.base === 'unidad') return Number(p.monto) > 0 ? Number(p.monto) : null;
   if (p.base !== 'persona') return null;
   const ad = Number(p.adulto ?? p.monto);
@@ -33651,7 +33650,6 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     const menor = Math.min(...cubren.map(x => x.amplitud));
     const precisas = cubren.filter(x => x.amplitud === menor);
     if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return fallo('La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.');
-    if (precisas.some(x => String(x.t.moneda || 'USD').toUpperCase() !== 'USD')) return fallo('La moneda del tarifario requiere confirmación manual en USD.');
     const precios = precisas.map(x => porHab ? cbTarPrecioHabitacion(x.t, it.tarifa_variante, ocupaciones) : cbTarPrecioAdulto(x.t, adultosHab, ocupaciones));
     if (precios.some(p => p === null) || precios.some(p => p !== precios[0])) return fallo(porHab ? 'Elige la variante de habitación (sencilla, doble…) para cargar el precio.' : 'Ocupación sin precio único: confirma la tarifa manualmente.');
     precisas.sort((a, b) => (a.t.orden_pdf ?? 1e9) - (b.t.orden_pdf ?? 1e9) || a.t.id - b.t.id);
@@ -33701,7 +33699,6 @@ function cbTarPaquete(it, candidatas, noches, ocupaciones) {
   if (!t) return fallo('No hay tarifa del paquete para esa fecha de salida. Ingresa el precio manualmente.');
   const n = cbTarPaqueteNoches(t);
   if (noches.length !== n) return fallo(`El paquete es de ${n + 1} días / ${cbNochesTexto(n)}: ajusta el check-out.`);
-  if (String(t.moneda || 'USD').toUpperCase() !== 'USD') return fallo('La moneda del tarifario requiere confirmación manual en USD.');
   const pareja = adultosHab === 2 ? cbTarNum(t.precios.por_pareja) : null;
   const tarifa = cbTarPrecioAdulto(t, adultosHab, ocupaciones) ?? (pareja !== null ? pareja / 2 : cbTarNum(t.precios[`${n}_noches`]));
   const avisos = new Set([`Paquete completo de ${n + 1} días / ${cbNochesTexto(n)}: precio por persona${pareja !== null ? ' en pareja' : ''}, no por noche.`]);
@@ -34539,12 +34536,12 @@ function cbHotelVariantesHtml(it, i) {
   const noches = cbTarNoches(it.ida, it.vuelta), opciones = new Map();
   for (const t of filas.filter(t => !noches.length || noches.some(n => cbTarAmplitud(t, n) !== null))) {
     for (const o of cbTarVariantes(t, TAR_OCUPACION)) {
-      if (!opciones.has(o.clave)) opciones.set(o.clave, { nombre: o.nombre, precios: new Set(), moneda: t.moneda || 'USD' });
+      if (!opciones.has(o.clave)) opciones.set(o.clave, { nombre: o.nombre, precios: new Set() });
       opciones.get(o.clave).precios.add(o.precio);
     }
   }
   if (opciones.size < 2 && !it.tarifa_variante) return '';
-  return `<div class="field"><label class="fl" for="cb-variante-${i}">Variante de tarifa</label><select class="ei" id="cb-variante-${i}" data-k="tarifa_variante"><option value="">Elegir variante</option>${[...opciones].map(([k, o]) => `<option value="${esc(k)}"${it.tarifa_variante === k ? ' selected' : ''}>${esc(o.nombre)} · ${esc(o.moneda)} ${[...o.precios].sort((a,b) => a-b).map(cbMonto).join(' / ')} por noche</option>`).join('')}</select></div>`;
+  return `<div class="field"><label class="fl" for="cb-variante-${i}">Variante de tarifa</label><select class="ei" id="cb-variante-${i}" data-k="tarifa_variante"><option value="">Elegir variante</option>${[...opciones].map(([k, o]) => `<option value="${esc(k)}"${it.tarifa_variante === k ? ' selected' : ''}>${esc(o.nombre)} · USD ${[...o.precios].sort((a,b) => a-b).map(cbMonto).join(' / ')} por noche</option>`).join('')}</select></div>`;
 }
 function cbHotelSelectorHtml(it, i, campo, label) {
   const filas = cbHotelFilas(it), esPlan = campo === 'plan';
