@@ -30024,6 +30024,10 @@ function setupWhatsapp() {
   document.getElementById('wa-buscar').addEventListener('input', waRenderChats);
   document.getElementById('wa-recargar').addEventListener('click', () => waCargarChats());
   document.getElementById('wa-conv-back').addEventListener('click', () => waCerrarChat());
+  document.getElementById('wa-conv-compose').addEventListener('submit', e => { e.preventDefault(); waEnviar(); });
+  document.getElementById('wa-conv-texto').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches) { e.preventDefault(); waEnviar(); }
+  });
   document.getElementById('wa-volver-dm').addEventListener('click', () => activateSection('dms'));
   document.getElementById('wa-ver-lead').addEventListener('click', () => { if (waActual?.lead) abrirLeadDesdeMisVentas(waActual.lead.id); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
@@ -30134,9 +30138,28 @@ async function waCargarAnteriores() {
   waRenderMensajes();
   log.scrollTop = log.scrollHeight - alto;
 }
+// Número compartido: no hay bot ni teléfono del asesor, se responde desde acá.
+const waEsCompartido = () => !!waNumeros?.find(n => n.id === waCuenta)?.compartido;
 function waPanelChat(abierto) {
+  const compartido = waEsCompartido();
   document.getElementById('wa-conv-vacio').hidden = abierto;
-  ['wa-conv-head', 'wa-conv-log', 'wa-conv-nota'].forEach(id => document.getElementById(id).hidden = !abierto);
+  ['wa-conv-head', 'wa-conv-log'].forEach(id => document.getElementById(id).hidden = !abierto);
+  document.getElementById('wa-conv-nota').hidden = !abierto || compartido;
+  document.getElementById('wa-conv-compose').hidden = !abierto || !compartido;
+}
+async function waEnviar() {
+  const ta = document.getElementById('wa-conv-texto'), btn = document.getElementById('wa-conv-enviar');
+  const texto = ta.value.trim();
+  if (!texto || !waActual || btn.disabled) return;
+  const conv = waActual.id;
+  btn.disabled = true;
+  try {
+    await waInvocar({ accion: 'enviar', accountId: waCuenta, conversationId: conv, texto });
+    if (ta.value.trim() === texto) ta.value = '';
+    if (waActual?.id === conv) { waRefrescarChat(); setTimeout(() => waActual?.id === conv && waRefrescarChat(), 3000); }
+  } catch (e) {
+    errToast(e.message === 'envio_rechazado' ? 'WhatsApp rechazó el mensaje: si pasaron 24 h desde el último del cliente, hace falta una plantilla' : 'No se pudo enviar el mensaje');
+  } finally { btn.disabled = false; }
 }
 function waCerrarChat(fromNav, sinRecarga) {
   waAbrirGen++;

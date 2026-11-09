@@ -2864,6 +2864,10 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 .wa-avatar img{width:100%;height:100%;object-fit:cover}
 .wa-lead-linea{font-size:11px;color:var(--muted2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wa-lead-linea i{color:var(--accent-ink)}
+.wa-compose{display:flex;gap:8px;align-items:flex-end;padding:10px;border-top:1px solid var(--line)}
+.wa-compose textarea{flex:1;resize:none;max-height:140px;min-height:42px;padding:10px 12px;border-radius:20px;border:1px solid var(--line2);background:var(--bg2);color:var(--txt);font:inherit}
+.wa-send{width:42px;height:42px;flex-shrink:0;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--wa);color:#fff}
+.wa-send:disabled{opacity:.5;cursor:default}
 .wa-mas{align-self:center;margin:8px auto;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;color:var(--txt);font:inherit;font-size:12px;padding:6px 14px;cursor:pointer}
 .wa-audio{display:block;width:240px;max-width:100%}
 .wa-transcripcion{display:flex;gap:6px;align-items:flex-start;width:240px;max-width:100%;margin-top:4px;padding:2px 6px;font-size:12.5px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -9196,6 +9200,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           </div>
           <div class="msg-conv-log dm-log" id="wa-conv-log" hidden></div>
           <div class="msg-readonly-note" id="wa-conv-nota" hidden><i class="fas fa-lock"></i> Solo lectura — el bot responde aquí; el asesor atiende por su WhatsApp</div>
+          <form class="wa-compose" id="wa-conv-compose" hidden>
+            <textarea id="wa-conv-texto" rows="1" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" enterkeyhint="enter" maxlength="4000"></textarea>
+            <button class="wa-send" id="wa-conv-enviar" type="submit" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+          </form>
         </div>
       </div>
     </section>
