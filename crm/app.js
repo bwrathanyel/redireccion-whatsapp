@@ -7524,26 +7524,30 @@ function renderEstDestinos(dest) {
   </div></div>`).join('');
 }
 
-/* ---------- Reparto de leads: una tabla, peso por asesor + destinos que atiende ----------
-   Cada asesor tiene un peso (la tabla suma 100) y marca los destinos que
-   atiende, más "Sin destino" (leads sin grupo identificado). En cada destino el
-   sorteo es solo entre quienes lo atienden, en proporción a su peso. Guardar
-   (admin_guardar_reparto_principal) deriva reparto_destino y
-   peso_asignacion/peso_internacional: el motor de sorteo no cambia.
-   "Real estimado" cruza la tabla con el volumen de 90 días y lo compara con
-   el reparto que rige hoy. Mientras nadie guardó, la tabla se arma desde la
-   configuración vieja (repartoSemilla). */
+/* ---------- Reparto de leads: % por asesor + de qué destinos salen sus leads ----------
+   Cada asesor tiene su % del total (la tabla suma 100) y una mezcla: qué parte
+   de SUS leads sale de cada destino (suma 100 por asesor; 0 = no lo atiende).
+   «Parejo» pesa cada destino por lo que trae, o sea que el asesor se lleva su %
+   de cada destino que atiende. Guardar (admin_guardar_reparto_principal) pone
+   en cada destino peso·mezcla normalizado: el motor de sorteo no cambia. Como
+   el volumen de cada destino es el que es, si entre todos piden más de lo que
+   entra se reparte a prorrata; el "real estimado" (volumen de 90 días) muestra
+   lo que de verdad toca. Mientras nadie guardó, la tabla reproduce el reparto
+   que rige hoy (repartoSemilla). */
 const REP_SIN = 'Sin destino';
 const REP_CORTO = { 'Isla de Margarita': 'Margarita', 'Otros nacionales': 'Otros nac.', 'Internacional': 'Internac.' };
 let repartoDatos = null;      // respuesta de reparto_principal_listar()
 let repartoAsesores = [];     // activos: {nombre, peso_asignacion, peso_internacional, es_cuenta_sistema}
-let repartoFilas = [];        // borrador: {nombre, peso, grupos:Set, sin_destino, fijo}
+let repartoFilas = [];        // borrador: {nombre, peso, mezcla:{clave: %}, fijo}
+let repartoAbiertos = new Set();
 let repartoDirty = false;
 let repartoSemilla = false;
 
 function repartoHayCambios() { return repartoDirty || repartoSemilla; }
 function repartoNumero(n) { return Number(n || 0).toLocaleString('es-VE'); }
 const repartoSumaMapa = m => [...m.values()].reduce((s, p) => s + p, 0);
+const repartoPct = v => (v > 0 && v < 1 ? '<1' : Math.round(v)) + '%';
+const repartoMarcados = f => new Set(Object.keys(f.mezcla).filter(k => f.mezcla[k] > 0));
 
 // Columna de cada lead con el mismo ruteo del motor: su grupo; sin grupo,
 // Internacional si el lead lo es y si no "Sin destino".
@@ -7575,9 +7579,13 @@ function repartoConfigBorrador() {
   const cfg = { grupos: {}, nac: new Map(), intl: new Map() };
   repartoFilas.forEach(f => {
     if (!(f.peso > 0)) return;
-    if (f.sin_destino) cfg.nac.set(f.nombre, f.peso);
-    if (f.grupos.has('Internacional')) cfg.intl.set(f.nombre, f.peso);
-    f.grupos.forEach(g => (cfg.grupos[g] ||= new Map()).set(f.nombre, f.peso));
+    Object.entries(f.mezcla).forEach(([clave, s]) => {
+      if (!(s > 0)) return;
+      const w = f.peso * s;
+      if (clave === REP_SIN) { cfg.nac.set(f.nombre, w); return; }
+      (cfg.grupos[clave] ||= new Map()).set(f.nombre, w);
+      if (clave === 'Internacional') cfg.intl.set(f.nombre, w);
+    });
   });
   return cfg;
 }
@@ -7606,9 +7614,15 @@ function repartoA100(filas) {
   filas.forEach(f => delete f.exacto);
   return filas;
 }
-// Primera vez: atiende lo que hoy le da leads, y su peso es su parte promedio
-// en esos destinos ponderada por volumen. No reproduce exacto un reparto que
-// era distinto en cada destino; el real estimado muestra la diferencia.
+// Mezcla pareja entre los destinos dados (sin ninguno, todos): cada uno pesa
+// lo que trae de leads. Un destino sin leads cuenta como 1 para no quedar en 0.
+function repartoParejo(claves) {
+  const cols = repartoColumnas(), usar = cols.filter(c => claves.has(c.clave));
+  const base = usar.length ? usar : cols, tot = base.reduce((s, c) => s + Math.max(c.vol, 1), 0);
+  return Object.fromEntries(base.map(c => [c.clave, 100 * Math.max(c.vol, 1) / tot]));
+}
+// Primera vez: el % y la mezcla de cada uno salen de lo que hoy le toca en
+// cada destino, así la tabla arranca igual al reparto vigente.
 function repartoSemillaFilas() {
   const cfg = repartoConfigHoy(), acc = new Map();
   const elegible = new Set(repartoAsesores.filter(a => !a.es_cuenta_sistema).map(a => a.nombre));
@@ -7618,13 +7632,16 @@ function repartoSemillaFilas() {
     if (!s) return;
     m.forEach((p, nombre) => {
       if (!elegible.has(nombre)) return;
-      const x = acc.get(nombre) || { pond: 0, vol: 0, grupos: new Set(), sin_destino: false };
-      x.pond += w * p / s; x.vol += w;
-      if (c.clave === REP_SIN) x.sin_destino = true; else x.grupos.add(c.clave);
+      const x = acc.get(nombre) || { total: 0, mezcla: {} };
+      x.total += w * p / s;
+      x.mezcla[c.clave] = (x.mezcla[c.clave] || 0) + w * p / s;
       acc.set(nombre, x);
     });
   });
-  return repartoA100([...acc].map(([nombre, x]) => ({ nombre, exacto: x.pond / x.vol, grupos: x.grupos, sin_destino: x.sin_destino, fijo: false })));
+  return repartoA100([...acc].map(([nombre, x]) => ({
+    nombre, exacto: x.total, fijo: false,
+    mezcla: Object.fromEntries(Object.entries(x.mezcla).map(([k, v]) => [k, 100 * v / x.total])),
+  })));
 }
 
 async function cargarReparto() {
@@ -7642,9 +7659,13 @@ async function cargarReparto() {
 function repartoDescartar() {
   const guardadas = repartoDatos?.filas || [];
   repartoSemilla = !guardadas.length;
-  repartoFilas = repartoSemilla ? repartoSemillaFilas()
-    : guardadas.map(f => ({ nombre: f.nombre, peso: Number(f.peso), grupos: new Set(f.grupos || []), sin_destino: !!f.sin_destino, fijo: false }));
+  repartoFilas = repartoSemilla ? repartoSemillaFilas() : guardadas.map(f => {
+    const mezcla = Object.fromEntries(Object.entries(f.mezcla || {}).map(([k, v]) => [k, Number(v)]));
+    const viejos = new Set([...(f.grupos || []), ...(f.sin_destino ? [REP_SIN] : [])]);
+    return { nombre: f.nombre, peso: Number(f.peso), mezcla: Object.keys(mezcla).length ? mezcla : repartoParejo(viejos), fijo: false };
+  });
   repartoFilas.sort((a, b) => b.peso - a.peso || a.nombre.localeCompare(b.nombre));
+  repartoAbiertos = new Set();
   repartoDirty = false;
   renderReparto();
 }
@@ -7680,12 +7701,29 @@ function repartoPeso(i, valor) {
   repartoDirty = true;
   repartoRefrescar();
 }
-function repartoToggle(i, clave) {
+// Mover un destino de la mezcla: los otros que atiende se escalan para que
+// sume 100. Sin redondear: un destino chico (Corporativo) pesa centésimas y
+// no debe quedar en 0. Si no atendía otro, el resto va parejo a los demás.
+function repartoMezcla(i, clave, valor) {
   const f = repartoFilas[i];
   if (!f) return;
-  if (clave === REP_SIN) f.sin_destino = !f.sin_destino;
-  else if (f.grupos.has(clave)) f.grupos.delete(clave);
-  else f.grupos.add(clave);
+  const v = Math.max(0, Math.min(100, valor)), resto = 100 - v;
+  const otros = Object.keys(f.mezcla).filter(k => k !== clave && f.mezcla[k] > 0);
+  if (otros.length) {
+    const s = otros.reduce((a, k) => a + f.mezcla[k], 0);
+    otros.forEach(k => { f.mezcla[k] = resto * f.mezcla[k] / s; });
+  } else if (resto > 0) {
+    const demas = new Set(repartoColumnas().map(c => c.clave).filter(k => k !== clave));
+    Object.entries(repartoParejo(demas)).forEach(([k, x]) => { f.mezcla[k] = resto * x / 100; });
+  }
+  f.mezcla[clave] = v;
+  repartoDirty = true;
+  repartoRefrescar();
+}
+function repartoParejoFila(i) {
+  const f = repartoFilas[i];
+  if (!f) return;
+  f.mezcla = repartoParejo(repartoMarcados(f));
   repartoDirty = true;
   repartoRefrescar();
 }
@@ -7698,10 +7736,11 @@ function repartoQuitar(i) {
   repartoDirty = true;
   renderReparto();
 }
-// Asesor nuevo: peso 0 con los destinos nacionales y "Sin destino", que es lo habitual.
+// Asesor nuevo: 0 % con los destinos nacionales y "Sin destino", que es lo habitual.
 function repartoAgregar(nombre) {
-  const grupos = new Set(repartoColumnas().map(c => c.clave).filter(k => k !== REP_SIN && k !== 'Internacional'));
-  repartoFilas.push({ nombre, peso: repartoFilas.length ? 0 : 100, grupos, sin_destino: true, fijo: false });
+  const claves = new Set(repartoColumnas().map(c => c.clave).filter(k => k !== 'Internacional'));
+  repartoFilas.push({ nombre, peso: repartoFilas.length ? 0 : 100, mezcla: repartoParejo(claves), fijo: false });
+  repartoAbiertos.add(nombre);
   repartoDirty = true;
   renderReparto();
 }
@@ -7709,34 +7748,41 @@ function repartoSinNadie(cfg = repartoConfigBorrador()) {
   return repartoColumnas().filter(c => !repartoSumaMapa(repartoMapaColumna(cfg, c.clave))).map(c => c.clave);
 }
 
-// Estructura (filas, columnas, select). Los valores los pone repartoRefrescar,
+// Estructura (filas, sliders, select). Los valores los pone repartoRefrescar,
 // que no reconstruye nada: así el slider no se corta mientras se arrastra.
 function renderReparto() {
   const box = document.getElementById('repRows');
   const selectAgregar = document.getElementById('repAgregar');
   if (!box) return;
   const cols = repartoColumnas();
-  box.style.setProperty('--rep-cols', cols.length);
-  const cab = `<div class="rep-fila rep-cab" role="row">
-    <span role="columnheader">Asesor</span><span role="columnheader">Peso</span>
-    ${cols.map(c => `<span role="columnheader" class="rep-col" data-col="${esc(c.clave)}" title="${esc(c.clave)} · ${repartoNumero(c.vol)} leads en 90 días">${esc(c.corto)}<small>${c.pct < 1 && c.vol ? '<1' : Math.round(c.pct)}% de leads</small></span>`).join('')}
-    <span role="columnheader" class="rep-est-cab">Real estimado</span>
+  box.innerHTML = repartoFilas.map((f, i) => {
+    const abierto = repartoAbiertos.has(f.nombre);
+    return `<div class="rep-ase${abierto ? ' abierto' : ''}" data-i="${i}">
+    <div class="rep-fila">
+      <span class="rep-quien">
+        <span class="rep-dot" style="background:${ADV_COLORS[i % ADV_COLORS.length]}"></span>
+        <span class="rep-nombre" title="${esc(f.nombre)}">${esc(f.nombre)}</span>
+        <button type="button" class="rep-ico rep-quitar" data-rep-quitar title="Quitar del reparto" aria-label="Quitar a ${esc(f.nombre)} del reparto"><i class="fas fa-xmark"></i></button>
+      </span>
+      <span class="rep-peso">
+        <input type="range" min="0" max="100" step="1" data-rep-slider aria-label="% del total de ${esc(f.nombre)}">
+        <input type="number" min="0" max="100" step="1" inputmode="numeric" data-rep-num aria-label="% del total de ${esc(f.nombre)}">
+        <button type="button" class="rep-ico" data-rep-fijo></button>
+      </span>
+      <span class="rep-est"></span>
+      <button type="button" class="rep-abrir" data-rep-abrir aria-expanded="${abierto}" title="De qué destinos salen sus leads"><span class="rep-abrir-txt"></span><i class="fas fa-chevron-down"></i></button>
+    </div>
+    <div class="rep-mez"${abierto ? '' : ' hidden'}>
+      <div class="rep-mez-cab"><span>De dónde salen los leads de ${esc(f.nombre)}</span><button type="button" class="btn-sec" data-rep-parejo title="Cada destino que atiende pesa lo que trae de leads">Parejo</button></div>
+      ${cols.map(c => `<div class="rep-mez-fila" data-clave="${esc(c.clave)}">
+        <span class="rep-mez-dest">${esc(c.clave)}<small>${c.pct < 1 && c.vol ? '<1' : Math.round(c.pct)}% de todos los leads</small></span>
+        <input type="range" min="0" max="100" step="1" data-rep-mez aria-label="Parte de los leads de ${esc(f.nombre)} que sale de ${esc(c.clave)}">
+        <b class="rep-mez-val"></b>
+        <span class="rep-mez-info"></span>
+      </div>`).join('')}
+    </div>
   </div>`;
-  const filas = repartoFilas.map((f, i) => `<div class="rep-fila" role="row" data-i="${i}">
-    <span class="rep-quien" role="cell">
-      <span class="rep-dot" style="background:${ADV_COLORS[i % ADV_COLORS.length]}"></span>
-      <span class="rep-nombre" title="${esc(f.nombre)}">${esc(f.nombre)}</span>
-      <button type="button" class="rep-ico rep-quitar" data-rep-quitar title="Quitar del reparto" aria-label="Quitar a ${esc(f.nombre)} del reparto"><i class="fas fa-xmark"></i></button>
-    </span>
-    <span class="rep-peso" role="cell">
-      <input type="range" min="0" max="100" step="1" data-rep-slider aria-label="Peso de ${esc(f.nombre)}">
-      <input type="number" min="0" max="100" step="1" inputmode="numeric" data-rep-num aria-label="Peso de ${esc(f.nombre)}">
-      <button type="button" class="rep-ico" data-rep-fijo></button>
-    </span>
-    <span class="rep-celdas" role="cell">${cols.map(c => `<button type="button" class="rep-cel" data-rep-cel="${esc(c.clave)}"><span class="rep-cel-lbl">${esc(c.corto)}</span><span class="rep-cel-val"></span></button>`).join('')}</span>
-    <span class="rep-est" role="cell"></span>
-  </div>`).join('');
-  box.innerHTML = cab + (filas || '<div class="muted" style="font-size:12.5px;padding:11px 0">Sin asesores en el reparto</div>');
+  }).join('') || '<div class="muted" style="font-size:12.5px;padding:11px 0">Sin asesores en el reparto</div>';
 
   const enTabla = new Set(repartoFilas.map(f => f.nombre));
   const disponibles = repartoAsesores.filter(a => !enTabla.has(a.nombre) && !a.es_cuenta_sistema);
@@ -7746,51 +7792,62 @@ function renderReparto() {
 function repartoRefrescar() {
   const box = document.getElementById('repRows');
   if (!box) return;
-  const cfg = repartoConfigBorrador();
+  const cfg = repartoConfigBorrador(), cols = repartoColumnas(), vol = repartoVolumenes();
   const total = Number(repartoDatos?.total_90d) || 0;
   const despues = repartoLeads(cfg), antes = repartoLeads(repartoConfigHoy());
   const pct = (m, n) => total ? 100 * (m.get(n) || 0) / total : 0;
   const sinNadie = new Set(repartoSinNadie(cfg));
-  const grandes = [];
+  const grandes = [], cortos = [];
 
-  box.querySelectorAll('.rep-cab [data-col]').forEach(el => el.classList.toggle('falta', sinNadie.has(el.dataset.col)));
-  box.querySelectorAll('.rep-fila[data-i]').forEach(row => {
-    const f = repartoFilas[Number(row.dataset.i)];
+  box.querySelectorAll('.rep-ase[data-i]').forEach(el => {
+    const f = repartoFilas[Number(el.dataset.i)];
     if (!f) return;
-    const slider = row.querySelector('[data-rep-slider]'), num = row.querySelector('[data-rep-num]'), fijo = row.querySelector('[data-rep-fijo]');
+    const slider = el.querySelector('[data-rep-slider]'), num = el.querySelector('[data-rep-num]'), fijo = el.querySelector('[data-rep-fijo]');
     slider.value = f.peso; num.value = f.peso;
     slider.disabled = num.disabled = f.fijo;
     fijo.classList.toggle('on', f.fijo);
     fijo.title = f.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)';
     fijo.setAttribute('aria-label', fijo.title);
     fijo.innerHTML = `<i class="fas fa-${f.fijo ? 'lock' : 'lock-open'}"></i>`;
-    row.querySelectorAll('[data-rep-cel]').forEach(b => {
-      const clave = b.dataset.repCel;
-      const on = clave === REP_SIN ? f.sin_destino : f.grupos.has(clave);
-      const s = repartoSumaMapa(repartoMapaColumna(cfg, clave));
-      const parte = on && s ? Math.round(100 * f.peso / s) : 0;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-pressed', on);
-      b.title = on ? `${f.nombre} atiende ${clave}: le toca el ${parte}% de esos leads` : `${f.nombre} no atiende ${clave} · tocar para sumarlo`;
-      b.querySelector('.rep-cel-val').textContent = on ? parte + '%' : '';
+    const marcados = [...repartoMarcados(f)];
+    el.querySelector('.rep-abrir-txt').textContent = marcados.length === 1 ? (REP_CORTO[marcados[0]] || marcados[0]) : marcados.length + ' destinos';
+    el.querySelectorAll('.rep-mez-fila').forEach(r => {
+      const clave = r.dataset.clave, s = f.mezcla[clave] || 0;
+      const suma = repartoSumaMapa(repartoMapaColumna(cfg, clave));
+      const parte = s > 0 && f.peso > 0 && suma ? f.peso * s / suma : 0;
+      r.querySelector('[data-rep-mez]').value = Math.round(s);
+      r.querySelector('.rep-mez-val').textContent = s > 0 ? repartoPct(s) : '—';
+      r.querySelector('.rep-mez-info').textContent = !(s > 0) ? 'No lo atiende'
+        : !(f.peso > 0) ? 'Sin % del total'
+        : `≈ ${repartoNumero(Math.round((vol[clave] || 0) * parte))} leads · ${repartoPct(100 * parte)} de ${REP_CORTO[clave] || clave}`;
+      r.classList.toggle('off', !(s > 0));
+      r.classList.toggle('falta', sinNadie.has(clave));
     });
     const est = pct(despues, f.nombre), hoy = pct(antes, f.nombre), d = est - hoy;
     if (Math.abs(d) >= 3) grandes.push(f.nombre);
+    if (total && Math.abs(est - f.peso) >= 1.5) cortos.push(`<b>${esc(f.nombre)}</b> pide ${f.peso}% y recibiría ${est.toFixed(1)}%`);
     const mov = Math.abs(d) < 0.05 ? '' : `<span class="${d > 0 ? 'sube' : 'baja'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}</span>`;
-    row.querySelector('.rep-est').innerHTML = `<b>${est.toFixed(1)}%</b>${mov}<small>hoy ${hoy.toFixed(1)}%</small>`;
+    el.querySelector('.rep-est').innerHTML = `<b>${est.toFixed(1)}%</b>${mov}<small>hoy ${hoy.toFixed(1)}%</small>`;
   });
 
-  document.getElementById('repBar').innerHTML = repartoFilas.map((f, i) => `<span style="flex-grow:${Math.max(f.peso, 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(f.nombre)}: peso ${f.peso}"></span>`).join('');
+  document.getElementById('repBar').innerHTML = repartoFilas.map((f, i) => `<span style="flex-grow:${Math.max(f.peso, 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(f.nombre)}: ${f.peso}% del total"></span>`).join('');
   const suma = repartoFilas.reduce((s, f) => s + f.peso, 0);
   const chip = document.getElementById('repTotal');
   chip.textContent = 'suma ' + suma;
   chip.className = 'rep-total ' + (suma === 100 ? 'ok' : 'bad');
 
+  // Leads que se piden de cada destino contra los que entran: arriba de 10 %
+  // de más, el sorteo los reparte a prorrata y alguien recibe menos de su %.
+  const llenos = cols.filter(c => c.vol >= 20).map(c => {
+    const pedido = repartoFilas.reduce((s, f) => s + total * f.peso * (f.mezcla[c.clave] || 0) / 10000, 0);
+    return { ...c, pedido };
+  }).filter(c => c.pedido > 1.1 * c.vol);
   const enTabla = new Set(repartoFilas.map(f => f.nombre));
   const fuera = [...antes.keys()].filter(n => !enTabla.has(n) && pct(antes, n) >= 0.5);
   const avisos = [];
-  if (sinNadie.size) avisos.push(`<div class="mal"><i class="fas fa-circle-exclamation"></i><span>Nadie atiende <b>${[...sinNadie].map(esc).join(', ')}</b>. Marcá al menos un asesor para poder guardar.</span></div>`);
-  if (repartoSemilla) avisos.push(`<div class="info"><i class="fas fa-circle-info"></i><span>Esta tabla todavía no está activa: se armó a partir del reparto que rige hoy. Revisá el real estimado y guardá para activarla.</span></div>`);
+  if (sinNadie.size) avisos.push(`<div class="mal"><i class="fas fa-circle-exclamation"></i><span>Nadie atiende <b>${[...sinNadie].map(esc).join(', ')}</b>. Subí ese destino en algún asesor para poder guardar.</span></div>`);
+  if (repartoSemilla) avisos.push(`<div class="info"><i class="fas fa-circle-info"></i><span>Esta tabla todavía no está activa: reproduce el reparto que rige hoy. Ajustá lo que quieras y guardá para activarla.</span></div>`);
+  if (cortos.length) avisos.push(`<div class="ojo"><i class="fas fa-scale-unbalanced"></i><span>El volumen no da para lo pedido: ${cortos.join('; ')}.${llenos.length ? ` Se pide más de lo que entra en ${llenos.map(c => `<b>${esc(c.clave)}</b> (${repartoNumero(Math.round(c.pedido))} pedidos, entran ${repartoNumero(c.vol)})`).join(', ')}.` : ''} Bajá ese destino en alguien o tocá «Parejo».</span></div>`);
   if (grandes.length) avisos.push(`<div class="ojo"><i class="fas fa-triangle-exclamation"></i><span>Cambia 3 puntos o más la carga de ${grandes.map(n => `<b>${esc(n)}</b>`).join(', ')}.</span></div>`);
   if (fuera.length) avisos.push(`<div class="ojo"><i class="fas fa-user-minus"></i><span>Quedan fuera del reparto: ${fuera.map(n => `<b>${esc(n)}</b> (hoy ${pct(antes, n).toFixed(1)}%)`).join(', ')}.</span></div>`);
   const avisosBox = document.getElementById('repAvisos');
@@ -7798,7 +7855,7 @@ function repartoRefrescar() {
   avisosBox.hidden = !avisos.length;
 
   document.getElementById('repNota').textContent = total
-    ? `Real estimado: qué parte del total le tocaría a cada uno con los ${repartoNumero(total)} leads de los últimos 90 días; «hoy» es con el reparto vigente. El % de cada casilla es su parte de ese destino.`
+    ? `Real estimado: qué parte del total le tocaría a cada uno con los ${repartoNumero(total)} leads de los últimos 90 días; «hoy» es con el reparto vigente. Los leads por destino también son de 90 días.`
     : '';
   document.getElementById('repGuardarWrap').style.display = repartoHayCambios() ? 'flex' : 'none';
   document.getElementById('repGuardar').disabled = suma !== 100 || sinNadie.size > 0;
@@ -7806,14 +7863,24 @@ function repartoRefrescar() {
 function setupReparto() {
   const box = document.getElementById('repRows');
   if (box) {
-    const indice = el => Number(el.closest('.rep-fila')?.dataset.i);
-    box.addEventListener('input', e => { if (e.target.matches('[data-rep-slider]')) repartoPeso(indice(e.target), Number(e.target.value)); });
+    const indice = el => Number(el.closest('.rep-ase')?.dataset.i);
+    box.addEventListener('input', e => {
+      if (e.target.matches('[data-rep-slider]')) repartoPeso(indice(e.target), Number(e.target.value));
+      else if (e.target.matches('[data-rep-mez]')) repartoMezcla(indice(e.target), e.target.closest('.rep-mez-fila').dataset.clave, Number(e.target.value));
+    });
     box.addEventListener('change', e => { if (e.target.matches('[data-rep-num]')) repartoPeso(indice(e.target), Number(e.target.value) || 0); });
     box.addEventListener('click', e => {
       const b = e.target.closest('button');
       if (!b || !box.contains(b)) return;
       const i = indice(b);
-      if (b.matches('[data-rep-cel]')) repartoToggle(i, b.dataset.repCel);
+      if (b.matches('[data-rep-abrir]')) {
+        const el = b.closest('.rep-ase'), nombre = repartoFilas[i]?.nombre, abrir = !repartoAbiertos.has(nombre);
+        if (abrir) repartoAbiertos.add(nombre); else repartoAbiertos.delete(nombre);
+        el.classList.toggle('abierto', abrir);
+        el.querySelector('.rep-mez').hidden = !abrir;
+        b.setAttribute('aria-expanded', abrir);
+      }
+      else if (b.matches('[data-rep-parejo]')) repartoParejoFila(i);
       else if (b.matches('[data-rep-fijo]')) { repartoFilas[i].fijo = !repartoFilas[i].fijo; repartoRefrescar(); }
       else if (b.matches('[data-rep-quitar]')) repartoQuitar(i);
     });
@@ -7826,17 +7893,20 @@ function setupReparto() {
 }
 async function guardarReparto() {
   const suma = repartoFilas.reduce((s, f) => s + f.peso, 0);
-  if (suma !== 100) { errToast('Los pesos tienen que sumar 100 (van ' + suma + ')'); return; }
+  if (suma !== 100) { errToast('Los % tienen que sumar 100 (van ' + suma + ')'); return; }
   const faltan = repartoSinNadie();
   if (faltan.length) { errToast('Falta quién atienda: ' + faltan.join(', ')); return; }
   if (!(await confirmarSheet({ titulo: '¿Aplicar este reparto?', detalle: 'Rige para los leads que entren desde ahora y el turno de cada destino arranca de cero. Los leads ya asignados no cambian.', textoOk: 'Aplicar' }))) return;
   const btn = document.getElementById('repGuardar');
   btn.disabled = true;
-  const p_filas = repartoFilas.map(f => ({ nombre: f.nombre, peso: f.peso, grupos: [...f.grupos], sin_destino: f.sin_destino }));
+  const p_filas = repartoFilas.map(f => ({
+    nombre: f.nombre, peso: f.peso,
+    mezcla: Object.fromEntries(Object.entries(f.mezcla).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.max(0.01, Math.round(v * 100) / 100)])),
+  }));
   const { data, error } = await sb.rpc('admin_guardar_reparto_principal', { p_filas });
   btn.disabled = false;
   if (error || !data?.ok) {
-    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'Los pesos no suman 100', peso_invalido: 'Hay un peso inválido', no_existe: 'Algún asesor ya no existe o está inactivo', no_elegible: 'Hay un asesor de boletería en la tabla', grupo_invalido: 'Algún destino ya no existe', nombre_invalido: 'Falta el nombre de un asesor', nombre_duplicado: 'Hay un asesor repetido', fila_invalida: 'Hay una fila incompleta', destino_sin_asesor: 'Nadie atiende ' + (data?.grupo || 'un destino') };
+    const msgs = { pool_vacio: 'El reparto no puede quedar vacío', suma_invalida: 'Los % no suman 100', peso_invalido: 'Hay un % inválido', no_existe: 'Algún asesor ya no existe o está inactivo', no_elegible: 'Hay un asesor de boletería en la tabla', grupo_invalido: 'Algún destino ya no existe', nombre_invalido: 'Falta el nombre de un asesor', nombre_duplicado: 'Hay un asesor repetido', fila_invalida: 'Hay una fila incompleta', mezcla_invalida: 'Hay un % de destino inválido', mezcla_suma: 'Los destinos de ' + (data?.nombre || 'un asesor') + ' no suman 100', destino_sin_asesor: 'Nadie atiende ' + (data?.grupo || 'un destino') };
     errToast('No se pudo guardar: ' + (msgs[data?.error] || data?.error || error?.message || ''));
     return;
   }
