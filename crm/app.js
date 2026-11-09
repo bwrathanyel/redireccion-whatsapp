@@ -32015,6 +32015,7 @@ function vcHotelSetup(form) {
   });
 }
 const VC_SERV_TIPOS = {
+  hotel: { nombre: 'Otro hotel', pdf: 'HOSPEDAJE', icono: 'fa-hotel', ph: 'Buscar hotel del tarifario o escribir el nombre' },
   excursion: { nombre: 'Excursión / full day', pdf: 'EXCURSIÓN', icono: 'fa-umbrella-beach', ph: 'Buscar excursión o full day del tarifario' },
   traslado: { nombre: 'Traslado', pdf: 'TRASLADO', icono: 'fa-van-shuttle', ph: 'Buscar traslado del tarifario' },
   paquete: { nombre: 'Paquete', pdf: 'PAQUETE', icono: 'fa-suitcase', ph: 'Buscar paquete del tarifario' },
@@ -32024,6 +32025,21 @@ const VC_SERV_TIPOS = {
 };
 const vcServConTarifario = tipo => tipo !== 'otro' && tipo !== 'seguro';
 const vcSeguroVigencia = s => s.fecha && s.hasta && s.hasta !== s.fecha ? `${vcFechaDma(s.fecha)} al ${vcFechaDma(s.hasta)}` : vcFechaDma(s.fecha || s.hasta);
+const vcHotelNoches = s => (s.fecha && s.hasta ? Math.round((new Date(s.hasta) - new Date(s.fecha)) / 864e5) : 0);
+const vcHotelEstadia = s => [vcSeguroVigencia(s), vcHotelNoches(s) > 0 && `${vcHotelNoches(s)} ${vcHotelNoches(s) === 1 ? 'noche' : 'noches'}`].filter(Boolean).join(' · ');
+// Otro hotel (2026-11-09): un segundo hospedaje en el mismo voucher; habitación, salida, infantes y localizador viajan en vouchers.servicios.
+function vcHotelHtml(s, f) {
+  const num = 'type="number" min="0" step="1" inputmode="numeric"', prod = vcServProd(s);
+  return `<div class="vc-fila">
+      ${f('nombre', 'Hotel', `list="vc-dl-hotel" autocomplete="off" placeholder="${esc(VC_SERV_TIPOS.hotel.ph)}"`, ' s2')}${f('habitacion', 'Habitación / clase', 'maxlength="80" placeholder="Habitación doble"')}${f('opcion', 'Modalidad', 'list="vc-dl-modalidad" maxlength="80" autocomplete="off" placeholder="Todo incluido"')}
+      ${prod ? `<div class="vc-serv-hint"><span class="vc-pill ok"><i class="fas fa-link"></i> Tarifario</span>${esc(prod.destino || '')}</div>` : ''}
+      ${f('fecha', 'Entrada', 'type="date"')}${f('hasta', 'Salida', 'type="date"')}
+      ${f('adultos', 'Adultos', num)}${f('ninos', 'Niños (3+ años)', num)}${f('infantes', 'Infantes (0-2 años)', num)}
+      ${f('localizador', 'Localizador (opcional)', 'maxlength="40" autocomplete="off" spellcheck="false"')}${f('monto', 'Monto (USD)', 'type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"')}
+      ${f('detalle', 'Detalle (opcional)', 'placeholder="Horarios de entrada y salida, qué incluye..."', ' s3')}
+    </div>`;
+}
+const vcHotelFalta = s => (s.fecha && s.hasta && s.hasta < s.fecha ? ['[data-sk="hasta"]', `La salida de ${String(s.nombre || '').trim() || 'otro hotel'} es antes de la entrada`] : null);
 // Seguro de viaje (2026-11-03): aseguradora va en nombre y plan/cobertura en opcion; vigencia, póliza y asistencia viajan en vouchers.servicios.
 function vcSeguroHtml(s, f) {
   const num = 'type="number" min="0" step="1" inputmode="numeric"';
@@ -32172,6 +32188,7 @@ function vcPrecioTarifa(t, a, n) {
 }
 // La tarifa que corresponde a la cantidad de pasajeros (traslados por rango de pax), si el asesor no eligió otra.
 function vcServRecalc(s) {
+  if (s.tipo === 'hotel') return;
   const prod = vcServProd(s), pax = (Number(s.adultos) || 0) + (Number(s.ninos) || 0);
   if (prod?.tarifas.length && !s.tarifaManual) {
     const enRango = prod.tarifas.find(x => { const p = x.precios || {}; return pax >= (Number(p.pax_min) || 0) && (p.pax_max == null || pax <= Number(p.pax_max)); });
@@ -32186,7 +32203,7 @@ function vcServHtml(s, i) {
   return `<div class="vc-serv" data-si="${i}" data-key="${vcServKey(s)}">
     <div class="vc-serv-cab"><i class="fas ${t.icono}"></i><span>${t.nombre}</span><b data-s-importe>${s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''}</b>
       <button class="vc-quitar" type="button" data-vc-squitar="${i}" title="Quitar servicio" aria-label="Quitar ${esc(t.nombre)}"><i class="fas fa-trash"></i></button></div>
-    ${s.tipo === 'boleto' ? vcBoletoHtml(s, i, f) + '</div>' : s.tipo === 'seguro' ? vcSeguroHtml(s, f) + '</div>' : `<div class="vc-fila">
+    ${s.tipo === 'boleto' ? vcBoletoHtml(s, i, f) + '</div>' : s.tipo === 'seguro' ? vcSeguroHtml(s, f) + '</div>' : s.tipo === 'hotel' ? vcHotelHtml(s, f) + '</div>' : `<div class="vc-fila">
       ${f('nombre', conTarifario ? 'Servicio' : 'Descripción', `placeholder="${esc(t.ph)}"${conTarifario ? ` list="vc-dl-${s.tipo}" autocomplete="off"` : ''}`, ' s2')}
       ${prod?.tarifas.length ? `<label class="vc-c s2"><span>Tarifa / opción</span><select class="ei" data-sk="tarifa_id">${prod.tarifas.map(x => `<option value="${x.id}"${x.id === s.tarifa_id ? ' selected' : ''}>${esc(vcTarifaTxt(x))}</option>`).join('')}</select></label>`
         : f('opcion', 'Opción', `placeholder="${s.tipo === 'traslado' ? 'Privado, compartido, ida y vuelta...' : 'Opcional'}"`, ' s2')}
@@ -32217,6 +32234,14 @@ function vcAgregarServicio(tipo) {
     document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="aerolinea"]`)?.focus();
     return;
   }
+  if (tipo === 'hotel') {
+    vcServicios.push({ tipo, producto_id: null, tarifa_id: null, nombre: '', habitacion: '', opcion: '', fecha: val('vc-fecha-salida'), hasta: '', hora: '', localizador: '',
+      adultos: parseInt(val('vc-adultos'), 10) || '', ninos: /^\d+$/.test(ni) ? Number(ni) : '', infantes: parseInt(val('vc-infantes'), 10) || '', monto: '', detalle: '' });
+    vcPintarServicios();
+    document.querySelector(`#vc-servicios [data-si="${vcServicios.length - 1}"] [data-sk="nombre"]`)?.focus();
+    vcCargarTarifario();
+    return;
+  }
   if (tipo === 'seguro') {
     vcServicios.push({ tipo, producto_id: null, tarifa_id: null, nombre: '', opcion: '', fecha: val('vc-fecha-entrada'), hasta: val('vc-fecha-salida'), hora: '', poliza: '', asistencia: '',
       adultos: parseInt(val('vc-adultos'), 10) || '', ninos: /^\d+$/.test(ni) ? Number(ni) : '', infantes: parseInt(val('vc-infantes'), 10) || '', monto: '', detalle: '' });
@@ -32245,7 +32270,7 @@ function vcServInput(el) {
     const p = vcTarifario?.porLabel[s.tipo]?.get(el.value.trim()) || null;
     if ((p?.id || null) !== s.producto_id) {
       s.producto_id = p?.id || null; s.tarifa_id = null; s.tarifaManual = s.montoManual = false;
-      if (p) { s.nombre = p.nombre; repintar = true; } else s.monto = '';
+      if (p) { s.nombre = p.nombre; repintar = true; } else if (s.tipo !== 'hotel') s.monto = '';
     }
   }
   const tarAntes = s.tarifa_id;
@@ -32273,7 +32298,8 @@ const vcServLimpio = s => {
   return { tipo: s.tipo, producto_id: s.producto_id || null, tarifa_id: tar ? tar.id : null, nombre: String(s.nombre || '').trim(),
     opcion: tar ? vcTarifaTxt(tar) : String(s.opcion || '').trim(), fecha: s.fecha || null, hora: String(s.hora || '').trim(),
     adultos: n(s.adultos), ninos: n(s.ninos), monto: n(s.monto), detalle: String(s.detalle || '').trim(), ...(s.tipo === 'boleto' ? vcBolLimpio(s) : {}),
-    ...(s.tipo === 'seguro' ? { hasta: s.hasta || null, infantes: n(s.infantes), poliza: String(s.poliza || '').trim(), asistencia: String(s.asistencia || '').trim() } : {}) };
+    ...(s.tipo === 'seguro' ? { hasta: s.hasta || null, infantes: n(s.infantes), poliza: String(s.poliza || '').trim(), asistencia: String(s.asistencia || '').trim() } : {}),
+    ...(s.tipo === 'hotel' ? { hasta: s.hasta || null, infantes: n(s.infantes), habitacion: String(s.habitacion || '').trim(), localizador: String(s.localizador || '').trim() } : {}) };
 };
 function vcBolLimpio(s) {
   const t = x => String(x ?? '').trim();
@@ -32440,7 +32466,7 @@ function vcActualizarPreview() {
   vcSyncPlanes();
   txt('vc-b-hab', val('vc-habitaciones').trim() || '—'); txt('vc-b-plan', val('vc-modalidad').trim() || '—');
   const servs = vcServicios.filter(s => String(s.nombre || '').trim());
-  $('vc-b-servs').innerHTML = servs.map(s => `<div><i class="fas ${(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).icono}"></i><span>${esc(s.nombre.trim())}</span><em>${esc([s.tipo === 'seguro' ? vcSeguroVigencia(s) : s.fecha ? vcFechaCorta(s.fecha) : '', s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''].filter(Boolean).join(' · '))}</em></div>`).join('');
+  $('vc-b-servs').innerHTML = servs.map(s => `<div><i class="fas ${(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).icono}"></i><span>${esc(s.nombre.trim())}</span><em>${esc([s.tipo === 'seguro' ? vcSeguroVigencia(s) : s.tipo === 'hotel' ? vcHotelEstadia(s) : s.fecha ? vcFechaCorta(s.fecha) : '', s.monto !== '' && s.monto != null ? vcMoney(s.monto) : ''].filter(Boolean).join(' · '))}</em></div>`).join('');
   $('vc-b-servs').hidden = !servs.length;
   const pm = vcEsPagoMovil(), ref = val('vc-referencia').trim(), forma = val('vc-forma-pago').trim();
   $('vc-ref-box').hidden = !pm;
@@ -32845,11 +32871,11 @@ window.generarVoucherPdf = async function generarVoucherPdf() {
     errToast('Coloca el número de referencia del pago móvil'); return;
   }
   for (const [i, s] of vcServicios.entries()) {
-    const falta = s.tipo === 'boleto' && vcBolFalta(s);
+    const falta = s.tipo === 'boleto' ? vcBolFalta(s) : s.tipo === 'hotel' && vcHotelFalta(s);
     if (falta) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${i}"] ${falta[0]}`)); errToast(falta[1]); return; }
   }
   const sinNombre = vcServicios.findIndex(s => !String(s.nombre || '').trim());
-  if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(vcServicios[sinNombre].tipo === 'seguro' ? 'Falta la aseguradora del seguro de viaje (o quítalo)' : `Falta el nombre del servicio adicional ${sinNombre + 1} (o quítalo)`); return; }
+  if (sinNombre >= 0) { docEnfocar(document.querySelector(`#vc-servicios [data-si="${sinNombre}"] [data-sk="nombre"]`)); errToast(vcServicios[sinNombre].tipo === 'seguro' ? 'Falta la aseguradora del seguro de viaje (o quítalo)' : vcServicios[sinNombre].tipo === 'hotel' ? 'Falta el nombre del otro hotel (o quítalo)' : `Falta el nombre del servicio adicional ${sinNombre + 1} (o quítalo)`); return; }
   const planInicial = vcPlan();
   if (planInicial.modo === 'cargando') { errToast('Espera a que carguen las reservas del cliente'); return; }
   const asesorNombre = esOficina() ? (val('vc-asesor').trim() || MI_NOMBRE) : MI_NOMBRE;
@@ -33296,9 +33322,9 @@ async function construirVoucherPdf(v) {
   const servicios = lista.map(s => ({
     // Helvetica (sin Poppins) no tiene «→»: en el PDF la ruta va como CCS-PMV-CCS.
     nombre: s.tipo === 'boleto' ? [`BOLETO AÉREO: ${String(s.nombre || '').replace(/ → /g, '-')}`,s.localizador ? `Localizador: ${s.localizador}` : ''].filter(Boolean).join('\n')
-      : [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.opcion,
-        s.tipo === 'seguro' ? [s.poliza && `Póliza: ${s.poliza}`, s.asistencia && `Asistencia 24h: ${s.asistencia}`].filter(Boolean).join(' · ') : '', s.detalle].filter(Boolean).join('\n'),
-    fecha: s.fecha_texto || (s.tipo === 'boleto' ? vcBolFechas(s) : s.tipo === 'seguro' ? vcSeguroVigencia(s) : [vcFechaDma(s.fecha), s.hora].filter(Boolean).join(' ')),
+      : [[(VC_SERV_TIPOS[s.tipo] || VC_SERV_TIPOS.otro).pdf, s.nombre].filter(Boolean).join(': '), s.tipo === 'hotel' ? [s.habitacion, s.opcion].filter(Boolean).join(' · ') : s.opcion,
+        s.tipo === 'seguro' ? [s.poliza && `Póliza: ${s.poliza}`, s.asistencia && `Asistencia 24h: ${s.asistencia}`].filter(Boolean).join(' · ') : s.tipo === 'hotel' && s.localizador ? `Localizador: ${s.localizador}` : '', s.detalle].filter(Boolean).join('\n'),
+    fecha: s.fecha_texto || (s.tipo === 'boleto' ? vcBolFechas(s) : s.tipo === 'seguro' ? vcSeguroVigencia(s) : s.tipo === 'hotel' ? vcHotelEstadia(s) : [vcFechaDma(s.fecha), s.hora].filter(Boolean).join(' ')),
     pax: [pl(s.adultos, 'adulto', 'adultos'), pl(s.ninos, 'niño', 'niños'), pl(s.infantes, 'infante', 'infantes')].filter(Boolean).join(' + '),
     monto: s.monto,
   }));
