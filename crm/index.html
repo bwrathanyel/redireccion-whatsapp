@@ -2885,12 +2885,13 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
    Los colores de cada app son marca ajena: viven como tokens de este bloque, con
    su variante clara, y solo se usan en pestañas, avatares, barra y área de chat. */
 .dm-shell{position:relative;display:grid;grid-template-columns:320px minmax(0,1fr) 300px;gap:14px;height:calc(100vh - 75px);height:calc(100dvh - 75px);min-height:520px;
-  --ig-degradado:linear-gradient(135deg,#7638fa,#d300c5 52%,#ff0069); --ig:#d300c5; --ig-ajena:#262626;
-  --fb:#0866ff; --fb-burbuja:linear-gradient(160deg,#00b2ff,#006aff); --fb-ajena:#303030;
+  --ig-degradado:linear-gradient(135deg,#7638fa,#d300c5 52%,#ff0069); --ig:#d300c5; --ig-mia:#4a1d6b; --ig-mia-txt:#f5eefc; --ig-ajena:#241e2d; --ig-fondo:#0f0b16; --ig-trama:rgba(245,238,252,.045);
+  --fb:#0866ff; --fb-mia:#0a4fb3; --fb-mia-txt:#fff; --fb-ajena:#1c2736; --fb-fondo:#0a1220; --fb-trama:rgba(232,240,252,.045);
   --ajena-txt:#f5f5f5;
   --wa:#25d366; --wa-mia:#005c4b; --wa-mia-txt:#e9edef; --wa-ajena:#202c33; --wa-ajena-txt:#e9edef; --wa-fondo:#0b141a; --wa-meta:rgba(233,237,239,.62); --wa-leido:#53bdeb; --wa-trama:rgba(233,237,239,.045);
   --dm-canal:var(--ig); --dm-marca:var(--ig-degradado)}
-:root[data-theme="light"] .dm-shell{--ig-ajena:#efefef; --fb-ajena:#f0f0f0; --ajena-txt:#050505;
+:root[data-theme="light"] .dm-shell{--ig-mia:#f3e3fb; --ig-mia-txt:#2a1036; --ig-ajena:#fff; --ig-fondo:#f4eff8; --ig-trama:rgba(42,16,54,.05);
+  --fb-mia:#d6e8ff; --fb-mia-txt:#0b2447; --fb-ajena:#fff; --fb-fondo:#eaf0f8; --fb-trama:rgba(11,36,71,.05); --ajena-txt:#050505;
   --wa-mia:#d9fdd3; --wa-mia-txt:#111b21; --wa-ajena:#fff; --wa-ajena-txt:#111b21; --wa-fondo:#efeae2; --wa-meta:#667781; --wa-trama:rgba(17,27,33,.05)}
 :is(.dm-shell,.dm-avatar,.dm-canal)[data-canal="instagram"]{--dm-canal:var(--ig);--dm-marca:var(--ig-degradado)}
 :is(.dm-shell,.dm-avatar,.dm-canal)[data-canal="facebook"]{--dm-canal:var(--fb);--dm-marca:var(--fb)}
@@ -2994,20 +2995,25 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 .dm-chat .dm-vacio>i{color:var(--dm-canal);opacity:.75}
 .dm-log{transition:background-color var(--dur-normal)}
 
-/* Burbujas Instagram y Messenger: pastillas muy redondas; en una racha del mismo
-   lado se achican las esquinas que se tocan, como en las apps. */
-.dm-shell[data-canal="instagram"]{--b-r:22px;--b-r-junta:4px}
-.dm-shell[data-canal="facebook"]{--b-r:18px;--b-r-junta:4px}
-.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg{border:none;border-radius:var(--b-r);padding:9px 14px;margin-top:2px}
+/* Burbujas Instagram y Messenger: la anatomía de WhatsApp (fondo con trama, color
+   sólido, foto casi al borde) sin colita; en una racha del mismo lado se achican
+   las esquinas que se tocan. El color de marca queda en avatar y chip. */
+.dm-shell[data-canal="instagram"]{--b-mia:var(--ig-mia);--b-mia-txt:var(--ig-mia-txt);--b-ajena:var(--ig-ajena);--b-fondo:var(--ig-fondo);--b-trama:var(--ig-trama)}
+.dm-shell[data-canal="facebook"]{--b-mia:var(--fb-mia);--b-mia-txt:var(--fb-mia-txt);--b-ajena:var(--fb-ajena);--b-fondo:var(--fb-fondo);--b-trama:var(--fb-trama)}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]){--b-r:14px;--b-r-junta:4px}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log{background-color:var(--b-fondo);background-image:radial-gradient(var(--b-trama) 1.2px,transparent 1.6px);background-size:22px 22px;border-radius:12px;padding:11px 14px}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg{border:none;border-radius:var(--b-r);padding:7px 11px;margin-top:2px;max-width:72%;box-shadow:0 1px .5px rgba(11,20,26,.13)}
 .dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg:not(.grouped){margin-top:9px}
 .dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.mine:not(.tail){border-bottom-right-radius:var(--b-r-junta)}
 .dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.mine.grouped{border-top-right-radius:var(--b-r-junta)}
 .dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.other:not(.tail){border-bottom-left-radius:var(--b-r-junta)}
 .dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.other.grouped{border-top-left-radius:var(--b-r-junta)}
-.dm-shell[data-canal="instagram"] .dm-log .chat-msg.mine{background:var(--ig-degradado);color:#fff}
-.dm-shell[data-canal="instagram"] .dm-log .chat-msg.other{background:var(--ig-ajena);color:var(--ajena-txt)}
-.dm-shell[data-canal="facebook"] .dm-log .chat-msg.mine{background:var(--fb-burbuja);color:#fff}
-.dm-shell[data-canal="facebook"] .dm-log .chat-msg.other{background:var(--fb-ajena);color:var(--ajena-txt)}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.mine{background:var(--b-mia);color:var(--b-mia-txt)}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.other{background:var(--b-ajena);color:var(--ajena-txt)}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg.adjunto{padding:3px}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .dm-foto{border-radius:11px;max-width:260px}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log img.dm-foto{max-height:320px;object-fit:cover}
+.dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .dm-burbuja-ia{opacity:.75}
 
 /* Burbujas WhatsApp: fondo con trama, radio 8px, colita en la primera de cada
    racha, hora y ticks dentro de la burbuja. */
@@ -3047,6 +3053,8 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
   .dm-log .chat-msg{max-width:88%}
   .dm-shell[data-canal="whatsapp"] .dm-log .chat-msg{max-width:84%}
   .dm-shell[data-canal="whatsapp"] .dm-log{padding:9px 9px}
+  .dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log .chat-msg{max-width:84%}
+  .dm-shell:is([data-canal="instagram"],[data-canal="facebook"]) .dm-log{padding:9px 9px}
   .dm-app-chip{padding:0 9px}
   .dm-app-chip span{display:none}
 }
