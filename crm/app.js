@@ -30957,9 +30957,12 @@ function renderBurbuja(m, esMio, agrupado, esUltimoDelGrupo, todosLeyeron, nombr
       const su = chatUrlSticker(m);
       cuerpo = su ? `<img class="cp-sticker" src="${esc(su)}" alt="Sticker" loading="lazy" draggable="false">${meta}` : `<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div><div class="msg-doc-nombre">Sticker</div><div class="msg-doc-peso">No se pudo cargar</div></div></div>${meta}`;
     } else if ((m.tipo === 'imagen' || m.tipo === 'video' || m.tipo === 'documento' || m.tipo === 'audio') && !url) cuerpo = `${sender}${cita}<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Adjunto')}</div><div class="msg-doc-peso">No se pudo cargar</div></div></div>${meta}`;
-    else if (m.tipo === 'imagen') cuerpo = `${sender}${cita}<img class="msg-img" src="${esc(url)}" data-img="${esc(url)}" alt="${esc(m.nombre_archivo || 'Foto')}">${m.contenido ? `<div style="padding:4px 4px 0">${esc(m.contenido)}</div>` : ''}${meta}`;
-    else if (m.tipo === 'video') cuerpo = `${sender}${cita}<div class="msg-video-wrap" data-video><video src="${esc(url)}" preload="metadata"></video><div class="msg-video-play"><i class="fas fa-play"></i></div></div>${meta}`;
-    else if (m.tipo === 'documento') cuerpo = `${sender}${cita}<div class="msg-doc" data-doc="${esc(url)}"><i class="fas ${iconoPorExtension(m.nombre_archivo)}"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Archivo')}</div><div class="msg-doc-peso">${formatBytes(m.peso_bytes)}</div></div></div>${meta}`;
+    else if (m.tipo === 'imagen') cuerpo = `${sender}${cita}<img class="msg-img" src="${esc(url)}" data-img="${esc(url)}" alt="${esc(m.nombre_archivo || 'Foto')}">${m.contenido ? `<div style="padding:4px 4px 0">${esc(m.contenido)}</div>` : ''}${CHAT_ADJ_ACCIONES}${meta}`;
+    else if (m.tipo === 'video') cuerpo = `${sender}${cita}<div class="msg-video-wrap" data-video><video src="${esc(url)}" preload="metadata"></video><div class="msg-video-play"><i class="fas fa-play"></i></div></div>${CHAT_ADJ_ACCIONES}${meta}`;
+    else if (m.tipo === 'documento') {
+      const mini = chatEsPdf(m) ? chatMiniGet(m.storage_path) : '';
+      cuerpo = `${sender}${cita}${mini !== '' ? `<div class="msg-doc-mini" data-doc data-doc-mini="${esc(m.storage_path)}">${mini ? `<img src="${mini}" alt="Primera página de ${esc(m.nombre_archivo || 'el documento')}">` : '<i class="fas fa-spinner fa-spin"></i>'}</div>` : ''}<div class="msg-doc" data-doc="${esc(url)}"><i class="fas ${iconoPorExtension(m.nombre_archivo)}"></i><div><div class="msg-doc-nombre">${esc(m.nombre_archivo || 'Archivo')}</div><div class="msg-doc-peso">${formatBytes(m.peso_bytes)}</div></div></div>${CHAT_ADJ_ACCIONES}${meta}`;
+    }
     else if (m.tipo === 'audio') cuerpo = `${sender}${cita}${chatAudioHtml(m, url)}${meta}`;
     else cuerpo = `${sender}${cita}${cuerpoTextoChat(m.contenido || '')}${meta}`;
   }
@@ -31011,6 +31014,181 @@ function renderConversacion(forzarAbajo) {
     log.querySelectorAll('img').forEach(img => { if (!img.complete) img.addEventListener('load', () => { log.scrollTop = log.scrollHeight; }, { once: true }); });
   }
   chatAudioRepintar();
+  chatObservarMinis(log);
+}
+
+/* ----- Adjuntos: vista previa dentro del CRM, compartir y WhatsApp ----- */
+const CHAT_ADJ_ACCIONES = '<div class="msg-adj-acc"><button type="button" data-adj-compartir><i class="fas fa-share-nodes"></i> Compartir</button><button type="button" class="wa" data-adj-wa><i class="fab fa-whatsapp"></i> WhatsApp</button></div>';
+const chatEsPdf = m => /\.pdf$/i.test(m.nombre_archivo || m.storage_path || '');
+const chatMsgDe = el => msgMensajes.find(x => x.id === Number(el.closest('.chat-msg')?.dataset.mid));
+const chatBlobs = new Map();
+async function chatBlobAdj(m) {
+  if (chatBlobs.has(m.storage_path)) return chatBlobs.get(m.storage_path);
+  const url = msgUrlsAdjuntos[m.storage_path]; if (!url) throw new Error('sin_url');
+  const res = await fetch(url); if (!res.ok) throw new Error('sin_archivo');
+  const blob = await res.blob();
+  chatBlobs.set(m.storage_path, blob);
+  if (chatBlobs.size > 12) chatBlobs.delete(chatBlobs.keys().next().value);
+  return blob;
+}
+async function chatArchivoAdj(m) {
+  const b = await chatBlobAdj(m);
+  const nombre = m.nombre_archivo || ({ imagen: 'Foto.jpg', video: 'Video.mp4', audio: 'Nota de voz.webm' }[m.tipo] || 'Archivo');
+  return new File([b], nombre, { type: b.type || (chatEsPdf(m) ? 'application/pdf' : 'application/octet-stream') });
+}
+// Miniatura = página 1 del PDF. Se guarda (máx. 40) para no volver a bajar el PDF de Storage en cada apertura.
+const chatMiniDocs = new Map(), chatMiniEnCurso = new Set();
+let chatMiniObs = null;
+function chatMiniGet(path) {
+  if (!chatMiniDocs.has(path)) { try { const s = localStorage.getItem('chat-mini:' + path); if (s) chatMiniDocs.set(path, s); } catch {} }
+  return chatMiniDocs.get(path);
+}
+function chatMiniGuardar(path, src) {
+  chatMiniDocs.set(path, src);
+  if (!src) return;
+  try {
+    const idx = JSON.parse(localStorage.getItem('chat-mini-idx') || '[]').filter(p => p !== path);
+    idx.push(path);
+    while (idx.length > 40) localStorage.removeItem('chat-mini:' + idx.shift());
+    localStorage.setItem('chat-mini:' + path, src); localStorage.setItem('chat-mini-idx', JSON.stringify(idx));
+  } catch {}
+}
+function chatObservarMinis(log) {
+  chatMiniObs?.disconnect();
+  chatMiniObs = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { chatMiniObs.unobserve(e.target); chatCargarMini(e.target.dataset.docMini); } }), { root: log, rootMargin: '300px' });
+  log.querySelectorAll('[data-doc-mini]').forEach(b => { if (!chatMiniDocs.has(b.dataset.docMini)) chatMiniObs.observe(b); });
+}
+async function chatCargarMini(path) {
+  if (chatMiniEnCurso.has(path) || chatMiniDocs.has(path)) return;
+  const m = msgMensajes.find(x => x.storage_path === path); if (!m) return;
+  chatMiniEnCurso.add(path);
+  let src = '';
+  try {
+    const lib = await cargarPdfjs();
+    const pdf = await lib.getDocument({ data: await (await chatBlobAdj(m)).arrayBuffer() }).promise;
+    const page = await pdf.getPage(1), vp = page.getViewport({ scale: 1 }), w = 320;
+    const c = document.createElement('canvas'); c.width = w; c.height = Math.min(Math.round(w / vp.width * vp.height), Math.round(w * 1.1));
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale: w / vp.width }) }).promise;
+    src = c.toDataURL('image/jpeg', .72); pdf.destroy();
+  } catch (e) { console.error('miniatura chat', e); }
+  chatMiniEnCurso.delete(path);
+  chatMiniGuardar(path, src);
+  // el registro pudo repintarse mientras tanto: se busca la caja vigente
+  const caja = chatEl('msg-conv-log').querySelector(`[data-doc-mini="${CSS.escape(path)}"]`);
+  if (caja) { if (src) caja.innerHTML = `<img src="${src}" alt="Primera página de ${esc(m.nombre_archivo || 'el documento')}">`; else caja.remove(); }
+}
+async function chatCompartirAdj(m) {
+  if (!m) return;
+  let file; try { file = await chatArchivoAdj(m); } catch { errToast('No se pudo cargar el archivo. Reintenta.'); return; }
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: file.name }); return; } catch (e) {
+      if (e.name === 'AbortError') return;
+      // iOS pierde el gesto del usuario durante el fetch: un toque más comparte el archivo ya cargado.
+      if (e.name === 'NotAllowedError') { docToastCompartir(file); return; }
+    }
+  }
+  descargarArchivo(file, file.name); okToast('Se descargó el archivo');
+}
+// La web no puede meter un archivo dentro de WhatsApp: en el celular se abre la hoja de compartir
+// (WhatsApp aparece ahí); en la PC la foto queda copiada para pegar, el resto se descarga, y se abre WhatsApp Web.
+async function chatWhatsappAdj(m) {
+  if (!m) return;
+  if (docTactil()) return chatCompartirAdj(m);
+  let file; try { file = await chatArchivoAdj(m); } catch { errToast('No se pudo cargar el archivo. Reintenta.'); return; }
+  let copiada = false;
+  if (m.tipo === 'imagen' && window.ClipboardItem) {
+    try {
+      const bmp = await createImageBitmap(file), c = document.createElement('canvas');
+      c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
+      const png = await new Promise(r => c.toBlob(r, 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      copiada = true;
+    } catch (e) { console.warn('copiar foto', e); }
+  }
+  if (!copiada) descargarArchivo(file, file.name);
+  const w = window.open('https://web.whatsapp.com/', 'whatsapp');
+  if (w) w.opener = null;
+  okToast(copiada ? 'Foto copiada: en WhatsApp abre el chat y pega con Ctrl+V' : `Se descargó «${file.name}»: arrástralo al chat de WhatsApp`);
+}
+
+/* Visor de PDF dentro del CRM: cada página se pinta una vez como imagen; el zoom solo cambia el ancho. */
+let chatDocVisor = null;
+async function chatVerDoc(m) {
+  if (!m) return;
+  if (/\.(jpe?g|png|webp|gif)$/i.test(m.nombre_archivo || '') && msgUrlsAdjuntos[m.storage_path]) { openLightbox([msgUrlsAdjuntos[m.storage_path]], 0); return; }
+  if (!chatEsPdf(m)) { if (docTactil()) chatCompartirAdj(m); else chatDescargar(m); return; }
+  if (chatDocVisor) return;
+  const el = document.createElement('div');
+  el.id = 'chat-doc-visor'; el.tabIndex = -1;
+  el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', m.nombre_archivo || 'Documento');
+  el.innerHTML = `<div class="cdv-barra">
+      <button type="button" data-cdv="cerrar" aria-label="Cerrar"><i class="fas fa-arrow-left"></i></button>
+      <div class="cdv-titulo">${esc(m.nombre_archivo || 'Documento')}<small>${formatBytes(m.peso_bytes)}</small></div>
+      <button type="button" data-cdv="compartir" aria-label="Compartir"><i class="fas fa-share-nodes"></i><span>Compartir</span></button>
+      <button type="button" class="wa" data-cdv="wa" aria-label="Enviar por WhatsApp"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></button>
+      <button type="button" data-cdv="descargar" aria-label="Descargar"><i class="fas fa-download"></i></button>
+    </div>
+    <div class="cdv-paginas"><div class="cdv-aviso"><i class="fas fa-spinner fa-spin"></i> Abriendo documento…</div></div>
+    <div class="cdv-zoom"><button type="button" data-cdv="menos" aria-label="Alejar"><i class="fas fa-minus"></i></button><button type="button" data-cdv="mas" aria-label="Acercar"><i class="fas fa-plus"></i></button></div>`;
+  const s = chatDocVisor = { el, m, pdf: null, urls: [], zoom: 1, base: 0 };
+  el.addEventListener('click', e => {
+    const b = e.target.closest('[data-cdv]'); if (!b) return;
+    const a = b.dataset.cdv;
+    if (a === 'cerrar') chatDocCerrar();
+    else if (a === 'compartir') chatCompartirAdj(m);
+    else if (a === 'wa') chatWhatsappAdj(m);
+    else if (a === 'descargar') chatDescargar(m);
+    else chatDocZoom(a === 'mas' ? 1 : -1);
+  });
+  el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); chatDocCerrar(); } });
+  document.body.appendChild(el); el.focus();
+  navPush({ type: 'chat-doc' });
+  const cont = el.querySelector('.cdv-paginas');
+  try {
+    const lib = await cargarPdfjs();
+    const pdf = await lib.getDocument({ data: await (await chatBlobAdj(m)).arrayBuffer() }).promise;
+    if (chatDocVisor !== s) { pdf.destroy(); return; }
+    s.pdf = pdf;
+    el.querySelector('.cdv-titulo small').textContent = `${formatBytes(m.peso_bytes)} · ${pdf.numPages} ${pdf.numPages === 1 ? 'página' : 'páginas'}`;
+    s.base = Math.min(cont.clientWidth - 24, 860);
+    const px = Math.min(2000, Math.round(s.base * Math.min(devicePixelRatio || 1, 2) * 1.75));
+    const c = document.createElement('canvas'), ctx = c.getContext('2d');
+    cont.innerHTML = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      if (chatDocVisor !== s) return;
+      const vp = page.getViewport({ scale: px / page.getViewport({ scale: 1 }).width });
+      c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .9));
+      if (chatDocVisor !== s) return;
+      const u = URL.createObjectURL(blob); s.urls.push(u);
+      const img = new Image(); img.src = u; img.alt = `Página ${i}`; img.style.width = Math.round(s.base * s.zoom) + 'px';
+      cont.appendChild(img);
+    }
+    c.width = c.height = 0;
+  } catch (e) {
+    console.error('visor chat', e);
+    if (chatDocVisor === s) cont.innerHTML = '<div class="cdv-aviso"><i class="fas fa-triangle-exclamation"></i> No se pudo abrir el documento. Usa Compartir o Descargar.</div>';
+  }
+}
+function chatDocZoom(dir) {
+  const s = chatDocVisor; if (!s?.base) return;
+  const pasos = [1, 1.5, 2, 2.5], cont = s.el.querySelector('.cdv-paginas');
+  const z = pasos[Math.max(0, Math.min(pasos.length - 1, pasos.indexOf(s.zoom) + dir))];
+  if (z === s.zoom) return;
+  const rel = cont.scrollTop / (cont.scrollHeight || 1);
+  s.zoom = z;
+  cont.querySelectorAll('img').forEach(img => { img.style.width = Math.round(s.base * z) + 'px'; });
+  cont.scrollTop = rel * cont.scrollHeight;
+}
+function chatDocCerrar(fromNav) {
+  const s = chatDocVisor; if (!s) return;
+  chatDocVisor = null;
+  s.pdf?.destroy(); s.urls.forEach(u => URL.revokeObjectURL(u)); s.el.remove();
+  if (!fromNav) navConsume();
 }
 
 /* Un solo juego de listeners en el registro (delegación): renderConversacion repinta todo el innerHTML. */
@@ -31025,8 +31203,9 @@ function chatSetupLog() {
     const vel = t.closest('[data-vel]'); if (vel) { chatAudioVelocidad(); return; }
     const img = t.closest('[data-img]'); if (img) { openLightbox([img.dataset.img], 0); return; }
     const vid = t.closest('[data-video]'); if (vid) { reproducirVideo(vid); return; }
-    const doc = t.closest('[data-doc]');
-    if (doc) { docEntregarUrl(doc.dataset.doc, doc.querySelector('.msg-doc-nombre')?.textContent || 'Documento', '').catch(() => errToast('No se pudo abrir el documento. Reintenta.')); return; }
+    const comp = t.closest('[data-adj-compartir]'); if (comp) { chatCompartirAdj(chatMsgDe(comp)); return; }
+    const wa = t.closest('[data-adj-wa]'); if (wa) { chatWhatsappAdj(chatMsgDe(wa)); return; }
+    const doc = t.closest('[data-doc]'); if (doc) { chatVerDoc(chatMsgDe(doc)); return; }
     const adj = t.closest('[data-adjunto-path]'); if (adj) { abrirAdjuntoChat(adj.dataset.adjuntoPath); return; }
     const stk = t.closest('.cp-sticker'); if (stk) chatMenuMensaje(stk.closest('.chat-msg'));
   });
@@ -35922,6 +36101,7 @@ window.addEventListener('popstate', () => {
   const top = NAV_STACK.pop();
   if (top.type === 'drawer') window.closeDrawer(true);
   else if (top.type === 'lightbox') closeLightbox(true);
+  else if (top.type === 'chat-doc') chatDocCerrar(true);
   else if (top.type === 'tutorial') cerrarTutorial(true);
   else if (top.type === 'tar-comparar') tarCerrarComparador(true);
   else if (top.type === 'sheet') closeSheet(top.id, true);
