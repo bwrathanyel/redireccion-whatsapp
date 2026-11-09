@@ -11547,8 +11547,28 @@ function loadWaBandeja() {
     WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
       abrirLead: id => abrirLeadDesdeMisVentas(id), cotizarLead: cbCotizarLeadId, puedeLlamar: () => MI_ASESOR_INTEGRAL, llamarLead: c => llamadasApp?.llamar({ id: c.lead_id, nombre: c.nombre }, c.wa_id), crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
     WB.enlazar();
+    if (ROL === 'admin') wbCoexistencia();
   }
   return WB.abrirSeccion();
+}
+// Admin: los números en coexistencia (Zernio: asesores y compartido) se eligen
+// desde WhatsApp empresa y se abren en la vista por número.
+async function wbCoexistencia() {
+  if (!waNumeros) { try { waNumeros = (await waInvocar({ accion: 'numeros' })).numeros; } catch { return; } }
+  const coex = waNumeros.filter(n => n.asesor || n.compartido);
+  if (!coex.length || document.getElementById('wb-coex')) return;
+  document.getElementById('wb-buscar').insertAdjacentHTML('beforebegin', `<select class="dm-buscar wa-numero" id="wb-coex" aria-label="Números en coexistencia"><option value="">Número de la empresa</option>${coex.map(n =>
+    `<option value="${esc(n.id)}">${esc(n.asesor || 'Compartido')} · ${esc(n.telefono)}${n.activo ? '' : ' (desconectado)'}</option>`).join('')}</select>`);
+  document.getElementById('wb-coex').addEventListener('change', e => {
+    const id = e.target.value;
+    e.target.value = '';
+    if (!id) return;
+    if (waCuenta !== id) { waCuenta = id; waChats = []; waChatsCursor = null; }
+    try { localStorage.setItem('wa-numero', id); } catch {}
+    if (waSelPintado) document.getElementById('wa-numero').value = id;
+    waVolverA = 'wa-bandeja';
+    activateSection('whatsapp');
+  });
 }
 
 function iaCard(p) {
@@ -29675,7 +29695,7 @@ function renderBotText(texto) {
    por la EF como Blob; las fotos que manda el bot son públicas (Worker de fotos). */
 const WA_POLL_MS = 20000;
 const WA_URL_PUBLICA = /^https:\/\/(?!(?:api\.)?zernio\.com\/)/i;
-let waNumeros = null, waNumerosPidiendo = false, waCuenta = null, waChats = [], waChatsCursor = null, waActual = null, waMensajes = [], waMsgCursor = null, waPoll = null, waAbrirGen = 0;
+let waNumeros = null, waNumerosPidiendo = false, waSelPintado = false, waVolverA = 'dms', waCuenta = null, waChats = [], waChatsCursor = null, waActual = null, waMensajes = [], waMsgCursor = null, waPoll = null, waAbrirGen = 0;
 const waMedia = new Map();
 
 async function waInvocar(body) {
@@ -29765,7 +29785,7 @@ function setupDms() {
   });
   document.getElementById('dm-perfil-cerrar').addEventListener('click', () => document.getElementById('dm-shell').classList.remove('ver-perfil'));
   document.getElementById('dm-perfil-body').addEventListener('click', e => { const b = e.target.closest('[data-dm-lead]'); if (b) abrirLeadDesdeMisVentas(+b.dataset.dmLead); });
-  document.getElementById('dm-wa-todos').addEventListener('click', () => activateSection('whatsapp'));
+  document.getElementById('dm-wa-todos').addEventListener('click', () => { waVolverA = 'dms'; activateSection('whatsapp'); });
   document.getElementById('dm-log').addEventListener('click', e => { if (e.target.closest('#dm-wa-anteriores')) dmWaAnteriores(); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'dms' && dmWa) dmWaRefrescar(); });
   dmPerfilVacio = document.getElementById('dm-perfil-body').innerHTML;
@@ -30155,16 +30175,20 @@ function setupWhatsapp() {
   document.getElementById('wa-conv-texto').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches) { e.preventDefault(); waEnviar(); }
   });
-  document.getElementById('wa-volver-dm').addEventListener('click', () => activateSection('dms'));
+  document.getElementById('wa-volver-dm').addEventListener('click', () => activateSection(waVolverA));
   document.getElementById('wa-ver-lead').addEventListener('click', () => { if (waActual?.lead) abrirLeadDesdeMisVentas(waActual.lead.id); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
 }
+// waNumeros puede llegar antes desde Meta DM o WhatsApp empresa: el select se pinta aparte.
 async function loadWhatsapp() {
   if (!waNumeros) {
     try { waNumeros = (await waInvocar({ accion: 'numeros' })).numeros; } catch { errToast('No se pudo conectar con WhatsApp'); return; }
+  }
+  if (!waSelPintado) {
+    waSelPintado = true;
     let guardado = null;
     try { guardado = localStorage.getItem('wa-numero'); } catch {}
-    waCuenta = waNumeros.find(n => n.id === guardado)?.id || waNumeros[0]?.id || null;
+    waCuenta = waNumeros.find(n => n.id === (waCuenta || guardado))?.id || waNumeros[0]?.id || null;
     const sel = document.getElementById('wa-numero');
     sel.innerHTML = waNumeros.map(n => `<option value="${esc(n.id)}">${esc(n.telefono)}${n.nombre ? ' · ' + esc(n.nombre) : ''}${n.activo ? '' : ' (desconectado)'}</option>`).join('') || '<option value="">Sin números conectados</option>';
     if (waCuenta) sel.value = waCuenta;
@@ -30280,6 +30304,7 @@ async function waAbrirChatDeTelefono(telefono, leadAtender) {
   for (let pag = 0; pag < 4 && !buscar() && waChatsCursor; pag++) await waCargarChats(false, waChatsCursor);
   const chat = buscar();
   if (!chat && !leadAtender) { await waPlantillaAbrir(telefono); return; }
+  waVolverA = 'dms';
   await new Promise(listo => trasCerrarDrawer(() => { activateSection('whatsapp'); listo(); }));
   if (chat) waAbrirChat(chat);
   if (leadAtender) await waPlantillaAutomatica(leadAtender, fin);
