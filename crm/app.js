@@ -2190,14 +2190,15 @@ function chipGroupValores(contenedorId) {
   return [...(document.getElementById(contenedorId)?.querySelectorAll('.ap-chip.on') || [])].map(b => b.dataset.valor);
 }
 function apFiltros() {
-  const antiguedadRaw = document.getElementById('ap-antiguedad').value;
   const desdeRaw = document.getElementById('ap-desde').value;
   const hastaRaw = document.getElementById('ap-hasta').value;
+  const hastaFin = hastaRaw ? new Date(hastaRaw + 'T00:00:00') : null;
+  if (hastaFin) hastaFin.setDate(hastaFin.getDate() + 1); // el RPC excluye p_fecha_hasta y el día elegido debe entrar
   return {
-    p_antiguedad_dias: antiguedadRaw ? parseInt(antiguedadRaw, 10) : null,
+    p_antiguedad_dias: null,
     p_estados: chipGroupValores('ap-estados-chips'),
     p_fecha_desde: desdeRaw ? new Date(desdeRaw + 'T00:00:00').toISOString() : null,
-    p_fecha_hasta: hastaRaw ? new Date(hastaRaw + 'T00:00:00').toISOString() : null,
+    p_fecha_hasta: hastaFin ? hastaFin.toISOString() : null,
     p_destinos: chipGroupValores('ap-destinos-chips')
   };
 }
@@ -2232,7 +2233,7 @@ function setupAsesoresPrueba() {
   document.getElementById('ld-activar')?.addEventListener('click', () => guardarLoteDiario(true));
   document.getElementById('ld-pausar')?.addEventListener('click', () => guardarLoteDiario(false));
   document.getElementById('ld-ahora')?.addEventListener('click', repartirLoteDiarioAhora);
-  ['ap-antiguedad', 'ap-desde', 'ap-hasta', 'ap-cantidad'].forEach(id => {
+  ['ap-desde', 'ap-hasta', 'ap-cantidad'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', apInvalidar);
   });
   document.querySelectorAll('[data-chips-todos],[data-chips-ninguno]').forEach(b => b.addEventListener('click', e => {
@@ -2254,16 +2255,18 @@ async function cargarDestinosLotePrueba() {
 }
 let asesorPruebaSeleccionado = null;
 async function loadAsesoresPruebaTab() {
+  const hastaEl = document.getElementById('ap-hasta');
+  if (hastaEl && !hastaEl.value) { const d = new Date(); d.setDate(d.getDate() - 90); hastaEl.value = d.toLocaleDateString('en-CA'); }
   const container = document.getElementById('ap-usuario-chips');
   if (container) {
-    const asesores = personalCache.filter(u => u.rol === 'asesor');
+    const asesores = personalCache.filter(u => u.rol === 'asesor' && u.asesor_integral);
     if (asesores.length) {
       renderChipGroup('ap-usuario-chips',
         asesores.map(u => ({ valor: String(u.usuario_id), etiqueta: `${u.nombre} (@${u.username || ''})` })),
         { multi: false, onChange: vals => { asesorPruebaSeleccionado = vals[0] || null; apInvalidar(); } });
       asesorPruebaSeleccionado = null;
     } else {
-      container.innerHTML = '<span style="color:var(--muted);font-size:12px">No hay asesores comerciales dados de alta</span>';
+      container.innerHTML = '<span style="color:var(--muted);font-size:12px">No hay asesores integrales dados de alta</span>';
       asesorPruebaSeleccionado = null;
     }
   }

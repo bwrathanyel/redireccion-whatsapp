@@ -9484,12 +9484,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="csub">Leads viejos que el asesor tiene que contactar dejando nota y resultado por cada uno. El lead pasa a ser suyo.</div>
           <label class="fl">Asesor</label>
           <div id="ap-usuario-chips" class="chip-group"></div>
-          <label class="fl">Antigüedad mínima (días, opcional)</label>
-          <input id="ap-antiguedad" class="ei" type="number" min="1" value="90">
-          <label class="fl">Fecha de creación desde (opcional)</label>
-          <input id="ap-desde" class="ei" type="date">
-          <label class="fl">Fecha de creación hasta (opcional)</label>
-          <input id="ap-hasta" class="ei" type="date">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0 10px">
+            <div><label class="fl">Lead creado desde <span class="ap-hint">(opcional)</span></label><input id="ap-desde" class="ei" type="date"></div>
+            <div><label class="fl">Lead creado hasta <span class="ap-hint">(opcional)</span></label><input id="ap-hasta" class="ei" type="date"></div>
+          </div>
           <label class="fl">Estados a incluir <button type="button" class="ap-chip-todos" data-chips-todos="ap-estados-chips">Todos</button><button type="button" class="ap-chip-todos" data-chips-ninguno="ap-estados-chips">Ninguno</button></label>
           <div id="ap-estados-chips" class="chip-group"></div>
           <label class="fl">Destino <span class="ap-hint">(ninguno marcado = todos)</span><button type="button" class="ap-chip-todos" data-chips-ninguno="ap-destinos-chips">Limpiar</button></label>
