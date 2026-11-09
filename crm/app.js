@@ -30033,6 +30033,7 @@ function setupWhatsapp() {
   document.getElementById('wa-recargar').addEventListener('click', () => waCargarChats());
   document.getElementById('wa-conv-back').addEventListener('click', () => waCerrarChat());
   document.getElementById('wa-conv-compose').addEventListener('submit', e => { e.preventDefault(); waEnviar(); });
+  document.getElementById('wa-conv-plantilla').addEventListener('click', () => { if (waActual) waPlantillaAbrir(waActual.telefono, waActual.nombre); });
   document.getElementById('wa-conv-texto').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches) { e.preventDefault(); waEnviar(); }
   });
@@ -30160,9 +30161,58 @@ async function waAbrirChatDeTelefono(telefono) {
   const buscar = () => waChats.find(c => String(c.telefono).replace(/\D/g, '').slice(-10) === fin);
   for (let pag = 0; pag < 4 && !buscar() && waChatsCursor; pag++) await waCargarChats(false, waChatsCursor);
   const chat = buscar();
-  if (!chat) { errToast('Este cliente aún no le ha escrito al número compartido. Su chat aparecerá aquí cuando escriba.'); return; }
+  if (!chat) { await waPlantillaAbrir(telefono); return; }
   await new Promise(listo => trasCerrarDrawer(() => { activateSection('whatsapp'); listo(); }));
   waAbrirChat(chat);
+}
+// Plantillas de la WABA del número compartido. {{cliente}} = «Sr./Sra. + primer nombre»;
+// si el nombre parece usuario de IG va la variante sin nombre (dueño: nada de «estimado cliente»).
+const WA_CO_PLANTILLAS = [
+  { t: 'Saludo inicial', con: 'saludo_inicial_asesor_v2', sin: 'saludo_inicial_sin_nombre' },
+  { t: 'Lead caliente', con: 'contacto_lead_caliente', sin: 'contacto_lead_caliente_sin_nombre' },
+  { t: 'Lead frío (reactivación)', con: 'reactivacion_lead_frio', sin: 'reactivacion_lead_frio_sin_nombre' },
+  { t: 'Seguimiento de reserva', con: 'seguimiento_reserva', orden: ['cliente', 'destino', 'fecha', 'asesor'] },
+];
+const WA_CO_ERR = { ya_enviada_hoy: 'Esa plantilla ya se le envió a este cliente en las últimas 24 h', contacto_dado_de_baja: 'Este cliente pidió no recibir más mensajes', no_autorizado: 'Este lead no está asignado a ti', telefono_invalido: 'Este lead no tiene un teléfono válido', variables_invalidas: 'Revisa los datos: cada uno admite hasta 60 caracteres', plantilla_no_aprobada: 'Meta todavía no aprueba esa plantilla', envio_fallido: 'WhatsApp rechazó la plantilla' };
+function waNombreReal(n) {
+  const s = String(n ?? '').trim(), p = s.split(/\s+/)[0] ?? '';
+  if (/[\d_.@]/.test(s) || !/^\p{L}{2,}$/u.test(p) || /^(invitado|cliente|lead)$/i.test(p)) return '';
+  // Una sola palabra en minúscula suele ser un usuario, no un nombre.
+  if (!/\s/.test(s) && p[0] !== p[0].toLocaleUpperCase('es')) return '';
+  return p[0].toLocaleUpperCase('es') + p.slice(1).toLocaleLowerCase('es');
+}
+async function waPlantillaAbrir(telefono, nombrePerfil) {
+  const d = String(telefono || '').replace(/\D/g, ''), cuenta = waCuenta;
+  const [lista, { data: l }] = await Promise.all([
+    waInvocar({ accion: 'plantillas_compartido', accountId: cuenta }).then(r => r.plantillas).catch(() => null),
+    sb.from('leads').select('nombre,destino,asesor').eq('telefono', `+${d}`).is('eliminado_at', null).order('fecha_creacion', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const familias = WA_CO_PLANTILLAS.filter(f => lista?.some(p => p.nombre === f.con || p.nombre === f.sin));
+  if (!familias.length) { errToast('No hay plantillas aprobadas para este número'); return; }
+  const nombre = waNombreReal(l?.nombre || nombrePerfil);
+  const r = await confirmarSheet({ titulo: 'Escribir con plantilla', detalle: 'Para iniciar la conversación, o si pasaron 24 h desde el último mensaje del cliente.', textoOk: 'Revisar mensaje', campos: [
+    { id: 'f', label: 'Plantilla', tipo: 'select', requerido: true, valor: 0, opciones: familias.map((f, v) => ({ v, t: f.t })) },
+    { id: 'trato', label: 'Tratamiento', tipo: 'select', requerido: true, valor: nombre ? '' : '-', opciones: [{ v: '', t: 'Elegir…' }, { v: 'Sr.', t: 'Sr.' }, { v: 'Sra.', t: 'Sra.' }, { v: '-', t: 'Sin nombre' }] },
+    { id: 'nombre', label: 'Primer nombre', valor: nombre, requeridoSi: o => o.trato !== '-' },
+    { id: 'destino', label: 'Destino', valor: l?.destino || '', requerido: true },
+    { id: 'fecha', label: 'Fecha de la reserva', placeholder: '15 de diciembre', requeridoSi: o => !!familias[+o.f]?.orden },
+    { id: 'asesor', label: 'Tu nombre', valor: l?.asesor || MI_NOMBRE || '', requerido: true },
+  ] });
+  if (!r) return;
+  const f = familias[+r.f], cliente = r.trato === '-' ? '' : `${r.trato} ${r.nombre}`, nombrePl = cliente ? f.con : f.sin;
+  if (!nombrePl) { errToast('Esta plantilla necesita el nombre del cliente'); return; }
+  const p = lista.find(x => x.nombre === nombrePl);
+  if (!p) { errToast('Meta todavía no aprueba esa plantilla'); return; }
+  const valores = { cliente, destino: r.destino, fecha: r.fecha, asesor: r.asesor };
+  const params = (cliente ? f.orden || ['cliente', 'asesor', 'destino'] : ['asesor', 'destino']).map(k => valores[k]);
+  const texto = p.cuerpo.replace(/\{\{(\d+)\}\}/g, (_, n) => params[n - 1] ?? '');
+  // closeSheet hizo history.back(): abrir otra hoja antes del popstate la cerraría al instante.
+  await new Promise(ir => { window.addEventListener('popstate', ir, { once: true }); setTimeout(ir, 400); });
+  if (!await confirmarSheet({ titulo: '¿Enviar este mensaje?', detalle: texto, textoOk: 'Enviar' })) return;
+  try { await waInvocar({ accion: 'enviar_plantilla_compartido', accountId: cuenta, telefono: `+${d}`, plantilla: p.nombre, params }); }
+  catch (e) { errToast(WA_CO_ERR[e.message] || 'No se pudo enviar la plantilla'); return; }
+  okToast('Plantilla enviada. El chat aparecerá en unos segundos.');
+  setTimeout(() => { if (currentSec === 'whatsapp') { waCargarChats(true); if (waActual) waRefrescarChat(); } }, 3000);
 }
 function waPanelChat(abierto) {
   const compartido = waEsCompartido();
