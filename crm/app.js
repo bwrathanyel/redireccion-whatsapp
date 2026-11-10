@@ -8311,7 +8311,8 @@ let PARA_CERRAR_PAGINA = [];
 // Mismos estados que lote_estado_regestionable() + el POR ATENDER que deja el lote.
 const FRIOS_ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'Sin gestionar'];
 const FRIOS_ESTADOS_PG = FRIOS_ESTADOS.map(e => `"${e}"`).join(',');
-// Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más): fuera de la lista, el inbox y los KPIs.
+// Los del lote diario no van a la tabla de Leads mientras sigan en regestión: POR ATENDER vive en la
+// cola horizontal (loadInboxLeads) y ya atendidos en Clientes Fríos, hasta que se cotizan.
 const sinFriosLote = q => MI_ASESOR_INTEGRAL ? q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`) : q;
 
 function buildQuery(forCount) {
@@ -8819,8 +8820,9 @@ function renderPager(pages) {
 async function loadInboxLeads() {
   if (ROL !== 'asesor') return;
   document.getElementById('inbox-loading').classList.add('show');
-  const { data, error } = await sinFriosLote(sb.from('leads').select('*')
-    .eq('estado', 'POR ATENDER').is('fecha_primer_contacto', null).is('eliminado_at', null));
+  // El lote vuelve un lead a POR ATENDER sin borrar el primer contacto del asesor anterior: igual va a la cola.
+  const { data, error } = await sb.from('leads').select('*')
+    .eq('estado', 'POR ATENDER').or('fecha_primer_contacto.is.null,lote_origen.eq.diario').is('eliminado_at', null);
   document.getElementById('inbox-loading').classList.remove('show');
   if (error) { console.error('inbox', error); errToast('No se pudo cargar el inbox de leads'); return; }
   // Cola: el más antiguo primero. Se ordena por fecha de llegada al asesor
@@ -9067,11 +9069,13 @@ async function refrescarKpisHoyAsesor() {
   try {
     const mes = new Date().toISOString().slice(0, 7), [y, m] = mes.split('-').map(Number);
     const sig = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-    const base = () => sinFriosLote(sb.from('leads').select('id', { count: 'exact', head: true })
-      .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`));
+    const todos = () => sb.from('leads').select('id', { count: 'exact', head: true })
+      .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
+    const base = () => sinFriosLote(todos());
     // Mismos filtros base que buildQuery: el KPI tiene que coincidir con la lista de Leads a la que lleva.
+    // Por atender cuenta también los fríos: están en la cola de arriba.
     const [pa, mm, tot, seg] = await Promise.all([
-      base().eq('estado', 'POR ATENDER'),
+      todos().eq('estado', 'POR ATENDER'),
       base().gte('fecha_creacion', mes + '-01').lt('fecha_creacion', sig + '-01'),
       base(),
       sb.from('leads').select('*', { count: 'exact' }).is('eliminado_at', null).is('contacto_directo_enviado_at', null)
@@ -36746,7 +36750,10 @@ function subscribeRealtime() {
       if (canal !== canalLeadsLive) return;
       if (cbLead?.id === payload.new.id) cbLeadActualizado(payload.new);
       if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
-          && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id, 'fuera');
+          && (payload.new.estado !== 'POR ATENDER' || (payload.new.fecha_primer_contacto && payload.new.lote_origen !== 'diario') || payload.new.eliminado_at)) quitarDeInbox(payload.new.id, 'fuera');
+      // El reparto de clientes fríos asigna con UPDATE, no INSERT: sin esto el lead recién repartido no entra a la cola hasta recargar.
+      else if (ROL === 'asesor' && payload.new.lote_origen === 'diario' && payload.new.estado === 'POR ATENDER' && payload.new.asesor === MI_NOMBRE
+          && !payload.new.eliminado_at && !INBOX_LEADS.some(x => x.id === payload.new.id)) recibirLeadNuevoInbox(payload.new);
       // Solo ventas, con debounce y sin esqueleto: cada UPDATE de cualquier lead
       // (el bot escribe sin parar) recargaba la pestaña Reservas entera.
       if (payload.new.estado === 'PAGO REALIZADO' && document.getElementById('sec-postventa')?.classList.contains('active')) {
@@ -39453,7 +39460,8 @@ async function loadLeadsAsignadosLote() {
 /* ---------- Clientes Fríos (sub-pestaña de Leads, solo asesor integral) ----------
    Leads viejos sin cotizar que repartir_lotes_diarios le asigna cada mañana
    (lote_origen = 'diario'). Se quedan acá mientras sigan en un estado de
-   regestión; al cotizar pasan al pipeline normal (buildQuery los excluye). */
+   regestión; al cotizar pasan al pipeline normal (buildQuery los excluye).
+   Los POR ATENDER no salen acá: esperan en la cola horizontal hasta que el asesor los atiende. */
 async function loadClientesFrios() {
   const grid = document.getElementById('cf-grid');
   if (!grid || !MI_ASESOR_INTEGRAL) return;
@@ -39462,22 +39470,22 @@ async function loadClientesFrios() {
   const qs = val('global-search').trim().replace(/[,()%]/g, '');
   let q = sb.from('leads').select('*')
     .is('eliminado_at', null).eq('lote_origen', 'diario').eq('asesor', MI_NOMBRE)
-    .in('estado', FRIOS_ESTADOS);
+    .in('estado', FRIOS_ESTADOS.filter(e => e !== 'POR ATENDER'));
   if (qs) q = q.or(`nombre.ilike.%${qs}%,telefono.ilike.%${qs}%`);
   const { data, error } = await q.order('lote_asignado_at', { ascending: false }).limit(300);
   loading?.classList.remove('show');
   if (error) { console.error('clientes_frios', error); errToast('No se pudieron cargar los clientes fríos'); return; }
   const filas = data || [];
-  // Con búsqueda el conteo saldría parcial: el badge solo se actualiza sin filtro.
-  const badge = document.getElementById('leads-frios-count');
-  if (badge && !qs) { const pendientes = filas.filter(l => l.estado === 'POR ATENDER').length; badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
   empty?.classList.toggle('show', filas.length === 0);
   const et = empty?.querySelector('.es-t'), es = empty?.querySelector('.es-s');
   if (et) et.textContent = qs ? `Ningún cliente frío coincide con «${qs}»` : 'Sin clientes fríos por ahora';
-  if (es) es.textContent = qs ? 'Prueba con otra parte del nombre o del teléfono' : 'El lote de recontacto llega cada mañana a las 7:30';
+  if (es) es.textContent = qs ? 'Prueba con otra parte del nombre o del teléfono' : 'Los nuevos llegan a tu cola de Por atender; al atenderlos quedan acá';
   grid.innerHTML = filas.map(leadCardHtml).join('');
   wireLeadCards(grid, filas);
   await cfPintarResultados(grid, filas);
+  // Pendiente = falta cargar el resultado del contacto. Con búsqueda el conteo saldría parcial.
+  const badge = document.getElementById('leads-frios-count');
+  if (badge && !qs) { const pendientes = grid.querySelectorAll('.cf-resultados').length; badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
 }
 const CF_RESULTADOS = [['no_contesta', 'No contesta'], ['interesado', 'Interesado'], ['no_interesa', 'No interesa'], ['ya_viajo', 'Ya viajó'], ['numero_equivocado', 'Número equivocado']];
 // Tarea más reciente de cada lead. «No contesta» queda abierto al reintento aunque la tarea esté completada.
