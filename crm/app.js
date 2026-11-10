@@ -3,6 +3,7 @@ import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
 import { crearBandejaWa, ventanaWaAbierta, vozHtml, vozSync, borrarHtml, enlazarBorrar } from './whatsapp-bandeja.js';
+import { crearGrabadorVoz } from './voz-grabar.js';
 import { crearTareas } from './tareas.js';
 import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
@@ -30252,7 +30253,7 @@ function renderBotText(texto) {
    por la EF como Blob; las fotos que manda el bot son públicas (Worker de fotos). */
 const WA_POLL_MS = 20000;
 const WA_URL_PUBLICA = /^https:\/\/(?!(?:api\.)?zernio\.com\/)/i;
-let waNumeros = null, waNumerosPidiendo = false, waSelPintado = false, waVolverA = 'dms', waCuenta = null, waChats = [], waChatsCursor = null, waActual = null, waMensajes = [], waMsgCursor = null, waPoll = null, waAbrirGen = 0;
+let waNumeros = null, waNumerosPidiendo = false, waSelPintado = false, waVolverA = 'dms', waCuenta = null, waChats = [], waChatsCursor = null, waActual = null, waMensajes = [], waMsgCursor = null, waPoll = null, waAbrirGen = 0, waGrabador = null;
 const waMedia = new Map();
 
 async function waInvocar(body) {
@@ -30728,7 +30729,8 @@ function setupWhatsapp() {
   document.getElementById('wa-recargar').addEventListener('click', () => waCargarChats());
   document.getElementById('wa-conv-back').addEventListener('click', () => waCerrarChat());
   document.getElementById('wa-conv-compose').addEventListener('submit', e => { e.preventDefault(); waEnviar(); });
-  document.getElementById('wa-conv-plantilla').addEventListener('click', () => { if (waActual) waPlantillaAbrir(waActual.telefono, waActual.nombre); });
+  document.getElementById('wa-conv-plantilla')?.addEventListener('click', () => { if (waActual) waPlantillaAbrir(waActual.telefono, waActual.nombre); });
+  waGrabador = crearGrabadorVoz({ compose: document.getElementById('wa-conv-compose'), antesDe: document.getElementById('wa-conv-enviar'), claseBoton: 'wa-send wa-send-pl', htmlVoz: vozHtml, puede: waPuedeAdjuntar, contexto: () => waActual?.id, alEnviar: waEnviarVoz, error: errToast });
   document.getElementById('wa-conv-pagos')?.addEventListener('click', () => metodosPago().abrirHoja({ insertar: mpInsertarEn('wa-conv-texto') }));
   document.getElementById('wb-pagos')?.addEventListener('click', () => metodosPago().abrirHoja({ insertar: mpInsertarEn('wb-texto') }));
   document.getElementById('wa-conv-texto').addEventListener('keydown', e => {
@@ -30816,6 +30818,7 @@ function waRenderChats() {
   document.getElementById('wa-mas-chats')?.addEventListener('click', () => waCargarChats(false, waChatsCursor));
 }
 async function waAbrirChat(c) {
+  waGrabador?.cancelar();
   const miGen = ++waAbrirGen;
   waActual = c; waMensajes = []; waMsgCursor = null;
   document.getElementById('wa-conv-titulo').textContent = c.nombre || c.telefono;
@@ -30981,7 +30984,8 @@ async function waEnviar() {
     if (ta.value.trim() === texto) ta.value = '';
     if (waActual?.id === conv) { waRefrescarChat(); setTimeout(() => waActual?.id === conv && waRefrescarChat(), 3000); }
   } catch (e) {
-    errToast(e.message === 'envio_rechazado' ? 'WhatsApp rechazó el mensaje: si pasaron 24 h desde el último del cliente, hace falta una plantilla' : 'No se pudo enviar el mensaje');
+    if (e.message !== 'envio_rechazado') errToast('No se pudo enviar el mensaje');
+    else { errToast('WhatsApp rechazó el mensaje: pasaron 24 h desde el último del cliente, elige una plantilla'); if (waActual?.id === conv) waPlantillaAbrir(waActual.telefono, waActual.nombre); }
   } finally { btn.disabled = false; }
 }
 // Fotos y documentos: el archivo viaja por la EF (bucket privado + URL firmada 1 h)
@@ -30993,6 +30997,28 @@ const WA_ADJUNTO_MSJ = {
   no_autorizado: 'Este chat no se puede responder desde el CRM',
 };
 const waPuedeAdjuntar = () => !!waActual && waEsCompartido() && !document.getElementById('wa-conv-compose').hidden;
+async function waSubirAdjunto(fd) {
+  try {
+    const { data, error } = await sb.functions.invoke('whatsapp-inbox', { body: fd });
+    if (error || !data?.ok) return (data || await Promise.resolve(error?.context?.json?.()).catch(() => null))?.error || 'envio_fallido';
+    return null;
+  } catch { return 'envio_fallido'; }
+}
+// Nota de voz grabada en el compositor (voz-grabar.js): ogg/opus mono sale como nota de voz de WhatsApp.
+async function waEnviarVoz(file, { voz }) {
+  if (!waPuedeAdjuntar()) return;
+  const conv = waActual.id, fd = new FormData();
+  fd.append('accion', 'enviar_archivo');
+  fd.append('accountId', waCuenta);
+  fd.append('conversationId', conv);
+  fd.append('voz', voz ? '1' : '0');
+  fd.append('archivo', file, file.name);
+  const falla = await waSubirAdjunto(fd);
+  if (falla) { errToast(WA_ADJUNTO_MSJ[falla] || 'No se pudo enviar la nota de voz'); return; }
+  okToast('Nota de voz enviada');
+  const refrescar = () => { if (waActual?.id === conv) waRefrescarChat(); };
+  setTimeout(refrescar, 1500); setTimeout(refrescar, 6000);
+}
 async function waEnviarArchivo(file) {
   if (!file || !waPuedeAdjuntar()) return;
   const foto = /^image\//.test(file.type);
@@ -31006,11 +31032,7 @@ async function waEnviarArchivo(file) {
   fd.append('conversationId', conv);
   fd.append('texto', pie);
   fd.append('archivo', file, file.name || (foto ? 'foto.jpg' : 'archivo'));
-  let falla = null;
-  try {
-    const { data, error } = await sb.functions.invoke('whatsapp-inbox', { body: fd });
-    if (error || !data?.ok) falla = (data || await Promise.resolve(error?.context?.json?.()).catch(() => null))?.error || 'envio_fallido';
-  } catch { falla = 'envio_fallido'; }
+  const falla = await waSubirAdjunto(fd);
   btn.disabled = false; btn.innerHTML = icono;
   if (falla) { errToast(WA_ADJUNTO_MSJ[falla] || 'No se pudo enviar el archivo'); return; }
   if (pie && ta.value.trim() === pie) ta.value = '';

@@ -4,6 +4,7 @@
 // whatsapp-enviar: texto/imagen/documento con la ventana de 24 h abierta, si no,
 // solo plantilla aprobada. En vivo por Realtime; CSS propio mínimo (prefijo wb-).
 import { crearCampanasWa } from './wa-campanas.js';
+import { crearGrabadorVoz } from './voz-grabar.js';
 const VENTANA_MS = 24 * 60 * 60 * 1000;
 export const ventanaWaAbierta = c => !!c?.ultimo_entrante_at && Date.now() - Date.parse(c.ultimo_entrante_at) < VENTANA_MS;
 const TICK = { enviando: '🕓', enviado: '✓', entregado: '✓✓', leido: '✓✓', fallido: '!' };
@@ -15,6 +16,7 @@ const ERRORES = {
   sin_acceso: 'Este chat no es tuyo',
   archivo_muy_grande: 'El archivo pesa demasiado (imagen hasta 5 MB, documento hasta 16 MB)',
   imagen_no_soportada: 'Solo fotos JPG o PNG',
+  audio_no_soportado: 'Este navegador grabó un formato que WhatsApp no acepta',
   meta_rechazo: 'WhatsApp rechazó el mensaje',
 };
 // Nota de voz estilo WhatsApp, compartida con la vista de Zernio (app.js). El <audio> va oculto
@@ -167,7 +169,7 @@ const CSS = `
 
 export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, cotizarLead, puedeLlamar, llamarLead, crearReserva, cargarPdfjs, confirmar, ok, error, navPush, navConsume }) {
   let convs = [];
-  let actual = null;
+  let actual = null, grabador = null;
   let navWb = null;
   let mensajes = [];
   let comprobantes = new Map();
@@ -248,7 +250,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
   }
 
   async function abrir(c) {
-    cierraPrevia?.();
+    cierraPrevia?.(); grabador?.cancelar();
     const g = ++gen;
     actual = c;
     if (!navWb && matchMedia('(max-width:760px)').matches) { navWb = { type: 'wb-conv' }; navPush?.(navWb); }
@@ -282,7 +284,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
   }
 
   function cerrar(desdeNav) {
-    cierraPrevia?.();
+    cierraPrevia?.(); grabador?.cancelar();
     if (desdeNav !== true && navWb) navConsume?.();
     navWb = null;
     gen++;
@@ -494,11 +496,29 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     if (pie) { fd.append('texto', pie); $('wb-texto').value = ''; autoAlto(); }
     const tmp = { wamid: 'tmp-' + Date.now(), _tmp: true, direccion: 'saliente_api', tipo: tipo === 'imagen' ? 'image' : 'document', texto: pie || `📎 ${file.name}`, enviado_en: new Date().toISOString(), estado: 'enviando' };
     mensajes.push(tmp); pintarMensajes(true);
+    await enviarForm(fd, tmp);
+  }
+  async function enviarForm(fd, tmp) {
     const r = await invocar(fd);
     const i = mensajes.indexOf(tmp);
     if (r?.ok) { if (i >= 0 && !mensajes.some(x => x.wamid === r.mensaje.wamid)) mensajes[i] = r.mensaje; else if (i >= 0) mensajes.splice(i, 1); }
-    else { if (i >= 0) mensajes[i] = { ...tmp, estado: 'fallido', error: mensajeError(r) }; error(mensajeError(r)); }
+    else {
+      if (i >= 0) mensajes[i] = { ...tmp, estado: 'fallido', error: mensajeError(r) };
+      error(mensajeError(r));
+      if (r?.error === 'ventana_cerrada') { actual.ultimo_entrante_at = null; pintarCabecera(); pintarCompositor(); }
+    }
     pintarMensajes(false);
+  }
+  async function enviarVoz(file, { voz }) {
+    if (!actual) return;
+    const fd = new FormData();
+    fd.append('conversacion_id', String(actual.id));
+    fd.append('tipo', 'audio');
+    fd.append('voz', voz ? '1' : '0');
+    fd.append('archivo', file, file.name);
+    const tmp = { wamid: 'tmp-' + Date.now(), _tmp: true, direccion: 'saliente_api', tipo: 'audio', texto: '🎤 Nota de voz', enviado_en: new Date().toISOString(), estado: 'enviando' };
+    mensajes.push(tmp); pintarMensajes(true);
+    await enviarForm(fd, tmp);
   }
 
   // PDF de una cotización a la vista en el chat de su cliente. Se descarta al cambiar de chat, para que no le llegue a otro.
@@ -629,6 +649,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     $('wb-enviar').addEventListener('mousedown', ev => ev.preventDefault());
     $('wb-enviar').addEventListener('click', enviarTexto);
     $('wb-adjuntar').addEventListener('click', () => $('wb-archivo').click());
+    grabador = crearGrabadorVoz({ compose: $('wb-compose'), antesDe: $('wb-enviar'), claseBoton: 'wb-ico', htmlVoz: vozHtml, puede: () => !!actual && !$('wb-compose').hidden, contexto: () => actual?.id, alEnviar: enviarVoz, error });
     $('wb-archivo').addEventListener('change', ev => { const f = ev.target.files?.[0]; ev.target.value = ''; enviarArchivo(f); });
     $('wb-pl-sel').addEventListener('change', pintarVariables);
     $('wb-pl-enviar').addEventListener('click', enviarPlantilla);

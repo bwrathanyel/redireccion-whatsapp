@@ -3191,6 +3191,15 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 :is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-date-chip{background:var(--wa-ajena);color:var(--wa-meta);border:none;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
 :is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-doc i{background:color-mix(in srgb,currentColor 10%,transparent);color:inherit}
 @media(prefers-reduced-motion:reduce){.dm-vivo.on .dm-vivo-punto,.dm-campo.recien,.dm-inbox .msg-inbox-row.llego{animation:none}.dm-canal::after,.dm-log{transition:none}}
+/* Escritorio: body{zoom} encoge 100dvh, por eso se divide por --zoom; el pie se oculta
+   para que la cáscara llene la pantalla sin scroll de página. */
+@media(min-width:761px){
+  .dm-shell{height:calc(100vh / var(--zoom,1) - 70px);height:calc(100dvh / var(--zoom,1) - 70px)}
+  main:has(.section.active>.dm-shell) .foot-note{display:none}
+  .wa-shell .dm-chat-head{padding-bottom:9px}
+  .dm-shell[data-canal="whatsapp"] .dm-log .chat-msg{max-width:min(72%,560px)}
+}
+@media(min-width:1440px){.dm-shell.wa-shell{grid-template-columns:360px minmax(0,1fr)}}
 /* Tablet: la ficha pasa a panel deslizable sobre el chat */
 @media(max-width:1179px){
   .dm-shell,.dm-shell.wa-shell{grid-template-columns:300px minmax(0,1fr)}
@@ -9525,7 +9534,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="msg-conv-log dm-log" id="wa-conv-log" hidden></div>
           <div class="msg-readonly-note" id="wa-conv-nota" hidden><i class="fas fa-lock"></i> Solo lectura — el bot responde aquí; el asesor atiende por su WhatsApp</div>
           <form class="wa-compose" id="wa-conv-compose" hidden>
-            <button class="wa-send wa-send-pl" id="wa-conv-plantilla" type="button" title="Escribir con plantilla (más de 24 h sin mensajes del cliente)" aria-label="Escribir con plantilla"><i class="fas fa-file-lines"></i></button>
             <button class="wa-send wa-send-pl" id="wa-conv-pagos" type="button" title="Poner los datos de pago en el chat" aria-label="Datos de pago"><i class="fas fa-building-columns"></i></button>
             <button class="wa-send wa-send-pl" id="wa-conv-adjuntar" type="button" title="Enviar foto o documento (o arrástralo al chat)" aria-label="Adjuntar foto o documento"><i class="fas fa-paperclip"></i></button>
             <input type="file" id="wa-conv-archivo" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" hidden>
