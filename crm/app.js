@@ -39826,6 +39826,8 @@ function pintarEstadoBody() {
   b.toggle('ver-chat-on', !!sec?.querySelector('.dm-shell.ver-chat'));
   b.toggle('en-voucher', sec?.id === 'sec-voucher');
   b.toggle('en-cotiz-boletos', sec?.id === 'sec-cotizacion-boletos');
+  // WhatsApp tiene su propio pie de envío: la burbuja de Mensajes lo tapaba.
+  b.toggle('en-whatsapp', sec?.id === 'sec-whatsapp');
 }
 function setupEstadoBody() {
   pintarEstadoBody();

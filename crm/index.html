@@ -2910,6 +2910,7 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 .chat-fab-badge[hidden]{display:none}
 .chat-fab.hay-nuevos::before{content:'';position:absolute;inset:0;border-radius:50%;border:3px solid var(--accent);animation:cp-anillo 1.8s ease-out infinite;pointer-events:none}
 .chat-fab.sacude{animation:cp-sacude .8s ease-in-out}
+body.en-whatsapp :is(.chat-fab,.chat-globo){display:none!important}
 .chat-fondo,.chat-panel .cp-asa{display:none}
 .chat-globo{position:fixed;right:22px;bottom:92px;z-index:61;max-width:300px;padding:10px 14px 11px;border-radius:16px 16px 4px 16px;background:var(--panel-solid);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line2));box-shadow:0 18px 40px -12px rgba(0,0,0,.55);color:var(--txt);font-size:13px;line-height:1.45;cursor:pointer;opacity:0;transform:translateY(8px) scale(.96);transform-origin:right bottom;transition:opacity .22s,transform .3s var(--ease-salida)}
 .chat-globo.show{opacity:1;transform:none}
