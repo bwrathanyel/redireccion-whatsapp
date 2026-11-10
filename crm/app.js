@@ -1360,20 +1360,20 @@ async function handleCheckIn() {
   JORNADA_ACTIVA = true;
   renderJornadaUI();
 }
-// Finalizar jornada exige resumen (Bloque 14): el click en "Finalizar" solo
-// abre el sheet, sin tocar el backend todavía -- agent_check_out(p_resumen)
-// cierra la sesión y guarda el informe en un único viaje transaccional, así
-// que si se cancela el sheet la jornada sigue activa (nunca queda cerrada
-// sin informe).
-const JORNADA_CAMPOS = ['jornada-como-me-fue', 'jornada-que-aprendi', 'jornada-que-se-complico', 'jornada-bloqueos'];
+// Finalizar jornada exige informe (Bloque 14, v2 2026-11-09): el click en "Finalizar" solo
+// abre el sheet; agent_check_out_informe cierra la sesión y guarda el informe en un único
+// viaje, así que si se cancela el sheet la jornada sigue activa. El informe es la lista de
+// clientes que trabajó hoy (la arma el servidor) + nota/ayuda opcionales por cliente.
+let JORNADA_DIA = null, JORNADA_BORRADOR = { notas: {}, ayuda: {}, texto: '' };
 function abrirResumenJornada() {
   if (!esOficina() && ROL !== 'asesor') return;
   // El informe es obligatorio solo para Asesor Integral (decisión del dueño 2026-11-06).
   if (!MI_ASESOR_INTEGRAL) { finalizarJornadaSinInforme(); return; }
-  const borrador = jornadaBorradorLeer();
-  JORNADA_CAMPOS.forEach(id => { const el = document.getElementById(id); if (el) el.value = borrador[id] || ''; });
-  validarResumenJornada();
+  JORNADA_BORRADOR = jornadaBorradorLeer();
+  document.getElementById('jornada-ayuda').value = JORNADA_BORRADOR.texto || '';
+  JORNADA_DIA = null;
   jornadaPintarDia(null);
+  validarResumenJornada();
   openSheet('jornada-resumen-sheet');
   jornadaCargarDia();
 }
@@ -1387,48 +1387,58 @@ async function finalizarJornadaSinInforme() {
 }
 // Borrador local: cerrar el aviso o la hoja no pierde lo escrito.
 const jornadaBorradorClave = () => `jornada-borrador:${MI_USUARIO_ID}:${hoyCaracas()}`;
-function jornadaBorradorLeer() { try { return JSON.parse(localStorage.getItem(jornadaBorradorClave())) || {}; } catch (_) { return {}; } }
-function jornadaBorradorGuardar() { try { localStorage.setItem(jornadaBorradorClave(), JSON.stringify(Object.fromEntries(JORNADA_CAMPOS.map(id => [id, document.getElementById(id)?.value || ''])))); } catch (_) {} }
+function jornadaBorradorLeer() { try { const b = JSON.parse(localStorage.getItem(jornadaBorradorClave())) || {}; return { notas: b.notas || {}, ayuda: b.ayuda || {}, texto: b.texto || '' }; } catch (_) { return { notas: {}, ayuda: {}, texto: '' }; } }
+function jornadaBorradorGuardar() { try { localStorage.setItem(jornadaBorradorClave(), JSON.stringify(JORNADA_BORRADOR)); } catch (_) {} }
 function jornadaBorradorBorrar() { try { localStorage.removeItem(jornadaBorradorClave()); } catch (_) {} }
-const JORNADA_RESULTADOS = { interesado: ['interesado', 'interesados'], no_contesta: ['no contestó', 'no contestaron'], no_interesa: ['no le interesa', 'no les interesa'], ya_viajo: ['ya viajó', 'ya viajaron'], numero_equivocado: ['número equivocado', 'números equivocados'] };
-function jornadaTextoDia(r) {
-  const contactos = Object.entries(r.contactos || {}), total = contactos.reduce((s, [, n]) => s + Number(n), 0);
-  const detalle = contactos.map(([k, n]) => `${n} ${JORNADA_RESULTADOS[k]?.[Number(n) === 1 ? 0 : 1] || k}`).join(', ');
-  const plural = (n, uno, varios) => `${n} ${Number(n) === 1 ? uno : varios}`;
-  const partes = [
-    total && `${plural(total, 'cliente contactado', 'clientes contactados')}${detalle ? ` (${detalle})` : ''}`,
-    Number(r.cotizaciones) > 0 && plural(r.cotizaciones, 'cotización', 'cotizaciones'),
-    Number(r.cobros?.n) > 0 && `${plural(r.cobros.n, 'cobro', 'cobros')} por $${Number(r.cobros.usd).toFixed(2)}`,
-    Number(r.seguimientos_manana) > 0 && plural(r.seguimientos_manana, 'seguimiento para mañana', 'seguimientos para mañana'),
-  ].filter(Boolean);
-  return partes.length ? `Hoy: ${partes.join('; ')}.` : '';
+const JORNADA_RESULTADOS = { interesado: 'Interesado', no_contesta: 'No contestó', no_interesa: 'No le interesa', ya_viajo: 'Ya viajó', numero_equivocado: 'Número equivocado' };
+// Solo viaja lo que el asesor escribió; la lista de clientes la arma el servidor.
+function jornadaEnvio(clientes, b) {
+  return (clientes || []).map(c => ({ id: c.id, nota: String(b.notas?.[c.id] || '').trim().slice(0, 300) || null, ayuda: !!b.ayuda?.[c.id] }))
+    .filter(x => x.nota || x.ayuda);
 }
 function jornadaPintarDia(r) {
   const box = document.getElementById('jornada-dia');
   if (!box) return;
-  box.hidden = !r;
-  if (!r) { box.innerHTML = ''; return; }
-  const total = Object.values(r.contactos || {}).reduce((s, n) => s + Number(n), 0);
+  if (!r) { box.innerHTML = '<p class="jd-vacio"><i class="fas fa-spinner fa-spin"></i> Cargando tu día…</p>'; return; }
   const kpi = (v, t) => `<div class="jd-kpi"><b>${esc(String(v))}</b><span>${esc(t)}</span></div>`;
-  const clientes = r.clientes || [];
-  box.innerHTML = `<div class="jd-kpis">${kpi(total, 'Contactos')}${kpi(r.cotizaciones, 'Cotizaciones')}${kpi(r.cobros?.n || 0, 'Cobros')}${kpi(r.seguimientos_manana, 'Para mañana')}</div>`
-    + (r.sin_proximo ? `<p class="jd-falta"><i class="fas fa-triangle-exclamation"></i> ${r.sin_proximo === 1 ? '1 cliente sin próximo paso' : `${r.sin_proximo} clientes sin próximo paso`}</p>` : '')
-    + (clientes.length ? `<ul class="jd-clientes">${clientes.map(c => `<li><span><b>${esc(c.nombre || `Lead #${c.id}`)}</b><small>${esc(niceEstado(c.estado))}${c.destino ? ` · ${esc(c.destino)}` : ''}</small></span>${c.sin_proximo ? `<button class="dseg-btn" type="button" data-jd-manana="${c.id}">Mañana</button>` : c.proxima_accion_at ? `<small class="jd-seg">${esc(tiempoSeguimiento(c.proxima_accion_at))}</small>` : ''}</li>`).join('')}</ul>` : '');
+  const clientes = r.clientes || [], b = JORNADA_BORRADOR;
+  const chips = id => `<span class="jd-chips">${[[1, 'Mañana'], [3, '3 días'], [7, '1 semana']].map(([d, t]) => `<button class="dseg-btn" type="button" data-jd-dias="${d}" data-jd-lead="${id}">${t}</button>`).join('')}</span>`;
+  box.innerHTML = `<div class="jd-kpis">${kpi(r.atendidos || 0, 'Atendidos')}${kpi(r.cotizaciones, 'Cotizaciones')}${kpi(r.cobros?.n || 0, 'Cobros')}${kpi(r.por_cerrar || 0, 'Por cerrar')}</div>`
+    + (clientes.length ? `<ul class="jd-clientes">${clientes.map(c => `<li class="${c.sin_proximo ? 'jd-pendiente' : ''}">
+        <div class="jd-cli-cab">
+          <button class="jd-nombre" type="button" data-jd-abrir="${c.id}"><b>${esc(c.nombre || `Lead #${c.id}`)}</b><small>${esc(niceEstado(c.estado))}${c.destino ? ` · ${esc(c.destino)}` : ''}${c.resultado ? ` · ${esc(JORNADA_RESULTADOS[c.resultado] || c.resultado)}` : ''}</small></button>
+          ${c.sin_proximo ? chips(c.id) : c.proxima_accion_at ? `<small class="jd-seg">${esc(tiempoSeguimiento(c.proxima_accion_at))}</small>` : ''}
+        </div>
+        <div class="jd-cli-pie">
+          <input class="jd-nota" type="text" maxlength="300" data-jd-nota="${c.id}" placeholder="Nota (opcional)" value="${esc(b.notas[c.id] || '')}">
+          <label class="jd-ayuda"><input type="checkbox" data-jd-ayuda="${c.id}"${b.ayuda[c.id] ? ' checked' : ''}> Necesito ayuda</label>
+        </div></li>`).join('')}</ul>`
+      : '<p class="jd-vacio">Hoy no hay clientes trabajados. Puedes cerrar igual.</p>');
 }
 async function jornadaCargarDia() {
   const { data, error } = await sb.rpc('mi_resumen_jornada');
-  if (error || !data?.ok) { console.error('mi_resumen_jornada', error); return; }
+  if (error || !data?.ok) { console.error('mi_resumen_jornada', error); errToast('No se pudo cargar tu día'); return; }
+  JORNADA_DIA = data;
   jornadaPintarDia(data);
-  const como = document.getElementById('jornada-como-me-fue');
-  if (como && !como.value.trim()) { como.value = jornadaTextoDia(data); validarResumenJornada(); }
+  validarResumenJornada();
 }
-document.getElementById('jornada-dia')?.addEventListener('click', async e => {
-  const b = e.target.closest('[data-jd-manana]');
+const jornadaDiaBox = document.getElementById('jornada-dia');
+jornadaDiaBox?.addEventListener('click', async e => {
+  const abrir = e.target.closest('[data-jd-abrir]');
+  if (abrir) { closeSheet('jornada-resumen-sheet'); abrirLeadDesdeMisVentas(Number(abrir.dataset.jdAbrir)); return; }
+  const b = e.target.closest('[data-jd-dias]');
   if (!b) return;
-  b.disabled = true;
-  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: Number(b.dataset.jdManana), p_at: seguimientoEnDias(1), p_nota: null });
-  if (error || !data?.ok) { b.disabled = false; errToast('No se pudo fijar el seguimiento'); return; }
+  b.parentElement.querySelectorAll('button').forEach(x => { x.disabled = true; });
+  const { data, error } = await sb.rpc('fijar_proxima_accion', { p_lead_id: Number(b.dataset.jdLead), p_at: seguimientoEnDias(Number(b.dataset.jdDias)), p_nota: null });
+  if (error || !data?.ok) { b.parentElement.querySelectorAll('button').forEach(x => { x.disabled = false; }); errToast('No se pudo fijar el seguimiento'); return; }
   jornadaCargarDia();
+});
+jornadaDiaBox?.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.jdNota) JORNADA_BORRADOR.notas[t.dataset.jdNota] = t.value;
+  else if (t.dataset.jdAyuda) JORNADA_BORRADOR.ayuda[t.dataset.jdAyuda] = t.checked;
+  else return;
+  jornadaBorradorGuardar();
 });
 const AVISO_INFORME_MS = 10 * 60 * 1000;
 let avisoInformeUltimo = 0;
@@ -1455,13 +1465,13 @@ function setupAvisoInforme() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) jornadaAvisoRevisar(); });
   jornadaAvisoRevisar();
 }
-// Solo las dos primeras respuestas habilitan el cierre; las otras dos son opcionales.
+// Se puede cerrar cuando el día cargó y ningún cliente abierto quedó sin próximo paso.
 function validarResumenJornada() {
-  const ok = ['jornada-como-me-fue', 'jornada-que-aprendi']
-    .every(id => (document.getElementById(id)?.value || '').trim().length > 0);
-  document.getElementById('jornada-resumen-ok').disabled = !ok;
+  const faltan = Number(JORNADA_DIA?.sin_proximo || 0), falta = document.getElementById('jornada-falta');
+  document.getElementById('jornada-resumen-ok').disabled = !JORNADA_DIA || faltan > 0;
+  if (falta) { falta.hidden = !faltan; falta.innerHTML = faltan ? `<i class="fas fa-triangle-exclamation"></i> ${faltan === 1 ? 'Te falta 1 próximo paso' : `Te faltan ${faltan} próximos pasos`}` : ''; }
 }
-JORNADA_CAMPOS.forEach(id => document.getElementById(id)?.addEventListener('input', () => { validarResumenJornada(); jornadaBorradorGuardar(); }));
+document.getElementById('jornada-ayuda')?.addEventListener('input', e => { JORNADA_BORRADOR.texto = e.target.value; jornadaBorradorGuardar(); });
 document.getElementById('jornada-resumen-cancelar')?.addEventListener('click', (e) => {
   if (e.currentTarget.disabled) return; // envío en curso -- no se puede cancelar a mitad de camino
   closeSheet('jornada-resumen-sheet');
@@ -1469,32 +1479,24 @@ document.getElementById('jornada-resumen-cancelar')?.addEventListener('click', (
 document.getElementById('jornada-resumen-ok')?.addEventListener('click', async () => {
   const btn = document.getElementById('jornada-resumen-ok');
   const cancelarBtn = document.getElementById('jornada-resumen-cancelar');
-  const comoMeFue = document.getElementById('jornada-como-me-fue').value.trim();
-  const queAprendi = document.getElementById('jornada-que-aprendi').value.trim();
-  if (!comoMeFue || !queAprendi) return;
+  if (!JORNADA_DIA) return;
   btn.disabled = true; cancelarBtn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
-  const { error } = await sb.rpc('agent_check_out', {
-    p_como_me_fue: comoMeFue,
-    p_que_aprendi: queAprendi,
-    p_que_se_complico: document.getElementById('jornada-que-se-complico').value.trim() || null,
-    p_bloqueos: document.getElementById('jornada-bloqueos').value.trim() || null
+  const { error } = await sb.rpc('agent_check_out_informe', {
+    p_clientes: jornadaEnvio(JORNADA_DIA.clientes, JORNADA_BORRADOR),
+    p_ayuda: document.getElementById('jornada-ayuda').value.trim() || null
   });
   btn.innerHTML = '<i class="fas fa-check"></i> Finalizar jornada';
   cancelarBtn.disabled = false;
-  if (error) { btn.disabled = false; errToast('No se pudo cerrar la jornada: ' + error.message); return; }
+  if (error) {
+    btn.disabled = false;
+    if (/faltan proximos pasos/.test(error.message)) { errToast('Te falta el próximo paso de algún cliente'); jornadaCargarDia(); return; }
+    errToast('No se pudo cerrar la jornada: ' + error.message); return;
+  }
   JORNADA_ACTIVA = false;
   jornadaBorradorBorrar();
   jornadaAvisoRevisar();
   renderJornadaUI();
   closeSheet('jornada-resumen-sheet');
-  if (document.getElementById('jornada-guardar-nota')?.checked) {
-    const { error: eNota } = await sb.rpc('guardar_nota', {
-      p_id: null,
-      p_titulo: 'Aprendido el ' + new Date().toLocaleDateString('es-VE', { day: 'numeric', month: 'long' }),
-      p_cuerpo: queAprendi, p_etiquetas: ['aprendizajes'], p_me_cuesta: true
-    });
-    if (!eNota) okToast('Guardado también en Mis Notas'); else errToast('La jornada se cerró, pero la nota no se pudo guardar.');
-  }
   okToast('Jornada finalizada: informe enviado. Puedes seguir atendiendo desde casa.');
 });
 window.toggleJornada = async () => { JORNADA_ACTIVA ? abrirResumenJornada() : await handleCheckIn(); };
@@ -3363,38 +3365,118 @@ function pintarAsistenciaHistorial() {
   document.getElementById('asist-hist-ver-mas')?.addEventListener('click', () => { asistHistMostrar += ASIST_HIST_PAGINA; pintarAsistenciaHistorial(); });
 }
 
-/* ---------- Informe Diario (Bloque 14 — solo Luis Rueda) ---------- */
+/* ---------- Informe Diario (Bloque 14 v2 — gate ve_informe_diario) ---------- */
+// Una fila por asesor y día con jornada. Los números salen de jornada_datos, la misma función que ve el asesor.
+let INFORME_CACHE = [], informeFiltro = '', INFORME_ASESORES = {}, informeListo = false;
+function informeRango(p) {
+  const hoy = hoyCaracas();
+  return p === 'ayer' ? [cbSumarDias(hoy, -1), cbSumarDias(hoy, -1)] : p === '7' ? [cbSumarDias(hoy, -6), hoy] : p === '30' ? [cbSumarDias(hoy, -29), hoy] : [hoy, hoy];
+}
+function setupInformeDiario() {
+  if (informeListo) return;
+  informeListo = true;
+  const desde = document.getElementById('informe-desde'), hasta = document.getElementById('informe-hasta');
+  [desde.value, hasta.value] = informeRango('hoy');
+  document.querySelectorAll('#informe-periodo .seg').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#informe-periodo .seg').forEach(x => x.classList.toggle('on', x === b));
+    [desde.value, hasta.value] = informeRango(b.dataset.p);
+    loadInformeDiario();
+  });
+  const aMano = () => { document.querySelectorAll('#informe-periodo .seg').forEach(x => x.classList.remove('on')); loadInformeDiario(); };
+  desde.onchange = aMano; hasta.onchange = aMano;
+  document.getElementById('informe-asesor').onchange = loadInformeDiario;
+  document.getElementById('sec-informe-diario').addEventListener('click', async e => {
+    const lead = e.target.closest('[data-inf-lead]');
+    if (lead) { abrirLeadDesdeMisVentas(Number(lead.dataset.infLead)); return; }
+    const res = e.target.closest('[data-inf-resolver]');
+    if (!res) return;
+    res.disabled = true;
+    const { error } = await sb.rpc('informe_resolver_ayuda', { p_informe_id: Number(res.dataset.infResolver) });
+    if (error) { res.disabled = false; errToast('No se pudo marcar como resuelto'); return; }
+    okToast('Ayuda marcada como resuelta');
+    loadInformeDiario();
+  });
+}
 async function loadInformeDiario() {
-  const { data, error } = await sb.rpc('informes_diarios_listado');
-  if (error) { console.error(error); errToast('No se pudo cargar el Informe Diario'); return; }
+  setupInformeDiario();
+  const desde = document.getElementById('informe-desde').value, hasta = document.getElementById('informe-hasta').value;
+  if (!desde || !hasta || hasta < desde) { errToast('Revisa el rango de fechas'); return; }
+  const asesor = document.getElementById('informe-asesor').value || null;
+  const [{ data, error }, equipo] = await Promise.all([
+    sb.rpc('informe_tablero', { p_desde: desde, p_hasta: hasta, p_asesor: asesor }),
+    desde === hasta ? sb.from('informes_equipo').select('resumen').eq('fecha', desde).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+  if (error) { console.error(error); errToast(/rango/.test(error.message) ? 'Máximo 31 días' : 'No se pudo cargar el Informe Diario'); return; }
   INFORME_CACHE = data || [];
+  INFORME_CACHE.forEach(f => { INFORME_ASESORES[f.asesor_id] = f.nombre; });
+  const sel = document.getElementById('informe-asesor');
+  sel.innerHTML = '<option value="">Todos</option>' + Object.entries(INFORME_ASESORES).sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, n]) => `<option value="${esc(id)}"${id === asesor ? ' selected' : ''}>${esc(n)}</option>`).join('');
+  const eq = document.getElementById('informe-equipo');
+  eq.hidden = !equipo.data?.resumen;
+  eq.innerHTML = equipo.data?.resumen ? `<b><i class="fas fa-wand-magic-sparkles"></i> Resumen del equipo</b>${esc(equipo.data.resumen)}` : '';
   renderInformeDiario();
 }
+const informeAyudas = f => f.ayuda_resuelta_at ? [] : [
+  ...(f.clientes || []).filter(c => c.ayuda).map(c => ({ lead: c, nota: c.nota })),
+  ...(f.ayuda ? [{ lead: null, nota: f.ayuda }] : []),
+];
+const informeFalta = f => f.aplica_informe && !f.tiene_informe;
 // KPIs = filtro (mismo patrón que Cuentas por Pagar): tocar uno filtra, tocarlo de nuevo lo quita.
-let INFORME_CACHE = [], informeFiltro = '';
+const INFORME_FILTROS = { ayuda: f => informeAyudas(f).length > 0, calientes: f => (f.calientes || []).length > 0, falta: informeFalta };
 function filtrarInformeEstado(estado) {
   informeFiltro = informeFiltro === estado ? '' : estado;
   renderInformeDiario();
 }
 function renderInformeDiario() {
-  const con = INFORME_CACHE.filter(f => f.tiene_informe).length, sin = INFORME_CACHE.length - con;
+  const C = INFORME_CACHE, n = k => C.filter(INFORME_FILTROS[k]).length;
+  const kpi = (key, t, d, i, c) => ({ key, t, v: fmt(key ? n(key) : C.length), d, i, c, on: informeFiltro === key, go: () => filtrarInformeEstado(key) });
   pintarKPIs('informe-diario-kpis', [
-    { key: '', t: 'Jornadas', v: fmt(INFORME_CACHE.length), d: 'últimos 14 días · ver todas', i: 'fa-calendar-days', c: 'var(--blue)', on: informeFiltro === '', go: () => filtrarInformeEstado('') },
-    { key: 'con', t: 'Con informe', v: fmt(con), d: 'cierre de jornada entregado', i: 'fa-circle-check', c: 'var(--green)', on: informeFiltro === 'con', go: () => filtrarInformeEstado('con') },
-    { key: 'sin', t: 'Sin informe', v: fmt(sin), d: 'falta el cierre', i: 'fa-hourglass-half', c: 'var(--amber)', on: informeFiltro === 'sin', go: () => filtrarInformeEstado('sin') },
+    kpi('', 'Jornadas', 'ver todas', 'fa-calendar-days', 'var(--blue)'),
+    kpi('ayuda', 'Piden ayuda', 'sin resolver', 'fa-hand', 'var(--red)'),
+    kpi('calientes', 'Calientes sin paso', 'por cerrar, sin próximo paso', 'fa-fire', 'var(--amber)'),
+    kpi('falta', 'Falta informe', 'integrales sin cierre', 'fa-hourglass-half', 'var(--muted)'),
   ]);
-  const filas = INFORME_CACHE.filter(f => !informeFiltro || (informeFiltro === 'con') === !!f.tiene_informe);
+  const sum = k => C.reduce((s, f) => s + Number(f.metricas?.[k] || 0), 0);
+  const usd = C.reduce((s, f) => s + Number(f.metricas?.cobros?.usd || 0), 0), cobros = C.reduce((s, f) => s + Number(f.metricas?.cobros?.n || 0), 0);
+  document.getElementById('informe-totales').textContent = C.length ? `Equipo: ${fmt(sum('atendidos'))} clientes atendidos · ${fmt(sum('cotizaciones'))} cotizaciones · ${fmt(cobros)} cobros (${money(usd)}) · ${fmt(sum('por_cerrar'))} por cerrar` : '';
+  renderInformeAlertas();
+  const filas = C.filter(f => !informeFiltro || INFORME_FILTROS[informeFiltro](f));
   INFORME_LAST = filas;
-  document.getElementById('informe-diario-tbody').innerHTML = filas.map((f, i) => `
-    <article class="lt-card${f.tiene_informe ? '' : ' lt-card-hecha'}" style="--i:${Math.min(i, 20)}">
+  document.getElementById('informe-diario-tbody').innerHTML = filas.map((f, i) => {
+    const m = f.metricas || {}, tag = f.tiene_informe ? ['Con informe', 'var(--green)'] : f.aplica_informe ? ['Falta informe', 'var(--amber)'] : ['No aplica', 'var(--muted)'];
+    const clientes = f.clientes || [];
+    return `<article class="lt-card" style="--i:${Math.min(i, 20)}">
       <div class="lt-card-cab">
         <div class="lt-card-tit" title="${esc(f.nombre)}">${esc(f.nombre)}</div>
-        <span class="bt-tag" style="--c:${f.tiene_informe ? 'var(--green)' : 'var(--amber)'}">${f.tiene_informe ? 'Con informe' : 'Sin informe'}</span>
+        <span class="bt-tag" style="--c:${tag[1]}">${tag[0]}</span>
       </div>
-      <div class="lt-card-meta"><i class="fas fa-calendar-day"></i> ${fmtFechaSolo(f.fecha)}${f.tiene_informe ? ` · <i class="fas fa-door-open"></i> salió ${fmtHoraCaracas(f.hora_salida)}` : ''}</div>
-      ${f.metricas && f.metricas.atendidos ? `<div class="lt-card-meta" title="Contactos de la cola cerrados ese día"><i class="fas fa-phone-volume"></i> ${fmt(f.metricas.atendidos)} atendidos · ${fmt(f.metricas.con_seguimiento)} con seguimiento · ${fmt(f.metricas.sin_seguimiento)} sin seguimiento · ${fmt(f.metricas.a_punto_de_vender)} a punto de vender</div>` : ''}
-      ${f.tiene_informe ? `<div class="lt-texto">${renderInformeCampos(f)}</div>` : ''}
-    </article>`).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${informeFiltro ? 'Nada coincide con el filtro' : 'Sin registros'}</div>`;
+      <div class="lt-card-meta"><i class="fas fa-calendar-day"></i> ${fmtFechaSolo(f.fecha)}${f.tiene_informe ? ` · <i class="fas fa-door-open"></i> salió ${fmtHoraCaracas(f.hora_salida)}` : ''}${informeAyudas(f).length ? ' · <i class="fas fa-hand" style="color:var(--red)"></i> pide ayuda' : ''}</div>
+      <div class="lt-cifras inf-5">
+        <div><span>Atendidos</span><b>${fmt(m.atendidos || 0)}</b></div>
+        <div><span>Cotiz.</span><b>${fmt(m.cotizaciones || 0)}</b></div>
+        <div><span>Cobros</span><b>${money(m.cobros?.usd || 0)}</b></div>
+        <div><span>Por cerrar</span><b>${fmt(m.por_cerrar || 0)}</b></div>
+        <div><span>Calientes</span><b${(f.calientes || []).length ? ' style="color:var(--amber)"' : ''}>${fmt((f.calientes || []).length)}</b></div>
+      </div>
+      ${clientes.length ? `<details class="inf-det"><summary>${clientes.length === 1 ? '1 cliente' : `${clientes.length} clientes`}</summary><ul class="inf-clientes">${clientes.map(c => `<li>
+        <span><button class="inf-lead" type="button" data-inf-lead="${c.id}">${esc(c.nombre || `Lead #${c.id}`)}</button>${c.ayuda ? ' <i class="fas fa-hand" style="color:var(--red)" title="Pidió ayuda"></i>' : ''}</span>
+        <small>${esc(niceEstado(c.estado))}${c.resultado ? ` · ${esc(JORNADA_RESULTADOS[c.resultado] || c.resultado)}` : ''}${c.proxima_accion_at ? ` · ${esc(tiempoSeguimiento(c.proxima_accion_at))}` : ''}</small>
+        ${c.nota ? `<em>${esc(c.nota)}</em>` : ''}</li>`).join('')}</ul></details>` : ''}
+      ${f.ayuda ? `<div class="lt-texto"><div><b>Pide ayuda</b>${esc(f.ayuda)}</div></div>` : ''}
+      ${f.tiene_informe && !clientes.length && (f.como_me_fue || f.resumen) ? `<div class="lt-texto">${renderInformeCampos(f)}</div>` : ''}
+    </article>`;
+  }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${informeFiltro ? 'Nada coincide con el filtro' : 'Nadie abrió jornada en este rango'}</div>`;
+}
+function renderInformeAlertas() {
+  const box = document.getElementById('informe-alertas');
+  const leadBtn = c => c ? `<button class="inf-lead" type="button" data-inf-lead="${c.id}">${esc(c.nombre || `Lead #${c.id}`)}</button>` : '';
+  const filas = INFORME_CACHE.flatMap(f => [
+    ...informeAyudas(f).map(a => `<div class="inf-alerta" style="--c:var(--red)"><i class="fas fa-hand"></i><span><b>${esc(f.nombre)}</b> pide ayuda${a.lead ? ' con ' + leadBtn(a.lead) : ''}${a.nota ? `: ${esc(a.nota)}` : ''} <small>· ${fmtFechaSolo(f.fecha)}</small></span><button class="dseg-btn" type="button" data-inf-resolver="${f.informe_id}">Resuelto</button></div>`),
+    ...(f.calientes || []).map(c => `<div class="inf-alerta" style="--c:var(--amber)"><i class="fas fa-fire"></i><span>${leadBtn(c)} <small>${esc(niceEstado(c.estado))}</small> sin próximo paso · <b>${esc(f.nombre)}</b></span></div>`),
+  ]);
+  box.hidden = !filas.length;
+  box.innerHTML = filas.slice(0, 30).join('') + (filas.length > 30 ? `<p class="inf-totales">y ${filas.length - 30} más…</p>` : '');
 }
 // Informes viejos (previos al 2026-08-19) solo tienen `resumen`; los nuevos
 // traen las cuatro respuestas separadas. Se muestran distinto sin romper el histórico.
@@ -21188,9 +21270,9 @@ EXPORTABLES.ranking = {
   celda: (c, r) => r[c] == null ? '' : c === 'monto' ? money(r[c]) : String(r[c]),
 };
 EXPORTABLES.informe = {
-  cols: [['fecha', 'Fecha'], ['nombre', 'Asesor'], ['tiene_informe', 'Informe'], ['hora_salida', 'Salida'], ['como_me_fue', 'Cómo le fue'], ['que_aprendi', 'Qué aprendió'], ['que_se_complico', 'Qué se le complicó'], ['bloqueos', 'Bloqueos'], ['resumen', 'Resumen']],
+  cols: [['fecha', 'Fecha'], ['nombre', 'Asesor'], ['tiene_informe', 'Informe'], ['hora_salida', 'Salida'], ['atendidos', 'Atendidos'], ['cotizaciones', 'Cotizaciones'], ['cobros', 'Cobros USD'], ['por_cerrar', 'Por cerrar'], ['calientes', 'Calientes sin paso'], ['ayuda', 'Pide ayuda'], ['resumen', 'Resumen']],
   filas: () => INFORME_LAST,
-  celda: (c, r) => c === 'tiene_informe' ? siNo(r[c]) : r[c] == null ? '' : c === 'fecha' ? fmtFechaSolo(r[c]) : c === 'hora_salida' ? fmtHoraCaracas(r[c]) : String(r[c]),
+  celda: (c, r) => c === 'tiene_informe' ? siNo(r[c]) : c === 'cobros' ? String(r.metricas?.cobros?.usd ?? 0) : ['atendidos', 'cotizaciones', 'por_cerrar'].includes(c) ? String(r.metricas?.[c] ?? 0) : c === 'calientes' ? String((r.calientes || []).length) : r[c] == null ? '' : c === 'fecha' ? fmtFechaSolo(r[c]) : c === 'hora_salida' ? fmtHoraCaracas(r[c]) : String(r[c]),
 };
 EXPORTABLES.pagos = {
   cols: [['etapa', 'Etapa'], ['lead_nombre', 'Cliente'], ['lead_telefono', 'Teléfono'], ['asesor', 'Asesor'], ['tipo', 'Tipo'], ['riel', 'Medio'], ['monto', 'Monto'], ['referencia_declarada', 'Referencia'], ['comprobante_path', 'Comprobante'], ['created_at', 'Declarado']],

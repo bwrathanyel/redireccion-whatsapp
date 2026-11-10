@@ -5267,6 +5267,16 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .jd-clientes li>span{display:flex;flex-direction:column;min-width:0;font-size:13px}
 .jd-clientes small{color:var(--muted);font-size:11.5px}
 .jd-seg{white-space:nowrap}
+.jd-clientes li{flex-direction:column;align-items:stretch;gap:6px}
+.jd-clientes li.jd-pendiente{box-shadow:inset 3px 0 0 var(--amber);padding-left:8px}
+.jd-cli-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.jd-nombre{display:flex;flex-direction:column;min-width:0;padding:0;border:0;background:none;color:inherit;font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.jd-nombre:hover b{text-decoration:underline}
+.jd-chips{display:flex;gap:4px;flex-wrap:wrap}
+.jd-cli-pie{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.jd-nota{flex:1 1 180px;min-width:0;padding:6px 9px;border:1px solid var(--line2);border-radius:8px;background:var(--panel-solid);color:var(--txt);font:inherit;font-size:12.5px}
+.jd-ayuda{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted2);white-space:nowrap;cursor:pointer}
+.jd-vacio{margin:8px 0;color:var(--muted);font-size:13px}
 .dseg{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:7px}
 .dseg-t{flex:1 1 100%;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted)}
 .dseg-btn{min-height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--txt);font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:background-color .16s,border-color .16s}
@@ -6509,6 +6519,26 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .lt-card-sel{border-color:var(--accent)}
 .lt-texto{font-size:13px;line-height:1.45;display:flex;flex-direction:column;gap:6px;overflow-wrap:anywhere}
 .lt-texto b{display:block;color:var(--muted2);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.inf-filtros{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:10px 0 12px}
+.inf-campo{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2)}
+.inf-campo input,.inf-campo select{padding:5px 8px;border:1px solid var(--line2);border-radius:8px;background:var(--panel-solid);color:var(--txt);font:inherit;font-size:12.5px}
+.inf-equipo{margin:0 0 12px;padding:12px 14px;border:1px solid rgba(var(--accent-rgb),.35);border-radius:12px;background:var(--accent-soft);font-size:13.5px;line-height:1.5;white-space:pre-line}
+.inf-equipo b{display:block;margin-bottom:4px;color:var(--accent-txt);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.inf-totales{margin:-4px 0 12px;color:var(--muted2);font-size:12.5px}
+.inf-alertas{display:flex;flex-direction:column;gap:6px;margin:0 0 14px}
+.inf-alerta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--line);border-left:3px solid var(--c);border-radius:10px;font-size:13px}
+.inf-alerta>i{color:var(--c)}
+.inf-alerta span{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+.inf-alerta small{color:var(--muted)}
+.inf-lead{padding:0;border:0;background:none;color:var(--accent-txt);font:inherit;font-weight:700;cursor:pointer}
+.inf-lead:hover{text-decoration:underline}
+.lt-cifras.inf-5{grid-template-columns:repeat(5,1fr)}
+@media(max-width:520px){.lt-cifras.inf-5{grid-template-columns:repeat(3,1fr)}}
+.inf-det summary{cursor:pointer;color:var(--muted2);font-size:12px;font-weight:700}
+.inf-clientes{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.inf-clientes li{display:flex;flex-direction:column;gap:1px;padding-top:6px;border-top:1px solid var(--line)}
+.inf-clientes small{color:var(--muted)}
+.inf-clientes em{font-style:normal;color:var(--txt)}
 @keyframes mv-celebrar{0%{box-shadow:0 0 0 0 rgba(16,185,129,.45)}50%{transform:scale(1.015);box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 .mv-celebra{animation:mv-celebrar .6s var(--ease-salida)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
@@ -10873,7 +10903,18 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-informe-diario">
       <div class="card">
         <h2><i class="fas fa-file-lines"></i> Informe Diario</h2>
-        <div class="csub">Resumen de cierre de jornada de cada asesor · últimos 14 días, más reciente primero</div>
+        <div class="csub">Cierre de jornada de cada asesor: clientes que trabajó, cómo quedaron y dónde pide ayuda</div>
+        <div class="inf-filtros">
+          <div class="seg-group seg-group-sm" id="informe-periodo">
+            <button class="seg on" type="button" data-p="hoy">Hoy</button>
+            <button class="seg" type="button" data-p="ayer">Ayer</button>
+            <button class="seg" type="button" data-p="7">7 días</button>
+            <button class="seg" type="button" data-p="30">30 días</button>
+          </div>
+          <label class="inf-campo">Desde <input type="date" id="informe-desde"></label>
+          <label class="inf-campo">Hasta <input type="date" id="informe-hasta"></label>
+          <label class="inf-campo">Asesor <select id="informe-asesor"><option value="">Todos</option></select></label>
+        </div>
         <div class="exp-fila"><div class="export-dd">
           <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'informe')"><i class="fas fa-download"></i> Exportar</button>
           <div class="export-dd-menu" id="export-menu-informe">
@@ -10882,7 +10923,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
             <button onclick="exportarXLSX('informe','Informe diario')"><i class="fas fa-file-excel"></i> XLSX</button>
           </div>
         </div></div>
+        <div class="inf-equipo" id="informe-equipo" hidden></div>
         <div class="kpis bt-kpis lt-kpis" id="informe-diario-kpis"></div>
+        <p class="inf-totales" id="informe-totales"></p>
+        <div class="inf-alertas" id="informe-alertas" hidden></div>
         <div id="informe-diario-tbody" class="lt-grid"></div>
       </div>
     </section>
@@ -12208,18 +12252,12 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 <div class="sheet" id="jornada-resumen-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-flag-checkered"></i> Resumen del día</div>
-  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Cuatro preguntas antes de cerrar tu jornada. Las dos primeras son obligatorias.</p>
-  <div style="padding:0 16px;max-height:52vh;overflow:auto">
-    <div id="jornada-dia" hidden></div>
-    <label class="fl">¿Cómo te fue hoy?</label>
-    <textarea class="jornada-resumen-input" id="jornada-como-me-fue" rows="3" placeholder="Ej: atendí 8 leads nuevos, cerré 2 ventas, seguimiento a cotizaciones pendientes..."></textarea>
-    <label class="fl">¿Qué aprendiste?</label>
-    <textarea class="jornada-resumen-input" id="jornada-que-aprendi" rows="3" placeholder="Algo nuevo del destino, del tarifario, de cómo responder una objeción..."></textarea>
-    <label class="fl">¿Qué se te complicó? <span class="ap-hint">(opcional)</span></label>
-    <textarea class="jornada-resumen-input" id="jornada-que-se-complico" rows="2" placeholder="Lo que te costó y por qué."></textarea>
-    <label class="fl">Bloqueos <span class="ap-hint">(opcional)</span></label>
-    <textarea class="jornada-resumen-input" id="jornada-bloqueos" rows="2" placeholder="Algo que necesitas de otra persona para poder avanzar."></textarea>
-    <label class="tar-f-check" style="margin-top:10px"><input type="checkbox" id="jornada-guardar-nota" checked> Guardar lo que aprendí en Mis Notas</label>
+  <p style="padding:0 16px 4px;color:var(--muted2);font-size:13.5px;line-height:1.5">Tus clientes de hoy. Ponle próximo paso a los que falten; la nota y el pedido de ayuda son opcionales.</p>
+  <div style="padding:0 16px;max-height:58vh;overflow:auto">
+    <div id="jornada-dia"></div>
+    <label class="fl" for="jornada-ayuda">¿Necesitas ayuda con algo más? <span class="ap-hint">(opcional)</span></label>
+    <textarea class="jornada-resumen-input" id="jornada-ayuda" rows="2" maxlength="1000" placeholder="Un cliente difícil, una tarifa que no encuentras, algo que debe ver gerencia."></textarea>
+    <p class="jd-falta" id="jornada-falta" hidden></p>
   </div>
   <div style="display:flex;gap:10px;padding:4px 16px 4px">
     <button class="dbtn" id="jornada-resumen-cancelar" type="button" style="flex:1;background:var(--panel-solid);color:var(--txt);border:1px solid var(--line2)">Seguir trabajando</button>
