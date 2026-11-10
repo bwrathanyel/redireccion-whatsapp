@@ -24422,17 +24422,98 @@ let IV_SEQ = 0;
 let IV_IMPORTANDO = false;
 // Vouchers de empresa (solo admin: asignar la empresa a la reserva lo exige). Pueden ir sin monto.
 let IV_EMPRESAS = [];
+let IV_HISTORICO = false;
+// Asesores del CRM (todos, con `activo`) para revisar el asesor del PDF antes de importar.
+// null = no se pudieron leer: no se pregunta nada y la importación queda como antes.
+let IV_ASESORES = null;
+
+// Fila histórica: todo el lote (casilla) o solo esta, porque su asesor no está activo en el CRM.
+// Va en lead aparte sin asesor: ni factura, ni comisión, ni ranking para un usuario actual.
+const ivHist = f => IV_HISTORICO || !!f.asesorHist;
+function ivReelegir(f) {
+  f.modoSob = false; f.sobrescribir = null; f.nueva = false; f.reasignar = false;
+  f.lead_id = ivElegirLeadInicial(f);
+}
+
+function ivSetHistorico(on) {
+  IV_HISTORICO = on;
+  IV_FILAS.filter(f => ivAbierta(f) && f.datos).forEach(ivReelegir);
+  ivRender();
+}
+
+// Igual que normalizar_nombre_asesor (SQL) con la que registrar_voucher_importado mapea el
+// asesor: sin mayúsculas ni tildes, pero la ñ cuenta. Si aquí coincide, allá también.
+const IV_TILDES = { á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ü: 'u', à: 'a', è: 'e', ì: 'i', ò: 'o', ù: 'u' };
+const ivNormAsesor = s => String(s || '').trim().toLowerCase().replace(/[áéíóúüàèìòù]/g, c => IV_TILDES[c]).replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ');
+function ivDistancia(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+// Revisa el asesor del PDF contra el CRM. f.asesorRev.tipo:
+//   ok        coincide con un asesor activo: la importación sigue igual que siempre.
+//   sugerido  no coincide pero se parece a uno activo (pocas letras, ñ, puntos): se pregunta.
+//   historico no está, ya no está activo o el PDF no trae asesor: se carga como histórica.
+// Devuelve true si la fila pasó a ser histórica o dejó de serlo (hay que volver a elegir dónde se carga).
+function ivRevisarAsesor(f) {
+  if (!IV_ASESORES || !f.datos) return false;
+  const antes = !!f.asesorHist, pdf = f.datos.asesor_pdf, n = ivNormAsesor(pdf);
+  const exacto = n ? IV_ASESORES.filter(a => ivNormAsesor(a.nombre) === n).sort((x, y) => (y.activo ? 1 : 0) - (x.activo ? 1 : 0))[0] : null;
+  if (exacto?.activo) f.asesorRev = { tipo: 'ok' };
+  else {
+    const suelto = ivNorm(pdf), limite = suelto.length < 5 ? 1 : suelto.length < 12 ? 2 : 3;
+    const cerca = !exacto && suelto ? IV_ASESORES.filter(a => a.activo && !a.es_cuenta_sistema)
+      .map(a => ({ nombre: a.nombre, d: ivDistancia(suelto, ivNorm(a.nombre)) }))
+      .filter(a => a.d <= limite).sort((x, y) => x.d - y.d)[0] : null;
+    f.asesorRev = cerca ? { tipo: 'sugerido', sugerido: cerca.nombre }
+      : { tipo: 'historico', motivo: !n ? 'vacio' : exacto ? 'inactivo' : 'no_existe' };
+  }
+  const r = f.asesorRev;
+  f.asesorHist = esOficina() && (r.tipo === 'historico' || (r.tipo === 'sugerido' && f.asesorDecision === 'historico'));
+  return antes !== f.asesorHist;
+}
+// Se relee en cada tanda de PDFs: un asesor dado de alta con la pantalla abierta no debe salir «no está».
+async function ivCargarAsesores() {
+  const { data, error } = await sb.from('asesores').select('nombre,activo,es_cuenta_sistema');
+  if (error || !Array.isArray(data) || !data.length) return;
+  IV_ASESORES = data;
+  IV_FILAS.filter(f => ivAbierta(f) && f.datos).forEach(f => { if (ivRevisarAsesor(f)) ivReelegir(f); });
+  ivRender();
+}
+const ivAsesorPendiente = f => !IV_HISTORICO && f.asesorRev?.tipo === 'sugerido' && f.asesorDecision !== 'historico';
+function ivAvisoAsesor(f) {
+  const r = f.asesorRev, pdf = esc(f.datos.asesor_pdf || '');
+  if (!r || r.tipo === 'ok') return '';
+  if (r.tipo === 'sugerido' && f.asesorDecision === 'historico')
+    return ivAviso(`Se carga como reserva histórica: «${pdf}» queda guardado como asesor original, sin asesor del CRM, factura ni comisión. <span class="iv-as-btns"><button type="button" data-as="deshacer">Deshacer</button></span>`);
+  if (r.tipo === 'sugerido')
+    return ivAviso(`El voucher dice «${pdf}». ¿Este asesor es <b>${esc(r.sugerido)}</b>?<span class="iv-as-btns"><button type="button" class="si" data-as="si">Sí, es ${esc(r.sugerido)}</button><button type="button" data-as="otro">No, es otro</button>${esOficina() ? '<button type="button" data-as="historico">Dejar como histórico</button>' : ''}</span>`);
+  const que = r.motivo === 'vacio' ? 'El voucher no trae asesor' : r.motivo === 'inactivo' ? `«${pdf}» ya no está activo en el CRM` : `«${pdf}» no está en el CRM`;
+  return esOficina()
+    ? ivAviso(`${que}: se carga como reserva histórica, sin asesor, factura ni comisión${r.motivo === 'vacio' ? '' : `, y «${pdf}» queda guardado como asesor original`}. Si es un asesor actual, corrige el nombre en Asesor (PDF).`)
+    : ivAviso(`${que}. Corrige el nombre en Asesor (PDF) o pide a la oficina que lo cargue como histórico.`, 'error');
+}
 
 function setupImportarVouchers() {
   const input = document.getElementById('iv-file');
   const drop = document.getElementById('iv-drop');
   if (!input || input._wired) return;
   input._wired = true;
+  const hist = document.getElementById('iv-historico');
+  if (esOficina() && hist) {
+    hist.closest('label').style.display = 'flex';
+    hist.addEventListener('change', () => ivSetHistorico(hist.checked));
+  }
   if (esOficina()) sb.rpc('listar_empresas_cliente', { p_solo_activos: true }).then(({ data, error }) => {
     if (error || !Array.isArray(data) || !data.length) return;
     IV_EMPRESAS = data.map(e => ({ id: e.id, nombre: e.nombre }));
     ivRender();
   });
+  ivCargarAsesores();
   input.addEventListener('change', () => { if (input.files?.length) ivLeerArchivos([...input.files]); input.value = ''; });
   document.getElementById('iv-importar-btn')?.addEventListener('click', ivImportar);
   document.getElementById('iv-limpiar-btn')?.addEventListener('click', () => { IV_FILAS = []; ivRender(); });
@@ -24465,6 +24546,7 @@ async function ivHash(b64) {
 async function ivLeerArchivos(files) {
   const drop = document.getElementById('iv-drop');
   drop?.classList.add('cargando');
+  await ivCargarAsesores().catch(() => {});
   for (const file of files) {
     if (file.type !== 'application/pdf') { errToast(`${file.name}: no es PDF`); continue; }
     const fila = { id: ++IV_SEQ, nombre: file.name, datos: null, pdf_b64: null, hash: null,
@@ -24483,6 +24565,7 @@ async function ivLeerArchivos(files) {
       }
       fila.datos = data.datos;
       fila.estado = data.datos.necesita_revision ? 'revisar' : 'ok';
+      ivRevisarAsesor(fila);
       fila.candidatos = await ivBuscarLeads(data.datos);
       fila.similares = await ivReservasSimilares(data.datos);
       fila.lead_id = ivElegirLeadInicial(fila);
@@ -24515,6 +24598,7 @@ function ivElegirLeadInicial(fila) {
   const gemela = (fila.similares || []).find(r => r.fuerte);
   fila.vincular = gemela ? gemela.id : null;
   if (gemela) { fila.crear_lead = false; return gemela.lead_id; }
+  if (ivHist(fila)) { fila.crear_lead = true; return null; }
   // Si el cliente ya existe se anexa a su lead, aunque sea de otro asesor (el admin puede reasignar).
   const asesorPdf = ivNorm(d.asesor_pdf);
   const elegido = cands.find(c => c.fuerte && ivNorm(c.asesor) === asesorPdf) || cands.find(c => c.fuerte) || cands[0];
@@ -24585,10 +24669,11 @@ function ivRender() {
     if (f.estado === 'error' && !d.numero_voucher) return `<article class="iv-card" data-e="error"><div class="iv-card-cab"><div class="iv-card-id"><div class="iv-num vacio">No se pudo leer</div>${archivo}</div><span class="iv-estado">Error</span></div>${ivAviso(f.resultado && f.resultado !== 'no se pudo leer' ? ivTexto(f.resultado) : 'Prueba con otro PDF o carga la venta a mano.', 'error')}</article>`;
     const cand = (f.candidatos || []).find(c => c.id === f.lead_id);
     const sims = f.similares || [];
-    const opciones = [`<option value="" ${f.crear_lead && !f.vincular && !f.modoSob ? 'selected' : ''}>➕ Crear lead nuevo</option>`,
-      `<option value="s" ${f.modoSob ? 'selected' : ''}>✏️ ${f.sobrescribir ? `Sobrescribir ${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)} · ${esc(f.sobrescribir.cliente || '')}` : 'Sobrescribir una reserva existente…'}</option>`].concat(
+    const hist = ivHist(f);
+    const opciones = (hist ? [`<option value="" ${!f.vincular ? 'selected' : ''}>🗄️ Reserva histórica, sin asesor</option>`] : [`<option value="" ${f.crear_lead && !f.vincular && !f.modoSob ? 'selected' : ''}>➕ Crear lead nuevo</option>`,
+      `<option value="s" ${f.modoSob ? 'selected' : ''}>✏️ ${f.sobrescribir ? `Sobrescribir ${esc(f.sobrescribir.codigo || '#' + f.sobrescribir.id)} · ${esc(f.sobrescribir.cliente || '')}` : 'Sobrescribir una reserva existente…'}</option>`]).concat(
       sims.map(r => `<option value="r:${r.id}" ${f.vincular === r.id ? 'selected' : ''}>🔗 Ya está en el CRM: ${esc(r.codigo || '#' + r.id)} · ${esc(r.cliente)} · ${ivMoney(r.monto_total)} (no duplica)</option>`),
-      (f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && !f.modoSob && !f.nueva && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`
+      (hist ? [] : f.candidatos || []).map(c => `<option value="${c.id}" ${!f.crear_lead && !f.vincular && !f.modoSob && !f.nueva && f.lead_id === c.id ? 'selected' : ''}>#${c.id} ${esc(c.nombre)} · ${esc(c.asesor || 'sin asesor')} · ${esc(c.estado)}${c.motivos ? ` (${esc(ivMotivos(c))})` : ''}</option>`
         + `<option value="n:${c.id}" ${f.nueva && f.lead_id === c.id ? 'selected' : ''}>🧳 Nueva venta de #${c.id} ${esc(c.nombre)} (reserva aparte)</option>`)
     ).join('');
     const debil = cand && !cand.fuerte && !f.crear_lead && !f.vincular && !f.modoSob;
@@ -24596,10 +24681,11 @@ function ivRender() {
     const sinMonto = empresa && !(Number(d.total_cobrado) > 0);
     const abierta = ivAbierta(f);
     const posible = !f.vincular && !f.modoSob && sims.find(r => !r.fuerte);
-    const mismatch = cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
+    const mismatch = !hist && cand && !f.crear_lead && !f.vincular && cand.asesor && ivNorm(cand.asesor) !== ivNorm(d.asesor_pdf);
     const otras = abierta && f.empresa_id ? abiertas.filter(x => x !== f && x.empresa_id !== f.empresa_id).length : 0;
     const num = d.numero_voucher != null && d.numero_voucher !== '' ? esc(String(d.numero_voucher)) : '';
     const avisos = [
+      abierta && !IV_HISTORICO && ivAvisoAsesor(f),
       abierta && debil && ivAviso('Coincide solo el nombre: revisa que sea el mismo cliente o elige ➕ Crear lead nuevo.'),
       abierta && posible && ivAviso(`Ojo: ${esc(posible.codigo || '#' + posible.id)} de ${esc(posible.cliente)} tiene el mismo monto. Si es este viaje, elige 🔗 para no duplicar la venta.`),
       abierta && f.modoSob && ivAviso(f.sobrescribir
@@ -24627,7 +24713,7 @@ function ivRender() {
         ${abierta ? `<div class="iv-sec"><h4><i class="fas fa-${icono}" aria-hidden="true"></i> Se carga en</h4><select class="iv-lead" aria-label="Dónde se carga el voucher ${num}">${opciones}</select>${f.modoSob ? `<div class="iv-sob"><input type="search" class="iv-sob-q" aria-label="Buscar la reserva a sobrescribir" placeholder="Código, cliente o teléfono" value="${esc(f.sobQ || '')}"><div class="iv-sob-res">${ivSobResHtml(f)}</div></div>` : ''}</div>` : ''}
       </div>` : ''}
       ${avisos}
-      ${f.estado === 'hecho' ? `<div class="iv-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><b>${f.sobrescrita ? 'Reserva sobrescrita' + (f.resultado_monto ? ' · facturado ' + ivMoney(f.resultado_monto) : '') : f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</b><span>${esc(f.resultado || '')}</span></div></div>` : ''}
+      ${f.estado === 'hecho' ? `<div class="iv-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div><b>${f.fue_historico ? 'Reserva histórica · sin factura ni comisión' : f.sobrescrita ? 'Reserva sobrescrita' + (f.resultado_monto ? ' · facturado ' + ivMoney(f.resultado_monto) : '') : f.sin_factura ? 'Sin factura · empresa' : 'Facturado ' + ivMoney(f.resultado_monto)}</b><span>${esc(f.resultado || '')}</span></div></div>` : ''}
     </article>`;
   }).join('');
   const nSel = abiertas.filter(f => f.sel).length;
@@ -24662,12 +24748,26 @@ function ivRender() {
       const r = (f.sobRes || ivSobSimilares(f)).find(x => x.id === +b.dataset.rid); if (!r) return;
       f.sobrescribir = r; f.lead_id = r.lead_id; ivRender();
     });
+    card.querySelectorAll('[data-as]').forEach(b => b.addEventListener('click', () => {
+      const a = b.dataset.as;
+      if (a === 'otro') { card.querySelector('.iv-in[data-k="asesor_pdf"]')?.select(); return; }
+      if (a === 'si') {
+        if (f.datos.asesor_pdf_leido === undefined) f.datos.asesor_pdf_leido = f.datos.asesor_pdf ?? null;
+        f.datos.asesor_pdf = f.asesorRev.sugerido;
+      }
+      f.asesorDecision = a === 'historico' ? 'historico' : null;
+      if (ivRevisarAsesor(f)) ivReelegir(f);
+      ivRender();
+    }));
     card.querySelector('.iv-reasignar')?.addEventListener('change', e => f.reasignar = e.target.checked);
     card.querySelector('.iv-empresa')?.addEventListener('change', e => { ivAplicarEmpresa(f, Number(e.target.value) || null); ivRender(); });
     card.querySelector('.iv-copiar')?.addEventListener('click', () => { abiertas.filter(x => x !== f).forEach(x => ivAplicarEmpresa(x, f.empresa_id)); ivRender(); });
     card.querySelectorAll('.iv-in').forEach(inp => inp.addEventListener('change', e => {
       const k = e.target.dataset.k;
+      // El nombre que traía el PDF queda en datos_extraidos aunque se corrija acá.
+      if (k === 'asesor_pdf' && f.datos.asesor_pdf_leido === undefined) f.datos.asesor_pdf_leido = f.datos.asesor_pdf ?? null;
       f.datos[k] = k === 'total_cobrado' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value;
+      if (k === 'asesor_pdf') { f.asesorDecision = null; if (ivRevisarAsesor(f)) ivReelegir(f); ivRender(); return; }
       if (k === 'total_cobrado' && f.empresa_id) ivRender();
     }));
   });
@@ -24678,6 +24778,8 @@ async function ivImportar() {
   if (!pend.length) { errToast('No hay filas para importar'); return; }
   const sinElegir = pend.find(f => f.modoSob && !f.sobrescribir);
   if (sinElegir) { errToast(`Elige la reserva a sobrescribir del voucher ${sinElegir.datos.numero_voucher || sinElegir.nombre}`); return; }
+  const dudosa = pend.find(ivAsesorPendiente);
+  if (dudosa) { errToast(`Confirma el asesor del voucher ${dudosa.datos.numero_voucher || dudosa.nombre}: ¿es ${dudosa.asesorRev.sugerido}?`); return; }
   const sobs = pend.filter(f => f.modoSob);
   if (sobs.length && !await confirmarSheet({
     titulo: sobs.length === 1 ? `Sobrescribir ${sobs[0].sobrescribir.codigo || 'la reserva'}` : `Sobrescribir ${sobs.length} reservas`,
@@ -24691,7 +24793,7 @@ async function ivImportar() {
     datos: f.datos, lead_id: f.crear_lead ? null : f.lead_id, crear_lead: f.crear_lead, vincular_reserva_id: f.vincular || null,
     sobrescribir_reserva_id: f.modoSob ? f.sobrescribir?.id || null : null,
     nueva_reserva: !!f.nueva && !f.crear_lead && !f.modoSob && !!f.lead_id,
-    reasignar: f.reasignar, empresa_id: f.empresa_id || null, pdf_base64: f.pdf_b64, archivo_hash: f.hash,
+    reasignar: f.reasignar, empresa_id: f.empresa_id || null, historico: ivHist(f), pdf_base64: f.pdf_b64, archivo_hash: f.hash,
   }));
   const { data, error } = await sb.functions.invoke('voucher-a-venta', { body: { accion: 'importar', filas } });
   IV_IMPORTANDO = false;
@@ -24700,7 +24802,7 @@ async function ivImportar() {
   (data.resultados || []).forEach(r => { porNum[r.numero_voucher] = r; });
   pend.forEach(f => {
     const r = porNum[f.datos.numero_voucher]; if (!r) return;
-    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : '') + (r.nota ? ' · ' + r.nota : ''); f.resultado_monto = r.monto_facturado; f.sin_factura = !r.factura_id && !!r.empresa_id; f.sobrescrita = !!r.sobrescrita; f.sel = false; }
+    if (r.estado === 'importado') { f.estado = 'hecho'; f.resultado = 'Lead #' + r.lead_id + (r.factura_id ? ' · factura #' + r.factura_id : '') + (r.nota ? ' · ' + r.nota : '') + (r.historico && f.datos.asesor_pdf ? ' · asesor original: ' + f.datos.asesor_pdf : ''); f.resultado_monto = r.monto_facturado; f.sin_factura = !r.factura_id && !!r.empresa_id; f.sobrescrita = !!r.sobrescrita; f.fue_historico = !!r.historico; f.sel = false; }
     else if (r.estado === 'ya_facturado') { f.estado = 'duplicado'; f.resultado = r.nota || 'El lead ya tenía factura'; f.sel = false; }
     else if (r.estado === 'duplicado') { f.estado = 'duplicado'; f.resultado = 'Voucher ya importado antes'; f.sel = false; }
     else { f.estado = 'error'; f.resultado = r.error || 'error'; }

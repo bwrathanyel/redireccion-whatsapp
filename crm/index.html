@@ -5943,6 +5943,9 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .iv-top{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:16px;font-size:12px;color:var(--muted)}
 .iv-todos{display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;background:var(--panel);color:var(--txt);font-weight:700;cursor:pointer}
 .iv-todos input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.iv-historico{align-items:center;gap:11px;min-height:44px;margin-top:12px;padding:10px 14px;border:1px solid var(--line2);border-radius:14px;background:var(--panel);font-size:12px;color:var(--muted);cursor:pointer}
+.iv-historico input{flex:none;width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.iv-historico b{display:block;font-size:13px;color:var(--txt)}
 .iv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px;margin-top:14px;align-items:start}
 .iv-card{--iv-c:var(--muted2);display:flex;flex-direction:column;gap:14px;min-width:0;padding:14px;border:1px solid var(--line);border-top:3px solid var(--iv-c);border-radius:14px;
   background:var(--panel);font-size:12.5px;transition:border-color .16s,box-shadow .16s,opacity .16s}
@@ -6001,6 +6004,10 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .iv-aviso details[open] .iv-corto{display:none}
 .iv-aviso details[open] .iv-mas::before{content:'ver menos'}
 .iv-aviso label{display:inline-flex;align-items:center;gap:4px;font-weight:700;cursor:pointer}
+.iv-as-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.iv-as-btns button{min-height:32px;padding:4px 11px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);color:var(--txt);font:inherit;font-size:11.5px;font-weight:700;cursor:pointer}
+.iv-as-btns button.si{border-color:var(--accent);background:var(--accent);color:#fff}
+.iv-as-btns button:hover{border-color:var(--accent)}
 .iv-ok{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border-radius:10px;background:color-mix(in srgb,var(--green) 12%,transparent);font-size:11.5px}
 .iv-ok>i{margin-top:2px;color:var(--green)}
 .iv-ok b{display:block;color:var(--green);font-weight:800}
@@ -11204,6 +11211,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <i class="fas fa-cloud-arrow-up"></i>
         <b>Elige los vouchers (PDF)</b>
         <span>Se leen de a uno · el número de factura del voucher no se puede repetir</span>
+      </label>
+      <label class="iv-historico" style="display:none">
+        <input type="checkbox" id="iv-historico">
+        <span><b>Reservas históricas</b>No se mira el asesor del voucher. Quedan en Reservas como cerradas, sin asesor, sin factura ni comisión, y sin mensajes al cliente.</span>
       </label>
       <div id="iv-lista"></div>
       <div class="iv-barra" id="iv-barra" style="display:none">
