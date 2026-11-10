@@ -8310,6 +8310,8 @@ let PARA_CERRAR_PAGINA = [];
 // Mismos estados que lote_estado_regestionable() + el POR ATENDER que deja el lote.
 const FRIOS_ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'Sin gestionar'];
 const FRIOS_ESTADOS_PG = FRIOS_ESTADOS.map(e => `"${e}"`).join(',');
+// Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más): fuera de la lista, el inbox y los KPIs.
+const sinFriosLote = q => MI_ASESOR_INTEGRAL ? q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`) : q;
 
 function buildQuery(forCount) {
   let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {})
@@ -8318,8 +8320,8 @@ function buildQuery(forCount) {
     // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
     .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
-  // Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más); buscando sí salen.
-  if (MI_ASESOR_INTEGRAL && !qs) q = q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`);
+  // Buscando por nombre/teléfono sí salen los de Clientes Fríos.
+  if (!qs) q = sinFriosLote(q);
   // Los leads que crea un voucher ya son ventas y viven en Reservas (dueño 2026-11-10);
   // siguen saliendo si se los busca por nombre/teléfono o se filtra por ese canal.
   if (!qs && !CANALES_VOUCHER.includes(fc)) q = q.or(`canal.is.null,canal.not.in.(${CANALES_VOUCHER.map(c => `"${c}"`).join(',')})`);
@@ -8816,8 +8818,8 @@ function renderPager(pages) {
 async function loadInboxLeads() {
   if (ROL !== 'asesor') return;
   document.getElementById('inbox-loading').classList.add('show');
-  const { data, error } = await sb.from('leads').select('*')
-    .eq('estado', 'POR ATENDER').is('fecha_primer_contacto', null).is('eliminado_at', null);
+  const { data, error } = await sinFriosLote(sb.from('leads').select('*')
+    .eq('estado', 'POR ATENDER').is('fecha_primer_contacto', null).is('eliminado_at', null));
   document.getElementById('inbox-loading').classList.remove('show');
   if (error) { console.error('inbox', error); errToast('No se pudo cargar el inbox de leads'); return; }
   // Cola: el más antiguo primero. Se ordena por fecha de llegada al asesor
@@ -9064,8 +9066,8 @@ async function refrescarKpisHoyAsesor() {
   try {
     const mes = new Date().toISOString().slice(0, 7), [y, m] = mes.split('-').map(Number);
     const sig = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-    const base = () => sb.from('leads').select('id', { count: 'exact', head: true })
-      .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
+    const base = () => sinFriosLote(sb.from('leads').select('id', { count: 'exact', head: true })
+      .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`));
     // Mismos filtros base que buildQuery: el KPI tiene que coincidir con la lista de Leads a la que lleva.
     const [pa, mm, tot, seg] = await Promise.all([
       base().eq('estado', 'POR ATENDER'),
