@@ -2,7 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { crearDocumentosRevisiones } from './documentos-revisiones.js';
 import { crearAbonos } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
-import { crearBandejaWa, ventanaWaAbierta } from './whatsapp-bandeja.js';
+import { crearBandejaWa, ventanaWaAbierta, vozHtml, vozSync, borrarHtml, enlazarBorrar } from './whatsapp-bandeja.js';
 import { crearTareas } from './tareas.js';
 import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
@@ -11995,7 +11995,7 @@ let WB = null;
 function loadWaBandeja() {
   if (!WB) {
     WB = crearBandejaWa({ sb, esc, rol: () => ROL, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox,
-      abrirLead: id => abrirLeadDesdeMisVentas(id), cotizarLead: cbCotizarLeadId, puedeLlamar: () => MI_ASESOR_INTEGRAL, llamarLead: c => llamadasApp?.llamar({ id: c.lead_id, nombre: c.nombre }, c.wa_id), crearReserva: efDesdeComprobante, cargarPdfjs, ok: okToast, error: errToast, navPush, navConsume });
+      abrirLead: id => abrirLeadDesdeMisVentas(id), cotizarLead: cbCotizarLeadId, puedeLlamar: () => MI_ASESOR_INTEGRAL, llamarLead: c => llamadasApp?.llamar({ id: c.lead_id, nombre: c.nombre }, c.wa_id), crearReserva: efDesdeComprobante, cargarPdfjs, confirmar: confirmarSheet, ok: okToast, error: errToast, navPush, navConsume });
     WB.enlazar();
     if (ROL === 'admin') wbCoexistencia();
   }
@@ -14633,7 +14633,7 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
 window.closeDrawer = (fromNav) => {
   guardarPendientesLead(); // ficha del lead: lo escrito sin "salir" del campo se guarda igual
   const notas = document.getElementById('tar-notas');
-  const cerrar = () => { tarDrawerSolicitud++; document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); };
+  const cerrar = () => { tarDrawerSolicitud++; document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); if (cbLead) setTimeout(cbRefrescarLeadFicha, 800); };
   if (notas && notas.value.trim() !== (notas.dataset.original || '').trim()) {
     confirmarSheet({ titulo: '¿Cerrar sin guardar?', detalle: 'Hay notas sin guardar.', textoOk: 'Cerrar', destructivo: true }).then(ok => { if (ok) cerrar(); });
     return;
@@ -22063,10 +22063,10 @@ async function docEntregarBlob(blob, nombre, mime = 'application/pdf') {
   if (w) w.opener = null; else descargarArchivo(file, nombre);
   setTimeout(() => URL.revokeObjectURL(u), 60000);
 }
-function docToastCompartir(file) {
+function docToastCompartir(file, texto) {
   const t = document.createElement('div'); t.className = 'toast';
   t.innerHTML = `<i class="fas fa-share-nodes"></i> <div><button class="btn-sm lt-primario" type="button">Compartir ${esc(file.name)}</button></div>`;
-  t.querySelector('button').onclick = () => { navigator.share({ files: [file], title: file.name }).catch(e => { if (e.name !== 'AbortError') { cbDescargar(file, file.name); okToast('Se descargó el PDF'); } }); t.remove(); };
+  t.querySelector('button').onclick = () => { navigator.share({ files: [file], title: file.name, ...(texto ? { text: texto } : {}) }).catch(e => { if (e.name !== 'AbortError') { cbDescargar(file, file.name); okToast('Se descargó el PDF'); } }); t.remove(); };
   document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30);
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 15000);
 }
@@ -30819,7 +30819,11 @@ async function waAbrirChat(c) {
   document.getElementById('wa-conv-titulo').textContent = c.nombre || c.telefono;
   document.getElementById('wa-conv-sub').textContent = c.lead ? `${c.telefono} · ${c.lead.estado || 'Lead'}${c.lead.asesor ? ' · ' + c.lead.asesor : ''}` : `${c.telefono} · sin lead en el CRM`;
   document.getElementById('wa-ver-lead').style.display = c.lead ? '' : 'none';
-  document.getElementById('wa-conv-avatar').innerHTML = c.foto ? `<img src="${esc(c.foto)}" alt="" loading="lazy" decoding="async">` : esc(initials(c.nombre || '#'));
+  const av = document.getElementById('wa-conv-avatar');
+  av.innerHTML = c.foto ? `<img src="${esc(c.foto)}" alt="" loading="lazy" decoding="async">` : esc(initials(c.nombre || '#'));
+  av.classList.toggle('wa-ver-foto', !!c.foto);
+  av.title = c.foto ? 'Ver foto de perfil' : '';
+  av.onclick = c.foto ? () => openLightbox([c.foto], 0) : null;
   document.getElementById('wa-conv-log').innerHTML = '<div class="msg-empty"><i class="fas fa-spinner fa-spin"></i></div>';
   waPanelChat(true);
   document.querySelectorAll('#wa-inbox [data-wa]').forEach(r => r.classList.toggle('on', r.dataset.wa === c.id));
@@ -31048,7 +31052,7 @@ function waAdjuntoHtml(a) {
   const firma = a.firma ? ` data-wa-exp="${esc(a.exp)}" data-wa-firma="${esc(a.firma)}"` : '';
   const fuente = publica ? `src="${esc(a.url)}"` : `data-wa-media="${esc(a.url)}" data-wa-mime="${esc(a.mime || '')}"${firma}`;
   if (a.tipo === 'image' || a.tipo === 'sticker') return `<img class="msg-img" ${fuente}${publica ? ` data-img="${esc(a.url)}"` : ''} alt="Foto">`;
-  if (a.tipo === 'audio' || a.tipo === 'voice') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>${waTranscripcionHtml(a.transcripcion)}`;
+  if (a.tipo === 'audio' || a.tipo === 'voice') return `${vozHtml(fuente, a.url)}${waTranscripcionHtml(a.transcripcion)}`;
   if (a.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
   return `<div class="msg-doc" ${publica ? `data-doc="${esc(a.url)}"` : fuente}><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(a.mime || 'Archivo')}</div></div></div>`;
 }
@@ -31062,11 +31066,23 @@ function waHtmlMensajes(lista, idAnteriores) {
     const cola = !sig || sig.saliente !== m.saliente || new Date(sig.fecha).toDateString() !== key;
     const meta = cola ? `<div class="msg-meta">${m.saliente ? `<span>${m.bot ? 'Bot' : 'Lotus'}</span>` : ''}<span>${fmtHoraChat(m.fecha)}</span>${m.saliente && WA_TICK[m.estado] ? `<span class="msg-tick${m.estado === 'read' ? ' leido' : ''}">${WA_TICK[m.estado]}</span>` : ''}</div>` : '';
     const adj = m.adjuntos.map(waAdjuntoHtml).join('');
-    html += `<div class="chat-msg ${m.saliente ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${adj ? ' adjunto' : ''}">${adj}${m.texto ? `<div>${textoConEnlaces(m.texto)}</div>` : ''}${meta}</div>`;
+    html += `<div class="chat-msg ${m.saliente ? 'mine' : 'other'}${agrupado ? ' grouped' : ''}${cola ? ' tail' : ''}${adj ? ' adjunto' : ''}">${m.id ? borrarHtml(esc(m.id)) : ''}${adj}${m.texto ? `<div>${textoConEnlaces(m.texto)}</div>` : ''}${meta}</div>`;
   });
   return html;
 }
+// Oculta el mensaje en el CRM (wa_mensajes_ocultos): WhatsApp no deja borrarlo para el cliente.
+async function waEliminarMensaje(log, id) {
+  const enDm = log.id === 'dm-log', ctx = enDm ? dmWa : waActual;
+  if (!ctx || !(await confirmarSheet({ titulo: '¿Eliminar este mensaje?', detalle: 'Se quita del CRM para todo el equipo. WhatsApp no permite borrarlo del teléfono del cliente: él lo sigue viendo.', textoOk: 'Eliminar', destructivo: true }))) return;
+  try { await waInvocar(enDm ? { accion: 'eliminar', external_id: ctx.id, messageId: id } : { accion: 'eliminar', accountId: waCuenta, conversationId: ctx.id, messageId: id }); } catch (e) {
+    errToast(e.message === 'no_autorizado' ? 'Este chat no es tuyo' : 'No se pudo eliminar el mensaje'); return;
+  }
+  if (enDm) { if (dmWa === ctx) { ctx.mensajes = ctx.mensajes.filter(m => m.id !== id); dmWaPintar(false); } }
+  else if (waActual === ctx) { waMensajes = waMensajes.filter(m => m.id !== id); waRenderMensajes(false); }
+  okToast('Mensaje eliminado del CRM');
+}
 function waEnlazarLog(log) {
+  enlazarBorrar(log, id => waEliminarMensaje(log, id));
   log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
   log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank', 'noopener')));
   log.querySelectorAll('[data-wa-media]').forEach(el => { if (el.dataset.waListo) delete el.dataset.waListo; else waCargarMedia(el); });
@@ -31080,7 +31096,7 @@ function waRenderMensajes(alFinal) {
   const previos = new Map([...log.querySelectorAll('[data-wa-media][src]')].map(el => [el.dataset.waMedia, el]));
   log.innerHTML = html;
   log._html = html; log._htmlNodo = log.firstChild;
-  log.querySelectorAll('[data-wa-media]').forEach(el => { const v = previos.get(el.dataset.waMedia); if (v && v.tagName === el.tagName) { previos.delete(el.dataset.waMedia); v.dataset.waListo = '1'; el.replaceWith(v); } });
+  log.querySelectorAll('[data-wa-media]').forEach(el => { const v = previos.get(el.dataset.waMedia); if (v && v.tagName === el.tagName) { previos.delete(el.dataset.waMedia); v.dataset.waListo = '1'; el.replaceWith(v); vozSync(v); } });
   document.getElementById('wa-anteriores')?.addEventListener('click', waCargarAnteriores);
   waEnlazarLog(log);
   if (abajo) log.scrollTop = log.scrollHeight;
@@ -31094,7 +31110,7 @@ function waBlobUrl(url, mime, exp, firma) {
 async function waCargarMedia(el) {
   const u = await waBlobUrl(el.dataset.waMedia, el.dataset.waMime, el.dataset.waExp, el.dataset.waFirma);
   if (!el.isConnected) return;
-  if (!u) { el.outerHTML = '<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div class="msg-doc-peso">No se pudo cargar el adjunto</div></div>'; return; }
+  if (!u) { (el.closest('.wa-voz') || el).outerHTML = '<div class="msg-doc"><i class="fas fa-triangle-exclamation"></i><div class="msg-doc-peso">No se pudo cargar el adjunto</div></div>'; return; }
   if (el.tagName === 'IMG') { el.src = u; el.addEventListener('click', () => openLightbox([u], 0)); }
   else if (el.tagName === 'AUDIO' || el.tagName === 'VIDEO') el.src = u;
   else el.addEventListener('click', () => window.open(u, '_blank', 'noopener'));
@@ -35294,8 +35310,55 @@ function cbPintarLead() {
   const dijo = cbLead ? cbLeadDijo(cbLead) : [];
   box.innerHTML = cbLead ? `<i class="fas fa-user"></i><span>Cotizando para <b>${esc(cbLead.nombre)}</b> (lead #${cbLead.id}): «Guardar en el lead» la deja como cotización enviada.${dijo.length ? `<br><small>El lead dice: ${dijo.map(([k, v]) => `${k} «${esc(v)}»`).join(' · ')}. Verifica lo precargado antes de enviar.</small>` : ''}</span><button class="btn-sm" type="button" onclick="cbQuitarLead()">Desvincular</button>` : '';
   document.getElementById('cb-lead-btn').hidden = !cbLead;
+  cbPintarLeadFicha();
 }
 window.cbQuitarLead = () => { cbLead = null; cbPintarLead(); };
+// El borrador solo guarda id y nombre del lead: la tarjeta lateral trae el resto una vez por lead.
+let cbLeadFicha = null;
+const CB_FICHA_CAMPOS = 'id,nombre,telefono,estado,asesor,canal,destino,destino_consulta,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_creacion,notas';
+const cbLimpio = v => v && !String(v).includes('{{') ? String(v).trim() : '';
+function cbLeadFichaHtml(l, cargando) {
+  const ini = (l.nombre || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+  const viaje = l.fecha_viaje_desde ? [l.fecha_viaje_desde, l.fecha_viaje_hasta].filter(Boolean).map(fechaCorta).join(' – ') : cbLimpio(l.fecha_estimada);
+  const datos = [['Asesor', cbLimpio(l.asesor)], ['Canal', l.canal !== 'Desconocido' && cbLimpio(l.canal)], ['Destino', cbLimpio(l.destino) || cbViajeLead(l).hotel], ['Viaje', viaje], ['Personas', cbLimpio(l.personas)], ['Ingresó', l.fecha_creacion && tiempoRelativo(l.fecha_creacion)]].filter(([, v]) => v);
+  const notas = cbLimpio(l.notas);
+  return `<div class="cb-lf-tit"><h3>Cliente vinculado</h3><small>Lead #${l.id}</small></div>
+    <div class="cb-lf-cab"><span class="cb-lf-avatar" aria-hidden="true">${esc(ini)}</span><b title="${esc(l.nombre)}">${esc(l.nombre)}</b>
+      <span class="cb-lf-sub">${l.telefono ? `<span>${esc(l.telefono)}</span>` : ''}${l.estado ? `<span class="cb-lf-estado" style="--c:${ESTADO_COLORS[l.estado] || 'var(--muted)'}">${esc(niceEstado(l.estado))}</span>` : ''}</span></div>
+    ${cargando ? '<p class="vc-recientes-estado">Cargando datos del lead…</p>' : datos.length || notas ? `<dl class="cb-lf-datos">${datos.map(([k, v]) => `<div><dt>${k}</dt><dd title="${esc(v)}">${esc(v)}</dd></div>`).join('')}${notas ? `<div class="cb-lf-ancho"><dt>Notas</dt><dd>${esc(notas)}</dd></div>` : ''}</dl>` : ''}
+    <div class="cb-lf-acc"><button class="dbtn" type="button" onclick="cbAbrirFichaLead()"><i class="fas fa-id-card" aria-hidden="true"></i> Abrir ficha</button><button class="vc-link" type="button" onclick="cbQuitarLead()">Desvincular</button></div>`;
+}
+async function cbPintarLeadFicha() {
+  const box = document.getElementById('cb-lead-ficha'); if (!box) return;
+  if (!cbLead) { box.hidden = true; box.innerHTML = ''; return; }
+  const id = cbLead.id; box.hidden = false;
+  if (cbLeadFicha?.id !== id) {
+    box.innerHTML = cbLeadFichaHtml(cbLead, true);
+    const { data } = await sb.from('leads').select(CB_FICHA_CAMPOS).eq('id', id).maybeSingle();
+    if (cbLead?.id !== id) return;
+    cbLeadFicha = data || { ...cbLead };
+    if (data?.telefono && !cbLead.telefono) cbLead.telefono = data.telefono;
+  }
+  box.innerHTML = cbLeadFichaHtml(cbLeadFicha);
+}
+// Cambios al lead vinculado (desde su ficha, otra pestaña u otro usuario) llegan por el canal de
+// Realtime de leads; si el nombre en la cotización era el del lead, se actualiza con él.
+function cbLeadActualizado(n) {
+  if (!n || cbLead?.id !== n.id) return;
+  if (n.eliminado_at) { cbQuitarLead(); return; }
+  const antes = cbLeadFicha?.id === n.id ? cbLeadFicha : cbLead, input = document.getElementById('cb-cliente');
+  if (n.nombre && n.nombre !== antes.nombre && input && input.value.trim() === String(antes.nombre || '').trim()) { input.value = n.nombre; cbResumenCliente(); }
+  const campos = Object.fromEntries(CB_FICHA_CAMPOS.split(',').filter(k => k in n).map(k => [k, n[k]]));
+  cbLeadFicha = { ...antes, ...campos };
+  Object.assign(cbLead, { nombre: n.nombre || cbLead.nombre, telefono: n.telefono ?? cbLead.telefono, estado: n.estado ?? cbLead.estado });
+  cbPintarLead();
+}
+async function cbRefrescarLeadFicha() {
+  if (!cbLead) return;
+  const { data } = await sb.from('leads').select(CB_FICHA_CAMPOS + ',eliminado_at').eq('id', cbLead.id).maybeSingle();
+  if (data) cbLeadActualizado(data);
+}
+window.cbAbrirFichaLead = () => cbLead && window.abrirLeadPorId(cbLead.id);
 // Un formulario a medio armar sin lead se conserva al ligarlo; si era de otro lead, se empieza de cero.
 function cbAplicarLead() {
   const l = cbLeadPendiente; cbLeadPendiente = null;
@@ -35716,17 +35779,34 @@ function cbAbrirWhatsapp(tel, texto) {
     if (!abrio) location.href = web;
   }, 1600);
 }
-window.cbWhatsapp = () => {
-  const cliente = val('cb-cliente').trim();
-  const items = cbItems.map(cbLimpiarItem).filter(it => cbTitulo(it) || it.tarifa);
-  const total = cbTotalItems(items), titulos = items.map(it => cbTitulo(it)).filter(Boolean);
-  const tel = String(cbLead?.telefono || '').replace(/\D/g, '');
+function cbTextoWhatsapp(cot) {
+  const cliente = String(cot.cliente || '').trim(), items = cot.items || [];
+  const total = Number(cot.total) || cbTotalItems(items), titulos = items.map(it => cbTitulo(it)).filter(Boolean);
   const extra = titulos.length > 3 ? ` y ${titulos.length - 3} servicio${titulos.length - 3 === 1 ? '' : 's'} más` : '';
-  const texto = cliente
+  return cliente
     ? `Hola ${cliente}, te comparto la cotización${titulos.length ? ` de ${titulos.slice(0, 3).join(' + ')}${extra}` : ''}${total ? ` por un total de $${cbMonto(total)}` : ''}. Cualquier duda me avisas. — ${MI_NOMBRE}`
     : '';
+}
+// El PDF va por la hoja de compartir del sistema (WhatsApp aparece ahí, en celular y en Windows).
+// Sin ella (navegador sin soporte de archivos), se descarga y se abre el chat del lead para adjuntarlo.
+async function cbWhatsappArchivo(blob, nombre, tel, texto) {
+  const file = new File([blob], nombre, { type: 'application/pdf' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: nombre, ...(texto ? { text: texto } : {}) }); return; }
+    catch (e) { if (e.name === 'AbortError') return; if (e.name === 'NotAllowedError') { docToastCompartir(file, texto); return; } }
+  }
+  cbDescargar(blob, nombre);
+  okToast('PDF descargado: adjúntalo en el chat de WhatsApp que se abre');
   cbAbrirWhatsapp(tel, texto);
-};
+}
+window.cbWhatsapp = () => cbGuardar('whatsapp');
+let cbUltima = null;
+function cbPintarGenerada() {
+  const box = document.getElementById('cb-generada'); if (!box) return;
+  box.hidden = !cbUltima;
+  box.innerHTML = cbUltima ? `<i class="fas fa-circle-check" aria-hidden="true"></i><span><b>${esc(cbNumero(cbUltima.cot.numero))}</b> generada. Descargar, compartir o WhatsApp reusan este número.<br><small>Si cambias algo, el próximo PDF sale como cotización nueva.</small></span><button class="btn-sm" type="button" onclick="cbNuevaCotizacion()"><i class="fas fa-plus" aria-hidden="true"></i> Nueva cotización</button>` : '';
+}
+window.cbNuevaCotizacion = () => { cbResetForm(); document.getElementById('sec-cotizacion-boletos')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }); };
 // Stand-by de boletería (2026-10-15): mientras la cotización está ligada a una
 // solicitud que atiendo yo, el formulario se autoguarda como borrador de la
 // solicitud (2 s después del último cambio) y se recupera al retomarla, también
@@ -35818,6 +35898,7 @@ async function cbResolverSolicitud(solId, cot) {
 const cbVenceDe = fecha => cbSumarDias(fecha, 2);
 function cbResetForm() {
   DR?.cancelar('cotizacion');
+  cbUltima = null; cbPintarGenerada();
   ['cb-fecha', 'cb-vence'].forEach(id => { document.getElementById(id).min = cbHoy(); });
   clearTimeout(cbBorradorTimer); cbBorradorTimer = null;
   cbSolicitud = null; cbPintarSolicitud();
@@ -36190,7 +36271,7 @@ window.cbGuardar = async function cbGuardar(accion) {
   const asesorId = val('cb-asesor');
   if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); docEnfocar('cb-asesor'); return; }
   // Sin lead la cotización no pasa el lead a COTIZACIÓN ENVIADA ni deja seguimiento.
-  if (ventas && !cbLead && !DR?.edicion('cotizacion')) {
+  if (ventas && !cbLead && !DR?.edicion('cotizacion') && !(cbUltima && !cbUltima.cot.lead_id)) {
     const sinLead = await confirmarSheet({ titulo: 'Esta cotización no tiene lead', detalle: 'Si la vinculas, el lead queda en cotización enviada y con su seguimiento. Sin lead, queda solo en el historial.', textoOk: 'Guardar sin lead', textoCancelar: 'Vincular' });
     if (!sinLead) { document.getElementById('cb-cliente-seccion').open = true; docEnfocar('cb-lead-q'); return; }
     if (cbGenerando) return;
@@ -36212,19 +36293,28 @@ window.cbGuardar = async function cbGuardar(accion) {
       solicitud_id: sol?.id ?? null, solicitud_revision: sol?.revision ?? null, origen: cbModo, lead_id: lead?.id ?? null,
     };
     if (DR?.edicion('cotizacion')) { await DR.guardar('cotizacion', { ...fila, items: items.map(it => ({ ...it, importe_revision: cbImporte(it) })) }); return; }
-    const { data: cot, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
-    if (error || !cot) { errToast('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
-    cbResetForm();
+    // Ventas no limpia el formulario al generar: descargar, compartir o mandar por WhatsApp la misma
+    // cotización sin cambios reusa el número ya guardado; si algo cambió, sale una nueva.
+    const firma = JSON.stringify(fila), repetida = ventas && cbUltima?.firma === firma;
+    let cot = repetida ? cbUltima.cot : null;
+    if (!repetida) {
+      const { data, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
+      if (error || !data) { errToast('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
+      cot = data;
+      if (ventas) { cbUltima = { firma, cot, blob: null }; cbPintarGenerada(); } else cbResetForm();
+    }
     try {
       await ensureVoucherLibs();
-      const blob = await cbPdfDe(cot), num = cbNumero(cot.numero);
+      const blob = (repetida && cbUltima.blob) || await cbPdfDe(cot), num = cbNumero(cot.numero);
       if (ventas) {
+        if (cbUltima?.cot === cot) cbUltima.blob = blob;
         let marca = '';
-        if (lead) marca = await cbRegistrarLeadCot(cot);
+        if (lead && !repetida) marca = await cbRegistrarLeadCot(cot);
         if (accion === 'compartir') { if (!lead || !await cbCompartirAlChat(blob, cbArchivo(cot), lead.id)) await cbCompartir(blob, cbArchivo(cot)); }
+        else if (accion === 'whatsapp') await cbWhatsappArchivo(blob, cbArchivo(cot), String(lead?.telefono || '').replace(/\D/g, ''), cbTextoWhatsapp(cot));
         else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
         else cbDescargar(blob, cbArchivo(cot));
-        okToast(`Cotización ${num} generada${marca}`);
+        if (!repetida) okToast(`Cotización ${num} generada${marca}`);
       }
       else if (!enviar || asesorId === MI_USUARIO_ID) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
       else if (await cbEnviarAAsesor(cot, blob, asesorId)) {
@@ -36630,6 +36720,7 @@ function subscribeRealtime() {
     // del inbox sin esperar un refresh manual.
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
       if (canal !== canalLeadsLive) return;
+      if (cbLead?.id === payload.new.id) cbLeadActualizado(payload.new);
       if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
           && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id, 'fuera');
       // Solo ventas, con debounce y sin esqueleto: cada UPDATE de cualquier lead
