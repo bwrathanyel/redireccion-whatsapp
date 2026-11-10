@@ -2972,6 +2972,10 @@ body.chat-abierto .chat-fab{opacity:0;pointer-events:none;transform:scale(.8)}
 .wa-send{width:42px;height:42px;flex-shrink:0;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--wa);color:#fff}
 .wa-send:disabled{opacity:.5;cursor:default}
 .wa-send-pl{background:var(--panel-solid);color:var(--muted);border:1px solid var(--line2)}
+/* Soltar un archivo sobre el chat de coexistencia (arrastrar y soltar del escritorio). */
+#wa-conv.wa-soltar{position:relative}
+#wa-conv.wa-soltar::after{content:'Suelta la foto o el documento para enviarlo';position:absolute;inset:8px;z-index:3;display:grid;place-items:center;padding:18px;text-align:center;border:2px dashed var(--wa);border-radius:14px;background:color-mix(in srgb,var(--wa) 12%,transparent);color:var(--wa);font-weight:600;font-size:13px;pointer-events:none}
+@media (max-width:430px){#wa-conv-compose .wa-send-pl{width:34px;height:34px;font-size:14px}}
 .wa-mas{align-self:center;margin:8px auto;background:var(--panel-solid);border:1px solid var(--line2);border-radius:20px;color:var(--txt);font:inherit;font-size:12px;padding:6px 14px;cursor:pointer}
 .wa-audio{display:block;width:240px;max-width:100%}
 .wa-transcripcion{display:flex;gap:6px;align-items:flex-start;width:240px;max-width:100%;margin-top:4px;padding:2px 6px;font-size:12.5px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -9431,6 +9435,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <form class="wa-compose" id="wa-conv-compose" hidden>
             <button class="wa-send wa-send-pl" id="wa-conv-plantilla" type="button" title="Escribir con plantilla (más de 24 h sin mensajes del cliente)" aria-label="Escribir con plantilla"><i class="fas fa-file-lines"></i></button>
             <button class="wa-send wa-send-pl" id="wa-conv-pagos" type="button" title="Poner los datos de pago en el chat" aria-label="Datos de pago"><i class="fas fa-building-columns"></i></button>
+            <button class="wa-send wa-send-pl" id="wa-conv-adjuntar" type="button" title="Enviar foto o documento (o arrástralo al chat)" aria-label="Adjuntar foto o documento"><i class="fas fa-paperclip"></i></button>
+            <input type="file" id="wa-conv-archivo" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip" hidden>
             <textarea id="wa-conv-texto" rows="1" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" enterkeyhint="enter" maxlength="4000"></textarea>
             <button class="wa-send" id="wa-conv-enviar" type="submit" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
           </form>

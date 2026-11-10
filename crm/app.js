@@ -30672,6 +30672,14 @@ function setupWhatsapp() {
   document.getElementById('wa-conv-texto').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches) { e.preventDefault(); waEnviar(); }
   });
+  document.getElementById('wa-conv-adjuntar').addEventListener('click', () => document.getElementById('wa-conv-archivo').click());
+  document.getElementById('wa-conv-archivo').addEventListener('change', e => { const f = e.target.files?.[0]; e.target.value = ''; waEnviarArchivo(f); });
+  // Captura pegada con Ctrl+V: mismo camino que el clip.
+  document.getElementById('wa-conv-texto').addEventListener('paste', e => {
+    const f = [...(e.clipboardData?.files || [])].find(x => /^image\//.test(x.type));
+    if (f) { e.preventDefault(); waEnviarArchivo(f); }
+  });
+  waSoltarArchivos();
   document.getElementById('wa-volver-dm').addEventListener('click', () => activateSection(waVolverA));
   document.getElementById('wa-ver-lead').addEventListener('click', () => { if (waActual?.lead) abrirLeadDesdeMisVentas(waActual.lead.id); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
@@ -30909,6 +30917,55 @@ async function waEnviar() {
   } catch (e) {
     errToast(e.message === 'envio_rechazado' ? 'WhatsApp rechazó el mensaje: si pasaron 24 h desde el último del cliente, hace falta una plantilla' : 'No se pudo enviar el mensaje');
   } finally { btn.disabled = false; }
+}
+// Fotos y documentos: el archivo viaja por la EF (bucket privado + URL firmada 1 h)
+// y Zernio lo publica por la API; el mensaje aparece al refrescar el chat.
+const WA_ADJUNTO_MSJ = {
+  archivo_muy_grande: 'El archivo pesa demasiado: la foto admite 5 MB y el documento 16 MB',
+  tipo_no_permitido: 'Ese formato no se puede enviar por WhatsApp: manda foto (JPG/PNG), PDF, Word, Excel, PowerPoint, TXT, CSV o ZIP',
+  envio_rechazado: 'WhatsApp rechazó el archivo: si pasaron 24 h desde el último mensaje del cliente, hace falta una plantilla',
+  no_autorizado: 'Este chat no se puede responder desde el CRM',
+};
+const waPuedeAdjuntar = () => !!waActual && waEsCompartido() && !document.getElementById('wa-conv-compose').hidden;
+async function waEnviarArchivo(file) {
+  if (!file || !waPuedeAdjuntar()) return;
+  const foto = /^image\//.test(file.type);
+  if (file.size > (foto ? 5 : 16) * 1024 * 1024) { errToast(WA_ADJUNTO_MSJ.archivo_muy_grande); return; }
+  const conv = waActual.id, ta = document.getElementById('wa-conv-texto'), btn = document.getElementById('wa-conv-adjuntar');
+  const pie = ta.value.trim(), icono = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  const fd = new FormData();
+  fd.append('accion', 'enviar_archivo');
+  fd.append('accountId', waCuenta);
+  fd.append('conversationId', conv);
+  fd.append('texto', pie);
+  fd.append('archivo', file, file.name || (foto ? 'foto.jpg' : 'archivo'));
+  let falla = null;
+  try {
+    const { data, error } = await sb.functions.invoke('whatsapp-inbox', { body: fd });
+    if (error || !data?.ok) falla = (data || await Promise.resolve(error?.context?.json?.()).catch(() => null))?.error || 'envio_fallido';
+  } catch { falla = 'envio_fallido'; }
+  btn.disabled = false; btn.innerHTML = icono;
+  if (falla) { errToast(WA_ADJUNTO_MSJ[falla] || 'No se pudo enviar el archivo'); return; }
+  if (pie && ta.value.trim() === pie) ta.value = '';
+  okToast(foto ? 'Foto enviada' : 'Documento enviado');
+  const refrescar = () => { if (waActual?.id === conv) waRefrescarChat(); };
+  setTimeout(refrescar, 1500); setTimeout(refrescar, 6000);
+}
+// Arrastrar y soltar sobre el chat de coexistencia (escritorio).
+function waSoltarArchivos() {
+  const panel = document.getElementById('wa-conv');
+  let dentro = 0;
+  const trae = e => [...(e.dataTransfer?.types || [])].includes('Files');
+  panel.addEventListener('dragenter', e => { if (!waPuedeAdjuntar() || !trae(e)) return; e.preventDefault(); dentro++; panel.classList.add('wa-soltar'); });
+  panel.addEventListener('dragover', e => { if (waPuedeAdjuntar() && trae(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+  panel.addEventListener('dragleave', () => { dentro = Math.max(0, dentro - 1); if (!dentro) panel.classList.remove('wa-soltar'); });
+  panel.addEventListener('drop', e => {
+    if (!waPuedeAdjuntar()) return;
+    e.preventDefault(); dentro = 0; panel.classList.remove('wa-soltar');
+    const f = e.dataTransfer?.files?.[0];
+    if (f) waEnviarArchivo(f);
+  });
 }
 function waCerrarChat(fromNav, sinRecarga) {
   waAbrirGen++;
