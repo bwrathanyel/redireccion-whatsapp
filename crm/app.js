@@ -8175,7 +8175,7 @@ function setupFilters() {
   fill('f-servicio', SERVICIOS);
   fill('f-anio', Object.keys(STATS.by_anio || {}).sort().reverse());
   ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta', 'f-sin-telefono', 'f-seguimiento'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
-  let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; loadTable(); renderChips(); }, 300); });
+  let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refresh, 300); });
   initDateRangePicker('f');
   leadsView = initViewSwitcher('leads-view-switch', 'leads', 'tarjetas', v => { leadsView = v; applyLeadsView(); });
 }
@@ -8279,7 +8279,7 @@ function renderChips() {
   document.getElementById('clearAll').onclick = () => { clearFiltersQuiet(); refresh(); };
 }
 function setDrop(id, v) { const el = document.getElementById(id); el.value = v; if (id.endsWith('-desde') || id.endsWith('-hasta')) el.dispatchEvent(new Event('change')); refresh(); }
-function refresh() { page = 1; loadTable(); renderChips(); }
+function refresh() { page = 1; loadTable(); renderChips(); if (leadsTab === 'frios') loadClientesFrios(); }
 {
   const pop = document.getElementById('leads-filtros-pop'), btn = document.getElementById('leads-filtros-btn');
   const abrir = a => { pop?.classList.toggle('lf-abierto', a); btn?.setAttribute('aria-expanded', a); };
@@ -8317,9 +8317,9 @@ function buildQuery(forCount) {
     // PostgREST usa como sintaxis dentro de un `or`. La rama `is.null` hace
     // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
     .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
-  // Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más).
-  if (MI_ASESOR_INTEGRAL) q = q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
+  // Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más); buscando sí salen.
+  if (MI_ASESOR_INTEGRAL && !qs) q = q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`);
   // Los leads que crea un voucher ya son ventas y viven en Reservas (dueño 2026-11-10);
   // siguen saliendo si se los busca por nombre/teléfono o se filtra por ese canal.
   if (!qs && !CANALES_VOUCHER.includes(fc)) q = q.or(`canal.is.null,canal.not.in.(${CANALES_VOUCHER.map(c => `"${c}"`).join(',')})`);
@@ -39284,18 +39284,22 @@ async function loadClientesFrios() {
   if (!grid || !MI_ASESOR_INTEGRAL) return;
   const loading = document.getElementById('cf-loading'), empty = document.getElementById('cf-empty');
   loading?.classList.add('show');
-  const { data, error } = await sb.from('leads').select('*')
+  const qs = val('global-search').trim().replace(/[,()%]/g, '');
+  let q = sb.from('leads').select('*')
     .is('eliminado_at', null).eq('lote_origen', 'diario').eq('asesor', MI_NOMBRE)
-    .in('estado', FRIOS_ESTADOS)
-    .order('lote_asignado_at', { ascending: false })
-    .limit(300);
+    .in('estado', FRIOS_ESTADOS);
+  if (qs) q = q.or(`nombre.ilike.%${qs}%,telefono.ilike.%${qs}%`);
+  const { data, error } = await q.order('lote_asignado_at', { ascending: false }).limit(300);
   loading?.classList.remove('show');
   if (error) { console.error('clientes_frios', error); errToast('No se pudieron cargar los clientes fríos'); return; }
   const filas = data || [];
-  const pendientes = filas.filter(l => l.estado === 'POR ATENDER').length;
+  // Con búsqueda el conteo saldría parcial: el badge solo se actualiza sin filtro.
   const badge = document.getElementById('leads-frios-count');
-  if (badge) { badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
+  if (badge && !qs) { const pendientes = filas.filter(l => l.estado === 'POR ATENDER').length; badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
   empty?.classList.toggle('show', filas.length === 0);
+  const et = empty?.querySelector('.es-t'), es = empty?.querySelector('.es-s');
+  if (et) et.textContent = qs ? `Ningún cliente frío coincide con «${qs}»` : 'Sin clientes fríos por ahora';
+  if (es) es.textContent = qs ? 'Prueba con otra parte del nombre o del teléfono' : 'El lote de recontacto llega cada mañana a las 7:30';
   grid.innerHTML = filas.map(leadCardHtml).join('');
   wireLeadCards(grid, filas);
   await cfPintarResultados(grid, filas);

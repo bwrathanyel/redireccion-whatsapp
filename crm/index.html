@@ -4422,15 +4422,9 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
 /* ============ MÓVIL ============ */
 @media(max-width:900px){.g-2,.g-2b{grid-template-columns:1fr}}
 @media(max-width:760px){
-  /* Fase 2 (Leads unificado): en mobile el inbox separado de arriba queda
-     fusionado dentro de las tarjetas de la lista general (badge "Sin
-     atender" + botón "Atender" en leadCardHtml) -- ocultarlo acá evita
-     mostrar el mismo lead dos veces. Desktop no se toca, sigue con el
-     inbox propio arriba de la tabla para el rol asesor (.rol-asesor
-     .leads-inbox{display:block} en la hoja de estilos base). Acotado a
-     #leads-inbox: la Bandeja y Por verificar de Facturación también usan
-     .leads-inbox y desaparecían en el celular. */
-  #leads-inbox{display:none !important}
+  /* La cola horizontal de leads nuevos también va en el celular (dueño
+     2026-11-10): ocupa una sola fila deslizable, así que ya no compite con
+     la lista. Antes se ocultaba con #leads-inbox{display:none !important}. */
   .app{grid-template-columns:1fr}
   /* El menú es el MISMO aside del escritorio, fijo y deslizable desde la
      izquierda. display:none lo dejaría fuera de getComputedStyle y rompería
