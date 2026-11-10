@@ -393,7 +393,7 @@ let trendKeys = [], canalKeys = [], destKeys = [], trendMap = {};
 let previewSel = null, charts = {};
 let ACTIVOS = [];
 let leadsView = 'lista';
-let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null;
+let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null, timerRelojInbox = null;
 let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_GRUPO = '', PV_ASESOR = '', PV_SEARCH_TIMER = null;
 let RV_DET = null, RV_RESERVA_ID = null, RV_FORM = null, RV_DESTINOS = null, RV_PROVEEDORES = null, RV_APTOS = {}, RV_APTO_UNI = [], RV_APTO_REQ = 0;
 
@@ -3738,7 +3738,7 @@ async function startApp() {
     renderNavItems, renderFavoritos, fijarSolicitudesArriba, setupAvisoPagos, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
-    setupDocumentosRevisiones, setupHoy, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
+    setupDocumentosRevisiones, setupHoy, setupColaInbox, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
     setupTareasV2, setupLlamadasWa, setupLlamadasApp, setupTecladoMovil, setupEstadoBody, setupBarraInf,
   );
   if (ROL === 'marketing') {
@@ -8817,29 +8817,122 @@ async function loadInboxLeads() {
   if (ROL !== 'asesor') return;
   document.getElementById('inbox-loading').classList.add('show');
   const { data, error } = await sb.from('leads').select('*')
-    .eq('estado', 'POR ATENDER').is('fecha_primer_contacto', null).is('eliminado_at', null)
-    .order('fecha_creacion', { ascending: false });
+    .eq('estado', 'POR ATENDER').is('fecha_primer_contacto', null).is('eliminado_at', null);
   document.getElementById('inbox-loading').classList.remove('show');
   if (error) { console.error('inbox', error); errToast('No se pudo cargar el inbox de leads'); return; }
-  INBOX_LEADS = data || [];
+  // Cola: el más antiguo primero. Se ordena por fecha de llegada al asesor
+  // (fechaLlegadaLead), no por fecha_creacion -- un lote o una reasignación
+  // trae fecha_creacion vieja y quedaría delante de leads que sí esperan hace rato.
+  INBOX_LEADS = (data || []).sort((a, b) => new Date(fechaLlegadaLead(a)) - new Date(fechaLlegadaLead(b)));
   renderInbox();
   renderHoyAsesor();
   refrescarKpisHoyAsesor();
 }
-function renderInbox() {
-  const grid = document.getElementById('inbox-grid'), empty = document.getElementById('inbox-empty');
-  document.getElementById('inbox-count').textContent = INBOX_LEADS.length;
+const COLA_PACIENCIA_MIN = [15, 60];
+const prefiereMenosMovimiento = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+function minutosEsperaInbox(l) {
+  const llegada = new Date(fechaLlegadaLead(l)).getTime();
+  return Number.isNaN(llegada) ? 0 : Math.max(0, Math.round((Date.now() - llegada) / 60000));
+}
+function renderInbox(opts = {}) {
+  const grid = document.getElementById('inbox-grid');
+  if (!grid) return;
+  const count = document.getElementById('inbox-count'), empty = document.getElementById('inbox-empty'), sub = document.getElementById('inbox-sub');
+  if (count) count.textContent = INBOX_LEADS.length;
   empty.classList.toggle('show', INBOX_LEADS.length === 0);
-  grid.innerHTML = INBOX_LEADS.map(inboxCardHtml).join('');
-  [...grid.querySelectorAll('.inbox-card')].forEach((el, i) => {
-    const l = INBOX_LEADS[i];
-    el.addEventListener('click', () => openDrawer(l));
-    const conCandado = candadoInbox(el);
-    el.querySelector('.inbox-btn.atender').addEventListener('click', conCandado(() => atenderInboxLead(l)));
-    el.querySelector('.inbox-btn.nopuedo')?.addEventListener('click', conCandado(() => noPuedoInboxLead(l)));
-    el.querySelector('.inbox-btn.avisar').addEventListener('click', e => { e.stopPropagation(); abrirAvisarTelefono(l); });
+  const sinMovimiento = prefiereMenosMovimiento();
+  // Nodos estables: la tarjeta se reutiliza por data-id y solo se reordena con
+  // appendChild. Reconstruir el innerHTML en cada render mataba la animación
+  // (el nodo nuevo no tiene de dónde venir) y volvía a cablear listeners.
+  const antes = new Map();
+  [...grid.children].forEach(el => {
+    if (el.classList.contains('inbox-card')) antes.set(el.dataset.id, { el, izq: sinMovimiento ? 0 : el.getBoundingClientRect().left });
   });
+  const vivos = new Set();
+  INBOX_LEADS.forEach((l, i) => {
+    const id = String(l.id);
+    vivos.add(id);
+    let card = antes.get(id)?.el;
+    if (!card) {
+      const tpl = document.createElement('div');
+      tpl.innerHTML = inboxCardHtml(l).trim();
+      card = tpl.firstElementChild;
+      if (!sinMovimiento && id === String(opts.entrada ?? '')) card.classList.add('inbox-entra');
+    }
+    grid.appendChild(card);
+    pintarTarjetaInbox(card, l, i);
+  });
+  antes.forEach(({ el }, id) => { if (!vivos.has(id)) el.remove(); });
+  if (!sinMovimiento) antes.forEach(({ el, izq }, id) => {
+    if (!vivos.has(id) || !el.animate) return;
+    const dx = izq - el.getBoundingClientRect().left;
+    if (Math.abs(dx) > 1) el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  });
+  if (sub) sub.textContent = INBOX_LEADS.length ? `${INBOX_LEADS.length} en espera · el más antiguo ${tiempoRelativo(fechaLlegadaLead(INBOX_LEADS[0]))}` : '';
+  actualizarMascaraCola();
   actualizarBadgeLeads(INBOX_LEADS.length);
+}
+// Solo texto/estilos: es lo único que se refresca cada minuto sin re-render.
+function pintarTarjetaInbox(card, l, i, opts = {}) {
+  const min = minutosEsperaInbox(l);
+  if (card.parentElement?.id === 'inbox-grid') card.setAttribute('role', 'listitem');
+  if (opts.orden !== false) {
+    card.classList.toggle('es-siguiente', i === 0);
+    const orden = card.querySelector('.inbox-orden');
+    if (orden) orden.textContent = i === 0 ? 'Siguiente' : '#' + (i + 1);
+  }
+  card.classList.toggle('cola-ambar', min >= COLA_PACIENCIA_MIN[0] && min < COLA_PACIENCIA_MIN[1]);
+  card.classList.toggle('cola-roja', min >= COLA_PACIENCIA_MIN[1]);
+  const tel = card.querySelector('.inbox-tel');
+  if (tel) tel.textContent = l.telefono || 'Sin teléfono';
+  const tiempo = card.querySelector('.inbox-tiempo');
+  if (tiempo) {
+    tiempo.innerHTML = `<i class="fas fa-clock" aria-hidden="true"></i> ${tiempoRelativo(fechaLlegadaLead(l))}`;
+    tiempo.title = min < 1 ? 'Llegó ahora mismo' : `Esperando hace ${min} min`;
+  }
+  const barra = card.querySelector('.inbox-paciencia i');
+  if (barra) barra.style.width = Math.min(100, Math.round(min / COLA_PACIENCIA_MIN[1] * 100)) + '%';
+}
+function actualizarMascaraCola() {
+  const grid = document.getElementById('inbox-grid');
+  if (!grid) return;
+  grid.classList.toggle('hay-mas', grid.scrollWidth - grid.scrollLeft - grid.clientWidth > 8);
+}
+function setupColaInbox() {
+  const grid = document.getElementById('inbox-grid');
+  if (!grid) return;
+  // Delegación: las tarjetas se reutilizan y reordenan, así que un listener por
+  // tarjeta se duplicaría o se perdería.
+  grid.addEventListener('click', e => {
+    const card = e.target.closest('.inbox-card');
+    if (!card || !grid.contains(card)) return;
+    const l = INBOX_LEADS.find(x => String(x.id) === card.dataset.id);
+    if (!l) return;
+    const btn = e.target.closest('.inbox-btn');
+    if (!btn) { openDrawer(l); return; }
+    if (btn.classList.contains('avisar')) { abrirAvisarTelefono(l); return; }
+    const accion = btn.classList.contains('atender') ? () => atenderInboxLead(l) : btn.classList.contains('nopuedo') ? () => noPuedoInboxLead(l) : null;
+    if (accion) candadoInbox(card)(accion)(e);
+  });
+  grid.addEventListener('scroll', actualizarMascaraCola, { passive: true });
+  const mover = dir => {
+    const primera = grid.querySelector('.inbox-card');
+    grid.scrollBy({ left: dir * ((primera?.offsetWidth || 280) + 12), behavior: 'smooth' });
+  };
+  document.getElementById('inbox-prev')?.addEventListener('click', () => mover(-1));
+  document.getElementById('inbox-next')?.addEventListener('click', () => mover(1));
+  if (!timerRelojInbox) timerRelojInbox = setInterval(refrescarRelojInbox, 60000);
+}
+// "hace X min" y la barra de paciencia envejecen solos: cada minuto se toca
+// solo lo que cambió, sin re-render ni perder el scroll de la cola.
+function refrescarRelojInbox() {
+  if (!leadsVisible() || !INBOX_LEADS.length) return;
+  const grid = document.getElementById('inbox-grid');
+  if (!grid) return;
+  INBOX_LEADS.forEach(l => {
+    const card = grid.querySelector(`.inbox-card[data-id="${l.id}"]`);
+    if (card) pintarTarjetaInbox(card, l, -1, { orden: false });
+  });
 }
 // Doble toque = dos RPC y dos WhatsApp: Atender y No puedo se bloquean juntos hasta que responda.
 function candadoInbox(card) {
@@ -8855,20 +8948,23 @@ function candadoInbox(card) {
 function inboxCardHtml(l) {
   const av = clientAvatar(l), pc = partesConsulta(l.destino_consulta);
   return `<div class="entity-card inbox-card" data-id="${l.id}">
-    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(nombreLead(l))}${badgePrioridadIA(l)}${badgeSeguidorIG(l)}${badgeNombreDudoso(l)}</div></div>
-    <div class="ec-row"><i class="fas fa-phone"></i> ${esc(l.telefono) || 'Sin teléfono'}</div>
+    <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(nombreLead(l))}${badgePrioridadIA(l)}${badgeSeguidorIG(l)}${badgeNombreDudoso(l)}</div><span class="inbox-orden"></span></div>
+    <div class="ec-row"><i class="fas fa-phone"></i> <span class="inbox-tel">${esc(l.telefono) || 'Sin teléfono'}</span></div>
     <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
     ${pc.resumen ? `<div class="lc-consulta" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
-    ${pc.avisos.length ? `<div class="lc-chips">${pc.avisos.map(a => `<span class="lc-chip aviso"><i class="fas fa-triangle-exclamation"></i>${esc(a)}</span>`).join('')}</div>` : ''}
-    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>Última oferta: ${esc(pc.oferta)}</span></div>` : ''}
-    ${l.personas ? `<div class="ec-row"><i class="fas fa-users"></i> ${esc(l.personas)} persona(s)</div>` : ''}
-    <div class="ec-row"><i class="fas fa-clock"></i> ${tiempoRelativo(fechaLlegadaLead(l))}</div>
-    ${l.no_reasignar ? `<div class="ec-row" style="color:var(--muted2)"><i class="fas fa-lock"></i> Llegó directo por WhatsApp -- no se reasigna</div>` : ''}
+    ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>${esc(pc.oferta)}</span></div>` : ''}
+    <div class="ec-row inbox-meta">
+      ${l.personas ? `<span title="${esc(l.personas)} persona(s)"><i class="fas fa-users"></i>${esc(l.personas)}</span>` : ''}
+      ${pc.avisos.length ? `<span class="inbox-aviso" title="${esc(pc.avisos.join(' · '))}"><i class="fas fa-triangle-exclamation"></i>${esc(pc.avisos[0])}${pc.avisos.length > 1 ? ' +' + (pc.avisos.length - 1) : ''}</span>` : ''}
+      <span class="inbox-tiempo"><i class="fas fa-clock"></i> ${tiempoRelativo(fechaLlegadaLead(l))}</span>
+      ${l.no_reasignar ? `<span title="Llegó directo por WhatsApp: no se reasigna"><i class="fas fa-lock"></i> directo</span>` : ''}
+    </div>
     <div class="inbox-actions">
       <button type="button" class="inbox-btn atender"><i class="fas fa-check"></i> Atender</button>
       ${l.no_reasignar ? '' : `<button type="button" class="inbox-btn nopuedo"><i class="fas fa-xmark"></i> No puedo</button>`}
       <button type="button" class="inbox-btn avisar" title="Avisar número incorrecto"><i class="fas fa-flag"></i></button>
     </div>
+    <div class="inbox-paciencia" aria-hidden="true"><i></i></div>
   </div>`;
 }
 async function atenderInboxLead(l) {
@@ -8886,7 +8982,7 @@ async function atenderInboxLead(l) {
   if (error || !data?.ok) { errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return false; }
   // El mismo objeto lo usa la ficha abierta para repintar estado y botón principal.
   l.estado = 'ATENDIDO'; l.fecha_primer_contacto = l.fecha_primer_contacto || new Date().toISOString();
-  quitarDeInbox(l.id);
+  quitarDeInbox(l.id, 'atendido');
   okToast('Lead marcado como atendido');
   if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">toca aquí para abrir WhatsApp</a>`);
   loadTable();
@@ -8917,6 +9013,7 @@ function renderHoyAsesor() {
     : '<div class="tbl-state show"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tienes leads nuevos esperando respuesta</div></div>';
   [...box.querySelectorAll('.inbox-card')].forEach((el, i) => {
     const l = top[i];
+    pintarTarjetaInbox(el, l, i, { orden: false });
     el.addEventListener('click', () => openDrawer(l));
     const conCandado = candadoInbox(el);
     el.querySelector('.inbox-btn.atender').addEventListener('click', conCandado(() => atenderInboxLead(l)));
@@ -9049,15 +9146,35 @@ async function noPuedoInboxLead(l) {
   if (data?.motivo === 'no_reasignable') { errToast('Este lead llegó directo por WhatsApp -- no se puede reasignar'); return; }
   if (!data?.ok) { errToast('No se pudo reasignar: ' + (data?.motivo || data?.error || 'error desconocido')); return; }
   if (data.pool_agotado) { errToast('No hay más asesores disponibles por ahora -- el lead sigue contigo'); return; }
-  quitarDeInbox(l.id);
+  quitarDeInbox(l.id, 'nopuedo');
   okToast('Lead reasignado a otro asesor');
   return true;
 }
-function quitarDeInbox(leadId) {
+async function quitarDeInbox(leadId, tipo = 'fuera') {
+  const card = document.querySelector(`#inbox-grid .inbox-card[data-id="${leadId}"]`);
+  if (card && !prefiereMenosMovimiento()) await animarSalidaInbox(card, tipo);
   INBOX_LEADS = INBOX_LEADS.filter(x => x.id !== leadId);
   renderInbox();
   renderHoyAsesor();
   refrescarKpisHoyAsesor();
+}
+// 'atendido' deja el sello verde y sube; 'nopuedo' se va hacia abajo con borde
+// rojo; 'fuera' (lo movió el sistema) es un fade corto. La salida se espera
+// antes de filtrar para que la tarjeta no desaparezca de golpe.
+function animarSalidaInbox(card, tipo) {
+  if (!card.animate) return Promise.resolve();
+  if (tipo === 'atendido') {
+    const sello = document.createElement('span');
+    sello.className = 'inbox-sello';
+    sello.innerHTML = '<i class="fas fa-check" aria-hidden="true"></i>';
+    card.appendChild(sello);
+  } else if (tipo === 'nopuedo') card.classList.add('sale-nopuedo');
+  const fotogramas = tipo === 'atendido'
+    ? [{ transform: 'translateY(0) scale(1)', opacity: 1 }, { transform: 'translateY(-24px) scale(.9)', opacity: 0 }]
+    : tipo === 'nopuedo'
+      ? [{ transform: 'translateY(0)', opacity: 1 }, { transform: 'translateY(28px)', opacity: 0 }]
+      : [{ opacity: 1 }, { opacity: 0 }];
+  return card.animate(fotogramas, { duration: tipo === 'fuera' ? 220 : 340, easing: 'ease-in', fill: 'forwards' }).finished.catch(() => {});
 }
 function abrirAvisarTelefono(l) {
   INBOX_TEL_LEAD_ID = l.id;
@@ -9563,7 +9680,7 @@ function marcarLeadAtendido(id) {
   sb.rpc('actualizar_lead', { p_lead_id: id, p_estado: 'ATENDIDO' }).then(({ data, error }) => {
     if (error || !data?.ok) return;
     if (currentLead?.id === id) { currentLead.estado = 'ATENDIDO'; currentLead.fecha_primer_contacto ||= new Date().toISOString(); const sel = document.getElementById('e-estado'); if (sel) sel.value = 'ATENDIDO'; }
-    quitarDeInbox(id); loadTable();
+    quitarDeInbox(id, 'atendido'); loadTable();
   });
 }
 
@@ -14609,8 +14726,8 @@ const repEl = id => document.getElementById(id);
 async function repPoblarAsesores() {
   const sel = repEl('rep-asesor');
   if (!sel || sel.options.length > 1) return;
-  const { data, error } = await sb.rpc('listar_asesores_activos');
-  if (!error && data) sel.innerHTML += data.map(a => `<option value="${esc(a.nombre)}">${esc(a.nombre)}</option>`).join('');
+  const { data, error } = await sb.rpc('asesores_repartir_numeros');
+  if (!error && data) sel.innerHTML += data.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
 }
 
 function repRenderPrevias() {
@@ -36397,7 +36514,7 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
       if (canal !== canalLeadsLive) return;
       if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
-          && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id);
+          && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id, 'fuera');
       // Solo ventas, con debounce y sin esqueleto: cada UPDATE de cualquier lead
       // (el bot escribe sin parar) recargaba la pestaña Reservas entera.
       if (payload.new.estado === 'PAGO REALIZADO' && document.getElementById('sec-postventa')?.classList.contains('active')) {
@@ -36471,10 +36588,20 @@ function detenerPollLeads() { clearInterval(leadsPollInterval); leadsPollInterva
 // Card nueva al tope del inbox en vivo + notificación local instantánea si la
 // pestaña no está en foco (no depende de la latencia del push del servidor).
 function recibirLeadNuevoInbox(lead) {
-  INBOX_LEADS.unshift(lead);
-  renderInbox();
-  const card = document.querySelector(`.inbox-card[data-id="${lead.id}"]`);
+  // Entra al final: la cola va del que más espera al que acaba de llegar.
+  INBOX_LEADS.push(lead);
+  const grid = document.getElementById('inbox-grid');
+  const alFinalVisible = !grid || grid.scrollWidth - grid.scrollLeft - grid.clientWidth < 320;
+  renderInbox({ entrada: lead.id });
+  const card = grid?.querySelector(`.inbox-card[data-id="${lead.id}"]`);
   if (card) { card.classList.add('inbox-new'); setTimeout(() => card.classList.remove('inbox-new'), 2200); }
+  // Sin autoscroll a propósito: moverle la cola al asesor mientras atiende es
+  // peor que no avisarle. Si la tarjeta nueva quedó fuera de vista, late el
+  // contador del encabezado una vez.
+  if (!alFinalVisible) {
+    const count = document.getElementById('inbox-count');
+    if (count) { count.classList.add('late'); setTimeout(() => count.classList.remove('late'), 1200); }
+  }
   // showNotification() vía SW, no `new Notification(...)` -- ese constructor
   // directo tira "Illegal constructor" en Chrome/Android cuando corre como
   // PWA instalada (la forma en que la usan los asesores), no solo en sitios
@@ -39658,7 +39785,7 @@ const TOUR_CAPITULOS = [
   ]},
   { id: 'leads', titulo: 'Leads', icono: 'fa-users', roles: ['admin', 'asesor'], seccion: 'leads', pasos: [
     { titulo: 'Tus clientes', texto: () => ROL === 'asesor' ? 'Acá aparecen los clientes que te asignaron. Los nuevos suben arriba de todo.' : 'Acá el admin ve y filtra todos los leads del negocio, de todos los asesores.', selector: '#sec-leads' },
-    { titulo: 'Leads nuevos por atender', texto: 'Cada tarjeta nueva tiene 3 botones: ✅ Atender (lo tomas), ❌ No puedo (se lo pasas a otro asesor), 🚩 (avisas que el número está mal).', selector: '#inbox-grid' },
+    { titulo: 'Leads nuevos por atender', texto: 'La cola avanza en una sola fila: la primera tarjeta es la siguiente y el resto espera a la derecha. Cada una tiene 3 botones: ✅ Atender (lo tomas), ❌ No puedo (se lo pasas a otro asesor), 🚩 (avisas que el número está mal).', selector: '#inbox-grid' },
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor solo ve sus propios leads nuevos, con estos mismos 3 botones. Si no toca ninguno a tiempo, el lead se reasigna automático a otro asesor.', mockup: mockupBandejaAsesor },
   ]},
   { id: 'mensajes', titulo: 'Mensajes', icono: 'fa-comment-dots', roles: ['admin', 'asesor', 'marketing'], seccion: 'mensajes', pasos: [
@@ -39848,6 +39975,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-10', emoji: '🎟️', titulo: 'Tu cola de leads', texto: 'Los leads nuevos ahora van en una sola fila, del que más espera al que acaba de llegar. La primera tarjeta es la siguiente; puedes atender cualquiera y el resto avanza solo. Al pie de cada tarjeta hay una barra de paciencia (verde, ámbar o roja) según el tiempo que lleva esperando, y en el encabezado ves cuántos hay y hace cuánto espera el más antiguo.', roles: ['asesor'] },
   { fecha: '2026-11-10', emoji: '🏦', titulo: 'Métodos de pago a un toque', texto: 'Nueva sección «Métodos de pago» en el menú: toca un dato (cuenta, correo de Zelle…) y se copia solo; cada método tiene «Copiar texto», «Foto» y «Enviar». Marca varios para mandarlos juntos, o manda el flyer completo. En los chats de WhatsApp y en las acciones del lead está el botón «Pagos», que pone los datos directo en el mensaje.', roles: ROLES_TODOS },
   { fecha: '2026-11-09', emoji: '💬', titulo: 'Bandeja de WhatsApp en tu menú', texto: 'En el menú de la izquierda (y abajo en el teléfono) ahora tienes Bandeja con los chats de WhatsApp de tus clientes: contestas desde ahí y los llamas con el botón de teléfono.', roles: ['asesor'] },
   { fecha: '2026-11-08', emoji: '📋', titulo: 'Nueva sección Llamadas', texto: 'En Leads › Llamadas ves las llamadas por WhatsApp que quedaron sin resultado y puedes completarlas con «Poner resultado». Arriba están tus números de hoy, 7 o 30 días: llamadas, contacto e interesados.', roles: ['admin', 'asesor'] },

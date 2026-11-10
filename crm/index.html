@@ -2584,6 +2584,46 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .sheet-input{width:100%;box-sizing:border-box;background:rgba(10,12,28,.7);border:1.5px solid var(--line2);border-radius:9px;padding:10px 12px;color:var(--txt);font-size:16px;font-family:inherit;outline:none;color-scheme:dark;margin:10px 0}
 .sheet-input:focus{border-color:var(--accent)}
 @media(max-width:760px){.inbox-btn{min-height:44px;font-size:12px}}
+/* Cola horizontal de leads: una fila, del más antiguo al más nuevo. */
+.lih-sub{flex:1;min-width:0;font-size:11.5px;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lih-nav{display:flex;gap:4px;margin-left:auto;flex:none}
+.lih-flecha{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line2);border-radius:9px;background:transparent;color:var(--muted);cursor:pointer;transition:color .16s,border-color .16s}
+.lih-flecha:hover{color:var(--txt);border-color:var(--accent)}
+.lih-flecha:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@keyframes inbox-late{0%,100%{transform:none}50%{transform:scale(1.25)}}
+.lih-count.late{display:inline-block;animation:inbox-late 1.2s ease-in-out}
+.inbox-cola{display:flex;align-items:stretch;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding:2px 2px 16px;scrollbar-width:thin}
+.inbox-cola.hay-mas{mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent);-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}
+.inbox-cola>.inbox-card{position:relative;flex:0 0 280px;min-width:0;display:flex;flex-direction:column;scroll-snap-align:start}
+.inbox-cola>.inbox-card .ec-row{font-size:11.5px;margin-top:5px}
+.inbox-cola>.inbox-card .lc-consulta{margin-top:8px}
+.inbox-cola>.inbox-card .lc-oferta{margin-top:5px}
+.inbox-cola>.inbox-card .inbox-actions{margin-top:auto;padding-top:10px}
+.inbox-cola>.inbox-card.es-siguiente{border-color:var(--green)}
+.inbox-cola>.inbox-card.es-siguiente .inbox-orden{background:var(--green);color:#04241a}
+.inbox-orden{flex:none;margin-left:auto;padding:2px 8px;border-radius:999px;background:rgba(var(--ink-rgb),.07);color:var(--muted2);font-size:10.5px;font-weight:800;white-space:nowrap}
+.leads-inbox-grid .inbox-orden{display:none}
+.inbox-card .inbox-meta{flex-wrap:wrap;gap:8px;font-size:11px;color:var(--muted2)}
+.inbox-meta>span{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inbox-card .inbox-meta i{width:auto;font-size:10px}
+.inbox-meta .inbox-aviso{color:var(--amber)}
+.inbox-paciencia{height:3px;border-radius:999px;background:rgba(var(--ink-rgb),.08);overflow:hidden;margin-top:9px}
+.inbox-paciencia i{display:block;height:100%;width:0;border-radius:999px;background:var(--green);transition:width .6s ease,background-color .3s}
+.inbox-card.cola-ambar .inbox-paciencia i{background:var(--amber)}
+.inbox-card.cola-roja .inbox-paciencia i{background:var(--danger)}
+.inbox-card.sale-nopuedo{border-color:var(--danger)}
+.inbox-sello{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green);font-size:34px;pointer-events:none}
+@keyframes inbox-entra{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
+.inbox-card.inbox-entra{animation:inbox-entra .3s cubic-bezier(.2,.8,.2,1)}
+@media(max-width:760px){
+  .lih-nav{display:none}
+  .lih-sub{font-size:11px}
+  .inbox-cola>.inbox-card{flex-basis:86%}
+}
+@media(prefers-reduced-motion:reduce){
+  .inbox-card.inbox-entra,.lih-count.late{animation:none}
+  .inbox-paciencia i{transition:none}
+}
 /* Pagos por verificar: tablero de 3 etapas (loadPagos). --etapa la pone cada columna. */
 .pagos-tablero{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
 .pagos-col{border:1px solid var(--line);border-top:3px solid var(--etapa);border-radius:14px;padding:11px;min-width:0}
@@ -8967,11 +9007,16 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
         <div class="leads-inbox" id="leads-inbox">
           <div class="leads-inbox-head">
-            <h2><i class="fas fa-inbox"></i> Leads nuevos <span class="lih-count" id="inbox-count">0</span></h2>
+            <h2><i class="fas fa-inbox"></i> Leads nuevos <span class="lih-count" id="inbox-count" aria-live="polite" aria-atomic="true">0</span></h2>
+            <span class="lih-sub" id="inbox-sub"></span>
+            <div class="lih-nav">
+              <button type="button" class="lih-flecha" id="inbox-prev" aria-label="Ver leads anteriores"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+              <button type="button" class="lih-flecha" id="inbox-next" aria-label="Ver leads siguientes"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+            </div>
           </div>
           <div class="tbl-state leads-carga" id="inbox-loading" role="status" aria-live="polite"><span class="leads-carga-insignia"><span class="leads-carga-aro" aria-hidden="true"></span>Actualizando</span></div>
           <div class="tbl-state" id="inbox-empty"><i class="fas fa-circle-check"></i><div class="es-t">Al día</div><div class="es-s">No tienes leads nuevos esperando respuesta</div></div>
-          <div class="leads-inbox-grid" id="inbox-grid"></div>
+          <div class="inbox-cola" id="inbox-grid" role="list" aria-label="Cola de leads nuevos, del más antiguo al más reciente"></div>
         </div>
         <div class="tbar mfs" id="leads-tbar">
             <div class="lf-dd">
