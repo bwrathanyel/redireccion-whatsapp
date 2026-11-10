@@ -8267,6 +8267,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   .ss-cal{grid-template-columns:repeat(7,minmax(0,1fr));overflow:visible}
   .ss-dia{min-height:40px}
   .ss-hotel-chip{min-height:40px;font-size:12.5px;padding:0 12px;margin:0 6px 8px 0}
+  /* Una sola fila deslizable: con 15+ hoteles los chips tapaban media pantalla antes del calendario */
+  #ss-chips-hotel{position:relative;display:flex;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;-webkit-mask-image:linear-gradient(to right,#000 85%,transparent);mask-image:linear-gradient(to right,#000 85%,transparent);padding-right:24px}
+  #ss-chips-hotel::-webkit-scrollbar{display:none}
+  #ss-chips-hotel .ss-hotel-chip{flex:none;white-space:nowrap;margin-bottom:0}
   .ss-nav-btn{width:44px;height:44px}
   .ss-rotulo{font-size:12px}
   .tar-selbar{background:var(--panel-solid);padding:10px 12px calc(10px + var(--safe-b))}

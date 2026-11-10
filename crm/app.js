@@ -20858,6 +20858,9 @@ function ssRenderVigentes() {
   const chipsBox = document.getElementById('ss-chips-hotel');
   chipsBox.innerHTML = ssChipsHoteles(noches);
   chipsBox.querySelectorAll('[data-ss-hotel]').forEach((b) => b.addEventListener('click', () => ssIrAHotel(b.dataset.ssHotel)));
+  // En móvil los chips van en una fila deslizable: dejar el elegido a la vista tras repintar.
+  const chipOn = chipsBox.querySelector('.ss-hotel-chip.on');
+  if (chipOn && chipsBox.scrollWidth > chipsBox.clientWidth) chipsBox.scrollLeft = chipOn.offsetLeft - (chipsBox.clientWidth - chipOn.offsetWidth) / 2;
   cont.querySelector('[data-ss-limpiar]')?.addEventListener('click', () => {
     ssFiltro = 'todos'; ssHotelSel = null; SS_DIA_ABIERTO = null;
     ssRenderVigentes();
