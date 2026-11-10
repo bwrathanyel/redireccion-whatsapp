@@ -2592,7 +2592,12 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .lih-flecha:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @keyframes inbox-late{0%,100%{transform:none}50%{transform:scale(1.25)}}
 .lih-count.late{display:inline-block;animation:inbox-late 1.2s ease-in-out}
-.inbox-cola{display:flex;align-items:stretch;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding:2px 2px 16px;scrollbar-width:thin}
+.inbox-cola{display:flex;align-items:stretch;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;padding:2px 2px 10px}
+.inbox-cola::-webkit-scrollbar{height:6px}
+.inbox-cola::-webkit-scrollbar-track{background:transparent}
+.inbox-cola::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:999px}
+.inbox-cola::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.26)}
+:root[data-theme="light"] .inbox-cola::-webkit-scrollbar-thumb{background:rgba(var(--ink-rgb),.18)}
 .inbox-cola.hay-mas{mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent);-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}
 .inbox-cola>.inbox-card{position:relative;flex:0 0 280px;min-width:0;display:flex;flex-direction:column;scroll-snap-align:start}
 .inbox-cola>.inbox-card .ec-row{font-size:11.5px;margin-top:5px}
