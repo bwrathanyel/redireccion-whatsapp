@@ -7547,6 +7547,8 @@ function repartoHayCambios() { return repartoDirty || repartoSemilla; }
 function repartoNumero(n) { return Number(n || 0).toLocaleString('es-VE'); }
 const repartoSumaMapa = m => [...m.values()].reduce((s, p) => s + p, 0);
 const repartoPct = v => (v > 0 && v < 1 ? '<1' : Math.round(v)) + '%';
+const REP_DIAS = [1, 2, 3, 5, 7, 15];
+const repartoFecha = t => new Date(t).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', timeZone: 'America/Caracas' });
 const repartoMarcados = f => new Set(Object.keys(f.mezcla).filter(k => f.mezcla[k] > 0));
 
 // Columna de cada lead con el mismo ruteo del motor: su grupo; sin grupo,
@@ -7662,7 +7664,7 @@ function repartoDescartar() {
   repartoFilas = repartoSemilla ? repartoSemillaFilas() : guardadas.map(f => {
     const mezcla = Object.fromEntries(Object.entries(f.mezcla || {}).map(([k, v]) => [k, Number(v)]));
     const viejos = new Set([...(f.grupos || []), ...(f.sin_destino ? [REP_SIN] : [])]);
-    return { nombre: f.nombre, peso: Number(f.peso), mezcla: Object.keys(mezcla).length ? mezcla : repartoParejo(viejos), fijo: false };
+    return { nombre: f.nombre, peso: Number(f.peso), mezcla: Object.keys(mezcla).length ? mezcla : repartoParejo(viejos), fijo: false, pausa: f.pausado_hasta || null };
   });
   repartoFilas.sort((a, b) => b.peso - a.peso || a.nombre.localeCompare(b.nombre));
   repartoAbiertos = new Set();
@@ -7761,7 +7763,8 @@ function renderReparto() {
     <div class="rep-fila">
       <span class="rep-quien">
         <span class="rep-dot" style="background:${ADV_COLORS[i % ADV_COLORS.length]}"></span>
-        <span class="rep-nombre" title="${esc(f.nombre)}">${esc(f.nombre)}</span>
+        <span class="rep-nombre" title="${esc(f.nombre)}">${esc(f.nombre)}${f.pausa ? `<small class="rep-pausa-tag">Pausado · vuelve el ${repartoFecha(f.pausa)}</small>` : ''}</span>
+        <button type="button" class="rep-ico rep-pausar${f.pausa ? ' on' : ''}" data-rep-pausa title="${f.pausa ? 'Reanudar ya' : 'Pausar unos días'}" aria-label="${f.pausa ? 'Reanudar' : 'Pausar'} a ${esc(f.nombre)}"><i class="fas fa-${f.pausa ? 'play' : 'pause'}"></i></button>
         <button type="button" class="rep-ico rep-quitar" data-rep-quitar title="Quitar del reparto" aria-label="Quitar a ${esc(f.nombre)} del reparto"><i class="fas fa-xmark"></i></button>
       </span>
       <span class="rep-peso">
@@ -7772,6 +7775,7 @@ function renderReparto() {
       <span class="rep-est"></span>
       <button type="button" class="rep-abrir" data-rep-abrir aria-expanded="${abierto}" title="De qué destinos salen sus leads"><span class="rep-abrir-txt"></span><i class="fas fa-chevron-down"></i></button>
     </div>
+    <div class="rep-pausa" hidden><span>Sacar a ${esc(f.nombre)} del reparto por</span>${REP_DIAS.map(d => `<button type="button" class="btn-sec" data-rep-dias="${d}">${d} ${d === 1 ? 'día' : 'días'}</button>`).join('')}</div>
     <div class="rep-mez"${abierto ? '' : ' hidden'}>
       <div class="rep-mez-cab"><span>De dónde salen los leads de ${esc(f.nombre)}</span><button type="button" class="btn-sec" data-rep-parejo title="Cada destino que atiende pesa lo que trae de leads">Parejo</button></div>
       ${cols.map(c => `<div class="rep-mez-fila" data-clave="${esc(c.clave)}">
@@ -7880,6 +7884,11 @@ function setupReparto() {
         el.querySelector('.rep-mez').hidden = !abrir;
         b.setAttribute('aria-expanded', abrir);
       }
+      else if (b.matches('[data-rep-pausa]')) {
+        if (repartoFilas[i]?.pausa) pausarReparto(i, 0);
+        else { const p = b.closest('.rep-ase').querySelector('.rep-pausa'); p.hidden = !p.hidden; }
+      }
+      else if (b.matches('[data-rep-dias]')) pausarReparto(i, Number(b.dataset.repDias));
       else if (b.matches('[data-rep-parejo]')) repartoParejoFila(i);
       else if (b.matches('[data-rep-fijo]')) { repartoFilas[i].fijo = !repartoFilas[i].fijo; repartoRefrescar(); }
       else if (b.matches('[data-rep-quitar]')) repartoQuitar(i);
@@ -7911,6 +7920,25 @@ async function guardarReparto() {
     return;
   }
   okToast('Reparto guardado');
+  await cargarReparto();
+}
+// Pausa: rige al toque, aparte del borrador. Mientras dura, su parte de cada
+// destino se reparte entre los demás que lo atienden; al vencer vuelve solo.
+async function pausarReparto(i, dias) {
+  const f = repartoFilas[i];
+  if (!f) return;
+  if (repartoHayCambios()) { errToast(repartoSemilla ? 'Guardá el reparto antes de pausar a alguien' : 'Guardá o descartá los cambios del reparto antes de pausar'); return; }
+  const ok = await confirmarSheet(dias
+    ? { titulo: `¿Pausar a ${f.nombre} ${dias} ${dias === 1 ? 'día' : 'días'}?`, detalle: 'No recibe leads nuevos hasta que venza; su parte se reparte entre los demás y vuelve solo. Sus leads y chats actuales no cambian.', textoOk: 'Pausar' }
+    : { titulo: `¿Reanudar a ${f.nombre}?`, detalle: 'Vuelve a recibir leads desde ahora con su % de siempre.', textoOk: 'Reanudar' });
+  if (!ok) return;
+  const { data, error } = await sb.rpc('admin_pausar_reparto', { p_nombre: f.nombre, p_dias: dias });
+  if (error || !data?.ok) {
+    const msgs = { todos_pausados: 'No puede quedar todo el equipo en pausa', no_esta: 'Ese asesor ya no está en el reparto', dias_invalidos: 'Días inválidos' };
+    errToast('No se pudo: ' + (msgs[data?.error] || data?.error || error?.message || ''));
+    return;
+  }
+  okToast(dias ? `${f.nombre} en pausa hasta el ${repartoFecha(data.pausado_hasta)}` : `${f.nombre} vuelve al reparto`);
   await cargarReparto();
 }
 
