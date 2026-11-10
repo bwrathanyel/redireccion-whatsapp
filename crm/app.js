@@ -30660,7 +30660,8 @@ async function waAbrirChatDeTelefono(telefono, leadAtender) {
 const WA_CO_PLANTILLAS = [
   { t: 'Saludo inicial', con: 'saludo_inicial_asesor_v2', sin: 'saludo_inicial_sin_nombre' },
   { t: 'Lead caliente', con: 'contacto_lead_caliente', sin: 'contacto_lead_caliente_sin_nombre' },
-  { t: 'Lead frío (reactivación)', con: 'reactivacion_lead_frio', sin: 'reactivacion_lead_frio_sin_nombre' },
+  // Cierre suave «¿Aún tiene planes de viajar?»: la larga queda de respaldo mientras Meta revisa la corta.
+  { t: 'Lead frío (reactivación)', con: ['reactivacion_lead_frio_corto', 'reactivacion_lead_frio'], sin: ['reactivacion_lead_frio_sin_nombre_corto', 'reactivacion_lead_frio_sin_nombre'] },
   { t: 'Seguimiento de reserva', con: 'seguimiento_reserva', orden: ['cliente', 'destino', 'fecha', 'asesor'] },
 ];
 const WA_CO_ERR = { ya_enviada_hoy: 'Esa plantilla ya se le envió a este cliente en las últimas 24 h', contacto_dado_de_baja: 'Este cliente pidió no recibir más mensajes', no_autorizado: 'Este lead no está asignado a ti', telefono_invalido: 'Este lead no tiene un teléfono válido', variables_invalidas: 'Revisa los datos: cada uno admite hasta 60 caracteres', plantilla_no_aprobada: 'Meta todavía no aprueba esa plantilla', envio_fallido: 'WhatsApp rechazó la plantilla' };
@@ -30677,7 +30678,8 @@ async function waPlantillaAbrir(telefono, nombrePerfil) {
     waInvocar({ accion: 'plantillas_compartido', accountId: cuenta }).then(r => r.plantillas).catch(() => null),
     sb.from('leads').select('nombre,destino,asesor').eq('telefono', `+${d}`).is('eliminado_at', null).order('fecha_creacion', { ascending: false }).limit(1).maybeSingle(),
   ]);
-  const familias = WA_CO_PLANTILLAS.filter(f => lista?.some(p => p.nombre === f.con || p.nombre === f.sin));
+  const aprobada = n => [].concat(n || []).map(x => lista?.find(p => p.nombre === x)).find(Boolean);
+  const familias = WA_CO_PLANTILLAS.filter(f => aprobada(f.con) || aprobada(f.sin));
   if (!familias.length) { errToast('No hay plantillas aprobadas para este número'); return; }
   const nombre = waNombreReal(l?.nombre || nombrePerfil);
   const r = await confirmarSheet({ titulo: 'Escribir con plantilla', detalle: 'Para iniciar la conversación, o si pasaron 24 h desde el último mensaje del cliente.', textoOk: 'Revisar mensaje', campos: [
@@ -30691,7 +30693,7 @@ async function waPlantillaAbrir(telefono, nombrePerfil) {
   if (!r) return;
   const f = familias[+r.f], cliente = r.trato === '-' ? '' : `${r.trato} ${r.nombre}`, nombrePl = cliente ? f.con : f.sin;
   if (!nombrePl) { errToast('Esta plantilla necesita el nombre del cliente'); return; }
-  const p = lista.find(x => x.nombre === nombrePl);
+  const p = aprobada(nombrePl);
   if (!p) { errToast('Meta todavía no aprueba esa plantilla'); return; }
   const valores = { cliente, destino: r.destino, fecha: r.fecha, asesor: r.asesor };
   const params = (cliente ? f.orden || ['cliente', 'asesor', 'destino'] : ['asesor', 'destino']).map(k => valores[k]);
@@ -30721,8 +30723,12 @@ async function waPlantillaAutomatica(l, fin) {
   const nombre = waNombreReal(l.nombre), trato = nombre && waTratamiento(nombre), cliente = trato ? `${trato} ${nombre}` : '';
   const destino = String(l.destino || '').replace(/\s+/g, ' ').trim();
   const params = [...(cliente ? [cliente] : []), l.asesor || MI_NOMBRE, destino && destino.length <= 60 ? destino : 'su próximo viaje'];
-  try { await waInvocar({ accion: 'enviar_plantilla_compartido', accountId: waCuenta, telefono: `+${String(l.telefono).replace(/\D/g, '')}`, plantilla: cliente ? base : `${base}_sin_nombre`, params }); }
-  catch (e) { errToast(WA_CO_ERR[e.message] || 'No se pudo enviar el mensaje al cliente'); return; }
+  const nombrePl = cliente ? base : `${base}_sin_nombre`;
+  const enviar = plantilla => waInvocar({ accion: 'enviar_plantilla_compartido', accountId: waCuenta, telefono: `+${String(l.telefono).replace(/\D/g, '')}`, plantilla, params });
+  try {
+    if (base !== 'reactivacion_lead_frio') await enviar(nombrePl);
+    else try { await enviar(`${nombrePl}_corto`); } catch (e) { if (!/^plantilla_no_(aprobada|disponible)$/.test(e.message)) throw e; await enviar(nombrePl); }
+  } catch (e) { errToast(WA_CO_ERR[e.message] || 'No se pudo enviar el mensaje al cliente'); return; }
   okToast('Mensaje enviado al cliente');
   setTimeout(async () => {
     if (currentSec !== 'whatsapp') return;
