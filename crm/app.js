@@ -8304,6 +8304,7 @@ document.getElementById('leads-reload-btn')?.addEventListener('click', async () 
 // a los asesores (entran sin asesor); acá se excluyen también para el admin,
 // que sí las vería, y viven en su propia sección: IA Atención al Cliente.
 const SERVICIO_POSADA_IA = 'Asistente IA (posada)';
+const CANALES_VOUCHER = ['Voucher importado', 'Voucher CRM'];
 const PARA_CERRAR_DIAS = { abierto: 14, cotizado: 21, ventana: 90 };
 let PARA_CERRAR_PAGINA = [];
 // Mismos estados que lote_estado_regestionable() + el POR ATENDER que deja el lote.
@@ -8319,6 +8320,9 @@ function buildQuery(forCount) {
   // Los del lote diario viven en Clientes Fríos hasta que avanzan (cotización o más).
   if (MI_ASESOR_INTEGRAL) q = q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
+  // Los leads que crea un voucher ya son ventas y viven en Reservas (dueño 2026-11-10);
+  // siguen saliendo si se los busca por nombre/teléfono o se filtra por ese canal.
+  if (!qs && !CANALES_VOUCHER.includes(fc)) q = q.or(`canal.is.null,canal.not.in.(${CANALES_VOUCHER.map(c => `"${c}"`).join(',')})`);
   if (fst === 'sin') q = q.is('telefono', null);
   else if (fst === 'con') q = q.not('telefono', 'is', null);
   const fseg = val('f-seguimiento');
@@ -36322,16 +36326,22 @@ window.addEventListener('offline', marcarLeadsLiveCaido);
 // Topic con sufijo propio por suscripción: removeChannel es asíncrono y sb.channel() con el
 // mismo nombre devolvía el canal viejo aún cerrándose (bindings duplicados o canal muerto).
 let canalCorreosLive = null, nCanalLive = 0;
+const INSERTS_LIVE_VISTOS = new Set();
 function subscribeRealtime() {
   const n = ++nCanalLive;
   const canal = canalLeadsLive = sb.channel('leads-live-' + n);
   canal
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leads' }, payload => {
+      // Un canal viejo que sigue entregando tras reconectar, o el mismo INSERT
+      // recibido dos veces, duplicaba el toast y el resto del handler (2026-11-10).
+      if (canal !== canalLeadsLive || INSERTS_LIVE_VISTOS.has(payload.new.id)) return;
+      INSERTS_LIVE_VISTOS.add(payload.new.id);
+      if (INSERTS_LIVE_VISTOS.size > 500) INSERTS_LIVE_VISTOS.delete(INSERTS_LIVE_VISTOS.values().next().value);
       // Mismo criterio de visibilidad que buildQuery (:2334) -- si no, avisa
       // de leads que el usuario nunca ve aparecer en la lista. Nota: buildQuery
       // NO excluye es_prueba (esos leads sí aparecen, con su chip), así que acá
       // tampoco se filtra por es_prueba -- solo lo que buildQuery de verdad excluye.
-      if (payload.new.servicio !== SERVICIO_POSADA_IA && !payload.new.eliminado_at && !payload.new.contacto_directo_enviado_at) toast(payload.new);
+      if (payload.new.servicio !== SERVICIO_POSADA_IA && !payload.new.eliminado_at && !payload.new.contacto_directo_enviado_at && !CANALES_VOUCHER.includes(payload.new.canal)) toast(payload.new);
       loadStats().then(renderAllSiVisible);
       if (page === 1 && document.getElementById('sec-leads')?.classList.contains('active')) encolarLeadLive(payload);
       // Solo empujar al inbox en vivo si el lead realmente llegó sin atender
@@ -36345,6 +36355,7 @@ function subscribeRealtime() {
     // pendiente por otra vía (ej. lo editan a mano en el drawer/tabla), sale
     // del inbox sin esperar un refresh manual.
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
+      if (canal !== canalLeadsLive) return;
       if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
           && (payload.new.estado !== 'POR ATENDER' || payload.new.fecha_primer_contacto || payload.new.eliminado_at)) quitarDeInbox(payload.new.id);
       // Solo ventas, con debounce y sin esqueleto: cada UPDATE de cualquier lead
