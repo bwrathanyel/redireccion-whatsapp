@@ -8711,6 +8711,7 @@ function leadCardHtml(l) {
     l.canal ? `<span class="chip ${cc}">${esc(l.canal)}</span>` : '',
     `<span>${textoTelefonoLead(l)}</span>`,
     ROL !== 'asesor' && l.asesor ? `<span>${l.asesor_activo ? esc(l.asesor) : '<span class="muted">' + esc(l.asesor) + '</span>'}</span>` : '',
+    ROL === 'admin' && l.asesor_original && l.asesor_original !== l.asesor ? `<span class="muted" title="Asesor al que se asignó primero">orig. ${esc(l.asesor_original)}</span>` : '',
   ].filter(Boolean).join('<span class="ec-dot">·</span>');
   const fechaViaje = pc.etiquetas['Fecha estimada'] || pc.etiquetas.Fechas || l.fecha_estimada;
   const chipsFichas = [fechaViaje && `<i class="fas fa-calendar-days"></i>${esc(fechaViaje)}`, fichas && pc.etiquetas.Presupuesto && esc('Presupuesto ' + pc.etiquetas.Presupuesto)]
