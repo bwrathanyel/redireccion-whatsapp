@@ -17,6 +17,116 @@ const ERRORES = {
   imagen_no_soportada: 'Solo fotos JPG o PNG',
   meta_rechazo: 'WhatsApp rechazó el mensaje',
 };
+// Nota de voz estilo WhatsApp, compartida con la vista de Zernio (app.js). El <audio> va oculto
+// adentro y conserva el atributo de fuente de cada vista: el reuso de adjuntos entre re-pintados
+// mueve ese mismo nodo a la burbuja nueva, y vozSync le pinta el estado (sigue sonando).
+const VOZ_BARRAS = 32, VOZ_VEL = [1, 1.5, 2];
+const vozTiempo = s => !Number.isFinite(s) || s < 0 ? '0:00' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function vozOnda(clave) {
+  let h = 2166136261;
+  for (const ch of String(clave)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  let out = '';
+  for (let i = 0; i < VOZ_BARRAS; i++) {
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    const alto = 22 + ((h >>> 0) % 78);
+    out += `<b style="height:${Math.round(i < 2 || i > VOZ_BARRAS - 3 ? alto * .45 : alto)}%"></b>`;
+  }
+  return out;
+}
+export function vozHtml(fuente, clave) {
+  instalarVoz();
+  return `<div class="wa-voz"><button type="button" class="wa-voz-play" aria-label="Reproducir nota de voz"><i class="fas fa-play"></i></button>`
+    + `<div class="wa-voz-cuerpo"><div class="wa-voz-onda" role="slider" tabindex="0" aria-label="Posición del audio" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">${vozOnda(clave)}<i></i></div>`
+    + `<div class="wa-voz-pie"><span class="wa-voz-t">0:00</span><button type="button" class="wa-voz-vel" aria-label="Velocidad">1×</button></div></div>`
+    + `<audio class="wa-audio" preload="metadata" ${fuente}></audio></div>`;
+}
+export function vozSync(a) {
+  const caja = a?.closest?.('.wa-voz');
+  if (!caja) return;
+  const dur = a.duration, fin = Number.isFinite(dur) && dur > 0, p = fin ? Math.min(1, a.currentTime / dur) : 0;
+  const sonando = !a.paused && !a.ended;
+  caja.querySelector('.wa-voz-play').innerHTML = `<i class="fas fa-${sonando ? 'pause' : 'play'}"></i>`;
+  caja.querySelector('.wa-voz-play').setAttribute('aria-label', sonando ? 'Pausar' : 'Reproducir nota de voz');
+  const onda = caja.querySelector('.wa-voz-onda');
+  onda.style.setProperty('--p', `${p * 100}%`);
+  onda.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+  onda.querySelectorAll('b').forEach((b, i) => b.classList.toggle('on', (i + .5) / VOZ_BARRAS <= p));
+  caja.querySelector('.wa-voz-t').textContent = vozTiempo(sonando || a.currentTime > 0 ? a.currentTime : dur);
+  caja.querySelector('.wa-voz-vel').textContent = `${a.playbackRate}×`;
+}
+let vozInstalada = false;
+function instalarVoz() {
+  if (vozInstalada) return;
+  vozInstalada = true;
+  const audioDe = el => el.closest('.wa-voz')?.querySelector('audio');
+  const tocar = a => {
+    document.querySelectorAll('.wa-voz audio').forEach(x => x !== a && !x.paused && x.pause());
+    if (!a.getAttribute('src') || a.readyState < 1) {
+      a.closest('.wa-voz').querySelector('.wa-voz-play').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+      a.dataset.vozPend = '1';
+      if (a.getAttribute('src')) a.load();
+      return;
+    }
+    a.play().catch(() => a.closest('.wa-voz')?.classList.add('error'));
+  };
+  const buscar = (onda, x) => {
+    const a = audioDe(onda), r = onda.getBoundingClientRect();
+    if (!a || !Number.isFinite(a.duration) || !r.width) return;
+    a.currentTime = Math.max(0, Math.min(1, (x - r.left) / r.width)) * a.duration;
+    vozSync(a);
+  };
+  ['play', 'pause', 'ended', 'timeupdate', 'loadedmetadata', 'durationchange', 'ratechange'].forEach(ev => document.addEventListener(ev, e => {
+    const a = e.target;
+    if (a.tagName !== 'AUDIO' || !a.closest('.wa-voz')) return;
+    if (ev === 'loadedmetadata') {
+      a.closest('.wa-voz').classList.remove('cargando');
+      if (a.dataset.vozPend) { delete a.dataset.vozPend; tocar(a); }
+    }
+    if (ev === 'ended') a.currentTime = 0;
+    vozSync(a);
+  }, true));
+  document.addEventListener('error', e => {
+    const caja = e.target.tagName === 'AUDIO' && e.target.closest('.wa-voz');
+    if (caja && e.target.getAttribute('src')) { caja.classList.remove('cargando'); caja.classList.add('error'); }
+  }, true);
+  document.addEventListener('click', e => {
+    const play = e.target.closest('.wa-voz-play'), vel = e.target.closest('.wa-voz-vel');
+    if (!play && !vel) return;
+    const a = audioDe(e.target);
+    if (!a) return;
+    if (vel) { a.playbackRate = VOZ_VEL[(VOZ_VEL.indexOf(a.playbackRate) + 1) % VOZ_VEL.length]; vozSync(a); return; }
+    if (a.paused) tocar(a); else a.pause();
+  });
+  document.addEventListener('pointerdown', e => {
+    const onda = e.target.closest('.wa-voz-onda');
+    if (!onda || e.button > 0) return;
+    e.preventDefault();
+    buscar(onda, e.clientX);
+    const mover = ev => buscar(onda, ev.clientX), soltar = () => { removeEventListener('pointermove', mover); removeEventListener('pointerup', soltar); };
+    addEventListener('pointermove', mover); addEventListener('pointerup', soltar);
+  });
+  document.addEventListener('keydown', e => {
+    const onda = e.target.closest?.('.wa-voz-onda'), a = onda && audioDe(onda);
+    if (!a || !Number.isFinite(a.duration)) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); a.currentTime = Math.max(0, Math.min(a.duration, a.currentTime + (e.key === 'ArrowRight' ? 5 : -5))); }
+    else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (a.paused) tocar(a); else a.pause(); }
+  });
+}
+// Eliminar = ocultar en el CRM: WhatsApp no deja borrar un mensaje para el cliente por API.
+export const borrarHtml = id => `<button type="button" class="wa-borrar" data-wa-borrar="${id}" title="Eliminar del CRM" aria-label="Eliminar mensaje"><i class="fas fa-trash-can"></i></button>`;
+export function enlazarBorrar(log, alBorrar) {
+  if (log._borrarEnlazado) return;
+  log._borrarEnlazado = true;
+  log.addEventListener('click', e => {
+    const b = e.target.closest('[data-wa-borrar]');
+    if (b) { e.stopPropagation(); alBorrar(b.dataset.waBorrar, b.closest('.chat-msg')); return; }
+    if (!matchMedia('(hover:none)').matches) return;
+    const msg = e.target.closest('.chat-msg');
+    if (!msg || e.target.closest('a,button,img,video,.wa-voz,.msg-doc')) return;
+    log.querySelectorAll('.chat-msg.sel').forEach(x => x !== msg && x.classList.remove('sel'));
+    msg.classList.toggle('sel');
+  });
+}
 const CSS = `
 .wb-badge{margin-left:auto}
 .wb-acciones{display:contents}
@@ -55,7 +165,7 @@ const CSS = `
 #wb-pdf-previa footer .wb-pv-enviar{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-color:transparent;background:var(--wa);color:#fff;font-weight:600}
 `;
 
-export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, cotizarLead, puedeLlamar, llamarLead, crearReserva, cargarPdfjs, ok, error, navPush, navConsume }) {
+export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmtHoraChat, fmtHoraMsg, initials, openLightbox, abrirLead, cotizarLead, puedeLlamar, llamarLead, crearReserva, cargarPdfjs, confirmar, ok, error, navPush, navConsume }) {
   let convs = [];
   let actual = null;
   let navWb = null;
@@ -68,6 +178,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
   let recarga = null;
   let gen = 0;
   const urls = new Map();
+  const fotos = new Map(), fotosPedidas = new Set();
   const $ = id => document.getElementById(id);
 
   const ventanaAbierta = ventanaWaAbierta;
@@ -87,6 +198,26 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     if (actual) actual = convs.find(c => c.id === actual.id) || actual;
     if (forzar === true || listaVisible()) pintarLista();
     pintarBadge();
+    cargarFotos();
+  }
+  // Meta Cloud API no entrega la foto de perfil: wa_fotos_perfil la guarda cuando el mismo
+  // número aparece en un chat de Zernio (whatsapp-inbox). Se pide una vez por número.
+  async function cargarFotos() {
+    const faltan = [...new Set(convs.map(c => c.wa_id))].filter(t => t && !fotosPedidas.has(t));
+    if (!faltan.length) return;
+    faltan.forEach(t => fotosPedidas.add(t));
+    const { data } = await sb.from('wa_fotos_perfil').select('telefono,foto').in('telefono', faltan);
+    if (!data?.length) return;
+    data.forEach(f => fotos.set(f.telefono, f.foto));
+    if (listaVisible()) pintarLista();
+    if (actual && fotos.has(actual.wa_id)) pintarAvatar();
+  }
+  const avatarHtml = c => fotos.get(c.wa_id) ? `<img src="${esc(fotos.get(c.wa_id))}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(document.createTextNode(this.dataset.ini||''))" data-ini="${esc(initials(c.nombre || '#'))}">` : esc(initials(c.nombre || '#'));
+  function pintarAvatar() {
+    const el = $('wb-avatar'), foto = fotos.get(actual.wa_id);
+    el.innerHTML = avatarHtml(actual);
+    el.classList.toggle('wa-ver-foto', !!foto);
+    el.title = foto ? 'Ver foto de perfil' : '';
   }
   // Fuera de la sección solo hace falta el contador: no se repintan 300 filas por cada cambio.
   const listaVisible = () => !document.hidden && !!$('wb-inbox')?.offsetParent;
@@ -104,7 +235,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     if (!lista.length) { cont.innerHTML = `<div class="msg-empty"><i class="fa-brands fa-whatsapp"></i><br>${q ? 'Sin resultados' : 'Sin chats todavía'}</div>`; return; }
     cont.innerHTML = lista.map(c => `
       <div class="msg-inbox-row${actual?.id === c.id ? ' on' : ''}" data-wb="${c.id}">
-        <div class="msg-avatar dm-avatar" data-canal="whatsapp">${esc(initials(c.nombre || '#'))}</div>
+        <div class="msg-avatar dm-avatar" data-canal="whatsapp">${avatarHtml(c)}</div>
         <div class="msg-inbox-body">
           <div class="msg-inbox-top">
             <div class="msg-inbox-nombre">${esc(c.nombre || '+' + c.wa_id)}</div>
@@ -125,7 +256,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     $('wb-vacio').hidden = true;
     ['wb-head', 'wb-log'].forEach(id => $(id).hidden = false);
     $('wb-titulo').textContent = c.nombre || '+' + c.wa_id;
-    $('wb-avatar').textContent = initials(c.nombre || '#');
+    pintarAvatar();
     $('wb-ver-lead').style.display = c.lead_id ? '' : 'none';
     $('wb-cotizar').style.display = c.lead_id && ['admin', 'asesor'].includes(rol()) ? '' : 'none';
     $('wb-llamar').style.display = c.lead_id && puedeLlamar() ? '' : 'none';
@@ -136,7 +267,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     document.querySelectorAll('#wb-inbox [data-wb]').forEach(r => r.classList.toggle('on', Number(r.dataset.wb) === c.id));
     const { data, error: e } = await sb.from('whatsapp_mensajes')
       .select('wamid,direccion,tipo,texto,enviado_en,estado,error,enviado_por,plantilla,media_id,media_mime,media_path,transcripcion')
-      .eq('conversacion_id', c.id).order('enviado_en', { ascending: false }).limit(150);
+      .eq('conversacion_id', c.id).is('eliminado_en', null).order('enviado_en', { ascending: false }).limit(150);
     if (g !== gen) return;
     if (e) { $('wb-log').innerHTML = '<div class="msg-empty">No se pudieron cargar los mensajes</div>'; return; }
     mensajes = (data || []).reverse();
@@ -180,7 +311,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     if (!m.media_path) return `<div class="msg-doc"><i class="fas fa-paperclip"></i><div><div class="msg-doc-nombre">Adjunto (${esc(m.tipo)}) · aún no descargado</div></div></div>`;
     if (m.tipo === 'image' || m.tipo === 'sticker') return `<img class="msg-img" ${fuente} alt="Foto">`;
     // transcripcion: la escribe whatsapp-webhook al bajar la nota de voz (mismo bloque que Meta DM).
-    if (m.tipo === 'audio') return `<audio class="wa-audio" controls preload="none" ${fuente}></audio>${m.transcripcion ? `<div class="wa-transcripcion"><i class="fas fa-microphone"></i><span>${esc(m.transcripcion)}</span></div>` : ''}`;
+    if (m.tipo === 'audio') return `${vozHtml(fuente, m.media_path)}${m.transcripcion ? `<div class="wa-transcripcion"><i class="fas fa-microphone"></i><span>${esc(m.transcripcion)}</span></div>` : ''}`;
     if (m.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
     return `<div class="msg-doc" ${fuente} data-wb-doc="1"><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(etiquetaDoc(m))}</div></div></div>`;
   }
@@ -221,6 +352,16 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       : `<div class="wb-comp-acc">${actual?.lead_id && ['admin', 'asesor', 'administrativo'].includes(rol()) ? `<button class="wb-comp-reserva" data-wb-reserva="${c.id}"><i class="fas fa-plus"></i> Crear reserva</button>` : ''}<button data-wb-comp="${c.id}" data-wb-est="registrado">Ya lo registré</button><button data-wb-comp="${c.id}" data-wb-est="descartado">Descartar</button></div>`;
     return `<div class="wb-comp"><span class="wb-comp-ia"><i class="fas fa-wand-magic-sparkles"></i> Lo leyó la IA, verifícalo con el banco</span><b>${partes || 'Sin datos legibles'}</b>${dup}${cierre}</div>`;
   }
+  async function eliminarMensaje(wamid) {
+    const id = actual?.id;
+    if (!id || !(await confirmar({ titulo: '¿Eliminar este mensaje?', detalle: 'Se quita del CRM para todo el equipo. WhatsApp no permite borrarlo del teléfono del cliente: él lo sigue viendo.', textoOk: 'Eliminar', destructivo: true }))) return;
+    const { error: e } = await sb.rpc('wa_eliminar_mensaje', { p_wamid: wamid });
+    if (e) { error(e.message?.includes('no_autorizado') ? 'Este chat no es tuyo' : 'No se pudo eliminar el mensaje'); return; }
+    if (actual?.id !== id) return;
+    mensajes = mensajes.filter(x => x.wamid !== wamid);
+    pintarMensajes(false);
+    ok('Mensaje eliminado del CRM');
+  }
   async function marcarComprobante(id, estado) {
     const { error: e } = await sb.from('wa_comprobantes').update({ estado }).eq('id', id);
     if (e) { error('No se pudo actualizar el comprobante'); return; }
@@ -248,7 +389,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       const meta = !mismo(sig) ? `<div class="msg-meta">${quien ? `<span class="wb-por">${esc(quien)}</span>` : ''}<span>${fmtHoraChat(m.enviado_en)}</span>${tick}</div>` : '';
       const adj = adjuntoHtml(m);
       const texto = m.texto ? `<div>${m.plantilla ? '<i class="fas fa-file-lines"></i> ' : ''}${textoConEnlaces(m.texto)}</div>` : (adj ? '' : `<div><i>(${esc(m.tipo)})</i></div>`);
-      html += `<div class="chat-msg ${sale ? 'mine' : 'other'}${mismo(prev) ? ' grouped' : ''}${!mismo(sig) ? ' tail' : ''}${adj ? ' adjunto' : ''}">${adj}${texto}${comprobanteHtml(m)}${meta}</div>`;
+      html += `<div class="chat-msg ${sale ? 'mine' : 'other'}${mismo(prev) ? ' grouped' : ''}${!mismo(sig) ? ' tail' : ''}${adj ? ' adjunto' : ''}">${m._tmp ? '' : borrarHtml(esc(m.wamid))}${adj}${texto}${comprobanteHtml(m)}${meta}</div>`;
     });
     // Las fotos/audios ya cargados se reusan: recrearlos dejaba cajas en 0 px hasta la URL firmada
     // (la lista saltaba) y cortaba el audio que se estaba escuchando.
@@ -256,7 +397,7 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     log.innerHTML = html || '<div class="msg-empty">Sin mensajes</div>';
     log.querySelectorAll('[data-wb-media]').forEach(el => {
       const v = previos.get(el.dataset.wbMedia);
-      if (v && v.tagName === el.tagName) { previos.delete(el.dataset.wbMedia); el.replaceWith(v); } else cargarMedia(el);
+      if (v && v.tagName === el.tagName) { previos.delete(el.dataset.wbMedia); el.replaceWith(v); vozSync(v); } else cargarMedia(el);
     });
     if (abajo) log.scrollTop = log.scrollHeight;
   }
@@ -287,6 +428,10 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
       .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_mensajes', filter: `conversacion_id=eq.${id}` }, ({ eventType, new: m }) => {
         if (!m?.wamid || actual?.id !== id) return;
         const i = mensajes.findIndex(x => x.wamid === m.wamid);
+        if (m.eliminado_en) {
+          if (i >= 0) { mensajes.splice(i, 1); pintarMensajes(false); }
+          return;
+        }
         if (i >= 0) {
           const antes = mensajes[i];
           mensajes[i] = { ...antes, ...m };
@@ -476,6 +621,8 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
     $('wb-ver-lead').addEventListener('click', () => actual?.lead_id && abrirLead(actual.lead_id));
     $('wb-cotizar').addEventListener('click', () => actual?.lead_id && cotizarLead(actual.lead_id));
     $('wb-llamar').addEventListener('click', () => actual?.lead_id && llamarLead(actual));
+    enlazarBorrar($('wb-log'), eliminarMensaje);
+    $('wb-avatar').addEventListener('click', () => { const f = actual && fotos.get(actual.wa_id); if (f) openLightbox([f], 0); });
     if (matchMedia('(max-width:760px)').matches) $('wb-texto').placeholder = 'Mensaje';
     $('wb-texto').addEventListener('input', autoAlto);
     $('wb-texto').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey && !matchMedia('(pointer:coarse)').matches) { ev.preventDefault(); enviarTexto(); } });
