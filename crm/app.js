@@ -8,6 +8,7 @@ import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
 import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
+import { crearMetodosPago } from './metodos-pago.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
@@ -1879,7 +1880,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
   'web-reasignados', 'contactos-directos', 'repartir', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
+  'facturacion', 'pagos', 'metodos-pago', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
@@ -4153,6 +4154,16 @@ let MARKETING = null;
 const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root') });
 let COSTOS_DIGITALES = null;
 const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
+let METODOS_PAGO = null;
+const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
+  raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
+  abrirSheet: openSheet, cerrarSheet: closeSheet, toastCompartir: docToastCompartir, descargar: descargarArchivo });
+// «Datos de pago» desde un chat: el texto elegido se suma a lo que ya estaba escrito.
+const mpInsertarEn = idTexto => t => {
+  const ta = document.getElementById(idTexto); if (!ta) return;
+  ta.value = ta.value.trim() ? ta.value.replace(/\s+$/, '') + '\n\n' + t : t;
+  ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus();
+};
 let BOLETOS_EMITIDOS = null;
 const boletosEmitidos = () => BOLETOS_EMITIDOS ||= crearBoletosEmitidos({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('boletos-emitidos-root'),
   librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), paleta: VCP,
@@ -8459,6 +8470,7 @@ function abrirAccionesLeadSheet(l) {
     { k: 'ficha', t: 'Abrir ficha', i: 'fa-id-card', go: () => openDrawer(l) },
     ROL !== 'administrativo' && { k: 'estado', t: 'Cambiar estado', i: 'fa-arrows-rotate', go: () => abrirEstadoLeadSheet(l) },
     vende && wa && !l.whatsapp_perfil_compartido && { k: 'wa-msg', t: 'Mensaje frecuente por WhatsApp', i: 'fa-comment-dots', go: () => waElegirMensaje(l) },
+    vende && { k: 'pagos', t: 'Datos de pago', i: 'fa-building-columns', go: () => metodosPago().abrirHoja({ telefono: wa }) },
     vende && cta !== 'cotizar' && { k: 'cotizar', t: 'Cotizar', i: 'fa-file-invoice-dollar', go: () => cbDesdeLead(l) },
     vende && !l.fecha_cotizacion_enviada && { k: 'reg-cot', t: 'Registrar cotización enviada', i: 'fa-file-circle-check', go: () => registrarCotizacionEnviada(l) },
     (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) && cta !== 'reserva' && { k: 'reserva', t: 'Crear reserva', i: 'fa-plus', go: () => abrirEnviarFacturacionSheet(l) },
@@ -30500,6 +30512,8 @@ function setupWhatsapp() {
   document.getElementById('wa-conv-back').addEventListener('click', () => waCerrarChat());
   document.getElementById('wa-conv-compose').addEventListener('submit', e => { e.preventDefault(); waEnviar(); });
   document.getElementById('wa-conv-plantilla').addEventListener('click', () => { if (waActual) waPlantillaAbrir(waActual.telefono, waActual.nombre); });
+  document.getElementById('wa-conv-pagos')?.addEventListener('click', () => metodosPago().abrirHoja({ insertar: mpInsertarEn('wa-conv-texto') }));
+  document.getElementById('wb-pagos')?.addEventListener('click', () => metodosPago().abrirHoja({ insertar: mpInsertarEn('wb-texto') }));
   document.getElementById('wa-conv-texto').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches) { e.preventDefault(); waEnviar(); }
   });
@@ -36742,6 +36756,7 @@ const NAV_ITEMS = [
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
+  { sec: 'metodos-pago', icon: 'fas fa-building-columns', label: 'Métodos de pago', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Cuentas de la agencia para copiar o enviar al cliente en texto o foto' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
@@ -36784,6 +36799,7 @@ const NAV_PADRES = [
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
   { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
   { sec: 'pagos', hoja: true },
+  { sec: 'metodos-pago', hoja: true },
   { divisor: 'Gestión' },
   { sec: 'grp-equipo', icon: 'fas fa-people-group', label: 'Equipo', badge: 'nav-tareas-count', badgeDefault: '0' },
   { sec: 'grp-directorio', icon: 'fas fa-briefcase', label: 'Corporativo' },
@@ -37159,6 +37175,7 @@ function cargarSeccion(sec) {
   if (sec === 'ads') adsMeta().cargar();
   if (sec === 'contenido') marketing().cargar();
   if (sec === 'costos-digitales') costosDigitales().cargar();
+  if (sec === 'metodos-pago') metodosPago().cargar();
   if (sec === 'llamadas') llamadasPanel().cargar();
   if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
   if (sec === 'facturas-empresa') facturasEmpresa().cargar();
@@ -39780,6 +39797,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-10', emoji: '🏦', titulo: 'Métodos de pago a un toque', texto: 'Nueva sección «Métodos de pago» en el menú: toca un dato (cuenta, correo de Zelle…) y se copia solo; cada método tiene «Copiar texto», «Foto» y «Enviar». Marca varios para mandarlos juntos, o manda el flyer completo. En los chats de WhatsApp y en las acciones del lead está el botón «Pagos», que pone los datos directo en el mensaje.', roles: ROLES_TODOS },
   { fecha: '2026-11-09', emoji: '💬', titulo: 'Bandeja de WhatsApp en tu menú', texto: 'En el menú de la izquierda (y abajo en el teléfono) ahora tienes Bandeja con los chats de WhatsApp de tus clientes: contestas desde ahí y los llamas con el botón de teléfono.', roles: ['asesor'] },
   { fecha: '2026-11-08', emoji: '📋', titulo: 'Nueva sección Llamadas', texto: 'En Leads › Llamadas ves las llamadas por WhatsApp que quedaron sin resultado y puedes completarlas con «Poner resultado». Arriba están tus números de hoy, 7 o 30 días: llamadas, contacto e interesados.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-08', emoji: '📞', titulo: 'Botón Llamar en la ficha del lead', texto: 'En la ficha del lead hay un botón de teléfono que abre el WhatsApp del cliente para llamarlo. A los pocos segundos aparece una tarjeta para anotar cómo salió la llamada, si quieres una tarea para volver a llamar y una nota. La llamada no se graba.', roles: ['admin', 'asesor'] },

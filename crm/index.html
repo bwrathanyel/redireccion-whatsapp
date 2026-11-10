@@ -9377,6 +9377,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <div class="msg-readonly-note" id="wa-conv-nota" hidden><i class="fas fa-lock"></i> Solo lectura — el bot responde aquí; el asesor atiende por su WhatsApp</div>
           <form class="wa-compose" id="wa-conv-compose" hidden>
             <button class="wa-send wa-send-pl" id="wa-conv-plantilla" type="button" title="Escribir con plantilla (más de 24 h sin mensajes del cliente)" aria-label="Escribir con plantilla"><i class="fas fa-file-lines"></i></button>
+            <button class="wa-send wa-send-pl" id="wa-conv-pagos" type="button" title="Poner los datos de pago en el chat" aria-label="Datos de pago"><i class="fas fa-building-columns"></i></button>
             <textarea id="wa-conv-texto" rows="1" placeholder="Escribe un mensaje" aria-label="Escribe un mensaje" enterkeyhint="enter" maxlength="4000"></textarea>
             <button class="wa-send" id="wa-conv-enviar" type="submit" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
           </form>
@@ -9406,6 +9407,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
             </div>
             <div class="wb-acciones" id="wb-acciones">
               <button class="chat-tool-btn" id="wb-llamar" type="button" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i> Llamar</button>
+              <button class="chat-tool-btn" id="wb-pagos" type="button" title="Poner los datos de pago en el chat" aria-label="Datos de pago"><i class="fas fa-building-columns"></i> Pagos</button>
               <button class="chat-tool-btn" id="wb-cotizar" type="button" aria-label="Cotizar"><i class="fas fa-file-invoice-dollar"></i> Cotizar</button>
               <button class="chat-tool-btn" id="wb-ver-lead" type="button" aria-label="Ver lead"><i class="fas fa-user"></i> Ver lead</button>
             </div>
@@ -11882,6 +11884,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-contenido"><div id="contenido-root"></div></section>
     <!-- IA › COSTOS DIGITALES (costos-digitales.js + RPC costos_digitales) -->
     <section class="section" id="sec-costos-digitales"><div id="costos-digitales-root"></div></section>
+    <!-- Métodos de pago (metodos-pago.js, 2026-11-10): copiar dato, texto o foto para el cliente. -->
+    <section class="section" id="sec-metodos-pago"><div id="metodos-pago-root"></div></section>
     <!-- LEADS › LLAMADAS (llamadas-panel.js + RPC llamadas_app_metricas) -->
     <section class="section" id="sec-llamadas"><div id="llamadas-root"></div></section>
     <!-- BOLETERÍA › BOLETOS EMITIDOS (boletos-emitidos.js + tabla boletos_emitidos) -->
@@ -12877,6 +12881,11 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   <div class="sheet-title">Buscar en el CRM</div>
   <input class="bg-input" id="bg-input" type="search" placeholder="Nombre, teléfono, reserva o sección..." autocomplete="off" aria-label="Buscar en el CRM">
   <div id="bg-res" aria-live="polite"></div>
+</div>
+<div class="sheet" id="mp-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Datos de pago</div>
+  <div id="mp-sheet-root"></div>
 </div>
 <div class="sheet" id="confirmar-sheet">
   <div class="sheet-handle"></div>
