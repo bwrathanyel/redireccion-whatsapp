@@ -8455,6 +8455,55 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   /* Cerrada queda justo bajo la pantalla y su sombra hacia arriba oscurecía la barra */
   :is(.mfs,.sheet):not(.open),:root[data-theme="light"] :is(.mfs,.sheet):not(.open){box-shadow:none}
 }
+
+/* ============ Ficha del lead en móvil (2026-11-10) ============
+   Hoja de 2 alturas (.d-completa la pone app.js), cabecera fija con nombre +
+   estado + pestañas, barra de acciones abajo. Pestañas = data-dtab en cada
+   bloque; los bloques sin data-dtab se ven siempre. Escritorio: solo oculta
+   los elementos nuevos. */
+.dtabs,.dtab-atajos,.dh-est,.dtab-vacio,.dacc-ic.dacc-tel{display:none}
+@media(max-width:760px){
+  .drawer:has(.dhead-lead){height:calc(64dvh / var(--zoom,1));max-height:none;padding-top:0;padding-bottom:0;overscroll-behavior:contain;transition:transform .3s cubic-bezier(.3,1,.4,1),height .3s cubic-bezier(.3,1,.4,1)}
+  .drawer.d-completa:has(.dhead-lead){height:calc((100dvh - env(safe-area-inset-top,0px) - 12px) / var(--zoom,1))}
+  .drawer:has(.dhead-lead)::before{display:none}
+  .drawer:has(.dhead-lead) .dclose{position:fixed;top:14px;right:11px;z-index:4;background:var(--bg2)}
+  .drawer:has(.dhead-lead) #drawerContent{display:flex;flex-direction:column;min-height:100%}
+  .drawer:has(.dhead-lead) .dresumen-cols{flex:1 0 auto}
+
+  .drawer .dhead-lead{position:sticky;top:0;z-index:3;display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:11px;align-items:center;margin:0 -15px 11px;padding:22px 15px 0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:radial-gradient(130% 120% at 0% 0%,color-mix(in srgb,var(--est) 15%,transparent),transparent 62%),var(--bg2);touch-action:pan-x}
+  .dhead-lead::before{content:'';position:absolute;top:9px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:3px;background:var(--line2)}
+  .dhead-lead .dava{grid-row:1/3;width:40px;height:40px;border-radius:12px;font-size:16px}
+  .dhead-lead .dhead-info{display:contents}
+  .dhead-lead .dn{padding-right:48px;font-size:17px}
+  .dhead-lead :is(.dm,.dh-badges){order:2;grid-column:1/-1;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-top:9px}
+  .dhead-lead :is(.dm,.dh-badges)::-webkit-scrollbar{display:none}
+  .dhead-lead :is(.dm-chip,.badge-st){flex-shrink:0;white-space:nowrap}
+  .dh-est{order:1;justify-self:start;display:inline-flex;align-items:center;gap:7px;margin-top:4px;padding:3px 11px 3px 9px;border:1px solid color-mix(in srgb,var(--est) 40%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--est) 14%,transparent);color:var(--txt);font-size:12px;font-weight:800}
+  .dh-est::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--est)}
+  .dtabs{order:3;grid-column:1/-1;display:flex;margin:7px -15px 0;padding:0 7px;overflow-x:auto;scrollbar-width:none}
+  .dtabs::-webkit-scrollbar{display:none}
+  .dtab{flex:1 0 auto;min-height:var(--tap);padding:0 9px;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:color .16s,border-color .16s}
+  .dtab[aria-selected="true"]{color:var(--txt);border-bottom-color:var(--accent)}
+  .dtab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+  #drawerContent[data-dtab="resumen"] [data-dtab]:not([data-dtab="resumen"]),
+  #drawerContent[data-dtab="conv"] [data-dtab]:not([data-dtab="conv"]),
+  #drawerContent[data-dtab="cot"] [data-dtab]:not([data-dtab="cot"]),
+  #drawerContent[data-dtab="hist"] [data-dtab]:not([data-dtab="hist"]){display:none}
+  .drawer .dtab-atajos{display:grid;gap:2px;margin-bottom:11px}
+  .dhago:has(#conv-bloque[hidden]) .dtab-vacio{display:block;margin:4px 2px 11px;color:var(--muted);font-size:13px}
+
+  .drawer:has(.dhead-lead) .dacc{order:99;position:sticky;bottom:0;z-index:3;flex-wrap:wrap;margin:11px -15px 0;padding:9px 15px calc(9px + var(--safe-b));border-top:1px solid var(--line2);background:var(--bg2)}
+  .drawer:has(.dhead-lead) .dacc-estado{flex:1 1 0;min-width:0}
+  .drawer:has(.dhead-lead) .dacc-cta{order:-1;flex:1 1 100%}
+  .drawer .dacc-ic.dacc-tel{display:grid}
+  .drawer:has(.dhead-lead) .dacc-mas{order:98;position:sticky;bottom:calc(var(--tap) + 19px + var(--safe-b));z-index:3;max-height:calc(45dvh / var(--zoom,1));overflow-y:auto;margin:0;background:var(--bg2);border-color:var(--line2)}
+  .drawer:has(.dacc-cta:not([hidden])) .dacc-mas{bottom:calc(2 * var(--tap) + 26px + var(--safe-b))}
+  body.teclado .drawer:has(.dhead-lead) :is(.dacc,.dacc-mas){position:relative;bottom:auto}
+}
+@media(max-width:760px) and (prefers-reduced-motion:reduce){
+  .drawer:has(.dhead-lead){transition:none}
+}
 </style>
 </head>
 <body>

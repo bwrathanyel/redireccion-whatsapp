@@ -8580,7 +8580,7 @@ function aplicarActualizacionLeadAbierto(lead) {
   document.getElementById('venta-box')?.classList.toggle('show', VENTA.includes(document.getElementById('e-estado').value));
   currentLead = lead;
   pintarLecturaDatos();
-  if (actualizados.includes('e-estado')) { document.getElementById('dacc-estado')?.style.setProperty('--est', ESTADO_COLORS[lead.estado] || '#8b93ad'); pintarCtaDrawer(lead); }
+  if (actualizados.includes('e-estado')) { pintarEstadoFicha(lead.estado); pintarCtaDrawer(lead); }
   // Llega también el eco de nuestro propio autoguardado: si no hubo nada que
   // refrescar ni conflicto, no se muestra la barra.
   if (actualizados.length || conflictivos.length) mostrarConflictoLead(actualizados, conflictivos);
@@ -9263,19 +9263,21 @@ function openDrawer(l, opciones = {}) {
       <div class="dhead-info"><div class="dn"><span id="d-nombre">${esc(nombreLead(l))}</span>${badgePrioridadIA(l)}${badgeSeguidorIG(l)}</div>
       <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}${l.destino ? `<span class="dm-chip"><i class="fas fa-location-dot"></i>${esc(l.destino)}</span>` : ''}<span class="dm-chip"><i class="fas fa-clock"></i>${esc(tiempoRelativo(fechaLlegadaLead(l)))}</span></div>
       ${l.meta_ad_id || l.meta_ref ? '<div class="dm"><span class="dm-chip" id="d-origen-ad"><i class="fas fa-bullhorn"></i>Vino de un anuncio de Meta</span></div>' : ''}
-      ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div></div>
+      ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div>
+      <span class="dh-est" id="dh-est" style="--est:${estColor}">${esc(niceEstado(l.estado))}</span>
+      <div class="dtabs" role="tablist" aria-label="Secciones de la ficha">${FICHA_TABS.map(([k, t], i) => `<button type="button" role="tab" class="dtab" data-dtab-btn="${k}" aria-selected="${i === 0}">${t}</button>`).join('')}</div></div>
 
     <div class="dacc">
       <label class="dacc-estado" id="dacc-estado" style="--est:${estColor}"><span class="sr-only">Estado</span>
         <select id="e-estado" ${dis}>${opt(ESTADOS_EDIT, ESTADOS_EDIT.includes(l.estado) ? l.estado : 'POR ATENDER')}</select><i class="fas fa-chevron-down"></i></label>
       <button type="button" class="dacc-cta" id="e-a-cta" ${cta ? `data-accion="${cta.key}"` : 'hidden'}>${cta ? `<i class="fas ${cta.icono}"></i>${cta.texto}` : ''}</button>
       ${wa ? `<a class="dacc-ic wa" ${waAtributosLead(l, wa)} title="Abrir WhatsApp" aria-label="Abrir WhatsApp"><i class="fab fa-whatsapp"></i></a>` : ''}
-      ${postWa(l.telefono) && MI_ASESOR_INTEGRAL ? `<button type="button" class="dacc-ic" id="e-a-llamar" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i></button>` : ''}
+      ${postWa(l.telefono) && MI_ASESOR_INTEGRAL ? `<button type="button" class="dacc-ic" id="e-a-llamar" title="Llamar por WhatsApp" aria-label="Llamar por WhatsApp"><i class="fas fa-phone"></i></button>` : wa ? `<a class="dacc-ic dacc-tel" href="tel:+${wa}" title="Llamar" aria-label="Llamar"><i class="fas fa-phone"></i></a>` : ''}
       ${wa && vende ? `<button type="button" class="dacc-ic" id="e-a-wa-msg" title="Mensaje frecuente por WhatsApp" aria-label="Mensaje frecuente por WhatsApp"><i class="fas fa-comment-dots"></i></button>` : ''}
       <button type="button" class="dacc-ic" id="e-a-mas" aria-expanded="false" aria-controls="dacc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
-    ${vende && !l.fecha_cotizacion_enviada ? `<button class="dacc-cot" id="e-a-cotizacion" type="button"><i class="fas fa-file-circle-check"></i><span>Registrar cotización enviada</span></button>` : ''}
-    ${vende && !soloLectura && !ESTADOS_SIN_SEGUIMIENTO.includes(l.estado) ? `<div class="dseg" id="d-seg" role="group" aria-label="Seguimiento">${dsegHtml(l)}</div>` : ''}
+    ${vende && !l.fecha_cotizacion_enviada ? `<button class="dacc-cot" id="e-a-cotizacion" type="button" data-dtab="cot"><i class="fas fa-file-circle-check"></i><span>Registrar cotización enviada</span></button>` : ''}
+    ${vende && !soloLectura && !ESTADOS_SIN_SEGUIMIENTO.includes(l.estado) ? `<div class="dseg" id="d-seg" data-dtab="resumen" role="group" aria-label="Seguimiento">${dsegHtml(l)}</div>` : ''}
     <div class="dacc-mas" id="dacc-mas" hidden>
       ${vende && !soloLectura ? `<button class="dq-mas" id="e-a-pegar-chat" type="button"><i class="fas fa-paste"></i>Pegar chat de WhatsApp</button>` : ''}
       ${vende && l.destino ? `<button class="dq-mas" id="e-a-texto-ia" type="button"><i class="fas fa-wand-magic-sparkles"></i>Respuesta sugerida (IA)</button>` : ''}
@@ -9290,7 +9292,7 @@ function openDrawer(l, opciones = {}) {
     <div class="edit-err" id="edit-err"></div>
     <div class="lead-conflict-bar" id="lead-conflict-bar" style="display:none"></div>
 
-    <section class="dbloque dgestion" id="d-gestion" data-dsec="gestion">
+    <section class="dbloque dgestion" id="d-gestion" data-dsec="gestion" data-dtab="resumen">
       <div class="dbloque-h"><span><i class="fas fa-sliders"></i> Gestión</span></div>
       <div class="dgrid">
         <div class="fcol"><label class="fl fl-ia">Servicio de interés <button class="ia-mini" id="e-servicio-ia" type="button" title="Detectar el servicio con IA" aria-label="Detectar el servicio con IA" ${dis}><i class="fas fa-wand-magic-sparkles"></i></button></label><select id="e-servicio" class="ei" ${dis}><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select></div>
@@ -9308,7 +9310,7 @@ function openDrawer(l, opciones = {}) {
 
     <div class="dresumen-cols">
       <div class="dquien-es">
-        <section class="dbloque" id="d-datos" data-dsec="datos">
+        <section class="dbloque" id="d-datos" data-dsec="datos" data-dtab="resumen">
           <div class="dbloque-h"><span><i class="fas fa-user-pen"></i> Datos del cliente</span>${soloLectura ? '' : '<button type="button" class="dbloque-btn" id="d-editar"><i class="fas fa-pen"></i> Editar</button>'}</div>
           <dl class="dlect">
             ${lectura('Teléfono', 'e-telefono')}
@@ -9335,11 +9337,12 @@ function openDrawer(l, opciones = {}) {
 
       </div>
       <div class="dhago">
+        <div class="dtab-atajos" data-dtab="cot" id="d-cot-atajos"></div>
         ${(vende || esOficina()) && VENTA.includes(l.estado) ? seccion('reservas', 'fa-suitcase-rolling', 'Reservas del cliente', `
           <div class="csub" style="margin-bottom:8px">Cada viaje del cliente es una reserva. La primera se cierra con el lead; las adicionales se facturan aparte.</div>
           <div id="res-lista"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
           <div class="edit-err" id="res-err"></div>
-          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true) : ''}
+          <button class="dbtn gh" id="res-nueva" type="button" style="width:100%;margin-top:6px"><i class="fas fa-plus"></i> Nueva reserva</button>`, true, 'data-dtab="cot"') : ''}
         ${(vende || esOficina()) && LINK_PAGO_ESTADOS.includes(l.estado) ? seccion('link-pago', 'fa-link', 'Link de pago', `
           <div class="csub" style="margin-bottom:8px">El cliente abre el link, elige cómo pagar (Zelle, Pago Móvil o Binance) y sube su comprobante. Vence en 24 horas; oficina lo verifica.</div>
           <label class="fl">Reserva</label>
@@ -9351,23 +9354,24 @@ function openDrawer(l, opciones = {}) {
           <div class="edit-err" id="lp-err"></div>
           <button class="dbtn save" id="lp-emitir" type="button" style="width:100%;margin-top:6px"><i class="fas fa-link"></i> Generar link</button>
           <div id="lp-resultado" style="display:none;margin-top:10px"></div>
-          <div class="lp-links" id="lp-links"></div>`, false) : ''}
-        <section class="dbloque" id="conv-bloque" hidden>
+          <div class="lp-links" id="lp-links"></div>`, false, 'data-dtab="cot"') : ''}
+        <section class="dbloque" id="conv-bloque" data-dtab="conv" hidden>
           <div class="dbloque-h"><span><i class="fas fa-robot"></i> Chat con la IA</span><button type="button" class="dbloque-btn" id="conv-ver">Ver todo</button></div>
           <div id="conv-preview" class="conv-preview"></div>
         </section>
+        <div class="dtab-atajos" data-dtab="conv" id="d-conv-atajos"><p class="dtab-vacio">Este lead no tiene chat con la IA.</p></div>
 
-        <section class="dbloque" id="d-tareas">
+        <section class="dbloque" id="d-tareas" data-dtab="resumen">
           <div class="dbloque-h"><span><i class="fas fa-list-check"></i> Tareas</span></div>
           <div class="tk-root" id="d-tareas-body"></div>
         </section>
 
-        <section class="dbloque">
+        <section class="dbloque" data-dtab="resumen">
           <div class="dbloque-h"><span><i class="fas fa-note-sticky"></i> Nota del equipo</span><span class="dnotas-meta" id="e-notas-meta"></span></div>
           <textarea id="e-notas" class="ei" rows="3" placeholder="Qué se habló, qué quedó pendiente… solo la ve el equipo">${esc(l.notas || '')}</textarea>
         </section>
 
-        <details class="dsec" data-dsec="historial">
+        <details class="dsec" data-dsec="historial" data-dtab="hist">
           <summary><i class="fas fa-clock-rotate-left dsec-ic"></i> <span class="dsec-t">Historial</span> <i class="fas fa-chevron-down dsec-arrow"></i></summary>
           <div class="dsec-body">
             <div id="act-body"><div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div></div>
@@ -9382,8 +9386,9 @@ function openDrawer(l, opciones = {}) {
   if (MI_USUARIO_ID) tareasV2().bloqueLead(document.getElementById('d-tareas-body'), { id: l.id, nombre: nombreLead(l), estado: l.estado, asesor: l.asesor });
   document.getElementById('e-estado').addEventListener('change', e => {
     document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
-    document.getElementById('dacc-estado').style.setProperty('--est', ESTADO_COLORS[e.target.value] || '#8b93ad');
+    pintarEstadoFicha(e.target.value);
   });
+  prepararFichaMovil();
   // Autoguardado: `input` solo marca el campo como tocado; `change` (al elegir
   // en un select, o al salir de un input) dispara el guardado.
   FIELD_IDS_LEAD.forEach(id => {
@@ -9448,6 +9453,60 @@ function openDrawer(l, opciones = {}) {
   navPush({ type: 'drawer' });
   if (opciones.seccion) setTimeout(() => irASeccionDrawer(opciones.seccion), 320);
 }
+// Ficha del lead en móvil (≤760px): hoja de 2 alturas, pestañas y barra de
+// acciones abajo. El CSS solo actúa en móvil; en escritorio esto no cambia nada.
+const FICHA_TABS = [['resumen', 'Resumen'], ['conv', 'Conversación'], ['cot', 'Cotización'], ['hist', 'Historial']];
+let fichaArrastreListo = false;
+function pintarEstadoFicha(est) {
+  const col = ESTADO_COLORS[est] || '#8b93ad';
+  document.getElementById('dacc-estado')?.style.setProperty('--est', col);
+  const p = document.getElementById('dh-est');
+  if (p) { p.style.setProperty('--est', col); p.textContent = niceEstado(est); }
+}
+function alturaFichaLead(completa) { document.getElementById('drawer').classList.toggle('d-completa', completa); }
+function tabFichaLead(tab) {
+  const c = document.getElementById('drawerContent');
+  c.dataset.dtab = tab;
+  c.querySelectorAll('[data-dtab-btn]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.dtabBtn === tab)));
+  const h = c.querySelector('details[data-dsec="historial"]');
+  if (tab === 'hist' && h && !h.open) h.open = true;
+  if (esMovil()) { alturaFichaLead(true); document.getElementById('drawer').scrollTop = 0; }
+}
+function prepararFichaMovil() {
+  const c = document.getElementById('drawerContent');
+  c.dataset.dtab = 'resumen';
+  alturaFichaLead(false);
+  const atajos = ids => ids.map(id => document.getElementById(id)).filter(Boolean)
+    .map(b => `<button type="button" class="dq-mas" data-clic="${b.id}">${b.querySelector('i')?.outerHTML || ''}${esc(b.textContent.trim() || b.getAttribute('aria-label') || '')}</button>`).join('');
+  document.getElementById('d-conv-atajos').insertAdjacentHTML('beforeend', atajos(['e-a-pegar-chat', 'e-a-texto-ia', 'e-a-wa-msg']));
+  document.getElementById('d-cot-atajos').innerHTML = atajos(['e-a-armar-cot', 'e-a-facturar', 'e-a-boleteria']);
+  c.querySelector('.dtabs').onclick = e => { const b = e.target.closest('[data-dtab-btn]'); if (b) tabFichaLead(b.dataset.dtabBtn); };
+  c.querySelectorAll('.dtab-atajos').forEach(a => { a.onclick = e => { const b = e.target.closest('[data-clic]'); if (b) document.getElementById(b.dataset.clic)?.click(); }; });
+  if (fichaArrastreListo) return;
+  fichaArrastreListo = true;
+  const d = document.getElementById('drawer');
+  const esFicha = () => esMovil() && !!d.querySelector('.dhead-lead');
+  let y0 = null, dy = 0, t0 = 0;
+  const soltar = () => { y0 = null; d.style.transition = ''; d.style.transform = ''; };
+  d.addEventListener('touchstart', e => {
+    if (!esFicha() || d.scrollTop > 2 || !e.target.closest('.dhead-lead') || e.target.closest('.dtabs,button,a,select,input')) return;
+    y0 = e.touches[0].clientY; dy = 0; t0 = Date.now(); d.style.transition = 'none';
+  }, { passive: true });
+  d.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    d.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+  }, { passive: true });
+  d.addEventListener('touchend', () => {
+    if (y0 == null) return;
+    const rapido = dy / Math.max(1, Date.now() - t0) > .5;
+    soltar();
+    if (dy < -40) alturaFichaLead(true);
+    else if (dy > 90 || (dy > 30 && rapido)) d.classList.contains('d-completa') ? alturaFichaLead(false) : window.closeDrawer();
+  });
+  d.addEventListener('touchcancel', () => { if (y0 != null) soltar(); });
+  d.addEventListener('scroll', () => { if (d.scrollTop > 40 && !d.classList.contains('d-completa') && esFicha()) alturaFichaLead(true); }, { passive: true });
+}
 // Filas de solo lectura de "Datos del cliente": salen de los inputs (no del
 // lead) para reflejar lo que el asesor acaba de escribir y lo que llegó en vivo.
 function pintarLecturaDatos() {
@@ -9469,6 +9528,7 @@ function irASeccionDrawer(id) {
   const mas = document.getElementById('dacc-mas');
   if (mas) { mas.hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); }
   if (!el) return;
+  if (el.dataset.dtab) tabFichaLead(el.dataset.dtab);
   el.hidden = false; el.dataset.revelada = '1'; el.open = true;
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -9479,7 +9539,7 @@ async function accionPrincipalDrawer(l, key) {
   if (key === 'atender') {
     if (await atenderInboxLead(l) && currentLead?.id === l.id) {
       document.getElementById('e-estado').value = l.estado;
-      document.getElementById('dacc-estado')?.style.setProperty('--est', ESTADO_COLORS[l.estado] || '#8b93ad');
+      pintarEstadoFicha(l.estado);
       pintarCtaDrawer(l);
     }
     return;
