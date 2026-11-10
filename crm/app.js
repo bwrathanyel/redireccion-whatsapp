@@ -9177,7 +9177,7 @@ function openDrawer(l, opciones = {}) {
       <div class="dbloque-h"><span><i class="fas fa-sliders"></i> Gestión</span></div>
       <div class="dgrid">
         <div class="fcol"><label class="fl fl-ia">Servicio de interés <button class="ia-mini" id="e-servicio-ia" type="button" title="Detectar el servicio con IA" aria-label="Detectar el servicio con IA" ${dis}><i class="fas fa-wand-magic-sparkles"></i></button></label><select id="e-servicio" class="ei" ${dis}><option value="">— sin definir —</option>${opt(SERVICIOS, l.servicio)}</select></div>
-        ${campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' || soloLectura ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select>`)}
+        ${ROL === 'admin' && !soloLectura ? `<div class="fcol"><label class="fl fl-ia">Asesor asignado <button class="e-reasignar" id="e-reasignar" type="button" title="Reasignar automático o manual"><i class="fas fa-shuffle"></i> Reasignar</button></label><select id="e-asesor" class="ei">${opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select></div>` : campo('Asesor asignado', `<select id="e-asesor" class="ei" ${ROL === 'asesor' || soloLectura ? 'disabled' : ''}>${ROL === 'asesor' ? opt([MI_NOMBRE], MI_NOMBRE) : opt(['Sin asignar', ...asesoresConActual(l.asesor)], l.asesor || 'Sin asignar')}</select>`)}
         <div class="fcol f-full"><div class="e-servicio-razon" id="e-servicio-razon">${l.servicio_ia_razon ? '<i class="fas fa-robot"></i> ' + esc(l.servicio_ia_razon) : ''}</div></div>
       </div>
       <div id="venta-box" class="venta-box ${VENTA.includes(l.estado) ? 'show' : ''}">
@@ -9306,6 +9306,7 @@ function openDrawer(l, opciones = {}) {
   };
   document.getElementById('e-a-facturar')?.addEventListener('click', () => abrirEnviarFacturacionSheet(l));
   document.getElementById('e-a-cotizacion')?.addEventListener('click', () => registrarCotizacionEnviada(l));
+  document.getElementById('e-reasignar')?.addEventListener('click', () => reasignarLeadAdmin(l));
   // Boletería y Cotizar navegan a otra sección: recién cuando el drawer terminó de cerrar.
   document.getElementById('e-a-boleteria')?.addEventListener('click', () => trasCerrarDrawer(() => abrirSolicitudBoleteria(l)));
   document.getElementById('e-a-armar-cot')?.addEventListener('click', () => trasCerrarDrawer(() => cbDesdeLead(l)));
@@ -9482,6 +9483,39 @@ async function dsegAccion(l, seg, btn) {
   if (!f) return;
   if (f < cbHoy()) { errToast('La fecha no puede ser anterior a hoy'); return; }
   return fijarSeguimiento(l, seguimientoEnDias(0, f), `Seguimiento el ${fmtFechaSolo(f)}, a las 9:00`);
+}
+// Botón «Reasignar» de la ficha (solo admin): automático = siguiente de la
+// rotación; manual = el asesor elegido. Vía Edge Function reasignar-lead para
+// que el asesor nuevo reciba el aviso (Telegram + push).
+async function reasignarLeadAdmin(l) {
+  if (ROL !== 'admin' || !l?.id) return;
+  // «Asesor IA» es cuenta de sistema: admin_reasignar_lead no la acepta.
+  const otros = ACTIVOS.filter(n => n !== l.asesor && n !== 'Asesor IA');
+  const r = await confirmarSheet({
+    titulo: 'Reasignar lead',
+    detalle: `Ahora: ${l.asesor || 'sin asesor'}.`,
+    textoOk: 'Reasignar',
+    campos: [
+      { id: 'modo', tipo: 'radio', label: 'Modo', requerido: true, valor: 'auto', opciones: [
+        { v: 'auto', t: 'Automático: el siguiente de la rotación' },
+        { v: 'manual', t: 'Manual: elegir el asesor' },
+      ] },
+      { id: 'asesor', tipo: 'select', label: 'Asesor (solo manual)', requeridoSi: o => o.modo === 'manual', opciones: [{ v: '', t: '— elegir —' }, ...otros.map(n => ({ v: n, t: n }))] },
+    ],
+  });
+  if (!r) return;
+  const btn = document.getElementById('e-reasignar');
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.functions.invoke('reasignar-lead', { body: { p_lead_id: l.id, modo: r.modo, asesor: r.modo === 'manual' ? r.asesor : undefined } });
+  if (btn) btn.disabled = false;
+  if (error) { errToast('No se pudo reasignar: ' + await msgErrorFn(error, data)); return; }
+  const motivos = { asesor_no_disponible: 'ese asesor no está activo', mismo_asesor: 'ya es el asesor del lead', lead_no_existe: 'el lead no existe' };
+  if (!data?.ok) { errToast('No se pudo reasignar: ' + (motivos[data?.motivo] || data?.motivo || data?.error || 'error desconocido')); return; }
+  if (data.pool_agotado) { errToast('No hay otro asesor disponible en la rotación — el lead sigue igual'); return; }
+  okToast(`Lead reasignado a ${data.asesor_nuevo}`);
+  const { data: fresco } = await sb.from('leads').select('*').eq('id', l.id).maybeSingle();
+  if (fresco && currentLead?.id === l.id) openDrawer(fresco);
+  loadTable();
 }
 async function registrarCotizacionEnviada(l) {
   // El botón existe solo con el drawer abierto; desde el menú "⋯" de la
