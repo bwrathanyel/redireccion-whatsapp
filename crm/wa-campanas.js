@@ -79,6 +79,11 @@ const CSS = `
 .wc-seg{display:inline-flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden;align-self:flex-start}
 .wc-seg button{padding:7px 13px;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:700;font-variant-numeric:tabular-nums;cursor:pointer}
 .wc-seg button+button{border-left:1px solid var(--line2)}.wc-seg button.on{background:var(--accent-soft);color:var(--accent)}
+.wc-vp{display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--line);padding-top:11px}
+.wc-chat{display:flex;background:#0b141a radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px) 0 0/14px 14px;border-radius:12px;padding:16px 14px}
+.wc-msj{max-width:min(440px,92%);background:#202c33;color:#e9edef;border-radius:2px 10px 10px 10px;padding:8px 10px 5px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:0 1px 1px rgba(0,0,0,.25)}
+.wc-msj small{display:block;text-align:right;font-size:10.5px;color:#8696a0;margin-top:2px}
+.wc-vp-gente button.on{border-color:var(--accent);color:var(--accent)}
 @media(max-width:700px){.wc-emb .wc-num{grid-template-columns:repeat(3,minmax(0,1fr))}.wc-vivo{grid-template-columns:repeat(2,minmax(0,1fr))}.wc-pasos li{flex:0 0 auto}
   .wc-det-fila{grid-template-columns:minmax(0,1fr) auto}.wc-det-fila .num{display:none}.wc-det-fila small{grid-column:1/-1}}
 `;
@@ -96,7 +101,8 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
   let timer = null;
   let paso = 1, previa = null, tCuenta = null, nPedido = 0, iMuestra = 0, dias = 30;
   let aprobando = null;
-  const pruebas = new Map();
+  let viendo = null, plantillasZ = null;
+  const pruebas = new Map(), vistas = new Map();
   const telPrueba = { get: () => { try { return localStorage.getItem('wc-tel-prueba') || ''; } catch { return ''; } },
     set: v => { try { localStorage.setItem('wc-tel-prueba', v); } catch { /* sin storage */ } } };
   const caja = () => raiz || fondo?.querySelector('.wc-caja') || null;
@@ -178,6 +184,7 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
         ${reservas && aprobando === c.id ? panelAprobar(c) : `<div class="wc-acc">
           ${c.estado === 'borrador' && admin ? (reservas ? `<button class="btn-sm lt-primario" data-wc-aprobar>Aprobar y enviar</button>`
             : `<button class="btn-sm lt-primario" data-wc-acc="enviando" data-n="${c.pendientes}" data-tarifa="${c.tarifa_usd ?? 0.074}">Aprobar y enviar</button>`) : ''}
+          ${reservas ? `<button class="btn-sm" type="button" data-wc-ver aria-expanded="${viendo === c.id}"><i class="fas fa-eye${viendo === c.id ? '-slash' : ''}"></i> ${viendo === c.id ? 'Ocultar vista previa' : 'Ver cómo le llega'}</button>` : ''}
           ${c.estado === 'borrador' && !admin ? '<span class="wc-nota">Espera la aprobación de un administrador</span>' : ''}
           ${c.estado === 'borrador' && reservas ? '<button class="btn-sm" data-wc-recalcular title="Vuelve a armar la lista con las reglas de hoy">Recalcular lista</button>' : ''}
           ${c.estado === 'enviando' ? '<button class="btn-sm" data-wc-acc="pausada">Pausar</button>' : ''}
@@ -186,6 +193,7 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
           ${['borrador', 'enviando', 'pausada'].includes(c.estado) ? '<button class="btn-sm" data-wc-acc="cancelada">Cancelar</button>' : ''}
           ${c.estado === 'enviando' && !reservas ? '<span class="wc-nota">Sale por tandas, unos 30 por minuto</span>' : ''}
         </div>`}
+        ${reservas && viendo === c.id ? `<div data-wc-vp>${panelVista(c.id)}</div>` : ''}
         ${reservas && malos ? `<details class="pv-wa-grupo" data-wc-det="${c.id}" style="--tc:var(--amber)"><summary><i class="fas fa-chevron-right flecha"></i><i class="fas fa-circle-info"></i>Por qué fallaron u omitieron<small>${malos} ${malos === 1 ? 'cliente' : 'clientes'}</small></summary>
           <div class="pv-wa-cuerpo" data-wc-det-cuerpo><div class="wc-nota">Cargando…</div></div></details>` : ''}
       </div>`;
@@ -220,6 +228,60 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
     </div>`;
   }
 
+  const primerNombre = n => {
+    const p = String(n || '').trim().split(/\s+/)[0] || '';
+    return !/^\p{L}{2,}$/u.test(p) || /^(invitado|cliente|lead)$/i.test(p) ? '' : p[0].toLocaleUpperCase('es') + p.slice(1).toLocaleLowerCase('es');
+  };
+  // Mismo armado que paramsCampana + textoPlantilla (_shared/zernio-plantilla.ts): si cambia allá, cambia acá.
+  function textoPara(cuerpo, variables, m) {
+    const nom = primerNombre(m?.nombre) || 'estimado cliente';
+    const params = (variables || []).map(v => String(v).replaceAll('{{nombre}}', nom).replaceAll('{{destino}}', m?.destino || '').replace(/\s+/g, ' ').trim() || 'cliente');
+    return cuerpo.replace(/\{\{(\d+)\}\}/g, (x, n) => params[Number(n) - 1] ?? '');
+  }
+  const formatoWa = s => esc(s).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:!?)]|$)/g, '$1<i>$2</i>').replace(/~([^~\n]+)~/g, '<s>$1</s>');
+
+  async function leerPlantillasZ() {
+    if (!plantillasZ) {
+      const { data } = await sb.functions.invoke('wa-plantilla-enviar', { body: { accion: 'plantillas' } });
+      if (data?.ok) plantillasZ = data.plantillas || [];
+    }
+    return plantillasZ;
+  }
+
+  async function cargarVista(id) {
+    if (vistas.has(id)) return;
+    vistas.set(id, { cargando: true });
+    const [r, pl] = await Promise.all([sb.rpc('wa_campana_muestra', { p_id: id, p_n: 6 }), leerPlantillasZ().catch(() => null)]);
+    const d = r.data;
+    const p = d?.ok ? pl?.find(t => t.nombre === d.plantilla && t.idioma === d.idioma) ?? pl?.find(t => t.nombre === d.plantilla) : null;
+    vistas.set(id, r.error || !d?.ok ? { error: 'No se pudo leer la lista de la campaña' }
+      : !p ? { error: pl ? 'La plantilla ya no está aprobada en WhatsApp: no se puede enviar' : 'No se pudo leer la plantilla desde WhatsApp. Prueba de nuevo en un rato.' }
+      : { datos: d, cuerpo: p.texto || '', i: 0 });
+    pintarVista(id);
+  }
+
+  function pintarVista(id) {
+    const el = caja()?.querySelector(`[data-wc-id="${id}"] [data-wc-vp]`);
+    if (el) el.innerHTML = panelVista(id);
+  }
+
+  function panelVista(id) {
+    const v = vistas.get(id);
+    if (!v || v.cargando) return '<div class="wc-vp"><div class="wc-nota"><i class="fas fa-spinner fa-spin"></i> Armando la vista previa…</div></div>';
+    if (v.error) return `<div class="wc-vp"><div class="wc-alerta">${esc(v.error)}</div></div>`;
+    const lista = v.datos.muestra || [], i = lista.length ? v.i % lista.length : 0, m = lista[i] || null;
+    const sinDestino = (v.datos.variables || []).some(x => String(x).includes('{{destino}}')) && !m?.destino;
+    const hora = new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="wc-vp">
+      <div class="wc-etq">Así le llega${m ? ` a ${esc(m.nombre || 'un cliente')}` : ' (ejemplo sin cliente)'}</div>
+      <div class="wc-chat"><div class="wc-msj">${formatoWa(textoPara(v.cuerpo, v.datos.variables, m))}<small>${hora}</small></div></div>
+      ${sinDestino && m ? '<div class="wc-alerta">Este cliente no tiene destino: al enviar se omite.</div>' : ''}
+      ${lista.length > 1 ? `<div class="wc-etq">Ver con otro cliente de la lista</div><div class="wc-chips wc-vp-gente">${lista.map((x, j) =>
+        `<button type="button" class="btn-sm${j === i ? ' on' : ''}" data-wc-vp-i="${j}" aria-pressed="${j === i}">${esc(primerNombre(x.nombre) || x.nombre || 'Sin nombre')}${x.destino ? ` · ${esc(x.destino)}` : ''}</button>`).join('')}</div>` : ''}
+      <div class="wc-nota">Es el texto de la plantilla aprobada con los datos de cada cliente. Para verlo en un teléfono de verdad: «Aprobar y enviar» › «Enviar prueba» (va solo a tu número).</div>
+    </div>`;
+  }
+
   async function probar(id) {
     const tel = caja().querySelector(`[data-wc-id="${id}"] [data-wc-tel]`)?.value.trim();
     if (!tel || tel.replace(/\D/g, '').length < 10) { error('Escribe tu número de WhatsApp con código de país'); return; }
@@ -244,7 +306,8 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
   async function recalcular(id) {
     const { data, error: e } = await sb.rpc('wa_campana_recalcular', { p_id: id });
     if (e || !data?.ok) { error(e?.message || 'No se pudo recalcular'); return; }
-    pruebas.delete(id);
+    pruebas.delete(id); vistas.delete(id);
+    if (viendo === id) cargarVista(id);
     ok(`Lista recalculada: ${data.envios} ${data.envios === 1 ? 'contacto' : 'contactos'}`);
     pintarLista(true);
     alCambiar?.();
@@ -545,6 +608,15 @@ export function crearCampanasWa({ sb, esc, ok, error, origen = 'leads', rol = 'a
       if (t.closest('[data-wc-aprobar-cerrar]')) { aprobando = null; return pintarLista(true); }
       if (t.closest('[data-wc-probar]')) return probar(idDe());
       if (t.closest('[data-wc-recalcular]')) return recalcular(idDe());
+      if (t.closest('[data-wc-ver]')) {
+        const id = idDe();
+        viendo = viendo === id ? null : id;
+        if (viendo && vistas.get(id)?.error) vistas.delete(id);
+        if (viendo) cargarVista(id);
+        return pintarLista(true);
+      }
+      const vi = t.closest('[data-wc-vp-i]');
+      if (vi) { const v = vistas.get(idDe()); if (v?.datos) { v.i = Number(vi.dataset.wcVpI); pintarVista(idDe()); } return; }
       const dd = t.closest('[data-wc-dias]');
       if (dd) { dias = Number(dd.dataset.wcDias); qa('[data-wc-dias]').forEach(b => { b.classList.toggle('on', b === dd); b.setAttribute('aria-pressed', b === dd); }); return recontar(); }
       const acc = t.closest('[data-wc-acc]');
