@@ -34598,9 +34598,9 @@ const cbEsPreventa = t => /preventa/i.test(`${t.titulo || ''} ${t.vigencia_texto
 const cbTarVentanas = t => Array.isArray(t.ventanas) && t.ventanas.length ? t.ventanas.map(v => [v.desde || null, v.hasta || null]) : [[t.disfrute_desde || null, t.fecha_fin || null]];
 const cbTarSeCruzan = (a, b) => cbTarVentanas(a).some(([d1, h1]) => cbTarVentanas(b).some(([d2, h2]) => (!d1 || !h2 || h2 >= d1) && (!h1 || !d2 || d2 <= h1)));
 function cbMarcarPreventas(filas, hoy = cbHoy()) {
-  const venta = t => t.fecha_venta_fin || t.venta_hasta || null;
+  const venta = t => t.fecha_venta_fin || t.venta_hasta || '9999-12-31';
   for (const t of filas) t._preventa_viva = cbEsPreventa(t) && !filas.some(x => x !== t && x.vigente !== false
-    && (!venta(x) || venta(x) >= hoy) && (!cbEsPreventa(x) || (venta(x) && venta(t) && venta(x) > venta(t))) && cbTarSeCruzan(t, x));
+    && venta(x) >= hoy && (!x.fecha_fin || x.fecha_fin >= hoy) && (!cbEsPreventa(x) || venta(x) > venta(t)) && cbTarSeCruzan(t, x));
   return filas;
 }
 function cbTarOpciones(filas, campo) {
@@ -37762,6 +37762,7 @@ function activateSection(sec, fromNav) {
   // Clase en .main en vez de .main:has(#sec-x.active): ese :has se re-evaluaba con
   // cualquier mutación dentro de .main e invalidaba todos sus DIV (cargador, renders).
   const mainEl = document.querySelector('.main'); mainEl?.classList.toggle('en-correo', sec === 'correo'); mainEl?.classList.toggle('en-facturacion', sec === 'facturacion');
+  document.body.classList.toggle('en-cotizar', sec === 'cotizacion-boletos');
   // Entrada de la sección nueva. La clase se saca al terminar para que el
   // transform de la animación no quede vivo más de lo necesario (ver
   // .section.entrando en index.html).
