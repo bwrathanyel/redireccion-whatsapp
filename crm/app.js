@@ -4911,12 +4911,15 @@ async function pvPlanAccion(c, p, btn) {
 
 function abrirPostventa(c, accionInicial = null) {
   if (!c) return; PV_ACTUAL = c;
+  const clienteSoloLectura = ROL === 'asesor' && c.asesor_lead !== undefined && c.asesor_lead !== MI_NOMBRE;
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
   const docs = c.documentos || {};
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
     <div data-rv-panel="resumen"><div class="rs-wrap">
+      <div class="rs-sec">Asesor de esta reserva</div>
+      <div class="rs-ro"><span id="pv-e-asesor-actual">${esc(c.asesor || 'Sin asignar')}</span>${ROL === 'admin' ? '<button class="rs-q" id="pv-e-asesor-cambiar" type="button"><i class="fas fa-user-pen" aria-hidden="true"></i> Cambiar asesor</button>' : ''}</div>
       <div data-rv-check></div><div id="pv-e-otras"></div>
       <div class="rs-sec">Dinero <span id="pv-e-modo">Se calcula solo desde servicios y abonos</span></div>
       <div class="rs-stats" id="pv-e-balance"><div class="rs-stat"><span class="rs-lbl">Total</span><b id="pv-d-total">—</b></div><div class="rs-stat"><span class="rs-lbl">Pagado</span><b id="pv-d-pagado">—</b></div><div class="rs-stat" id="pv-d-saldo-box"><span class="rs-lbl">Saldo</span><b id="pv-d-saldo">—</b></div></div>
@@ -4929,7 +4932,7 @@ function abrirPostventa(c, accionInicial = null) {
       <div class="rs-grid2">
         <div><label class="rs-lbl" for="pv-e-inicio">Inicio</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}"></div>
         <div><label class="rs-lbl" for="pv-e-fin">Fin</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}"></div>
-        <div><label class="rs-lbl" for="pv-e-destino">Destino</label><input class="ei" id="pv-e-destino" maxlength="200" value="${esc(c.destino || '')}" placeholder="${esc(c.servicio || 'Sin definir')}"></div>
+        <div><label class="rs-lbl" for="pv-e-destino">Destino</label><input class="ei" id="pv-e-destino" maxlength="200" value="${esc(c.destino || '')}" placeholder="${esc(c.servicio || 'Sin definir')}" ${clienteSoloLectura ? 'readonly' : ''}></div>
         <div><span class="rs-lbl">Etapa</span><div class="rs-ro rs-ro-etapa"><span id="pv-e-etapa-txt">${esc((PV_ETAPAS[c.etapa] || [c.etapa])[0])}</span><button class="rs-q" id="pv-e-etapa-cambiar" type="button" aria-expanded="false">Cambiar</button></div></div>
       </div>
       <select class="ei" id="pv-e-etapa" aria-label="Etapa" hidden>${opt(PV_ETAPAS, c.etapa)}</select>
@@ -4937,8 +4940,8 @@ function abrirPostventa(c, accionInicial = null) {
       <div id="pv-e-habs"></div>
       <div class="rs-sec">Cliente <span>Titular de la reserva (cambia también en su lead)</span></div>
       <div class="rs-grid2">
-        <div><label class="rs-lbl" for="pv-e-nombre">Nombre</label><input class="ei" id="pv-e-nombre" maxlength="160" value="${esc(c.nombre || '')}"></div>
-        <div><label class="rs-lbl" for="pv-e-telefono">Teléfono</label><input class="ei" id="pv-e-telefono" type="tel" maxlength="40" value="${esc(c.telefono || '')}"></div>
+        <div><label class="rs-lbl" for="pv-e-nombre">Nombre</label><input class="ei" id="pv-e-nombre" maxlength="160" value="${esc(c.nombre || '')}" ${clienteSoloLectura ? 'readonly' : ''}></div>
+        <div><label class="rs-lbl" for="pv-e-telefono">Teléfono</label><input class="ei" id="pv-e-telefono" type="tel" maxlength="40" value="${esc(c.telefono || '')}" ${clienteSoloLectura ? 'readonly' : ''}></div>
       </div>
       <div class="rs-sec">Checklist <span>Las marcas «Auto» las pone el sistema</span></div>
       <div class="pv-doc-grid rs-chk-box">${Object.entries(PV_DOCS).map(([k, t]) => pvChkFila(k, t, docs)).join('')}</div>
@@ -4968,6 +4971,7 @@ function abrirPostventa(c, accionInicial = null) {
     <div data-rv-panel="servicios" hidden></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div><div data-rv-panel="abonos" hidden></div>`;
   pvDineroPintar();
   pvComisionPintar(c.id);
+  document.getElementById('pv-e-asesor-cambiar')?.addEventListener('click', e => pvCambiarAsesor(c, e.currentTarget));
   document.getElementById('pv-e-total').addEventListener('input', pvDineroPintar);
   document.getElementById('pv-e-etapa-cambiar').onclick = e => {
     const sel = document.getElementById('pv-e-etapa'), abrir = sel.hidden;
@@ -4996,6 +5000,46 @@ function abrirPostventa(c, accionInicial = null) {
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
   rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : accionInicial === 'abonos' ? 'abonos' : 'resumen', accionInicial);
   if (esOficina()) pvCargarEmpresas(c);
+}
+async function pvCambiarAsesor(c, btn) {
+  if (ROL !== 'admin' || !c?.id || btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const [{ data: equipo, error: errorEquipo }, { data: asesores, error: errorAsesores }] = await Promise.all([
+      sb.rpc('personal_resumen', { p_dias: 1 }),
+      sb.from('asesores').select('id,nombre').eq('activo', true).eq('es_cuenta_sistema', false),
+    ]);
+    if (PV_ACTUAL?.id !== c.id || !btn.isConnected) return;
+    if (errorEquipo || errorAsesores) { errToast('No se pudieron cargar los asesores. Intenta de nuevo.'); return; }
+    const habilitados = new Set((equipo?.personas || []).filter(p => p.asesor_id && ['admin', 'asesor'].includes(p.rol) && !p.bloqueado && !p.dado_de_baja && !p.desactivado_at).map(p => String(p.asesor_id)));
+    const nombres = [...new Set((asesores || []).filter(a => habilitados.has(String(a.id))).map(a => a.nombre))]
+      .filter(n => n && n !== c.asesor).sort((a, b) => a.localeCompare(b));
+    if (!nombres.length) { errToast('No hay otro asesor disponible.'); return; }
+    const version = RV_RESERVA_ID === c.id ? RV_DET?.reserva?.version ?? c.version : c.version;
+    const r = await confirmarSheet({ titulo: 'Cambiar asesor de la reserva',
+      detalle: `${c.codigo || 'Reserva'} · Asesor actual: ${c.asesor || 'Sin asignar'}.\nSolo cambia esta reserva. El cliente y sus otras reservas conservan su asesor. Las facturas y comisiones ya registradas se mantienen.`,
+      textoOk: 'Cambiar asesor', campos: [{ id: 'asesor', label: 'Nuevo asesor', tipo: 'select', requerido: true,
+        opciones: [{ v: '', t: 'Elige un asesor' }, ...nombres.map(n => ({ v: n, t: n }))] }] });
+    if (!r || PV_ACTUAL?.id !== c.id || !btn.isConnected) return;
+    const { data, error } = await sb.rpc('admin_reasignar_reserva', { p_reserva_id: c.id, p_asesor: r.asesor, p_version: version });
+    if (error || !data?.ok) {
+      const errores = { asesor_no_disponible: 'Ese asesor ya no está disponible.', reserva_cambio: 'La reserva cambió mientras elegías. Vuelve a abrirla e intenta de nuevo.', reserva_no_existe: 'La reserva ya no existe.', reserva_no_disponible: 'La reserva ya no está activa.', lead_no_disponible: 'El cliente ya no está disponible.' };
+      errToast(errores[data?.error] || 'No se pudo cambiar el asesor. Intenta de nuevo.'); return;
+    }
+    c.asesor = data.asesor; c.responsable = data.asesor; c.version = data.version;
+    const fila = POSTVENTA.find(x => x.id === c.id); if (fila) Object.assign(fila, { asesor: data.asesor, responsable: data.asesor, version: data.version });
+    if (PV_ACTUAL?.id === c.id && btn.isConnected) {
+      document.getElementById('pv-e-asesor-actual').textContent = data.asesor;
+      const sub = document.querySelector('#drawerContent .dhead .dm');
+      if (sub) sub.textContent = `${c.codigo || ''}${c.principal === false ? ' (adicional)' : ''} · ${c.destino || c.servicio || 'Postventa'} · ${data.asesor}`;
+    }
+    okToast(`Reserva asignada a ${data.asesor}`);
+    try {
+      if (PV_ACTUAL?.id === c.id && btn.isConnected) await rvCargar();
+      await loadPostventa();
+    } catch { errToast('El asesor se cambió. Vuelve a abrir la reserva para refrescar los datos.'); }
+  } catch { errToast('No se pudo cambiar el asesor. Comprueba la conexión e intenta de nuevo.'); }
+  finally { if (btn.isConnected) btn.disabled = false; }
 }
 // Sin empresa_id en la bandeja (migración 20260925190000 sin aplicar) se deduce de las reservas de cada empresa.
 let PV_EMPRESA_PREVIA = null;
@@ -40652,6 +40696,7 @@ function setupTutoriales() {
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
   { fecha: '2026-11-11', emoji: '🧾', titulo: 'Lyra genera la cotización completa', texto: 'Pídele a Lyra «hazme la cotización de este cliente en tal hotel, del 10 al 14, 2 adultos» y la genera igual que la sección Cotizaciones: número COT, PDF, queda en el historial y el lead pasa a Cotización enviada. En el chat te deja botones para abrir el PDF, mandarlo por WhatsApp o verla en Cotizaciones. Si falta un dato (tarifa de niños, fechas cerradas), te avisa y la deja armada en Cotizaciones para que la termines.', roles: ['asesor', 'admin'] },
+  { fecha: '2026-11-11', emoji: '🔁', titulo: 'Cambiar el asesor de una reserva', texto: 'En el Resumen de la reserva, administración puede tocar «Cambiar» junto a «Asesor de esta reserva» y pasarla a otro asesor. Solo cambia esa reserva: el cliente y sus otras reservas siguen con su asesor, y las facturas y comisiones ya registradas no se tocan. El asesor nuevo la ve en su lista de reservas.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-11', emoji: '🏨', titulo: 'Varias opciones en una cotización', texto: 'En Cotizaciones activa «Opciones para elegir» y agrega un hotel por opción. El PDF muestra cada opción con su propio total y no las suma, así el cliente compara y elige. El vuelo o el traslado marcados «En todas» entran en cada opción. Cuando el cliente elija, toca su opción y genera la cotización final.', roles: ROLES_TODOS },
   { fecha: '2026-11-10', emoji: '🎟️', titulo: 'Tu cola de leads', texto: 'Los leads nuevos ahora van en una sola fila, del que más espera al que acaba de llegar. La primera tarjeta es la siguiente; puedes atender cualquiera y el resto avanza solo. Al pie de cada tarjeta hay una barra de paciencia (verde, ámbar o roja) según el tiempo que lleva esperando, y en el encabezado ves cuántos hay y hace cuánto espera el más antiguo.', roles: ['asesor'] },
   { fecha: '2026-11-10', emoji: '🏦', titulo: 'Métodos de pago a un toque', texto: 'Nueva sección «Métodos de pago» en el menú: toca un dato (cuenta, correo de Zelle…) y se copia solo; cada método tiene «Copiar texto», «Foto» y «Enviar». Marca varios para mandarlos juntos, o manda el flyer completo. En los chats de WhatsApp y en las acciones del lead está el botón «Pagos», que pone los datos directo en el mensaje.', roles: ROLES_TODOS },
