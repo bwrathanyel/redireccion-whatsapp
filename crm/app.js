@@ -34590,7 +34590,18 @@ function cbTarNoches(a, b) {
 }
 function cbTarUtil(t, hoy) {
   return t.vigente !== false && !t.necesita_revision && (!t.venta_desde || t.venta_desde <= hoy)
-    && (!(t.venta_hasta || t.fecha_venta_fin) || (t.venta_hasta || t.fecha_venta_fin) >= hoy) && (!t.fecha_fin || t.fecha_fin >= hoy);
+    && (t._preventa_viva || !(t.venta_hasta || t.fecha_venta_fin) || (t.venta_hasta || t.fecha_venta_fin) >= hoy) && (!t.fecha_fin || t.fecha_fin >= hoy);
+}
+// Regla del dueño (2026-11-11), espejo de preventa_sin_reemplazo en SQL: una preventa con la venta
+// cerrada se sigue cotizando hasta que exista otra tarifa del producto con venta abierta que cubra sus fechas.
+const cbEsPreventa = t => /preventa/i.test(`${t.titulo || ''} ${t.vigencia_texto || ''}`);
+const cbTarVentanas = t => Array.isArray(t.ventanas) && t.ventanas.length ? t.ventanas.map(v => [v.desde || null, v.hasta || null]) : [[t.disfrute_desde || null, t.fecha_fin || null]];
+const cbTarSeCruzan = (a, b) => cbTarVentanas(a).some(([d1, h1]) => cbTarVentanas(b).some(([d2, h2]) => (!d1 || !h2 || h2 >= d1) && (!h1 || !d2 || d2 <= h1)));
+function cbMarcarPreventas(filas, hoy = cbHoy()) {
+  const venta = t => t.fecha_venta_fin || t.venta_hasta || null;
+  for (const t of filas) t._preventa_viva = cbEsPreventa(t) && !filas.some(x => x !== t && x.vigente !== false
+    && (!venta(x) || venta(x) >= hoy) && (!cbEsPreventa(x) || (venta(x) && venta(t) && venta(x) > venta(t))) && cbTarSeCruzan(t, x));
+  return filas;
 }
 function cbTarOpciones(filas, campo) {
   const grupos = new Map(), clave = campo === 'plan' ? cbTarPlanClave : cbTarNorm;
@@ -35711,9 +35722,9 @@ async function cbTraerTarifas(id) {
     const control = new AbortController(); let reloj;
     const espera = new Promise((_, rechazar) => { reloj = setTimeout(() => { control.abort(); rechazar(new Error('La carga de tarifas tardó demasiado.')); }, 12000); });
     const consulta = (async () => {
-      const { data, error } = await sb.from('tarifas').select('id,titulo,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,incluye_tags,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
+      const { data, error } = await sb.from('tarifas').select('id,titulo,vigencia_texto,plan,habitacion,precios,moneda,vigente,necesita_revision,venta_desde,venta_hasta,fecha_venta_fin,disfrute_desde,fecha_fin,ventanas,minimo_noches,condiciones,orden_pdf,fuente_archivo,incluye_tags,tarifario_bloques(plan,incluye,otras,base_precio,minimo_noches,suplementos,impuestos)').eq('producto_id', id).eq('vigente', true).order('orden_pdf').abortSignal(control.signal).limit(1000);
       if (error) throw error;
-      return cbTarAnotarUnidades(data || []);
+      return cbMarcarPreventas(cbTarAnotarUnidades(data || []));
     })();
     const peticion = Promise.race([consulta, espera]).then(filas => { cbHotelTarifas.set(id, filas); return filas; }).finally(() => {
       clearTimeout(reloj); if (cbHotelPeticiones.get(id) === peticion) cbHotelPeticiones.delete(id);
@@ -37544,6 +37555,25 @@ function destinoDePadre(padre) {
   const ultima = PADRES_SIN_MEMORIA.includes(padre) ? null : (MI_PREFERENCIAS.ultima_hija || {})[padre];
   return vis.includes(ultima) ? ultima : (vis[0] || 'hoy');
 }
+// Equipo › Asesores: cada tarjeta se despliega tocando su título. Cerradas por defecto; las
+// abiertas se recuerdan en este navegador.
+function montarPlegablesEquipo() {
+  const clave = 'crm_asesores_abiertas';
+  let abiertas; try { abiertas = new Set(JSON.parse(localStorage.getItem(clave) || '[]')); } catch { abiertas = new Set(); }
+  const guardar = () => { try { localStorage.setItem(clave, JSON.stringify([...abiertas])); } catch {} };
+  document.querySelectorAll('[data-gp-panel="asesores"] > .card').forEach(card => {
+    const h = card.querySelector(':scope > h2'); if (!h) return;
+    const id = h.querySelector('i')?.className || h.textContent.trim();
+    card.classList.add('card-plegable');
+    h.setAttribute('role', 'button'); h.tabIndex = 0;
+    const pintar = () => { const a = abiertas.has(id); card.classList.toggle('plegada', !a); h.setAttribute('aria-expanded', String(a)); };
+    const alternar = () => { abiertas.has(id) ? abiertas.delete(id) : abiertas.add(id); guardar(); pintar(); };
+    h.addEventListener('click', alternar);
+    h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); } });
+    pintar();
+  });
+}
+arrancar(montarPlegablesEquipo);
 // El buscador de Leads no ocupa fila propia: en el celular comparte fila con el filtro y en
 // escritorio con las pestañas (que pintarPestanasNav reinserta al inicio en cada visita).
 let buscadorLeadsMQ = false;

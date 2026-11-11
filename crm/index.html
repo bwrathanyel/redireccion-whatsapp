@@ -7634,6 +7634,13 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 .main .topbar,.main .topbar.show-search{display:none}
 /* El buscador de Leads vive dentro de la sección (ubicarBuscadorLeads): en escritorio en la fila
    de las pestañas, en el celular en la fila del filtro, con las pestañas compactas. */
+/* Equipo › Asesores: tarjetas plegables por título (montarPlegablesEquipo), cerradas por defecto. */
+.card-plegable > h2{cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px}
+.card-plegable > h2::after{content:'\f078';font-family:'Font Awesome 6 Free';font-weight:900;font-size:12px;color:var(--muted);margin-left:auto;transition:transform .2s}
+.card-plegable > h2:has(.rep-total)::after{margin-left:10px}
+.card-plegable.plegada > h2{margin-bottom:0}
+.card-plegable:not(.plegada) > h2::after{transform:rotate(180deg)}
+.card-plegable.plegada > :not(h2){display:none!important}
 .leads-fila-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .leads-fila-top .nav-tabs-sec{margin-bottom:0}
 .leads-fila-top .search{display:block;margin-left:auto}
@@ -7641,8 +7648,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
   .leads-fila-top{display:contents}
   #sec-leads .leads-pipeline-head .search{display:block;flex:1 1 auto;min-width:0;width:auto;order:0;margin:0}
   #sec-leads .leads-pipeline-head .search input{height:44px;padding-block:0}
-  #sec-leads .nav-tabs-sec{margin-bottom:8px;padding:3px}
-  #sec-leads .nav-tabs-sec .seg{min-height:36px;padding:0 12px;font-size:12.5px}
+  .nav-tabs-sec{margin-bottom:8px;padding:3px}
+  .nav-tabs-sec .seg{min-height:36px;padding:0 12px;font-size:12.5px}
+  /* Gestión de Personal: subpestañas en una sola fila deslizable (el degradé avisa que hay más)
+     y en Asesores el rango de fechas como ícono junto a los periodos rápidos. */
+  #gp-tabs{flex-wrap:nowrap;overflow-x:auto;margin-bottom:10px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+  #gp-tabs .seg{flex:0 0 auto;min-height:36px;padding:0 12px;font-size:12.5px}
+  [data-gp-panel="asesores"] > .tbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px!important}
+  [data-gp-panel="asesores"] > .tbar .drp{flex:none;width:auto}
+  #drp-ase-btn{width:42px!important;min-width:42px;min-height:40px;padding:0!important;justify-content:center}
+  #drp-ase-label{display:none}
+  [data-gp-panel="asesores"] .ase-rap{flex:1 1 0;min-width:0;margin:0}
+  [data-gp-panel="asesores"] .ase-rap .seg{flex:1 1 auto;min-height:40px;padding:0 8px;font-size:12px}
+  [data-gp-panel="asesores"] .ase-rap .seg i{display:none}
 }
 /* colores que app.js escribe inline (style="color:#...") */
 :root[data-theme="light"] [style*="color:#f59e0b"]:not([style*="background:var(--accent)"]){color:#684810!important}
