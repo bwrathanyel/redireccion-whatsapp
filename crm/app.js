@@ -34943,6 +34943,33 @@ function cbTarOcupacionTexto(it, precisas, precios, noche, adultosHab, ocupacion
   if (precios.some(p => p === null)) return `El tarifario no trae precio de ${it.hab} para ${adultosHab} adulto${adultosHab === 1 ? '' : 's'} por habitación la noche del ${dm(noche)}. Cambia la ocupación o escribe la tarifa manual.`;
   return `Hay ${precisas.length} tarifas de ${it.hab} con precios distintos para la noche del ${dm(noche)} (${precisas.map(x => `«${x.t.titulo || x.t.id}»`).join(', ')}). Confirma cuál aplica y escribe la tarifa manual.`;
 }
+// El PDF parte una misma temporada por día de la semana («DOMINGO A JUEVES» / «VIERNES A SABADO»,
+// Hesperia, H2otel, Malibu) o por largo de estadía («(1) NOCHE» / «Mínimo (2) NOCHES», Trucha Azul):
+// salían como tarifas duplicadas y el asesor tenía que escribir el precio a mano.
+const CB_TAR_DIAS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+const cbTarTextoFila = t => cbTarNorm([...(t.condiciones || []), t.vigencia_texto, t.habitacion].filter(Boolean).join(' / '));
+function cbTarDiasDe(t) {
+  const d = '(domingo|lunes|martes|miercoles|jueves|viernes|sabado)s?', m = cbTarTextoFila(t).match(new RegExp(`\\b${d}\\s+(?:a|al|hasta)\\s+${d}\\b`));
+  if (!m) return null;
+  const a = CB_TAR_DIAS.indexOf(m[1]), b = CB_TAR_DIAS.indexOf(m[2]);
+  return { inicio: a, dias: Array.from({ length: (b - a + 7) % 7 + 1 }, (_, k) => (a + k) % 7) };
+}
+function cbTarEstadiaDe(t) {
+  const txt = cbTarTextoFila(t), min = txt.match(/\bminimo\s*\(?(\d+)\)?\s*noches?\b/);
+  if (min) return { min: +min[1] };
+  const exacta = txt.match(/(?:^|\/)\s*\(?(\d+)\)?\s*noches?\b/);
+  return exacta ? { exacta: +exacta[1] } : null;
+}
+function cbTarDesempatar(precisas, noche, totalNoches) {
+  if (precisas.length < 2) return precisas;
+  const angostar = (xs, ok) => { const r = xs.filter(ok); return r.length ? r : xs; };
+  const dow = new Date(cbTarFecha(noche)).getUTCDay();
+  let r = angostar(precisas, x => { const d = cbTarDiasDe(x.t); return !d || d.dias.includes(dow); });
+  // «JUEVES A DOMINGO» + «DOMINGO A MIERCOLES»: la noche del domingo es del rango que empieza ese día.
+  if (r.filter(x => cbTarDiasDe(x.t)).length > 1) r = angostar(r, x => cbTarDiasDe(x.t)?.inicio === dow);
+  r = angostar(r, x => { const e = cbTarEstadiaDe(x.t); return !e || (e.min ? totalNoches >= e.min : totalNoches === e.exacta); });
+  return r;
+}
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
   if (!noches.length) return fallo(it.ida && it.vuelta ? 'Las fechas deben sumar de 1 a 366 noches.' : 'Elige el check-in y las noches: la tarifa sale sola.');
@@ -34961,7 +34988,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     const cubren = candidatas.map(t => ({ t, amplitud: cbTarAmplitud(t, noche) })).filter(x => x.amplitud !== null);
     if (!cubren.length) return { sin: true };
     const menor = Math.min(...cubren.map(x => x.amplitud));
-    const precisas = cubren.filter(x => x.amplitud === menor);
+    const precisas = cbTarDesempatar(cubren.filter(x => x.amplitud === menor), noche, noches.length);
     if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return { texto: 'La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.' };
     // Por habitación: con reparto desigual y variante automática, cada grupo lleva su variante (triple + doble).
     const variantes = porHab ? grupos.map(g => grupos.length > 1 && (it.variante_auto || !it.tarifa_variante) ? cbVarianteAuto(precisas.map(x => x.t), g.adultos) : it.tarifa_variante) : [];
