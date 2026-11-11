@@ -34530,11 +34530,11 @@ const cbPorNoche = it => it.tipo === 'hotel' && ['persona_noche', 'habitacion_no
 const cbNochesCobro = it => cbPorNoche(it) ? (+cbNoches(it.ida, it.vuelta) || 1) : 1;
 const cbImporte = it => {
   if (it.tipo === 'hotel' && it.tramos?.length) return cbTarImporte(it);
-  const t = Number(it.tarifa) || 0;
-  if (cbPorHabitacion(it)) return Math.round((cbHabitaciones(it) * t + cbPax(it).n * (Number(it.tarifa_nino) || 0)) * cbNochesCobro(it) * 100) / 100;
+  const t = Number(it.tarifa) || 0, extras = it.tipo === 'hotel' ? cbHotelExtras(it).reduce((s, x) => s + x.centavos, 0) : 0;
+  if (cbPorHabitacion(it)) return Math.round((cbHabitaciones(it) * t + cbPax(it).n * (Number(it.tarifa_nino) || 0)) * cbNochesCobro(it) * 100 + extras) / 100;
   if (!cbEsPax(it)) return (Number(it.cant) || 0) * t;
   const p = cbPax(it);
-  return Math.round((p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (it.infantes_gratis ? 0 : Number(it.tarifa_infante) || 0)) * cbNochesCobro(it) * 100) / 100;
+  return Math.round((p.a * t + p.n * (Number(it.tarifa_nino) || 0) + p.i * (it.infantes_gratis ? 0 : Number(it.tarifa_infante) || 0)) * cbNochesCobro(it) * 100 + extras) / 100;
 };
 const cbNochesTexto = n => `${n} noche${n === 1 ? '' : 's'}`;
 // BEGIN CB_TARIFAS: funciones puras; snapshots de precios, nunca recalcular documentos guardados.
@@ -34583,7 +34583,7 @@ function cbOpciones(items) {
 const cbTotalCot = items => cbConOpciones(items) ? Math.min(...cbOpciones(items).map(o => o.total)) : cbTotalItems(items);
 const cbTarFecha = s => { const ms = /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Date.parse(s + 'T00:00:00Z') : NaN; return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s ? ms : NaN; };
 const cbTarIso = ms => new Date(ms).toISOString().slice(0, 10);
-const cbTarContexto = it => [it.producto_id, cbTarPlanClave(it.plan), cbTarNorm(it.hab), it.ida, it.vuelta, cbPorHabitacion(it) ? it.tarifa_variante || '' : it.adultos + (cbHabitaciones(it) > 1 ? '/' + cbHabitaciones(it) : ''), it.unidad].join('|');
+const cbTarContexto = it => [it.producto_id, cbTarPlanClave(it.plan), cbTarNorm(it.hab), it.ida, it.vuelta, cbPorHabitacion(it) ? (it.tarifa_variante || '') + (Number(it.adultos) % (cbHabitaciones(it) || 1) ? `~${it.adultos}/${cbHabitaciones(it)}` : '') : it.adultos + (cbHabitaciones(it) > 1 ? '/' + cbHabitaciones(it) : ''), it.unidad].join('|');
 function cbTarNoches(a, b) {
   const inicio = cbTarFecha(a), fin = cbTarFecha(b), n = (fin - inicio) / 864e5;
   return Number.isInteger(n) && n > 0 && n <= 366 ? Array.from({ length: n }, (_, i) => cbTarIso(inicio + i * 864e5)) : [];
@@ -34668,6 +34668,20 @@ function cbTarPrecioHabitacion(t, variante, ocupaciones) {
   if (variante) return opciones.find(o => o.clave === variante)?.precio ?? null;
   return opciones.length && opciones.every(o => o.precio === opciones[0].precio) ? opciones[0].precio : null;
 }
+const cbTarCupo = clave => TAR_OCUPACION.get(clave) || Number((/^pax_(\d+)$/.exec(clave || '') || [])[1]) || 0;
+function cbVarianteAuto(filas, adultos) {
+  const vs = [...new Map(filas.flatMap(t => cbTarVariantes(t, TAR_OCUPACION)).map(o => [o.clave, cbTarCupo(o.clave)])).entries()].filter(([, n]) => n > 0).sort((a, b) => a[1] - b[1]);
+  return (vs.find(([, n]) => n === adultos) || (vs.length && adultos > vs.at(-1)[1] ? vs.at(-1) : null))?.[0] || '';
+}
+// Reparto de la ocupación entre habitaciones (2026-11-11, dueño): lo más parejo posible, las primeras
+// con un adulto más (5 en 2 = 3 + 2) y los niños uno por habitación desde la primera. Cada grupo de
+// habitaciones con la misma cantidad de adultos se cobra por su ocupación (triple + doble).
+function cbReparto(it) {
+  const h = Math.max(1, cbHabitaciones(it)), a = Math.max(0, Number(it.adultos) || 0), n = Math.max(0, Number(it.ninos) || 0);
+  return Array.from({ length: h }, (_, i) => ({ adultos: Math.floor(a / h) + (i < a % h ? 1 : 0), ninos: Math.floor(n / h) + (i < n % h ? 1 : 0) }));
+}
+const cbRepartoGrupos = it => [...cbReparto(it).reduce((m, r) => m.set(r.adultos, (m.get(r.adultos) || 0) + 1), new Map())].map(([adultos, habs]) => ({ adultos, habs }));
+const cbRepartoTexto = it => cbHabitaciones(it) > 1 ? cbReparto(it).map((r, i) => `Hab. ${i + 1}: ${r.adultos} adulto${r.adultos === 1 ? '' : 's'}${r.ninos ? ` + ${r.ninos} niño${r.ninos === 1 ? '' : 's'}` : ''}`).join(' · ') : '';
 function cbHotelUnidad(it, filas) {
   const candidatas = cbTarDelPlan(filas, it.plan).filter(t => !it.hab || cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
   const noches = cbTarNoches(it.ida, it.vuelta);
@@ -34680,13 +34694,25 @@ function cbHotelUnidad(it, filas) {
   if (!it.unidad_manual && base && it.unidad !== base) {
     it.unidad = base; it.tarifa = ''; it.tramos = []; it.tarifa_manual = false; delete it.tarifa_variante;
   }
+  // Más adultos de los que admite la habitación (5 en una STANDART de Margarita Village, que llega a
+  // cuádruple): sube «Habitaciones» a lo justo, ceil(adultos / máximo), y la baja de nuevo hasta lo que
+  // había puesto el asesor si después quita adultos (pedido del dueño 2026-11-11). Con PAX ADIC en el
+  // tarifario la habitación sí admite más adultos y no se toca.
+  const maxHab = it.hab ? Math.max(0, ...aplican.flatMap(t => cbTarVariantes(t, TAR_OCUPACION).map(o => cbTarCupo(o.clave)))) : 0;
+  it._maxHab = maxHab;
+  if (cbPorNoche(it) && maxHab && !(cbPorHabitacion(it) && aplican.some(t => cbTarNum(t.precios?.pax_adic) !== null))) {
+    const adultos = Number(it.adultos) || 0, actual = cbHabitaciones(it), justas = Math.ceil(adultos / maxHab);
+    if (adultos > maxHab * actual) { if (!it.habitaciones_auto) it.habitaciones_antes = actual || 1; it.habitaciones = justas; it.habitaciones_auto = true; }
+    else if (it.habitaciones_auto) {
+      it.habitaciones = Math.max(Number(it.habitaciones_antes) || 1, justas);
+      if (it.habitaciones === (Number(it.habitaciones_antes) || 1)) { it.habitaciones_auto = false; delete it.habitaciones_antes; }
+    }
+  }
   // Por habitación, la variante sale sola de los adultos por habitación (2 → doble); si nadie la
   // eligió a mano se vuelve a calcular al cambiar la ocupación. Más adultos que la mayor = la mayor + PAX ADIC.
   if (cbPorHabitacion(it) && it.hab && (!it.tarifa_variante || it.variante_auto)) {
-    const porHab = Math.ceil((Number(it.adultos) || 1) / (cbHabitaciones(it) || 1));
-    const vs = [...new Map(aplican.flatMap(t => cbTarVariantes(t, TAR_OCUPACION)).map(o => [o.clave, TAR_OCUPACION.get(o.clave) || Number(o.clave.replace(/^pax_/, '')) || 0])).entries()].filter(([, n]) => n > 0).sort((a, b) => a[1] - b[1]);
-    const v = vs.find(([, n]) => n === porHab) || (vs.length && porHab > vs.at(-1)[1] ? vs.at(-1) : null);
-    if (v) { it.tarifa_variante = v[0]; it.variante_auto = true; } else if (it.variante_auto) { it.tarifa_variante = ''; }
+    const v = cbVarianteAuto(aplican, cbRepartoGrupos(it)[0]?.adultos || 1);
+    if (v) { it.tarifa_variante = v; it.variante_auto = true; } else if (it.variante_auto) { it.tarifa_variante = ''; }
   }
   // Paquete cerrado: la salida fija el regreso.
   const nPaquete = it.unidad === 'persona' ? Math.max(0, ...candidatas.map(cbTarPaqueteNoches)) : 0;
@@ -34758,7 +34784,7 @@ function cbTarOcupacionTexto(it, precisas, precios, noche, adultosHab, ocupacion
   const max = Math.max(0, ...precisas.flatMap(x => cbTarVariantes(x.t, ocupaciones).map(o => ocupaciones.get(o.clave) || Number(o.clave.replace(/^pax_/, '')) || 0)));
   if (precios.some(p => p === null) && max && adultosHab > max) {
     const habs = Math.ceil(Number(it.adultos) / max);
-    return `${it.hab} se vende hasta ${max} adultos por habitación (${nombres[max] || max}) y aquí hay ${adultosHab}. Sube «Habitaciones» a ${habs}${Number(it.adultos) % habs ? ' (si no se reparten iguales, separa una habitación en otro servicio)' : ''} o escribe la tarifa manual.`;
+    return `${it.hab} se vende hasta ${max} adultos por habitación (${nombres[max] || max}) y aquí hay ${adultosHab}. Sube «Habitaciones» a ${habs} o escribe la tarifa manual.`;
   }
   if (precios.some(p => p === null)) return `El tarifario no trae precio de ${it.hab} para ${adultosHab} adulto${adultosHab === 1 ? '' : 's'} por habitación la noche del ${dm(noche)}. Cambia la ocupación o escribe la tarifa manual.`;
   return `Hay ${precisas.length} tarifas de ${it.hab} con precios distintos para la noche del ${dm(noche)} (${precisas.map(x => `«${x.t.titulo || x.t.id}»`).join(', ')}). Confirma cuál aplica y escribe la tarifa manual.`;
@@ -34769,22 +34795,32 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
   if (!cbPorNoche(it) && !(it.unidad === 'persona' && filas.some(cbTarPaqueteNoches))) return fallo('La estadía completa se cotiza manualmente.');
   if (it._unidadPendiente) return fallo('El tarifario no declara una unidad única. Confirma «Tarifa por» antes de cargar el precio.');
   if (!it.hab) return fallo('Elige una habitación del tarifario o escribe una tarifa manual.');
-  const porHab = cbPorHabitacion(it), habitaciones = cbHabitaciones(it), adultosHab = Number(it.adultos) / habitaciones;
-  if (!porHab && !Number.isInteger(adultosHab)) return fallo(`${it.adultos} adultos no se reparten igual en ${cbHabitacionesTexto(it)}: separa las habitaciones en otro servicio o ingresa la tarifa manual.`);
+  const porHab = cbPorHabitacion(it), habitaciones = cbHabitaciones(it), grupos = cbRepartoGrupos(it);
+  if (!Number.isInteger(habitaciones) || habitaciones < 1) return fallo('Indica cuántas habitaciones lleva el servicio.');
+  if (Number(it.adultos) < habitaciones) return fallo(`${cbHabitacionesTexto(it)} para ${it.adultos} adulto${Number(it.adultos) === 1 ? '' : 's'}: cada habitación necesita al menos un adulto. Baja «Habitaciones» o escribe la tarifa manual.`);
   const utilizables = filas.filter(t => cbTarUtil(t, hoy));
   const candidatas = cbTarDelPlan(utilizables, it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(it.hab));
   if (!cbPorNoche(it)) return cbTarPaquete(it, candidatas, noches, ocupaciones);
   const tramos = [], usadas = [], avisos = new Set();
-  for (const noche of noches) {
+  // Precio de una noche para toda la ocupación. También se usa con la fecha del check-out para el late check-out.
+  const precioNoche = (noche, avisos) => {
     const cubren = candidatas.map(t => ({ t, amplitud: cbTarAmplitud(t, noche) })).filter(x => x.amplitud !== null);
-    if (!cubren.length) return fallo(cbTarSinTarifaTexto(it, filas, candidatas, noches, hoy));
+    if (!cubren.length) return { sin: true };
     const menor = Math.min(...cubren.map(x => x.amplitud));
     const precisas = cubren.filter(x => x.amplitud === menor);
-    if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return fallo('La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.');
-    const precios = precisas.map(x => porHab ? cbTarPrecioHabitacion(x.t, it.tarifa_variante, ocupaciones) : cbTarPrecioAdulto(x.t, adultosHab, ocupaciones));
-    if (precios.some(p => p === null) || precios.some(p => p !== precios[0])) return fallo(porHab ? 'Elige la variante de habitación (sencilla, doble…) para cargar el precio.' : cbTarOcupacionTexto(it, precisas, precios, noche, adultosHab, ocupaciones));
+    if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return { texto: 'La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.' };
+    // Por habitación: con reparto desigual y variante automática, cada grupo lleva su variante (triple + doble).
+    const variantes = porHab ? grupos.map(g => grupos.length > 1 && (it.variante_auto || !it.tarifa_variante) ? cbVarianteAuto(precisas.map(x => x.t), g.adultos) : it.tarifa_variante) : [];
+    const ps = grupos.map((g, k) => precisas.map(x => porHab ? cbTarPrecioHabitacion(x.t, variantes[k], ocupaciones) : cbTarPrecioAdulto(x.t, g.adultos, ocupaciones)));
+    const malo = ps.findIndex(p => p.some(v => v === null) || p.some(v => v !== p[0]));
+    if (malo >= 0) {
+      if (!porHab) return { texto: cbTarOcupacionTexto(it, precisas, ps[malo], noche, grupos[malo].adultos, ocupaciones) };
+      return { texto: grupos.length > 1 && variantes.some(v => v !== variantes[0]) ? `No hay precio de ${it.hab} para ${grupos[malo].adultos} adulto${grupos[malo].adultos === 1 ? '' : 's'} por habitación (${cbRepartoTexto(it)}). Elige la variante a mano, cambia el reparto o escribe la tarifa manual.` : 'Elige la variante de habitación (sencilla, doble…) para cargar el precio.' };
+    }
+    const tarifa = ps[0][0];
+    const repartidos = (porHab ? variantes.some(v => v !== variantes[0]) : ps.some(p => p[0] !== tarifa)) ? grupos.map((g, k) => ({ ...g, ...(porHab ? { variante: variantes[k] } : {}), tarifa: ps[k][0] })) : null;
     precisas.sort((a, b) => (a.t.orden_pdf ?? 1e9) - (b.t.orden_pdf ?? 1e9) || a.t.id - b.t.id);
-    const t = precisas[0].t, tarifa = precios[0], siguiente = cbTarIso(cbTarFecha(noche) + 864e5);
+    const t = precisas[0].t;
     let tarifaNino = null, paxAdic = 0, tarifaPaxAdic = null;
     if (Number(it.ninos) > 0) {
       const infantiles = precisas.map(x => cbTarPrecioNino(x.t, Number(it.ninos)));
@@ -34795,19 +34831,29 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     }
     // Por habitación, los adultos que no caben en la variante pagan el PAX ADIC del PDF.
     if (porHab) {
-      const capacidad = (ocupaciones.get(it.tarifa_variante) || Number((/^pax_(\d+)$/.exec(it.tarifa_variante || '') || [])[1]) || 0) * habitaciones;
-      paxAdic = capacidad ? Math.max(0, Number(it.adultos) - capacidad) : 0;
+      paxAdic = grupos.reduce((s, g, k) => { const cupo = cbTarCupo(variantes[k]); return s + (cupo ? Math.max(0, g.adultos - cupo) * g.habs : 0); }, 0);
       if (paxAdic) {
         const adic = precisas.map(x => cbTarNum(x.t.precios?.pax_adic));
-        if (adic.some(p => p === null || p !== adic[0])) return fallo(`${paxAdic} adulto${paxAdic === 1 ? '' : 's'} más de lo que admite${habitaciones === 1 ? ' la habitación' : 'n las habitaciones'}: elige otra variante, más habitaciones o confirma el precio manual.`);
+        if (adic.some(p => p === null || p !== adic[0])) return { texto: `${paxAdic} adulto${paxAdic === 1 ? '' : 's'} más de lo que admite${habitaciones === 1 ? ' la habitación' : 'n las habitaciones'}: elige otra variante, más habitaciones o confirma el precio manual.` };
         tarifaPaxAdic = adic[0];
       }
     }
-    usadas.push(...precisas.map(x => x.t));
-    const ultimo = tramos.at(-1);
-    if (ultimo?.tarifa_id === t.id) { ultimo.hasta = siguiente; ultimo.noches++; }
-    else tramos.push({ desde: noche, hasta: siguiente, noches: 1, tarifa, tarifa_nino: tarifaNino, ...(paxAdic ? { pax_adic: paxAdic, tarifa_pax_adic: tarifaPaxAdic } : {}), tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null });
+    return { t, precisas, precio: { tarifa, tarifa_nino: tarifaNino, ...(repartidos ? { grupos: repartidos } : {}), ...(paxAdic ? { pax_adic: paxAdic, tarifa_pax_adic: tarifaPaxAdic } : {}) } };
+  };
+  for (const noche of noches) {
+    const r = precioNoche(noche, avisos);
+    if (r.sin) return fallo(cbTarSinTarifaTexto(it, filas, candidatas, noches, hoy));
+    if (r.texto) return fallo(r.texto);
+    usadas.push(...r.precisas.map(x => x.t));
+    const ultimo = tramos.at(-1), siguiente = cbTarIso(cbTarFecha(noche) + 864e5);
+    if (ultimo?.tarifa_id === r.t.id) { ultimo.hasta = siguiente; ultimo.noches++; }
+    else tramos.push({ desde: noche, hasta: siguiente, noches: 1, ...r.precio, tarifa_id: r.t.id, fuente_archivo: r.t.fuente_archivo || null });
   }
+  // Late check-out (2026-11-11, dueño): 50% de la tarifa vigente el día de salida. Si ninguna la cubre,
+  // queda null y se cobra sobre la última noche (cbHotelExtras lo dice en el texto).
+  const rs = precioNoche(it.vuelta, new Set());
+  const salida = rs.precio ? { desde: it.vuelta, hasta: cbTarIso(cbTarFecha(it.vuelta) + 864e5), noches: 1, ...rs.precio, tarifa_id: rs.t.id, fuente_archivo: rs.t.fuente_archivo || null } : null;
+  if (it.habitaciones_auto && it._maxHab) avisos.add(`${it.hab} admite hasta ${it._maxHab} adultos por habitación: «Habitaciones» subió sola a ${habitaciones}.`);
   for (const t of usadas) {
     const b = cbTarBloque(t), m = Number(t.minimo_noches) ? { exigidos: [Number(t.minimo_noches)], dudosos: [], ambiguo: false } : cbTarMinimoBloque(t, noches), min = Math.max(0, ...m.exigidos);
     if (min > noches.length && (m.ambiguo || new Set(m.exigidos).size > 1)) return fallo('El mínimo de noches requiere confirmación manual para esta temporada.');
@@ -34820,7 +34866,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
   if (/on request/i.test(it.hab)) avisos.add('Habitación sujeta a confirmación del hotel.');
   if (!it.plan) avisos.add('Plan sin especificar en el tarifario: completa o confirma antes de entregar.');
   else if (!utilizables.some(t => cbTarPlan(t))) avisos.add('El tarifario no especifica el plan: confirma que el plan ingresado corresponda a esta tarifa.');
-  return { ok: true, tramos, avisos: [...avisos] };
+  return { ok: true, tramos, salida, avisos: [...avisos] };
 }
 // Un solo tramo con todas las noches del paquete; `por_pareja` es el total de 2 adultos en la misma habitación.
 function cbTarPaquete(it, candidatas, noches, ocupaciones) {
@@ -34838,10 +34884,30 @@ function cbTarPaquete(it, candidatas, noches, ocupaciones) {
   for (const c of t.condiciones || []) if (typeof c === 'string') avisos.add(c);
   return { ok: true, tramos: [{ desde: noches[0], hasta: cbTarIso(cbTarFecha(noches.at(-1)) + 864e5), noches: n, tarifa, tarifa_nino: tarifaNino, paquete: true, incluye: t.incluye_tags || [], tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null }], avisos: [...avisos] };
 }
+// Una noche de un tramo para toda la ocupación, en centavos. Con `grupos` (reparto desigual con
+// precios distintos) cada grupo de habitaciones paga su ocupación.
+function cbTarCostoNoche(it, t) {
+  const a = Number(it.adultos) || 0, n = Number(it.ninos) || 0, gs = Array.isArray(t.grupos) && t.grupos.length ? t.grupos : null;
+  if (cbPorHabitacion(it)) return (gs ? gs.reduce((s, g) => s + cbTarCent(g.tarifa) * g.habs, 0) : cbTarCent(t.tarifa) * cbHabitaciones(it)) + cbTarCent(t.tarifa_pax_adic) * (Number(t.pax_adic) || 0) + cbTarCent(cbTarNinoTramo(it, t)) * n;
+  return Math.round(((gs ? gs.reduce((s, g) => s + g.adultos * g.habs * Number(g.tarifa || 0), 0) : a * Number(t.tarifa || 0)) + n * (cbTarNinoTramo(it, t) || 0)) * 100);
+}
 function cbTarImporte(it) {
-  const a = Number(it.adultos) || 0, n = Number(it.ninos) || 0;
-  if (cbPorHabitacion(it)) return (it.tramos || []).reduce((s, t) => s + (cbTarCent(t.tarifa) * cbHabitaciones(it) + cbTarCent(t.tarifa_pax_adic) * (Number(t.pax_adic) || 0) + cbTarCent(cbTarNinoTramo(it, t)) * n) * t.noches, 0) / 100;
-  return (it.tramos || []).reduce((s, t) => s + Math.round((a * Number(t.tarifa || 0) + n * (cbTarNinoTramo(it, t) || 0)) * 100) * (t.paquete ? 1 : t.noches), 0) / 100;
+  return ((it.tramos || []).reduce((s, t) => s + cbTarCostoNoche(it, t) * (t.paquete ? 1 : t.noches), 0) + cbHotelExtras(it).reduce((s, x) => s + x.centavos, 0)) / 100;
+}
+// Early check-in y late check-out (2026-11-11, dueño): casillas separadas en el hotel. Early = 50% de
+// la noche del check-in; late = 50% de la tarifa del día de salida (sin tarifa ese día, la de la
+// última noche, avisado). Sobre toda la ocupación del servicio, igual que una noche.
+function cbHotelExtras(it) {
+  if (it.tipo !== 'hotel' || !cbPorNoche(it) || !(it.early_checkin || it.late_checkout) || it.tramos?.[0]?.paquete) return [];
+  const conTramos = !!it.tramos?.length, p = cbPax(it), t = Number(it.tarifa) || 0, nino = Number(it.tarifa_nino) || 0;
+  if (!conTramos && !(t > 0)) return [];
+  const manual = cbPorHabitacion(it) ? Math.round((cbHabitaciones(it) * t + p.n * nino) * 100) : Math.round((p.a * t + p.n * nino + p.i * (it.infantes_gratis ? 0 : Number(it.tarifa_infante) || 0)) * 100);
+  const costo = tr => conTramos ? cbTarCostoNoche(it, tr) : manual, salida = conTramos && it.tramo_salida?.desde === it.vuelta ? it.tramo_salida : null;
+  const x = [];
+  if (it.early_checkin) x.push({ clave: 'early', nombre: 'Early check-in', fecha: it.ida, centavos: Math.round(costo(it.tramos?.[0]) / 2), texto: `50% de la noche del ${cbFechaCorta(it.ida)}` });
+  if (it.late_checkout) x.push({ clave: 'late', nombre: 'Late check-out', fecha: it.vuelta, centavos: Math.round(costo(salida || it.tramos?.at(-1)) / 2), aprox: conTramos && !salida,
+    texto: conTramos && !salida ? `50% de la tarifa de la última noche: el tarifario no tiene precio para el ${cbFechaCorta(it.vuelta)}` : `50% de la tarifa del ${cbFechaCorta(it.vuelta)}` });
+  return x.map(e => ({ ...e, monto: e.centavos / 100 }));
 }
 function cbTarTramosValidos(it) {
   if (!it.tramos?.length) return true;
@@ -35105,11 +35171,13 @@ function cbDesgloseHtml(it) {
   if (!cbEsPax(it) || !(total > 0)) return '<div class="cb-desglose cb-full"></div>';
   const p = cbPax(it), noches = cbNochesCobro(it), varios = it.tipo === 'hotel' && it.tramos?.length > 1, m = n => '$' + cbMonto(n);
   const x = (n, s, pl, v) => n && v > 0 ? `${n} ${n === 1 ? s : pl} × ${m(v)}` : '';
+  const gs = !varios && it.tramos?.[0]?.grupos?.length ? it.tramos[0].grupos : null, extras = cbHotelExtras(it), base = total - extras.reduce((s, e) => s + e.monto, 0);
   const partes = (varios ? [`${it.tramos.length} temporadas, ${cbNochesTexto(noches)}`]
-    : cbPorHabitacion(it) ? [x(cbHabitaciones(it), 'hab.', 'hab.', Number(it.tarifa)), x(Number(it.tramos?.[0]?.pax_adic) || 0, 'adulto extra', 'adultos extra', Number(it.tramos?.[0]?.tarifa_pax_adic)), x(p.n, 'niño', 'niños', Number(it.tarifa_nino))]
-    : [x(p.a, 'adulto', 'adultos', Number(it.tarifa)), x(p.n, 'niño', 'niños', Number(it.tarifa_nino)), it.tipo === 'hotel' && it.infantes_gratis ? (p.i ? `${p.i} ${p.i === 1 ? 'infante' : 'infantes'} gratis` : '') : x(p.i, 'infante', 'infantes', Number(it.tarifa_infante))]).filter(Boolean);
-  const porNoche = cbPorNoche(it) && !varios ? ` → ${m(total / noches)} por noche × ${cbNochesTexto(noches)}` : '';
-  return `<div class="cb-desglose cb-full"><span class="cb-emo" aria-hidden="true">🧾</span><span>${esc(partes.join(' + ') + porNoche)}<b>${m(total)}</b></span></div>`;
+    : cbPorHabitacion(it) ? [...(gs ? gs.map(g => x(g.habs, `hab. de ${g.adultos}`, `hab. de ${g.adultos}`, Number(g.tarifa))) : [x(cbHabitaciones(it), 'hab.', 'hab.', Number(it.tarifa))]), x(Number(it.tramos?.[0]?.pax_adic) || 0, 'adulto extra', 'adultos extra', Number(it.tramos?.[0]?.tarifa_pax_adic)), x(p.n, 'niño', 'niños', Number(it.tarifa_nino))]
+    : [...(gs ? gs.map(g => x(g.adultos * g.habs, 'adulto', 'adultos', Number(g.tarifa))) : [x(p.a, 'adulto', 'adultos', Number(it.tarifa))]), x(p.n, 'niño', 'niños', Number(it.tarifa_nino)), it.tipo === 'hotel' && it.infantes_gratis ? (p.i ? `${p.i} ${p.i === 1 ? 'infante' : 'infantes'} gratis` : '') : x(p.i, 'infante', 'infantes', Number(it.tarifa_infante))]).filter(Boolean);
+  const porNoche = cbPorNoche(it) && !varios ? ` → ${m(base / noches)} por noche × ${cbNochesTexto(noches)}` : '';
+  const masExtras = extras.map(e => ` + ${e.nombre.toLowerCase()} ${m(e.monto)}`).join('');
+  return `<div class="cb-desglose cb-full"><span class="cb-emo" aria-hidden="true">🧾</span><span>${esc(partes.join(' + ') + porNoche + masExtras)}<b>${m(total)}</b></span></div>`;
 }
 function cbOpcionSelectHtml(it, i) {
   if (!cbComparar) return '';
@@ -35197,7 +35265,12 @@ function cbLimpiarItem(it) {
     o.tarifa_manual = !!it.tarifa_manual; o.habitacion_manual = !!it.habitacion_manual;
     o.tarifa_nino_auto = it.tarifa_nino_auto === true;
     if (it.tarifa_nino_contexto) o.tarifa_nino_contexto = it.tarifa_nino_contexto;
-    if (it.tramos?.length) o.tramos = it.tramos.map(t => ({ desde: t.desde, hasta: t.hasta, noches: Number(t.noches), tarifa: Number(t.tarifa), tarifa_nino: cbTarNinoTramo(it, t), tarifa_habitacion: cbTarNum(t.tarifa_habitacion), ...(Number(t.pax_adic) > 0 ? { pax_adic: Number(t.pax_adic), tarifa_pax_adic: cbTarNum(t.tarifa_pax_adic) } : {}), tarifa_id: t.tarifa_id || null, fuente_archivo: t.fuente_archivo || null }));
+    const tramo = t => ({ desde: t.desde, hasta: t.hasta, noches: Number(t.noches), tarifa: Number(t.tarifa), tarifa_nino: cbTarNinoTramo(it, t), tarifa_habitacion: cbTarNum(t.tarifa_habitacion), ...(t.grupos?.length ? { grupos: t.grupos.map(g => ({ adultos: Number(g.adultos), habs: Number(g.habs), tarifa: Number(g.tarifa), ...(g.variante ? { variante: g.variante } : {}) })) } : {}), ...(Number(t.pax_adic) > 0 ? { pax_adic: Number(t.pax_adic), tarifa_pax_adic: cbTarNum(t.tarifa_pax_adic) } : {}), tarifa_id: t.tarifa_id || null, fuente_archivo: t.fuente_archivo || null });
+    if (it.tramos?.length) o.tramos = it.tramos.map(tramo);
+    if (it.tramo_salida && it.tramos?.length) o.tramo_salida = tramo(it.tramo_salida);
+    if (it.early_checkin) o.early_checkin = true;
+    if (it.late_checkout) o.late_checkout = true;
+    if (it.habitaciones_auto) { o.habitaciones_auto = true; o.habitaciones_antes = Number(it.habitaciones_antes) || 1; }
     if (it.tarifa_avisos?.length) o.tarifa_avisos = [...it.tarifa_avisos];
   }
   return Object.assign(o, { cant: o.adultos + o.ninos + o.infantes });
@@ -35212,6 +35285,7 @@ function cbDetalle(it) {
   } else if (tipo === 'hotel' || tipo === 'paquete') {
     d.push(`${tipo === 'hotel' ? 'HOSPEDAJE' : 'PAQUETE'}: ${U(it.nombre)}`);
     add('PLAN', U(it.plan)); add('HABITACIÓN', U(it.hab)); add(tipo === 'hotel' ? 'CHECK-IN' : 'ENTRADA', cbFechaCorta(it.ida)); add(tipo === 'hotel' ? 'CHECK-OUT' : 'SALIDA', cbFechaCorta(it.vuelta)); add('NOCHES', cbNoches(it.ida, it.vuelta));
+    if (tipo === 'hotel') add('DISTRIBUCIÓN', U(cbRepartoTexto(it)));
     if (cbPorHabitacion(it)) { add('TARIFA', `$${cbMonto(it.tarifa)} POR HABITACIÓN POR NOCHE × ${U(cbHabitacionesTexto(it))} × ${U(cbNochesTexto(cbNochesCobro(it)))}`); add('PASAJEROS', cbPaxTexto(it)); if (+it.ninos && +it.tarifa_nino) add('NIÑOS', `$${cbMonto(it.tarifa_nino)} POR NIÑO POR NOCHE`); }
     else if (cbPorNoche(it)) { const p = cbPax(it); add('TARIFA', p.n || p.i ? 'POR PERSONA POR NOCHE' : `$${cbMonto(it.tarifa)} POR PERSONA POR NOCHE × ${U(cbNochesTexto(cbNochesCobro(it)))}`); }
     else if (it.tramos?.[0]?.paquete) { const t = it.tramos[0]; add('TARIFA', `PAQUETE ${t.noches + 1} DÍAS / ${U(cbNochesTexto(t.noches))} · $${cbMonto(it.tarifa)} POR PERSONA`); if (t.incluye?.length) add('INCLUYE', U(t.incluye.join(', '))); }
@@ -35235,27 +35309,35 @@ function cbDetalleCliente(it) {
     if (it.ida) add('', `${f(it.ida)}${it.vuelta ? ' al ' + f(it.vuelta) : ''}${n ? ` · ${n} noche${n === 1 ? '' : 's'}` : ''}`);
   } else if (tipo === 'traslado') { add('Fecha', con(f(it.ida), it.ida_hora)); add('Regreso', con(f(it.vuelta), it.vuelta_hora)); }
   else add('Fecha', f(it.ida));
+  const ninosTxt = (q, v) => v === null ? `${q} ${q === 1 ? 'niño' : 'niños'} · precio por confirmar` : v === 0 ? `${q} ${q === 1 ? 'niño' : 'niños'} gratis` : `${q} ${q === 1 ? 'niño' : 'niños'} × $${cbMonto(v)} por noche`;
+  const adultosTxt = q => `${q} ${q === 1 ? 'adulto' : 'adultos'}`;
+  if (it.tipo === 'hotel' && cbHabitaciones(it) > 1) add('Distribución', cbRepartoTexto(it));
   if (cbPorHabitacion(it)) {
-    add('Habitaciones', cbHabitacionesTexto(it)); if (it.tarifa_variante) add('Variante de tarifa', it.tarifa_variante.replace(/_/g, ' ')); add('Pasajeros', cbPaxTexto(it));
+    add('Habitaciones', cbHabitacionesTexto(it)); if (it.tarifa_variante && !it.tramos?.some(t => t.grupos?.length)) add('Variante de tarifa', it.tarifa_variante.replace(/_/g, ' ')); add('Pasajeros', cbPaxTexto(it));
     const ninos = +it.ninos || 0, nino = t => cbTarNum(t ? cbTarNinoTramo(it, t) : it.tarifa_nino);
     if (it.tramos?.length) it.tramos.forEach(t => {
-      add('', `${f(t.desde)} al ${f(t.hasta)} · $${cbMonto(t.tarifa)} por habitación por noche × ${cbHabitacionesTexto(it)} × ${cbNochesTexto(t.noches)}`);
+      add('', `${f(t.desde)} al ${f(t.hasta)} · ${t.grupos?.length ? t.grupos.map(g => `${g.habs} hab. de ${adultosTxt(g.adultos)} × $${cbMonto(g.tarifa)}`).join(' + ') + ' por noche' : `$${cbMonto(t.tarifa)} por habitación por noche × ${cbHabitacionesTexto(it)}`} × ${cbNochesTexto(t.noches)}`);
       if (+t.pax_adic) add('', `${t.pax_adic} adulto${+t.pax_adic === 1 ? '' : 's'} adicional${+t.pax_adic === 1 ? '' : 'es'} × $${cbMonto(t.tarifa_pax_adic)} por noche`);
-      if (ninos && nino(t)) add('', `${ninos} ${ninos === 1 ? 'niño' : 'niños'} × $${cbMonto(nino(t))} por noche`);
+      if (ninos && nino(t) !== null) add('', ninosTxt(ninos, nino(t)));
     });
     else {
       add('Tarifa', `$${cbMonto(it.tarifa)} por habitación por noche × ${cbHabitacionesTexto(it)} × ${cbNochesTexto(cbNochesCobro(it))}`);
       if (ninos && nino()) add('', `${ninos} ${ninos === 1 ? 'niño' : 'niños'} × $${cbMonto(nino())} por noche`);
     }
   } else if (it.tipo === 'hotel' && it.tramos?.length) {
-    it.tramos.forEach(t => add('', `${f(t.desde)} al ${f(t.hasta)} · ${cbNochesTexto(t.noches)} · ${t.tarifa_habitacion != null ? `${it.adultos} adultos, habitación $${cbMonto(t.tarifa_habitacion)} por noche` : `${it.adultos} adultos × $${cbMonto(t.tarifa)} por persona por noche`}`));
-    if (+it.ninos) it.tramos.forEach(t => add('', `${f(t.desde)} al ${f(t.hasta)} · ${it.ninos} niños × $${cbMonto(cbTarNinoTramo(it, t))} por noche`));
+    // Una línea por tramo con adultos y niños juntos: así se ve cómo cuadra una estadía que cruza dos tarifas.
+    it.tramos.forEach(t => add('', `${f(t.desde)} al ${f(t.hasta)} · ${cbNochesTexto(t.noches)} · ${[
+      t.tarifa_habitacion != null ? `${adultosTxt(+it.adultos)}, habitación $${cbMonto(t.tarifa_habitacion)} por noche`
+        : t.grupos?.length ? t.grupos.map(g => `${adultosTxt(g.adultos * g.habs)} × $${cbMonto(g.tarifa)}`).join(' + ') + ' por persona por noche'
+        : `${adultosTxt(+it.adultos)} × $${cbMonto(t.tarifa)} por persona por noche`,
+      +it.ninos ? ninosTxt(+it.ninos, cbTarNinoTramo(it, t)) : ''].filter(Boolean).join(' + ')}`));
     if (+it.infantes) add('', `${it.infantes} infantes · alojamiento gratis`);
   } else if (cbEsPax(it)) {
     const p = cbPax(it), xNoche = cbPorNoche(it) ? ` por noche × ${cbNochesTexto(cbNochesCobro(it))}` : '';
     [[p.a, 'adulto', 'adultos', it.tarifa], [p.n, 'niño', 'niños', it.tarifa_nino], [p.i, 'infante', 'infantes', it.tarifa_infante]].forEach(([n, s, pl, t]) => { if (n) add('', `${n} ${n === 1 ? s : pl} × $${cbMonto(t)}${xNoche}`); });
   }
   else add('', `${it.cant} × $${cbMonto(it.tarifa)}`);
+  cbHotelExtras(it).forEach(x => add(x.nombre, `${x.texto} · $${cbMonto(x.monto)}`));
   if (it.extra) add('', it.extra);
   return d.join('\n');
 }
@@ -35678,7 +35760,7 @@ function cbHotelRecalcular(it, aplicar = false) {
       if (!manual || aplicar || (it.tarifa_nino_contexto && it.tarifa_nino_contexto !== contexto)) {
         it.tarifa_nino = s.tramos.every(t => cbTarNum(t.tarifa_nino) !== null) ? s.tramos[0].tarifa_nino : '';
         it.tarifa_nino_auto = true;
-      } else s.tramos.forEach(t => { t.tarifa_nino = cbTarNum(it.tarifa_nino); });
+      } else [...s.tramos, ...(s.salida ? [s.salida] : [])].forEach(t => { t.tarifa_nino = cbTarNum(it.tarifa_nino); });
       it.tarifa_nino_contexto = contexto;
       if (s.tramos.some(t => t.tarifa_nino !== s.tramos[0].tarifa_nino)) s.avisos.push('La tarifa de niños cambia por fechas: el campo muestra el primer tramo; el total y el PDF usan cada tramo.');
       if (it.tarifa_manual) (it.tramos || []).forEach(t => {
@@ -35695,10 +35777,10 @@ function cbHotelRecalcular(it, aplicar = false) {
   }
   it._desactualizado = false;
   if (s.ok) {
-    it.tramos = s.tramos.map(t => ({ ...t })); it.tarifa = s.tramos[0].tarifa;
+    it.tramos = s.tramos.map(t => ({ ...t })); it.tarifa = s.tramos[0].tarifa; it.tramo_salida = s.salida ? { ...s.salida } : null;
     it.tarifas_contexto = cbTarContexto(it); it.tarifa_manual = false; it._aviso = '';
     it.tarifa_avisos = s.avisos;
-  } else { it.tramos = []; it.tarifa = ''; it._aviso = s.texto; it.tarifa_avisos = []; }
+  } else { it.tramos = []; it.tarifa = ''; it.tramo_salida = null; it._aviso = s.texto; it.tarifa_avisos = []; }
 }
 async function cbTraerHabitaciones(id) {
   id = Number(id);
@@ -35788,7 +35870,10 @@ function cbHotelPrecioHtml(it, i) {
     ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por ${cbPorHabitacion(it) ? 'habitación' : 'persona'}/noche${Number(it.ninos) > 0 ? ` · niños: ${cbTarNinoTramo(it, t) === null ? 'por confirmar' : '$' + cbMonto(cbTarNinoTramo(it, t)) + '/noche'}` : ''}</small></span><input class="ei" aria-label="Tarifa ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>`).join('')}</div>` : ''}
     ${it.tarifa_manual && it._sugerencia?.ok ? `<button type="button" class="btn-sm" data-cb-usar>Usar tarifa del tarifario · ${it._sugerencia.tramos.map(t => '$' + cbMonto(t.tarifa)).join(' / ')}</button>` : ''}
     ${it._desactualizado ? `<button type="button" class="btn-sm" data-cb-manual>Usar $${cbMonto(it.tarifa)} por ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} ${cbPorNoche(it) ? 'por noche' : 'por estadía'} para este viaje</button>` : ''}
-    ${(it.tarifa_avisos || []).map(a => `<small class="cb-condicion">${esc(a)}</small>`).join('')}</div>`;
+    ${(it.tarifa_avisos || []).map(a => `<small class="cb-condicion">${esc(a)}</small>`).join('')}
+    ${cbRepartoTexto(it) ? `<small class="cb-condicion">🚪 ${esc(cbRepartoTexto(it))}</small>` : ''}
+    ${cbPorNoche(it) && !it.tramos?.[0]?.paquete ? `<div class="cb-hotel-extras">${[['early_checkin', 'Early Check-in'], ['late_checkout', 'Late Check-out']].map(([k, l]) => `<label class="cb-check"><input type="checkbox" data-cb-extra="${k}"${it[k] ? ' checked' : ''}> ${l} <small>(+50% de una noche)</small></label>`).join('')}</div>` : ''}
+    ${cbHotelExtras(it).map(x => `<small class="cb-condicion${x.aprox ? ' cb-aviso' : ''}">${esc(`${x.nombre}: ${x.texto} · $${cbMonto(x.monto)}`)}</small>`).join('')}</div>`;
 }
 // Carga liviana de nombres y portadas; el detalle de precios se pide solo al elegir hotel.
 async function cbCargarHotSales() {
@@ -35897,9 +35982,11 @@ function cbTextoWhatsapp(cot) {
   const total = Number(cot.total) || cbTotalItems(items), titulos = items.map(it => cbTitulo(it)).filter(Boolean);
   const extra = titulos.length > 3 ? ` y ${titulos.length - 3} servicio${titulos.length - 3 === 1 ? '' : 's'} más` : '';
   const ops = cbConOpciones(items) ? cbOpciones(items) : [];
-  if (cliente && ops.length > 1) return `Hola ${cliente}, te comparto ${ops.length} opciones para que elijas la que más te guste (${ops.map(o => o.titulo).filter(Boolean).join(' / ')}), desde $${cbMonto(total)}. Cualquier duda me avisas. — ${MI_NOMBRE}`;
+  const horarios = items.flatMap(it => cbHotelExtras(it).map(x => `${x.nombre} en ${cbTitulo(it) || 'el hotel'} ($${cbMonto(x.monto)})`));
+  const incluye = horarios.length ? `\nIncluye ${horarios.join(' y ')}.\n` : ' ';
+  if (cliente && ops.length > 1) return `Hola ${cliente}, te comparto ${ops.length} opciones para que elijas la que más te guste (${ops.map(o => o.titulo).filter(Boolean).join(' / ')}), desde $${cbMonto(total)}.${incluye}Cualquier duda me avisas. — ${MI_NOMBRE}`;
   return cliente
-    ? `Hola ${cliente}, te comparto la cotización${titulos.length ? ` de ${titulos.slice(0, 3).join(' + ')}${extra}` : ''}${total ? ` por un total de $${cbMonto(total)}` : ''}. Cualquier duda me avisas. — ${MI_NOMBRE}`
+    ? `Hola ${cliente}, te comparto la cotización${titulos.length ? ` de ${titulos.slice(0, 3).join(' + ')}${extra}` : ''}${total ? ` por un total de $${cbMonto(total)}` : ''}.${incluye}Cualquier duda me avisas. — ${MI_NOMBRE}`
     : '';
 }
 // El PDF va por la hoja de compartir del sistema (WhatsApp aparece ahí, en celular y en Windows).
@@ -36157,7 +36244,7 @@ async function cbCargarSeccion() {
       const k = e.target.dataset.k, card = e.target.closest('.cb-item');
       if (card && e.target.dataset.tramo !== undefined) {
         const it = cbItems[+card.dataset.i], t = it.tramos[+e.target.dataset.tramo];
-        t.tarifa = Number(e.target.value) || 0; t.tarifa_habitacion = null; it.tarifa_manual = true;
+        t.tarifa = Number(e.target.value) || 0; t.tarifa_habitacion = null; delete t.grupos; it.tarifa_manual = true;
         if (+e.target.dataset.tramo === 0) it.tarifa = t.tarifa;
         if (cbTarTramosValidos(it)) it.tarifas_contexto = cbTarContexto(it);
         card.querySelector('.cb-importe').textContent = cbImporteTexto(it); cbActualizarTotal(); cbProgramarBorrador(); return;
@@ -36188,7 +36275,7 @@ async function cbCargarSeccion() {
       }
       if (it.tipo === 'hotel' && k === 'tarifa') {
         it.tarifa_manual = true; it.tarifas_contexto = cbTarContexto(it);
-        if (it.tramos?.length === 1) { it.tramos[0].tarifa = Number(it.tarifa) || 0; it.tramos[0].tarifa_habitacion = null; }
+        if (it.tramos?.length === 1) { it.tramos[0].tarifa = Number(it.tarifa) || 0; it.tramos[0].tarifa_habitacion = null; delete it.tramos[0].grupos; }
       }
       if (it.tipo === 'hotel' && k === 'tarifa_nino') {
         it.tarifa_nino_auto = false; it.tarifa_nino_contexto = cbTarContexto(it);
@@ -36221,6 +36308,8 @@ async function cbCargarSeccion() {
       const k = e.target.dataset.k, card = e.target.closest('.cb-item'); if (!card) return;
       const it = cbItems[+card.dataset.i];
       if (it.tipo !== 'hotel') return;
+      if (e.target.dataset.cbExtra) { it[e.target.dataset.cbExtra] = e.target.checked; cbRenderItems(); cbProgramarBorrador(); document.querySelector(`#cb-items .cb-item[data-i="${card.dataset.i}"] [data-cb-extra="${e.target.dataset.cbExtra}"]`)?.focus({ preventScroll: true }); return; }
+      if (k === 'habitaciones') { it.habitaciones_auto = false; delete it.habitaciones_antes; }
       const campo = e.target.dataset.cbCampo;
       if (campo) {
         cbHotelCambiarOpcion(it, campo, e.target.value); cbRenderItems(); cbProgramarBorrador();
@@ -36551,10 +36640,11 @@ async function cbPdfBlob(c) {
     if (!cbEsPax(it)) return [[i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
     if (it.tipo === 'hotel' && it.tramos?.length) return [[i + 1, cbDetalleCliente(it), '1.00', cbMonto(cbImporte(it)), cbMonto(cbImporte(it))]];
     // Hotel por noche: la columna Tarifa va por la estadía completa para que Cant. × Tarifa = Importe.
-    const p = cbPax(it), noches = cbNochesCobro(it), tn = t => (Number(t) || 0) * noches;
-    if (!p.n && !p.i) return [[i + 1, cbDetalle(it), p.a.toFixed(2), cbMonto(tn(it.tarifa)), cbMonto(cbImporte(it))]];
+    const p = cbPax(it), noches = cbNochesCobro(it), tn = t => (Number(t) || 0) * noches, extras = cbHotelExtras(it);
+    if (!p.n && !p.i && !extras.length) return [[i + 1, cbDetalle(it), p.a.toFixed(2), cbMonto(tn(it.tarifa)), cbMonto(cbImporte(it))]];
     const cat = [['ADULTOS', p.a, it.tarifa], ['NIÑOS', p.n, it.tarifa_nino], ['INFANTES', p.i, it.tarifa_infante]].filter(x => x[1])
-      .map(([n, q, t]) => ['', cbPorNoche(it) ? `${n} · $${cbMonto(t)} × ${cbNochesTexto(noches).toUpperCase()}` : n, q.toFixed(2), cbMonto(tn(t)), cbMonto(q * tn(t))]);
+      .map(([n, q, t]) => ['', cbPorNoche(it) ? `${n} · $${cbMonto(t)} × ${cbNochesTexto(noches).toUpperCase()}` : n, q.toFixed(2), cbMonto(tn(t)), cbMonto(q * tn(t))])
+      .concat(extras.map(x => ['', `${x.nombre.toUpperCase()} · ${x.texto.toUpperCase()}`, '1.00', cbMonto(x.monto), cbMonto(x.monto)]));
     return [[i + 1, cbDetalle(it), '', '', ''], ...cat];
   });
   const tabla = (filas, startY) => doc.autoTable({
