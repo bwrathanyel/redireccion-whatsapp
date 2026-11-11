@@ -37031,7 +37031,9 @@ async function pdfCotizacionCliente(datos) {
   font('normal', 8.5, C.claro); doc.text('Agencia de viajes · destinoyeventoslotus360.com', 122, 85);
   font('medium', 7.5, C.claro); doc.text('COTIZACIÓN DE VIAJE', X1, 44, { align: 'right', charSpace: 1.4 });
   if (datos.numero) {
-    font('bold', 24, C.blanco); doc.text(`N° ${datos.numero}`, X1, 74, { align: 'right' });
+    // Pedido del dueño (2026-11-11): el número grande va solo con 4 cifras («0270»), sin «N° COT-000».
+    const corto = String(datos.numero).replace(/\D/g, '').replace(/^0+(?=\d)/, '').padStart(4, '0');
+    font('bold', 24, C.blanco); doc.text(corto, X1, 74, { align: 'right' });
     font('normal', 8.5, C.claro); doc.text(emitida, X1, 90, { align: 'right' });
   } else { font('bold', 16, C.blanco); doc.text(emitida, X1, 70, { align: 'right' }); }
 
