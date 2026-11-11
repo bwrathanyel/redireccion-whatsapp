@@ -25669,6 +25669,10 @@ function aplicarTabsOcultas() {
 // Último TARIFARIO NACIONAL de BT Travel tal cual llegó al Drive (Edge Function tarifario-bt-pdf).
 // La ventana se abre antes del await para que no la bloqueen; la primera vez por versión tarda (copia ~12 MB del Drive).
 // Con productoId devuelve solo las páginas de ese hotel (extracto chico, cacheado por versión).
+// Solo las tarifas que salieron de una carga maestra de BT Travel tienen páginas
+// en su PDF: `fuente_archivo` = "<archivo>.pdf — <carga_id> — <NOMBRE> — <n>".
+// Las manuales y las de flyer no, y el botón no debe aparecer en esas fichas.
+const tarDeBtTravel = t => /— [0-9a-f-]{36} — /.test(t?.fuente_archivo || '');
 async function abrirPdfBtTravel(btn, productoId) {
   if (btn.disabled) return;
   const w = window.open('', '_blank');
@@ -27201,6 +27205,31 @@ function vigenciaHtml(texto) {
   return `<div class="tc-fechas">${partes.map(([k, v]) =>
     `<div class="tc-fecha${k ? '' : ' tcf-crudo'}">${k ? `<span class="tcf-k">${esc(k)}</span>` : ''}<span class="tcf-v">${esc(v)}</span></div>`).join('')}</div>`;
 }
+// ~90% de las tarifas del PDF no tienen resumen_ia ni incluye_tags y la tarjeta
+// quedaba en "TEMPORADA BAJA" a secas. Los datos estructurados de la fila (plan,
+// habitación, mínimo de noches, fechas de disfrute, precio de niño) ya dicen qué
+// es: se muestran como chips. Nunca el precio adulto: ese vive en la pastilla.
+const tarCapitalizar = s => String(s).toLowerCase().replace(/(^|[\s/(-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase())
+  .replace(/\b(De|Del|La|El|Con|Y|En|Al)\b/g, w => w.toLowerCase());
+function tarChipsPromo(x) {
+  const chips = [], tit = tarNorm(tarTituloSinHotel(x));
+  const plan = vcPlanDeTarifario(x.plan) || (x.plan ? tarCapitalizar(x.plan) : '');
+  if (plan && !tit.includes(tarNorm(plan))) chips.push(['utensils', plan]);
+  const habCruda = String(x.habitacion || '');
+  const aSolicitud = /on\s*request|a\s*solicitud/i.test(habCruda);
+  const hab = habCruda.replace(/\((?:on\s*request|todos\s+los\s+d[ií]as)\)|\btodos\s+los\s+d[ií]as\b|on\s*request/gi, '').replace(/\s{2,}/g, ' ').replace(/^[\s\-–·/]+|[\s\-–·/]+$/g, '').trim();
+  if (hab && !tit.includes(tarNorm(hab))) chips.push(['bed', tarCapitalizar(hab)]);
+  if (aSolicitud) chips.push(['circle-question', 'A solicitud', 'is-aviso']);
+  const min = Number(tarMinimoNoches(x));
+  if (min > 1) chips.push(['moon', `Mín. ${min} noches`]);
+  const corta = d => dtf('es-VE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(Date.parse(d + 'T12:00:00Z')).replace(/\./g, '');
+  const ini = String(x.disfrute_desde || '').slice(0, 10), fin = String(x.fecha_fin || '').slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ini) && /^\d{4}-\d{2}-\d{2}$/.test(fin)) chips.push(['plane-departure', `Viaje ${corta(ini)} – ${corta(fin)}`]);
+  const nino = Object.entries(x.precios || {}).find(([k, v]) => /^(chd|nin[oa]s?)_?(\d+)_(\d+)/i.test(k) && Number(v) > 0);
+  if (nino) { const [, a, b] = nino[0].match(/(\d+)_(\d+)/); chips.push(['child', `Niños ${a}–${b}: ${tarMonto(nino[1], x.moneda)}`]); }
+  if (!chips.length) return '';
+  return `<div class="tc-chips">${chips.map(([ic, txt, cls]) => `<span class="tc-chip${cls ? ' ' + cls : ''}" title="${esc(txt)}"><i class="fas fa-${ic}"></i>${esc(txt)}</span>`).join('')}</div>`;
+}
 function tarCardHtml(x) {
   if (tarTab === 'promo' || tarTab === 'hotsale') {
     // resumen_ia: descripción normalizada al mismo largo por IA (la misma que
@@ -27216,6 +27245,7 @@ function tarCardHtml(x) {
         ${hotel}
         <div class="tc-nombre">${esc(tarTituloSinHotel(x))}</div>
         ${x.resumen_ia ? `<div class="tc-desc">${esc(x.resumen_ia)}</div>` : ''}
+        ${tarChipsPromo(x)}
         ${tarMetaHtml(tarFechaCorta(x), 0, tarIconosIncluye(x.incluye_tags, `${tarTituloSinHotel(x)}. ${x.resumen_ia || ''}`), tarVendibleHoy(x))}
         ${retirar}
       </div></div>`;
@@ -28928,7 +28958,7 @@ function tgCabeceraHtml(x, nombre, fotos, n) {
   const chip = (ic, txt) => `<span class="tg-dato"><i class="fas ${ic}"></i>${esc(txt)}</span>`;
   const datos = [b?.check_in ? chip('fa-clock', 'Check-in ' + b.check_in) : '', b?.check_out ? chip('fa-clock-rotate-left', 'Check-out ' + b.check_out) : '',
     precioChip ? chip('fa-coins', precioChip) : '',
-    x.tipo === 'hotel' && vivas.length && ROL !== 'marketing' ? '<button type="button" class="tg-dato tg-pdf" data-tar-pdf><i class="fas fa-file-pdf"></i>Ver en tarifario BT Travel</button>' : ''].filter(Boolean).join('');
+    x.tipo === 'hotel' && vivas.some(tarDeBtTravel) && ROL !== 'marketing' ? '<button type="button" class="tg-dato tg-pdf" data-tar-pdf><i class="fas fa-file-pdf"></i>Ver en tarifario BT Travel</button>' : ''].filter(Boolean).join('');
   const foto = (src, i, alt) => `<div class="tg-foto" style="--bg:url('${esc(src.replace(/'/g, '%27'))}')"><img src="${esc(src)}" alt="${esc(alt)}"${i ? ' loading="lazy"' : ''} data-drawer-foto="${i}"></div>`;
   const sub = [x.destino, TAR_TAB_LABEL[x.tipo] || TAR_TAB_LABEL[tarTab], vivas.length ? `${vivas.length} tarifa${vivas.length > 1 ? 's' : ''} vigente${vivas.length > 1 ? 's' : ''}` : 'Sin tarifas vigentes'].filter(Boolean).join(' · ');
   return `<div class="tg-cab">
@@ -36015,9 +36045,24 @@ function cbTextoWhatsapp(cot) {
     ? `Hola ${cliente}, te comparto la cotización${titulos.length ? ` de ${titulos.slice(0, 3).join(' + ')}${extra}` : ''}${total ? ` por un total de $${cbMonto(total)}` : ''}.${incluye}Cualquier duda me avisas. — ${MI_NOMBRE}`
     : '';
 }
-// El PDF va por la hoja de compartir del sistema (WhatsApp aparece ahí, en celular y en Windows).
-// Sin ella (navegador sin soporte de archivos), se descarga y se abre el chat del lead para adjuntarlo.
+// El navegador no puede adjuntar un archivo a un chat: el PDF viaja como link firmado (30 días)
+// en el mensaje de wa.me, que abre directo el chat del lead o, sin lead, el selector de chats.
+// Si la subida falla, cae a la hoja de compartir del sistema y, sin ella, a descargar + abrir el chat.
+const CB_PDF_LINK_SEG = 30 * 86400;
+async function cbLinkPdf(blob, nombre) {
+  const ruta = `${MI_USUARIO_ID}/${Date.now()}-${nombre.replace(/[^\w.-]+/g, '_')}`;
+  const { error } = await sb.storage.from('cotizaciones-pdf').upload(ruta, blob, { contentType: 'application/pdf', upsert: false });
+  if (error) throw error;
+  const { data, error: e2 } = await sb.storage.from('cotizaciones-pdf').createSignedUrl(ruta, CB_PDF_LINK_SEG);
+  if (e2 || !data?.signedUrl) throw e2 || new Error('sin link');
+  return data.signedUrl;
+}
 async function cbWhatsappArchivo(blob, nombre, tel, texto) {
+  try {
+    const link = await cbLinkPdf(blob, nombre);
+    cbAbrirWhatsapp(tel, `${texto || `Te comparto la cotización. — ${MI_NOMBRE}`}\n\n📄 ${link}`);
+    return;
+  } catch (e) { console.error('cbLinkPdf', e); }
   const file = new File([blob], nombre, { type: 'application/pdf' });
   if (navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: nombre, ...(texto ? { text: texto } : {}) }); return; }

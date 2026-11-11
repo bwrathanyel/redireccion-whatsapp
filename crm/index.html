@@ -1973,6 +1973,11 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 /* Fecha corta · promos · íconos de lo incluido (con tooltip). */
 /* 2026-10-28: la fecha va en pastilla con ícono y color por estado (antes gris 11px,
    casi invisible) y los íconos en cuadritos; si no entran, bajan de renglón. */
+.tc-chips{display:flex;flex-wrap:wrap;gap:5px;max-height:52px;overflow:hidden;margin-top:2px}
+.tc-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 8px;border-radius:7px;font-size:11px;font-weight:600;line-height:1.35;color:inherit;background:rgba(var(--accent-rgb),.08);border:1px solid rgba(var(--accent-rgb),.18);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc-chip i{color:var(--accent-ink);font-size:10px;flex-shrink:0}
+.tc-chip.is-aviso{color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,transparent);border-color:color-mix(in srgb,var(--amber) 30%,transparent)}
+.tc-chip.is-aviso i{color:inherit}
 .tc-meta{margin-top:auto;padding-top:9px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:6px 7px;min-width:0;font-size:11px;color:var(--muted2)}
 .tc-meta .tcm-fecha,.tc-meta .tcm-promos{white-space:nowrap}
 .tc-meta .tcm-fecha{--c:var(--green);display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;line-height:1.3;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent);border:1px solid color-mix(in srgb,var(--c) 32%,transparent)}
