@@ -18317,7 +18317,7 @@ function lyraPintarHistorial() {
   // Con adjuntos, content es la lectura que armó la EF; en pantalla va lo que escribió el usuario.
   asisChatHistory.forEach(m => {
     if (m.role === 'user' && m.vista?.a) lyraBurbuja('user', m.vista.t || '', false, 'neutral', m.vista);
-    else if (m.role === 'assistant' && Array.isArray(m.cot) && typeof m.r === 'string') { lyraBurbuja('bot', m.r); m.cot.forEach(lyraPintarCotizacion); if (LYRA_STICKERS.includes(m.st)) lyraPintarSticker(m.st); }
+    else if (m.role === 'assistant' && Array.isArray(m.cot) && typeof m.r === 'string') { lyraBurbuja('bot', m.r); m.cot.forEach(lyraPintarCotizacion); (m.gens || []).forEach(g => lyraPintarGenerada(g)); if (LYRA_STICKERS.includes(m.st)) lyraPintarSticker(m.st); }
     else lyraBurbuja(m.role === 'user' ? 'user' : 'bot', m.content);
   });
   lyraSugerencias();
@@ -18493,12 +18493,76 @@ function lyraPintarSticker(nombre) {
 // La etiqueta [sticker:x] queda al final del content: la EF la mira para no mandar dos seguidos.
 function lyraTurnoAsistente(respuesta, bloques, sticker) {
   const cot = Array.isArray(bloques) ? bloques.filter(b => b?.tipo === 'cotizacion') : [];
+  const gen = Array.isArray(bloques) ? bloques.filter(b => b?.tipo === 'generar_cotizacion' && Array.isArray(b.servicios)) : [];
   const st = LYRA_STICKERS.includes(sticker) ? sticker : '';
-  if (!cot.length && !st) return { role: 'assistant', content: respuesta };
+  if (!cot.length && !st && !gen.length) return { role: 'assistant', content: respuesta };
   cot.forEach(lyraPintarCotizacion);
   if (st) lyraPintarSticker(st);
   const content = [respuesta, ...cot.map(b => String(b.texto || '').replaceAll('---BLOQUE---', '\n\n'))].join('\n\n') + (st ? `\n[sticker:${st}]` : '');
-  return st ? { role: 'assistant', content, r: respuesta, cot, st } : { role: 'assistant', content, r: respuesta, cot };
+  const turno = st ? { role: 'assistant', content, r: respuesta, cot, st } : { role: 'assistant', content, r: respuesta, cot };
+  gen.reduce((cola, b) => cola.then(() => lyraGenerarCotizacion(b, turno)), Promise.resolve());
+  return turno;
+}
+// generar_cotizacion (2026-11-11): la genera la sección Cotizaciones (cbDesdeLyra); el resultado queda en el turno
+// (gens, para repintar la tarjeta) y en su content, para que Lyra sepa el número en los turnos siguientes.
+async function lyraGenerarCotizacion(b, turno) {
+  const fila = lyraPintarGenerada({ cargando: true, cliente: b.cliente });
+  const r = usuarioPuedeAbrirSeccion('cotizacion-boletos')
+    ? await cbDesdeLyra(b).catch(e => ({ error: e?.message || String(e) }))
+    : { error: 'Tu usuario no tiene acceso a Cotizaciones', sinSeccion: true };
+  const g = r.cot
+    ? { id: r.cot.id, numero: r.cot.numero, cliente: r.cot.cliente, total: r.cot.total, aviso: r.aviso || '' }
+    : { error: r.error || 'No se pudo generar', cliente: b.cliente, sinSeccion: !!r.sinSeccion };
+  (turno.gens ??= []).push(g);
+  turno.content += '\n\n' + (g.error
+    ? `[No se generó la cotización de ${g.cliente}: ${g.error}.${g.sinSeccion ? '' : ' Quedó armada en Cotizaciones para revisarla.'}]`
+    : `[Cotización ${cbNumero(g.numero)} generada para ${g.cliente}, total $${cbMonto(g.total)}${g.aviso ? ` (${g.aviso})` : ''}]`);
+  lyraGuardarHistorial();
+  lyraPintarGenerada(g, fila);
+}
+function lyraPintarGenerada(g, previa) {
+  const log = document.getElementById('lyra-log'), row = document.createElement('div');
+  row.className = 'chat-row';
+  row.innerHTML = lyraMini(g.error ? 'preocupada' : 'neutral');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg bot';
+  msg.innerHTML = g.cargando ? `<i class="fas fa-spinner fa-spin"></i> Generando la cotización de ${esc(g.cliente || 'tu cliente')} en Cotizaciones…`
+    : g.error ? `No se generó la cotización de ${esc(g.cliente || 'tu cliente')}: ${esc(g.error)}.`
+    : `<i class="fas fa-circle-check"></i> <b>${esc(cbNumero(g.numero))}</b> generada · ${esc(g.cliente || '')} · <b>$${esc(cbMonto(g.total))}</b>${g.aviso ? `<br><small>${esc(g.aviso)}</small>` : ''}`;
+  row.appendChild(msg);
+  if (previa?.isConnected) previa.replaceWith(row); else log.appendChild(row);
+  if (g.cargando) { log.scrollTop = log.scrollHeight; return row; }
+  const acciones = document.createElement('div');
+  acciones.className = 'cot-acciones';
+  const boton = (icono, etiqueta, fn) => {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn-sm';
+    btn.innerHTML = `<i class="fa${icono === 'whatsapp' ? 'b' : 's'} fa-${icono}"></i> ${etiqueta}`;
+    btn.onclick = async () => { btn.disabled = true; try { await fn(); } catch (e) { console.error('lyra cotización', e); errToast(e?.message || 'No se pudo completar'); } finally { btn.disabled = false; } };
+    acciones.appendChild(btn);
+  };
+  if (!g.error) {
+    boton('file-pdf', 'PDF', async () => { const { c, blob } = await lyraCotGenerada(g.id); cbDescargar(blob, cbArchivo(c)); });
+    boton('whatsapp', 'WhatsApp', async () => {
+      const { c, blob } = await lyraCotGenerada(g.id);
+      const tel = c.lead_id ? (await sb.from('leads').select('telefono').eq('id', c.lead_id).maybeSingle()).data?.telefono : '';
+      await cbWhatsappArchivo(blob, cbArchivo(c), String(tel || '').replace(/\D/g, ''), cbTextoWhatsapp(c));
+    });
+  }
+  if (!g.sinSeccion) boton('file-invoice-dollar', g.error ? 'Revisar en Cotizaciones' : 'Ver en Cotizaciones', async () => lyraTrasCerrar(() => activateSection('cotizacion-boletos')));
+  const filaAcc = document.createElement('div');
+  filaAcc.className = 'chat-row'; filaAcc.innerHTML = lyraMini('neutral'); filaAcc.appendChild(acciones);
+  row.after(filaAcc);
+  log.scrollTop = log.scrollHeight;
+  return row;
+}
+// La fila guardada y su PDF: el mismo que bajó Cotizaciones si sigue en memoria, si no se regenera igual (cbPdfDe).
+async function lyraCotGenerada(id) {
+  if (cbUltima?.cot?.id === id && cbUltima.blob) return { c: cbUltima.cot, blob: cbUltima.blob };
+  const { data: c, error } = await sb.from('cotizaciones_boleteria').select('*').eq('id', id).maybeSingle();
+  if (error || !c) throw new Error('No se encontró la cotización');
+  await ensureVoucherLibs();
+  return { c, blob: await cbPdfDe(c) };
 }
 // Vacío vuelve al alto del CSS (una línea = alto del botón); con texto crece hasta
 // 120px. El borde se suma aparte porque scrollHeight no lo incluye (border-box).
@@ -18742,7 +18806,7 @@ async function lyraEnviar(directo, audio) {
   asisChatHistory.push(yo);
   lyraGuardarHistorial();
   const seccion = TITLES[currentSec]?.[0] || '';
-  const body = { messages: asisChatHistory.map(({ role, content }) => ({ role, content })), humor: LYRA.humor, contexto: { seccion }, acepta_bloques: true, acepta_stickers: true };
+  const body = { messages: asisChatHistory.map(({ role, content }) => ({ role, content })), humor: LYRA.humor, contexto: { seccion }, acepta_bloques: true, acepta_stickers: true, genera_cotizaciones: true };
   if (adjuntos) body.adjuntos = adjuntos;
   // La opción del tarifario desde la que se abrió Lyra solo acompaña al primer mensaje.
   if (LYRA.cotizar) { body.contexto.cotizacion = LYRA.cotizar; LYRA.cotizar = null; }
@@ -18945,7 +19009,7 @@ async function lyraEscuchaFrase(E, audio, ventana) {
     const token = (await sb.auth.getSession()).data.session?.access_token;
     if (!token) return;
     const body = {
-      accion: 'escucha', audio: lyraWavB64(audio.subarray(0, 16000 * LYRA_FRASE_MAX_S)), ventana, acepta_bloques: true,
+      accion: 'escucha', audio: lyraWavB64(audio.subarray(0, 16000 * LYRA_FRASE_MAX_S)), ventana, acepta_bloques: true, genera_cotizaciones: true,
       messages: asisChatHistory.slice(-7).map(({ role, content }) => ({ role, content })),
       humor: LYRA.humor, contexto: { seccion: TITLES[currentSec]?.[0] || '' },
     };
@@ -35530,6 +35594,46 @@ async function cbAplicarProducto(id, fechas = null) {
 async function cbDesdeLead(l) {
   if (cbLead && cbLead.id !== l.id) { await cbGuardarBorrador(); cbResetForm(); }
   cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
+// Lyra (2026-11-11): su herramienta generar_cotizacion se arma y se guarda acá, con el mismo motor de tarifas,
+// Stop Sales, validaciones, número QT, PDF y registro del lead que a mano. Lo que no pasa queda armado para revisar.
+let cbLyraPendiente = null;
+function cbDesdeLyra(spec) {
+  return new Promise(resolver => {
+    const reloj = setTimeout(() => { cbLyraPendiente = null; resolver({ error: 'Cotizaciones tardó demasiado en cargar' }); }, 60000);
+    cbLyraPendiente = { spec, resolver: r => { clearTimeout(reloj); resolver(r); } };
+    currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos');
+  });
+}
+async function cbAplicarLyra(spec) {
+  if (cbGenerando) return { error: 'Ya se está generando otra cotización' };
+  if (DR?.edicion('cotizacion')) return { error: 'Hay una cotización en edición en Cotizaciones: guárdala o cancélala primero' };
+  await cbGuardarBorrador(); cbResetForm();
+  if (spec.lead_id) {
+    const { data: l } = await sb.from('leads').select(CB_LEAD_CAMPOS).eq('id', spec.lead_id).maybeSingle();
+    if (!l) return { error: `No se pudo abrir el lead #${spec.lead_id}` };
+    cbLead = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; cbPintarLead();
+  }
+  document.getElementById('cb-cliente').value = spec.cliente || cbLead?.nombre || '';
+  cbResumenCliente(true);
+  const parecido = (ops, q) => { const n = cbTarNorm(q || ''); return n ? ops.find(o => cbTarNorm(o) === n) || ops.find(o => cbTarNorm(o).includes(n) || n.includes(cbTarNorm(o))) : null; };
+  for (const s of spec.servicios || []) {
+    const it = await cbAplicarProducto(Number(s.producto_id));
+    if (!it) return { error: `No se pudo cargar ${s.nombre}` };
+    Object.assign(it, { ida: s.ida, vuelta: s.vuelta, adultos: s.adultos, ninos: s.ninos || '', infantes: s.infantes || '' });
+    if (it.auto) ['ida', 'vuelta', 'adultos', 'ninos', 'infantes'].forEach(k => delete it.auto[k]);
+    if (it.tipo !== 'hotel') continue;
+    const filas = cbHotelFilas(it), plan = parecido(cbTarOpciones(filas, 'plan'), s.plan);
+    if (plan) Object.assign(it, { plan, hab: '', habitacion_manual: false });
+    cbHotelRecalcular(it);
+    const hab = parecido(cbTarOpciones(cbTarDelPlan(filas, it.plan), 'habitacion'), s.habitacion);
+    if (hab && hab !== it.hab) { Object.assign(it, { hab, habitacion_manual: true }); cbHotelRecalcular(it); }
+  }
+  if (spec.como_opciones) window.cbAlternarOpciones(true);
+  cbAutoTodos(); cbRenderItems();
+  const aviso = cbItems.map(it => it._aviso).find(Boolean) || '';
+  await cbGuardar('lyra');
+  return cbUltima?.cot ? { cot: cbUltima.cot, aviso: cbUltimoAviso } : { error: cbUltimoAviso || aviso || 'No se pudo generar' };
+}
 const CB_LEAD_CAMPOS = 'id,nombre,telefono,estado,asesor,personas,fecha_estimada,fecha_viaje_desde,fecha_viaje_hasta,fecha_viaje_exactitud,destino,destino_consulta';
 // El chat de Bandeja solo conoce el lead_id: se trae con lo que lee el autorrelleno (destino_consulta, personas, fechas).
 async function cbCotizarLeadId(id) {
@@ -36187,7 +36291,7 @@ function cbResetForm() {
   document.getElementById('cb-cliente-seccion').open = true; cbResumenCliente();
 }
 async function cbCargarSeccion() {
-  const modo = cbLeadPendiente || (!cbSolicitudPendiente && !document.body.classList.contains('modo-boleteria')) ? 'ventas' : 'boleteria';
+  const modo = cbLeadPendiente || cbLyraPendiente || (!cbSolicitudPendiente && !document.body.classList.contains('modo-boleteria')) ? 'ventas' : 'boleteria';
   const primera = !cbListo, cambio = modo !== cbModo;
   if (cambio && !primera) await cbGuardarBorrador();
   cbModo = modo;
@@ -36442,6 +36546,7 @@ async function cbCargarSeccion() {
   cbCargarStops();
   if (cbLeadPendiente) cbAplicarLead();
   if (cbProductoPendiente) { const id = cbProductoPendiente, fechas = cbFechasPendientes; cbProductoPendiente = cbFechasPendientes = null; await cbAplicarProducto(id, fechas); }
+  if (cbLyraPendiente) { const { spec, resolver } = cbLyraPendiente; cbLyraPendiente = null; resolver(await cbAplicarLyra(spec).catch(e => ({ error: e?.message || String(e) }))); }
   cbResumenCliente();
   cbOffset = 0;
   await cbCargarHistorial(false);
@@ -36537,33 +36642,37 @@ async function cbEnviarAAsesor(c, blob, asesorId) {
 }
 let cbGenerando = false;
 // accion: 'enviar' | 'descargar' (Boletería y ventas) | 'compartir' | 'lead' (solo ventas).
+// Lyra genera por acá con accion 'lyra': mismo guardado sin entregar el PDF (lo entrega su tarjeta) y el motivo del rechazo queda en cbUltimoAviso.
+let cbUltimoAviso = '';
+const cbAviso = m => { cbUltimoAviso = m; errToast(m); };
 window.cbGuardar = async function cbGuardar(accion) {
-  if (cbGenerando) return;
-  const enviar = accion === 'enviar', ventas = cbModo === 'ventas';
+  cbUltimoAviso = '';
+  if (cbGenerando) { cbUltimoAviso = 'Ya se está generando otra cotización'; return; }
+  const enviar = accion === 'enviar', ventas = cbModo === 'ventas', lyra = accion === 'lyra';
   const cliente = val('cb-cliente').trim();
-  if (!cliente) { errToast('Escribe el cliente'); docEnfocar('cb-cliente'); return; }
+  if (!cliente) { cbAviso('Escribe el cliente'); docEnfocar('cb-cliente'); return; }
   const hotelPendiente = cbItems.find(it => it.tipo === 'hotel' && (it._cargando || it._unidadPendiente || it._desactualizado || !cbTarTramosValidos(it) || (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) || ((it.infantes_gratis || cbPorHabitacion(it)) && (!cbTarNoches(it.ida, it.vuelta).length || cbTarNum(it.tarifa) === null)) || (cbPorHabitacion(it) && (!Number.isInteger(cbHabitaciones(it)) || cbHabitaciones(it) < 1))));
-  if (hotelPendiente) { errToast('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); cbEnfocarServicio(hotelPendiente, 'ida'); return; }
+  if (hotelPendiente) { cbAviso('Hospedaje: revisa las fechas y confirma una tarifa para el viaje actual.'); cbEnfocarServicio(hotelPendiente, 'ida'); return; }
   const ninosSinTarifa = cbItems.find(it => it.tipo === 'hotel' && !cbPorHabitacion(it) && Number(it.ninos) > 0 && (cbTarNum(it.tarifa_nino) === null || (it.tramos || []).some(t => cbTarNinoTramo(it, t) === null)));
-  if (ninosSinTarifa) { errToast('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); cbEnfocarServicio(ninosSinTarifa, 'tarifa_nino'); return; }
+  if (ninosSinTarifa) { cbAviso('Hospedaje: indica la tarifa de los niños; escribe 0 si la promoción los incluye gratis.'); cbEnfocarServicio(ninosSinTarifa, 'tarifa_nino'); return; }
   const registros = cbItems.map(it => ({ original: it, datos: cbLimpiarItem(it) })).filter(({ datos }) => cbTitulo(datos) || datos.tarifa);
   const items = registros.map(({ datos }) => datos);
-  if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); cbEnfocarServicio(cbItems[0], 'nombre'); return; }
+  if (!items.length) { cbAviso('Agrega al menos un servicio con su descripción y tarifa'); cbEnfocarServicio(cbItems[0], 'nombre'); return; }
   const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
-  if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); cbEnfocarServicio(registros[items.indexOf(incompleto)].original, !cbTitulo(incompleto) ? t.campos[0][0] : cbEsPax(incompleto) ? 'adultos' : 'cant'); return; }
-  if (cbComparar && cbOpciones(items).length < 2) { errToast('Opciones para elegir: arma al menos dos opciones (por ejemplo, dos hoteles) o desactívalo.'); docEnfocar('cb-opciones'); return; }
+  if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; cbAviso(`${t.nombre}: falta ${falta.toLowerCase()}`); cbEnfocarServicio(registros[items.indexOf(incompleto)].original, !cbTitulo(incompleto) ? t.campos[0][0] : cbEsPax(incompleto) ? 'adultos' : 'cant'); return; }
+  if (cbComparar && cbOpciones(items).length < 2) { cbAviso('Opciones para elegir: arma al menos dos opciones (por ejemplo, dos hoteles) o desactívalo.'); docEnfocar('cb-opciones'); return; }
   const pasada = items.find(it => [it.ida, it.vuelta].some(d => d && d < cbHoy()));
-  if (pasada && !DR?.edicion('cotizacion')) { errToast(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); cbEnfocarServicio(registros[items.indexOf(pasada)].original, pasada.ida && pasada.ida < cbHoy() ? 'ida' : 'vuelta'); return; }
-  if (!DR?.edicion('cotizacion') && [val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); docEnfocar(val('cb-fecha') && val('cb-fecha') < cbHoy() ? 'cb-fecha' : 'cb-vence'); return; }
+  if (pasada && !DR?.edicion('cotizacion')) { cbAviso(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); cbEnfocarServicio(registros[items.indexOf(pasada)].original, pasada.ida && pasada.ida < cbHoy() ? 'ida' : 'vuelta'); return; }
+  if (!DR?.edicion('cotizacion') && [val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { cbAviso('La fecha y la vigencia no pueden ser anteriores a hoy'); docEnfocar(val('cb-fecha') && val('cb-fecha') < cbHoy() ? 'cb-fecha' : 'cb-vence'); return; }
   const asesorId = val('cb-asesor');
-  if (enviar && !asesorId) { errToast('Elige a qué asesor mandarla'); docEnfocar('cb-asesor'); return; }
+  if (enviar && !asesorId) { cbAviso('Elige a qué asesor mandarla'); docEnfocar('cb-asesor'); return; }
   // Sin lead la cotización no pasa el lead a COTIZACIÓN ENVIADA ni deja seguimiento.
-  if (ventas && !cbLead && !DR?.edicion('cotizacion') && !(cbUltima && !cbUltima.cot.lead_id)) {
+  if (ventas && !lyra && !cbLead && !DR?.edicion('cotizacion') && !(cbUltima && !cbUltima.cot.lead_id)) {
     const sinLead = await confirmarSheet({ titulo: 'Esta cotización no tiene lead', detalle: 'Si la vinculas, el lead queda en cotización enviada y con su seguimiento. Sin lead, queda solo en el historial.', textoOk: 'Guardar sin lead', textoCancelar: 'Vincular' });
     if (!sinLead) { document.getElementById('cb-cliente-seccion').open = true; docEnfocar('cb-lead-q'); return; }
     if (cbGenerando) return;
   }
-  const btn = document.getElementById(`cb-${accion}-btn`), htmlBtn = btn.dataset.drEtiqueta || btn.innerHTML;
+  const btn = document.getElementById(`cb-${lyra ? 'descargar' : accion}-btn`), htmlBtn = btn.dataset.drEtiqueta || btn.innerHTML;
   cbGenerando = true; document.querySelectorAll('.cb-acciones button').forEach(b => b.disabled = true);
   btn.disabled = true; btn.innerHTML = 'Generando... <i class="fas fa-spinner fa-spin"></i>';
   const sol = ventas ? null : cbSolicitud, lead = ventas ? cbLead : null;
@@ -36572,7 +36681,7 @@ window.cbGuardar = async function cbGuardar(accion) {
     if (!DR?.edicion('cotizacion')) {
       await cbCargarStops();
       const sinCupo = cbItems.find(it => cbStopDe(it)?.stop.length);
-      if (sinCupo) { errToast(`${sinCupo.nombre}: sin cupo en esas fechas según Stop Sales. Cambia las fechas o el hotel.`); cbEnfocarServicio(sinCupo, 'ida'); return; }
+      if (sinCupo) { cbAviso(`${sinCupo.nombre}: sin cupo en esas fechas según Stop Sales. Cambia las fechas o el hotel.`); cbEnfocarServicio(sinCupo, 'ida'); return; }
     }
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
@@ -36586,7 +36695,7 @@ window.cbGuardar = async function cbGuardar(accion) {
     let cot = repetida ? cbUltima.cot : null;
     if (!repetida) {
       const { data, error } = await sb.from('cotizaciones_boleteria').insert(fila).select().single();
-      if (error || !data) { errToast('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
+      if (error || !data) { cbAviso('No se pudo guardar la cotización: ' + (error?.message || '')); return; }
       cot = data;
       if (ventas) { cbUltima = { firma, cot, blob: null }; cbPintarGenerada(); } else cbResetForm();
     }
@@ -36600,7 +36709,7 @@ window.cbGuardar = async function cbGuardar(accion) {
         if (accion === 'compartir') { if (!lead || !await cbCompartirAlChat(blob, cbArchivo(cot), lead.id)) await cbCompartir(blob, cbArchivo(cot)); }
         else if (accion === 'whatsapp') await cbWhatsappArchivo(blob, cbArchivo(cot), String(lead?.telefono || '').replace(/\D/g, ''), cbTextoWhatsapp(cot));
         else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
-        else cbDescargar(blob, cbArchivo(cot));
+        else if (!lyra) cbDescargar(blob, cbArchivo(cot));
         if (!repetida) okToast(`Cotización ${num} generada${marca}`);
       }
       else if (!enviar || asesorId === MI_USUARIO_ID) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
@@ -36608,10 +36717,10 @@ window.cbGuardar = async function cbGuardar(accion) {
         const resuelta = sol && await cbResolverSolicitud(sol.id, cot);
         okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}${resuelta ? ` · solicitud #${sol.id} resuelta` : ''}`);
       }
-      else errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo enviar: reenvíala desde el historial`);
+      else cbAviso(`${cbNumero(cot.numero)} se guardó pero no se pudo enviar: reenvíala desde el historial`);
     } catch (e) {
       console.error('cbGuardar pdf', e);
-      errToast(`${cbNumero(cot.numero)} se guardó pero no se pudo generar el PDF: reintenta desde el historial`);
+      cbAviso(`${cbNumero(cot.numero)} se guardó pero no se pudo generar el PDF: reintenta desde el historial`);
     }
     cbOffset = 0; cbCargarHistorial(false);
   } finally {
@@ -40540,6 +40649,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-11', emoji: '🧾', titulo: 'Lyra genera la cotización completa', texto: 'Pídele a Lyra «hazme la cotización de este cliente en tal hotel, del 10 al 14, 2 adultos» y la genera igual que la sección Cotizaciones: número COT, PDF, queda en el historial y el lead pasa a Cotización enviada. En el chat te deja botones para abrir el PDF, mandarlo por WhatsApp o verla en Cotizaciones. Si falta un dato (tarifa de niños, fechas cerradas), te avisa y la deja armada en Cotizaciones para que la termines.', roles: ['asesor', 'admin'] },
   { fecha: '2026-11-11', emoji: '🏨', titulo: 'Varias opciones en una cotización', texto: 'En Cotizaciones activa «Opciones para elegir» y agrega un hotel por opción. El PDF muestra cada opción con su propio total y no las suma, así el cliente compara y elige. El vuelo o el traslado marcados «En todas» entran en cada opción. Cuando el cliente elija, toca su opción y genera la cotización final.', roles: ROLES_TODOS },
   { fecha: '2026-11-10', emoji: '🎟️', titulo: 'Tu cola de leads', texto: 'Los leads nuevos ahora van en una sola fila, del que más espera al que acaba de llegar. La primera tarjeta es la siguiente; puedes atender cualquiera y el resto avanza solo. Al pie de cada tarjeta hay una barra de paciencia (verde, ámbar o roja) según el tiempo que lleva esperando, y en el encabezado ves cuántos hay y hace cuánto espera el más antiguo.', roles: ['asesor'] },
   { fecha: '2026-11-10', emoji: '🏦', titulo: 'Métodos de pago a un toque', texto: 'Nueva sección «Métodos de pago» en el menú: toca un dato (cuenta, correo de Zelle…) y se copia solo; cada método tiene «Copiar texto», «Foto» y «Enviar». Marca varios para mandarlos juntos, o manda el flyer completo. En los chats de WhatsApp y en las acciones del lead está el botón «Pagos», que pone los datos directo en el mensaje.', roles: ROLES_TODOS },
