@@ -18510,8 +18510,10 @@ async function lyraGenerarCotizacion(b, turno) {
   const r = usuarioPuedeAbrirSeccion('cotizacion-boletos')
     ? await cbDesdeLyra(b).catch(e => ({ error: e?.message || String(e) }))
     : { error: 'Tu usuario no tiene acceso a Cotizaciones', sinSeccion: true };
+  const pl = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+  const detalle = b.servicios.map(s => [s.nombre, `${fmtFechaSolo(s.ida)} al ${fmtFechaSolo(s.vuelta)}`, [pl(s.adultos, 'adulto', 'adultos'), s.ninos && pl(s.ninos, 'niño', 'niños'), s.infantes && pl(s.infantes, 'infante', 'infantes')].filter(Boolean).join(', ')].join(' · ')).join('\n');
   const g = r.cot
-    ? { id: r.cot.id, numero: r.cot.numero, cliente: r.cot.cliente, total: r.cot.total, aviso: r.aviso || '' }
+    ? { id: r.cot.id, numero: r.cot.numero, cliente: r.cot.cliente, total: r.cot.total, aviso: r.aviso || '', detalle }
     : { error: r.error || 'No se pudo generar', cliente: b.cliente, sinSeccion: !!r.sinSeccion };
   (turno.gens ??= []).push(g);
   turno.content += '\n\n' + (g.error
@@ -18528,7 +18530,7 @@ function lyraPintarGenerada(g, previa) {
   msg.className = 'chat-msg bot';
   msg.innerHTML = g.cargando ? `<i class="fas fa-spinner fa-spin"></i> Generando la cotización de ${esc(g.cliente || 'tu cliente')} en Cotizaciones…`
     : g.error ? `No se generó la cotización de ${esc(g.cliente || 'tu cliente')}: ${esc(g.error)}.`
-    : `<i class="fas fa-circle-check"></i> <b>${esc(cbNumero(g.numero))}</b> generada · ${esc(g.cliente || '')} · <b>$${esc(cbMonto(g.total))}</b>${g.aviso ? `<br><small>${esc(g.aviso)}</small>` : ''}`;
+    : `<i class="fas fa-circle-check"></i> <b>${esc(cbNumero(g.numero))}</b> · ${esc(g.cliente || '')}${g.detalle ? `<br><small>${esc(g.detalle).replaceAll('\n', '<br>')}</small>` : ''}<br>Total <b>$${esc(cbMonto(g.total))}</b>${g.aviso ? `<br><small>${esc(g.aviso)}</small>` : ''}`;
   row.appendChild(msg);
   if (previa?.isConnected) previa.replaceWith(row); else log.appendChild(row);
   if (g.cargando) { log.scrollTop = log.scrollHeight; return row; }
