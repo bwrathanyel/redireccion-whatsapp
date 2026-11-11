@@ -7631,12 +7631,14 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 }
 /* 2026-11-11: franja superior (título + tutoriales + En vivo) fuera en todas las secciones,
    ocupaba alto sin aportar. Solo queda el buscador de Leads; Ctrl+B sigue abriendo la búsqueda global. */
-.main .topbar{display:none}
-.main .topbar.show-search{display:flex;justify-content:flex-end;margin-bottom:12px}
-.main .topbar > div:first-child,.main .topbar .topbar-help-btn,.main .topbar .pill{display:none}
-/* Leads en celular: el buscador baja a la fila del filtro (ubicarBuscadorLeads) y las pestañas se compactan. */
+.main .topbar,.main .topbar.show-search{display:none}
+/* El buscador de Leads vive dentro de la sección (ubicarBuscadorLeads): en escritorio en la fila
+   de las pestañas, en el celular en la fila del filtro, con las pestañas compactas. */
+.leads-fila-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.leads-fila-top .nav-tabs-sec{margin-bottom:0}
+.leads-fila-top .search{display:block;margin-left:auto}
 @media(max-width:760px){
-  .main .topbar.show-search{display:none}
+  .leads-fila-top{display:contents}
   #sec-leads .leads-pipeline-head .search{display:block;flex:1 1 auto;min-width:0;width:auto;order:0;margin:0}
   #sec-leads .leads-pipeline-head .search input{height:44px;padding-block:0}
   #sec-leads .nav-tabs-sec{margin-bottom:8px;padding:3px}

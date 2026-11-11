@@ -37454,15 +37454,19 @@ function destinoDePadre(padre) {
   const ultima = PADRES_SIN_MEMORIA.includes(padre) ? null : (MI_PREFERENCIAS.ultima_hija || {})[padre];
   return vis.includes(ultima) ? ultima : (vis[0] || 'hoy');
 }
-// En el celular el buscador de Leads sale de la franja superior y comparte fila con el filtro,
-// debajo de las pestañas; en escritorio vuelve a la franja.
+// El buscador de Leads no ocupa fila propia: en el celular comparte fila con el filtro y en
+// escritorio con las pestañas (que pintarPestanasNav reinserta al inicio en cada visita).
 let buscadorLeadsMQ = false;
 function ubicarBuscadorLeads() {
-  const s = document.getElementById('global-search')?.closest('.search'), head = document.querySelector('#sec-leads .leads-pipeline-head');
+  const s = document.getElementById('global-search')?.closest('.search'), sec = document.getElementById('sec-leads'), head = sec?.querySelector('.leads-pipeline-head');
   if (!s || !head) return;
   if (!buscadorLeadsMQ) { buscadorLeadsMQ = true; KPI_MQ.addEventListener('change', ubicarBuscadorLeads); }
-  if (KPI_MQ.matches) { if (s.parentElement !== head) head.querySelector('.live-indicator').after(s); }
-  else if (s.parentElement === head) document.getElementById('topbar-tutorial-btn').before(s);
+  if (KPI_MQ.matches) { if (s.parentElement !== head) head.querySelector('.live-indicator').after(s); return; }
+  let fila = sec.querySelector(':scope > .leads-fila-top');
+  if (!fila) { fila = document.createElement('div'); fila.className = 'leads-fila-top'; sec.prepend(fila); }
+  const tabs = sec.querySelector(':scope > .nav-tabs-sec');
+  if (tabs) fila.prepend(tabs);
+  if (s.parentElement !== fila) fila.append(s);
 }
 function pintarPestanasNav(sec, secEl) {
   document.querySelectorAll('.nav-tabs-sec').forEach(n => n.remove());
