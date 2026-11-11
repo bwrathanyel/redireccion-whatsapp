@@ -34568,6 +34568,19 @@ const cbTarNum = v => v !== null && v !== undefined && v !== '' && Number.isFini
 const cbTarPaqueteNoches = t => Number((Object.entries(t?.precios || {}).find(([k, v]) => /^\d+_noches$/.test(k) && cbTarNum(v) !== null) || ['0'])[0].split('_')[0]);
 const cbTarCent = v => Math.round((Number(v) || 0) * 100);
 const cbTotalItems = items => items.reduce((s, it) => s + cbTarCent(cbImporte(it)), 0) / 100;
+// Opciones para elegir (2026-11-11, pedido del dueño): el cliente compara hoteles en un mismo PDF sin que se sumen.
+// Un servicio con `opcion` > 0 pertenece a esa opción; sin `opcion` es común y entra en el total de cada una.
+// `total` guarda el de la opción más barata (el «desde»).
+const cbOpcionDe = it => Number(it?.opcion) > 0 ? Number(it.opcion) : 0;
+const cbConOpciones = items => (items || []).some(it => cbOpcionDe(it));
+function cbOpciones(items) {
+  const comunes = items.filter(it => !cbOpcionDe(it));
+  return [...new Set(items.map(cbOpcionDe).filter(Boolean))].sort((a, b) => a - b).map(n => {
+    const propios = items.filter(it => cbOpcionDe(it) === n), todos = [...propios, ...comunes];
+    return { n, propios, comunes, items: todos, total: cbTotalItems(todos), titulo: propios.map(cbTitulo).filter(Boolean).join(' + ') };
+  });
+}
+const cbTotalCot = items => cbConOpciones(items) ? Math.min(...cbOpciones(items).map(o => o.total)) : cbTotalItems(items);
 const cbTarFecha = s => { const ms = /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Date.parse(s + 'T00:00:00Z') : NaN; return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s ? ms : NaN; };
 const cbTarIso = ms => new Date(ms).toISOString().slice(0, 10);
 const cbTarContexto = it => [it.producto_id, cbTarPlanClave(it.plan), cbTarNorm(it.hab), it.ida, it.vuelta, cbPorHabitacion(it) ? it.tarifa_variante || '' : it.adultos + (cbHabitaciones(it) > 1 ? '/' + cbHabitaciones(it) : ''), it.unidad].join('|');
@@ -35066,6 +35079,37 @@ function cbDesgloseHtml(it) {
   const porNoche = cbPorNoche(it) && !varios ? ` → ${m(total / noches)} por noche × ${cbNochesTexto(noches)}` : '';
   return `<div class="cb-desglose cb-full"><span class="cb-emo" aria-hidden="true">🧾</span><span>${esc(partes.join(' + ') + porNoche)}<b>${m(total)}</b></span></div>`;
 }
+function cbOpcionSelectHtml(it, i) {
+  if (!cbComparar) return '';
+  const tope = Math.max(0, ...cbItems.map(cbOpcionDe)) + 1, actual = cbOpcionDe(it);
+  const ops = [[0, 'En todas'], ...Array.from({ length: tope }, (_, k) => [k + 1, `Opción ${k + 1}`])];
+  return `<select class="ei cb-opcion${actual ? '' : ' cb-opcion-comun'}" data-k="opcion" aria-label="Opción del servicio ${i + 1}">${ops.map(([v, t]) => `<option value="${v}"${v === actual ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+}
+function cbPintarModoOpciones() {
+  const chk = document.getElementById('cb-opciones'), box = document.getElementById('cb-opc-elegir');
+  if (chk) chk.checked = cbComparar;
+  if (!box) return;
+  const ops = cbComparar ? cbOpciones(cbItems) : [];
+  box.hidden = ops.length < 2;
+  box.innerHTML = ops.length < 2 ? '' : `<span>El cliente eligió:</span>${ops.map((o, k) => `<button type="button" class="btn-sm" onclick="cbQuedarseOpcion(${o.n})">Opción ${k + 1}${o.titulo ? ` · ${esc(o.titulo)}` : ''}</button>`).join('')}`;
+}
+window.cbAlternarOpciones = on => {
+  cbComparar = !!on;
+  if (cbComparar) {
+    // Cada hotel o paquete arranca como su propia opción; boletos, traslados y demás quedan en todas.
+    let n = Math.max(0, ...cbItems.map(cbOpcionDe));
+    cbItems.forEach(it => { if (!cbOpcionDe(it) && ['hotel', 'paquete'].includes(it.tipo)) it.opcion = ++n; });
+    if (!n && cbItems[0]) cbItems[0].opcion = 1;
+  } else cbItems.forEach(it => { delete it.opcion; });
+  cbRenderItems(); cbProgramarBorrador();
+};
+// Deja solo la opción elegida (más lo común) como cotización normal: al generar sale con número nuevo.
+window.cbQuedarseOpcion = n => {
+  cbItems = cbItems.filter(it => !cbOpcionDe(it) || cbOpcionDe(it) === n);
+  cbItems.forEach(it => { delete it.opcion; });
+  cbComparar = false; cbRenderItems(); cbProgramarBorrador();
+  okToast('Quedó solo esa opción. Genera el PDF para mandarle la cotización final.');
+};
 function cbItemHtml(it, i) {
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto', hotel = tipo === 'hotel', porHab = cbPorHabitacion(it);
   // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
@@ -35090,7 +35134,7 @@ function cbItemHtml(it, i) {
       + (pax ? pax.cuentas + tarifaSec('') + pax.precios + cbDesgloseHtml(it) : '')
       + (boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : '');
   return `<div class="cb-item${hotel ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
-    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select></span><span class="cb-item-acc"><b class="cb-importe" title="Importe del servicio">${cbImporteTexto(it)}</b><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-controls="cb-item-campos-${i}" aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button>${cbItems.length > 1 ? `<button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
+    <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select>${cbOpcionSelectHtml(it, i)}</span><span class="cb-item-acc"><b class="cb-importe" title="Importe del servicio">${cbImporteTexto(it)}</b><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-controls="cb-item-campos-${i}" aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button>${cbItems.length > 1 ? `<button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
     <div class="cb-item-resumen">${esc(cbResumenServicio(it))}</div>
     <div class="cb-item-grid" id="cb-item-campos-${i}">
       ${cuerpo}
@@ -35099,7 +35143,7 @@ function cbItemHtml(it, i) {
   </div>`;
 }
 function cbLimpiarItem(it) {
-  const o = { tipo: CB_TIPOS[it.tipo] ? it.tipo : 'boleto' };
+  const o = { tipo: CB_TIPOS[it.tipo] ? it.tipo : 'boleto', ...(cbComparar && cbOpcionDe(it) ? { opcion: cbOpcionDe(it) } : {}) };
   [...CB_TIPOS[o.tipo].campos.map(([k]) => k), 'extra'].forEach(k => { o[k] = String(it[k] ?? '').trim(); });
   if (o.tipo === 'boleto') {
     o.viaje = it.viaje === 'ow' ? 'ow' : 'rt';
@@ -35188,20 +35232,21 @@ function cbDatosPdf(c) {
   const items = c.items || [], fechas = items.flatMap(it => [it.ida, it.vuelta]).filter(Boolean).sort();
   const principal = items.find(it => it.tipo === 'hotel' || it.tipo === 'paquete') || items[0];
   const conPersonas = items.filter(it => ['boleto', 'hotel', 'paquete'].includes(it.tipo || 'boleto')).sort((x, y) => cbTotalPax(y) - cbTotalPax(x))[0];
+  const fila = it => [`${cbTipo(it).nombre}: ${cbTitulo(it)}`, cbDetalleCliente(it), '$' + cbMonto(cbImporte(it))];
+  const ops = cbConOpciones(items) ? cbOpciones(items) : [];
   return {
     cliente: c.cliente, numero: cbNumero(c.numero), fecha: c.fecha, revision: c.revision || 1,
-    titulo: principal ? cbTitulo(principal) : '',
+    titulo: ops.length > 1 ? `${ops.length} opciones para elegir` : principal ? cbTitulo(principal) : '',
     fechas: fechas.length ? (fechas[0] === fechas.at(-1) ? cbFechaLarga(fechas[0]) : `${cbFechaLarga(fechas[0])} al ${cbFechaLarga(fechas.at(-1))}`) : '',
     personas: conPersonas ? cbPaxTexto(conPersonas) : '',
-    opciones: [{ titulo: 'Servicios cotizados', lineas: [], tabla: {
-      filas: items.map(it => [`${cbTipo(it).nombre}: ${cbTitulo(it)}`, cbDetalleCliente(it), '$' + cbMonto(cbImporte(it))]),
-      totales: [['Total', '$' + cbMonto(c.total)]],
-    } }],
-    notas: [c.notas, c.terminos].filter(Boolean).flatMap(t => String(t).split('\n')).map(l => l.trim()).filter(Boolean),
+    opciones: ops.length > 1
+      ? ops.map((o, k) => ({ titulo: o.titulo || `Opción ${k + 1}`, precio_texto: `Total de esta opción: $${cbMonto(o.total)}`, lineas: [], tabla: { filas: o.items.map(fila), totales: [[`Total opción ${k + 1}`, '$' + cbMonto(o.total)]] } }))
+      : [{ titulo: 'Servicios cotizados', lineas: [], tabla: { filas: items.map(fila), totales: [['Total', '$' + cbMonto(c.total)]] } }],
+    notas: [ops.length > 1 ? 'Cada opción tiene su propio precio; los totales no se suman. Elija la que prefiera.' : '', c.notas, c.terminos].filter(Boolean).flatMap(t => String(t).split('\n')).map(l => l.trim()).filter(Boolean),
     validez: c.vence ? `Cotización válida hasta el ${cbFechaLarga(c.vence)}. Sujeta a cambio y a disponibilidad.` : '',
   };
 }
-function cbActualizarTotal() { document.getElementById('cb-total').textContent = '$' + cbMonto(cbTotalItems(cbItems)); cbPintarResumen(); document.querySelectorAll('#cb-items .cb-item').forEach(card => { card.querySelector('.cb-item-resumen').textContent = cbResumenServicio(cbItems[+card.dataset.i]); }); }
+function cbActualizarTotal() { const tot = document.getElementById('cb-total'), ops = cbComparar && cbOpciones(cbItems).length > 1; tot.textContent = '$' + cbMonto(ops ? cbTotalCot(cbItems) : cbTotalItems(cbItems)); if (tot.previousElementSibling) tot.previousElementSibling.textContent = ops ? 'Desde USD' : 'Total USD'; cbPintarResumen(); cbPintarModoOpciones(); document.querySelectorAll('#cb-items .cb-item').forEach(card => { card.querySelector('.cb-item-resumen').textContent = cbResumenServicio(cbItems[+card.dataset.i]); }); }
 let cbRenderizando = false;
 function cbRenderItems() {
   if (cbRenderizando) return;
@@ -35278,7 +35323,7 @@ function cbAutoSincronizar() {
   document.querySelectorAll('#cb-items datalist').forEach(dl => { const it = cbItems[+dl.closest('.cb-item').dataset.i]; if (it) dl.innerHTML = cbOpcionesProducto(it); });
   cbActualizarTotal();
 }
-window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbAutoIniciar(cbItems.at(-1)); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); };
+window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbAutoIniciar(cbItems.at(-1)); if (cbComparar && ['hotel', 'paquete'].includes(cbItems.at(-1).tipo)) cbItems.at(-1).opcion = Math.max(0, ...cbItems.map(cbOpcionDe)) + 1; cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); };
 window.cbQuitarItem = i => { cbItems.splice(i, 1); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); };
 // Cotizar desde una solicitud de boletería (2026-10-15): precarga cliente, ruta,
 // fechas, personas y el asesor que la pidió; al enviarla al asesor la solicitud
@@ -35295,7 +35340,7 @@ window.cbQuitarSolicitud = async () => { await cbGuardarBorrador(); cbSolicitud 
 // arma para su cliente. Sin "Enviar al asesor": el PDF (pdfCotizacionCliente) va al cliente y,
 // si se abrió desde un lead, la fila queda con lead_id y "Guardar en el lead" lo marca cotizado.
 const CB_CON_PRODUCTO = ['hotel', 'paquete', 'fullday', 'tour'];
-let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false;
+let cbModo = 'boleteria', cbLead = null, cbLeadPendiente = null, cbProductosListos = false, cbComparar = false;
 let cbProductoPendiente = null;
 let cbFechasPendientes = null;
 function cbDesdeFicha(id, fechas = null) { cbProductoPendiente = Number(id); cbFechasPendientes = fechas; activateSection('cotizacion-boletos'); }
@@ -35479,7 +35524,12 @@ let cbLeadsRes = [], cbLeadTimer = null, cbLeadTk = 0;
 const cbHotelFilas = it => (cbHotelTarifas.get(Number(it.producto_id)) || []).filter(t => cbTarUtil(t, cbHoy()));
 function cbPintarResumen() {
   const box = document.getElementById('cb-resumen'); if (!box) return;
-  box.innerHTML = cbItems.map((it, i) => `<div class="cb-res-linea"><span><b>${esc(cbTitulo(it) || cbTipo(it).nombre)}</b><small>${esc([it.plan, cbPorHabitacion(it) ? cbHabitacionesTexto(it) + ' · por habitación/noche' : '', it.tipo === 'hotel' && cbNoches(it.ida, it.vuelta) ? cbNochesTexto(+cbNoches(it.ida, it.vuelta)) : '', cbEsPax(it) ? cbPaxTexto(it) : ''].filter(Boolean).join(' · '))}</small></span><strong>$${cbMonto(cbImporte(it))}</strong></div>`).join('');
+  const linea = it => `<div class="cb-res-linea"><span><b>${esc(cbTitulo(it) || cbTipo(it).nombre)}</b><small>${esc([it.plan, cbPorHabitacion(it) ? cbHabitacionesTexto(it) + ' · por habitación/noche' : '', it.tipo === 'hotel' && cbNoches(it.ida, it.vuelta) ? cbNochesTexto(+cbNoches(it.ida, it.vuelta)) : '', cbEsPax(it) ? cbPaxTexto(it) : ''].filter(Boolean).join(' · '))}</small></span><strong>$${cbMonto(cbImporte(it))}</strong></div>`;
+  const ops = cbComparar ? cbOpciones(cbItems) : [];
+  if (ops.length < 2) { box.innerHTML = cbItems.map(linea).join(''); return; }
+  const comunes = ops[0].comunes;
+  box.innerHTML = ops.map((o, k) => `<div class="cb-res-op"><span>Opción ${k + 1}</span><strong>$${cbMonto(o.total)}</strong></div>${o.propios.map(linea).join('')}`).join('')
+    + (comunes.length ? `<div class="cb-res-op cb-res-comun"><span>En todas las opciones</span></div>${comunes.map(linea).join('')}` : '');
 }
 function cbPintarBusquedaLead(f) {
   const input = document.getElementById('cb-lead-q'), box = document.getElementById('cb-lead-res');
@@ -35814,6 +35864,8 @@ function cbTextoWhatsapp(cot) {
   const cliente = String(cot.cliente || '').trim(), items = cot.items || [];
   const total = Number(cot.total) || cbTotalItems(items), titulos = items.map(it => cbTitulo(it)).filter(Boolean);
   const extra = titulos.length > 3 ? ` y ${titulos.length - 3} servicio${titulos.length - 3 === 1 ? '' : 's'} más` : '';
+  const ops = cbConOpciones(items) ? cbOpciones(items) : [];
+  if (cliente && ops.length > 1) return `Hola ${cliente}, te comparto ${ops.length} opciones para que elijas la que más te guste (${ops.map(o => o.titulo).filter(Boolean).join(' / ')}), desde $${cbMonto(total)}. Cualquier duda me avisas. — ${MI_NOMBRE}`;
   return cliente
     ? `Hola ${cliente}, te comparto la cotización${titulos.length ? ` de ${titulos.slice(0, 3).join(' + ')}${extra}` : ''}${total ? ` por un total de $${cbMonto(total)}` : ''}. Cualquier duda me avisas. — ${MI_NOMBRE}`
     : '';
@@ -35866,6 +35918,7 @@ async function cbGuardarBorrador() {
 }
 function cbRestaurarBorrador(b, sel) {
   cbItems = Array.isArray(b.items) && b.items.length ? b.items.map(it => ({ ...cbItemVacio(CB_TIPOS[it?.tipo] ? it.tipo : 'boleto'), ...cbMigrarBoleto(cbMigrarPax(it)), ...(it.tipo === 'hotel' ? { unidad: it.unidad || 'persona', unidad_manual: it.unidad_manual ?? true, _unidadPendiente: it.unidad_pendiente === true, infantes_gratis: it.infantes_gratis === true } : {}) })) : [cbItemVacio()];
+  cbComparar = cbConOpciones(cbItems);
   cbRenderItems();
   cbLead = b.lead || null; cbPintarLead();
   cbItems.forEach(it => { if (it.tarifas_contexto && it.tarifas_contexto !== cbTarContexto(it)) { it._desactualizado = true; it._aviso = 'Revisa y confirma los precios del borrador para las fechas actuales.'; } });
@@ -35937,7 +35990,7 @@ function cbResetForm() {
   cbLeadTk++; clearTimeout(cbLeadTimer); cbLeadsRes = [];
   const busca = document.getElementById('cb-lead-q'), res = document.getElementById('cb-lead-res');
   if (busca) busca.value = ''; if (res) res.hidden = true;
-  cbItems = [cbItemVacio(cbModo === 'ventas' ? 'hotel' : 'boleto')]; cbAutoIniciar(cbItems[0]); cbRenderItems();
+  cbComparar = false; cbItems = [cbItemVacio(cbModo === 'ventas' ? 'hotel' : 'boleto')]; cbAutoIniciar(cbItems[0]); cbRenderItems();
   document.getElementById('cb-cliente').value = '';
   document.getElementById('cb-fecha').value = cbHoy(); document.getElementById('cb-vence').value = cbVenceDe(cbHoy());
   document.getElementById('cb-notas').value = CB_NOTAS; document.getElementById('cb-terminos').value = CB_TERMINOS;
@@ -36078,6 +36131,7 @@ async function cbCargarSeccion() {
         card.querySelector('.cb-importe').textContent = cbImporteTexto(it); cbActualizarTotal(); cbProgramarBorrador(); return;
       }
       if (!k || !card) return;
+      if (k === 'opcion') { cbItems[+card.dataset.i].opcion = Number(e.target.value) || 0; cbRenderItems(); cbProgramarBorrador(); return; }
       const it = cbItems[+card.dataset.i], previo = it[k]; it[k] = e.target.value;
       if (it.auto) delete it.auto[k];
       if (it.tipo === 'hotel' && k === 'unidad') {
@@ -36124,7 +36178,7 @@ async function cbCargarSeccion() {
         }
       }
       if (k === 'ida') { const vuelta = card.querySelector('[data-k="vuelta"]'); if (vuelta) vuelta.min = cbMinFecha('vuelta', it.ida); }
-      if (k === 'tipo') { cbItems[+card.dataset.i] = cbItemVacio(it.tipo); cbAutoIniciar(cbItems[+card.dataset.i]); cbAutoTodos(); cbRenderItems(); return; }
+      if (k === 'tipo') { cbItems[+card.dataset.i] = Object.assign(cbItemVacio(it.tipo), cbOpcionDe(it) ? { opcion: cbOpcionDe(it) } : {}); cbAutoIniciar(cbItems[+card.dataset.i]); cbAutoTodos(); cbRenderItems(); return; }
       if (k === 'ida' || k === 'vuelta' || k === 'nombre') cbPintarStop(card, it);
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
       if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (k === 'infantes' && it.tipo === 'hotel' && it.infantes_gratis));
@@ -36296,6 +36350,7 @@ window.cbGuardar = async function cbGuardar(accion) {
   if (!items.length) { errToast('Agrega al menos un servicio con su descripción y tarifa'); cbEnfocarServicio(cbItems[0], 'nombre'); return; }
   const incompleto = items.find(it => !cbTitulo(it) || !(cbEsPax(it) ? cbPax(it).a : it.cant));
   if (incompleto) { const t = cbTipo(incompleto), falta = !cbTitulo(incompleto) ? t.campos[0][1] : cbEsPax(incompleto) ? 'al menos un adulto' : t.campos.find(([k]) => k === 'cant')[1]; errToast(`${t.nombre}: falta ${falta.toLowerCase()}`); cbEnfocarServicio(registros[items.indexOf(incompleto)].original, !cbTitulo(incompleto) ? t.campos[0][0] : cbEsPax(incompleto) ? 'adultos' : 'cant'); return; }
+  if (cbComparar && cbOpciones(items).length < 2) { errToast('Opciones para elegir: arma al menos dos opciones (por ejemplo, dos hoteles) o desactívalo.'); docEnfocar('cb-opciones'); return; }
   const pasada = items.find(it => [it.ida, it.vuelta].some(d => d && d < cbHoy()));
   if (pasada && !DR?.edicion('cotizacion')) { errToast(`${cbTipo(pasada).nombre}: hay una fecha anterior a hoy`); cbEnfocarServicio(registros[items.indexOf(pasada)].original, pasada.ida && pasada.ida < cbHoy() ? 'ida' : 'vuelta'); return; }
   if (!DR?.edicion('cotizacion') && [val('cb-fecha'), val('cb-vence')].some(d => d && d < cbHoy())) { errToast('La fecha y la vigencia no pueden ser anteriores a hoy'); docEnfocar(val('cb-fecha') && val('cb-fecha') < cbHoy() ? 'cb-fecha' : 'cb-vence'); return; }
@@ -36320,7 +36375,7 @@ window.cbGuardar = async function cbGuardar(accion) {
     }
     const fila = {
       creado_por: MI_USUARIO_ID, creado_por_nombre: MI_NOMBRE, cliente, fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null,
-      items, total: cbTotalItems(items), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
+      items, total: cbTotalCot(items), notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null,
       solicitud_id: sol?.id ?? null, solicitud_revision: sol?.revision ?? null, origen: cbModo, lead_id: lead?.id ?? null,
     };
     if (DR?.edicion('cotizacion')) { await DR.guardar('cotizacion', { ...fila, items: items.map(it => ({ ...it, importe_revision: cbImporte(it) })) }); return; }
@@ -36459,7 +36514,7 @@ async function cbPdfBlob(c) {
   doc.text(doc.splitTextToSize(c.cliente.toUpperCase(), 260), M, 216);
 
   // Con niños o infantes el ítem lleva su descripción y una fila por categoría (adultos, niños, infantes).
-  const filas = (c.items || []).flatMap((it, i) => {
+  const filasDe = items => items.flatMap((it, i) => {
     if (cbPorHabitacion(it)) return [[i + 1, cbDetalleCliente(it), cbHabitaciones(it).toFixed(2), cbMonto(cbImporte(it) / (cbHabitaciones(it) || 1)), cbMonto(cbImporte(it))]];
     if (!cbEsPax(it)) return [[i + 1, cbDetalle(it), Number(it.cant).toFixed(2), cbMonto(it.tarifa), cbMonto(cbImporte(it))]];
     if (it.tipo === 'hotel' && it.tramos?.length) return [[i + 1, cbDetalleCliente(it), '1.00', cbMonto(cbImporte(it)), cbMonto(cbImporte(it))]];
@@ -36470,8 +36525,8 @@ async function cbPdfBlob(c) {
       .map(([n, q, t]) => ['', cbPorNoche(it) ? `${n} · $${cbMonto(t)} × ${cbNochesTexto(noches).toUpperCase()}` : n, q.toFixed(2), cbMonto(tn(t)), cbMonto(q * tn(t))]);
     return [[i + 1, cbDetalle(it), '', '', ''], ...cat];
   });
-  doc.autoTable({
-    startY: 240, theme: 'plain', margin: { left: M, right: M },
+  const tabla = (filas, startY) => doc.autoTable({
+    startY, theme: 'plain', margin: { left: M, right: M },
     head: [['#', 'Artículo y descripción', 'Cant.', 'Tarifa', 'Importe']],
     body: filas,
     styles: { fontSize: 8.5, cellPadding: { top: 7, bottom: 7, left: 8, right: 8 }, textColor: [40, 40, 40], valign: 'top' },
@@ -36480,16 +36535,40 @@ async function cbPdfBlob(c) {
     didParseCell: d => { if (d.section === 'head' && d.column.index >= 2) d.cell.styles.halign = 'right'; },
     didDrawCell: d => { if (d.section === 'body' && d.column.index === 0 && (!filas[d.row.index + 1] || filas[d.row.index + 1][0] !== '')) { doc.setDrawColor(190, 190, 190); doc.line(M, d.cell.y + d.cell.height, W - M, d.cell.y + d.cell.height); } },
   });
+  const cajaTotal = (etiqueta, monto, y0) => {
+    doc.setFillColor(243, 242, 240); doc.rect(W / 2 - 20, y0, W / 2 + 20 - M, 32, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(40, 40, 40);
+    doc.text(etiqueta, W - M - 120, y0 + 20, { align: 'right' }); doc.text(`$${cbMonto(monto)}`, W - M - 8, y0 + 20, { align: 'right' });
+  };
 
-  let y = doc.lastAutoTable.finalY + 22;
-  const total = `$${cbMonto(c.total)}`;
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(40, 40, 40);
-  doc.text('Subtotal', W - M - 120, y, { align: 'right' }); doc.text(cbMonto(c.total), W - M - 8, y, { align: 'right' });
-  y += 14;
-  doc.setFillColor(243, 242, 240); doc.rect(W / 2 - 20, y, W / 2 + 20 - M, 32, 'F');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5);
-  doc.text('Total', W - M - 120, y + 20, { align: 'right' }); doc.text(total, W - M - 8, y + 20, { align: 'right' });
-  y += 66;
+  let y;
+  const ops = cbConOpciones(c.items) ? cbOpciones(c.items) : [];
+  if (ops.length > 1) {
+    y = 240;
+    ops.forEach((o, k) => {
+      if (y + 110 > 740) { doc.addPage(); y = 50; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(20, 20, 20);
+      const tit = doc.splitTextToSize(`Opción ${k + 1}${o.titulo ? ` · ${o.titulo}` : ''}`, W - 2 * M);
+      doc.text(tit, M, y); y += tit.length * 14;
+      tabla(filasDe(o.items), y - 4);
+      y = doc.lastAutoTable.finalY + 10;
+      if (y + 32 > 740) { doc.addPage(); y = 50; }
+      cajaTotal(`Total opción ${k + 1}`, o.total, y);
+      y += 58;
+    });
+    if (y + 20 > 740) { doc.addPage(); y = 50; }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 60, 60);
+    doc.text('Cada opción tiene su propio precio; los totales no se suman. Elija la que prefiera.', M, y);
+    y += 30;
+  } else {
+    tabla(filasDe(c.items || []), 240);
+    y = doc.lastAutoTable.finalY + 22;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(40, 40, 40);
+    doc.text('Subtotal', W - M - 120, y, { align: 'right' }); doc.text(cbMonto(c.total), W - M - 8, y, { align: 'right' });
+    y += 14;
+    cajaTotal('Total', c.total, y);
+    y += 66;
+  }
 
   const bloque = (titulo, texto) => {
     if (!texto) return;
@@ -40224,6 +40303,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-11', emoji: '🏨', titulo: 'Varias opciones en una cotización', texto: 'En Cotizaciones activa «Opciones para elegir» y agrega un hotel por opción. El PDF muestra cada opción con su propio total y no las suma, así el cliente compara y elige. El vuelo o el traslado marcados «En todas» entran en cada opción. Cuando el cliente elija, toca su opción y genera la cotización final.', roles: ROLES_TODOS },
   { fecha: '2026-11-10', emoji: '🎟️', titulo: 'Tu cola de leads', texto: 'Los leads nuevos ahora van en una sola fila, del que más espera al que acaba de llegar. La primera tarjeta es la siguiente; puedes atender cualquiera y el resto avanza solo. Al pie de cada tarjeta hay una barra de paciencia (verde, ámbar o roja) según el tiempo que lleva esperando, y en el encabezado ves cuántos hay y hace cuánto espera el más antiguo.', roles: ['asesor'] },
   { fecha: '2026-11-10', emoji: '🏦', titulo: 'Métodos de pago a un toque', texto: 'Nueva sección «Métodos de pago» en el menú: toca un dato (cuenta, correo de Zelle…) y se copia solo; cada método tiene «Copiar texto», «Foto» y «Enviar». Marca varios para mandarlos juntos, o manda el flyer completo. En los chats de WhatsApp y en las acciones del lead está el botón «Pagos», que pone los datos directo en el mensaje.', roles: ROLES_TODOS },
   { fecha: '2026-11-09', emoji: '💬', titulo: 'Bandeja de WhatsApp en tu menú', texto: 'En el menú de la izquierda (y abajo en el teléfono) ahora tienes Bandeja con los chats de WhatsApp de tus clientes: contestas desde ahí y los llamas con el botón de teléfono.', roles: ['asesor'] },
