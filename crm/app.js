@@ -34685,11 +34685,14 @@ function cbVarianteAuto(filas, adultos) {
   return (vs.find(([, n]) => n === adultos) || (vs.length && adultos > vs.at(-1)[1] ? vs.at(-1) : null))?.[0] || '';
 }
 // Reparto de la ocupación entre habitaciones (2026-11-11, dueño): lo más parejo posible, las primeras
-// con un adulto más (5 en 2 = 3 + 2) y los niños uno por habitación desde la primera. Cada grupo de
-// habitaciones con la misma cantidad de adultos se cobra por su ocupación (triple + doble).
+// con un adulto más (5 en 2 = 3 + 2). Cada niño va a la habitación con menos personas (5 + 1 niño en 2 =
+// 3 y 2 + 1, pedido del dueño 2026-11-11). Cada grupo de habitaciones con la misma cantidad de adultos
+// se cobra por su ocupación (triple + doble); los niños no cambian el grupo.
 function cbReparto(it) {
   const h = Math.max(1, cbHabitaciones(it)), a = Math.max(0, Number(it.adultos) || 0), n = Math.max(0, Number(it.ninos) || 0);
-  return Array.from({ length: h }, (_, i) => ({ adultos: Math.floor(a / h) + (i < a % h ? 1 : 0), ninos: Math.floor(n / h) + (i < n % h ? 1 : 0) }));
+  const r = Array.from({ length: h }, (_, i) => ({ adultos: Math.floor(a / h) + (i < a % h ? 1 : 0), ninos: 0 }));
+  for (let k = 0; k < n; k++) r.reduce((m, x) => x.adultos + x.ninos < m.adultos + m.ninos ? x : m).ninos++;
+  return r;
 }
 const cbRepartoGrupos = it => [...cbReparto(it).reduce((m, r) => m.set(r.adultos, (m.get(r.adultos) || 0) + 1), new Map())].map(([adultos, habs]) => ({ adultos, habs }));
 const cbRepartoTexto = it => cbHabitaciones(it) > 1 ? cbReparto(it).map((r, i) => `Hab. ${i + 1}: ${r.adultos} adulto${r.adultos === 1 ? '' : 's'}${r.ninos ? ` + ${r.ninos} niño${r.ninos === 1 ? '' : 's'}` : ''}`).join(' · ') : '';
@@ -35132,7 +35135,7 @@ function cbPaxHtml(it, i, tipo) {
     + (hotel && it.unidad !== 'persona' ? `<div class="field cb-cuenta"><label class="fl" for="cb-habitaciones-${i}">${cbEmo('🚪')}Habitaciones</label>${cbStepHtml(i, 'habitaciones', it.habitaciones ?? 1, 1, 'habitaciones')}</div>` : '');
   const precios = CB_PAX_CAMPOS.map(([c, t, lc, lt]) => {
     if (porHab && t !== 'tarifa_nino') return '';
-    const oculto = (c !== 'adultos' && !(Number(it[c]) > 0)) || (hotel && ((t === 'tarifa_infante' && it.infantes_gratis) || (t === 'tarifa' && it.tramos?.length > 1)));
+    const oculto = (c !== 'adultos' && !(Number(it[c]) > 0)) || (hotel && ((t === 'tarifa_infante' && it.infantes_gratis) || ((t === 'tarifa' || t === 'tarifa_nino') && it.tramos?.length > 1)));
     const label = noche ? `${{ adultos: 'Adulto', ninos: 'Niño', infantes: 'Infante' }[c]} por noche` : lt.replace(' (USD)', '');
     return `<div class="field cb-precio${oculto ? ' cb-oculto' : ''}" data-pax-precio="${c}"><label class="fl" for="cb-${t}-${i}">${cbEmo(CB_PAX_EMOJI[c])}${label}</label><div class="cb-usd"><span aria-hidden="true">$</span><input id="cb-${t}-${i}" class="ei" data-k="${t}" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="${esc(String(it[t] ?? ''))}"></div></div>`;
   }).join('');
@@ -35274,7 +35277,7 @@ function cbLimpiarItem(it) {
     if (it.producto_id) o.producto_id = Number(it.producto_id);
     if (it.tarifas_contexto) o.tarifas_contexto = it.tarifas_contexto;
     o.tarifa_manual = !!it.tarifa_manual; o.habitacion_manual = !!it.habitacion_manual;
-    o.tarifa_nino_auto = it.tarifa_nino_auto === true;
+    o.tarifa_nino_auto = it.tarifa_nino_auto === true; if (it.tarifa_nino_tramos) o.tarifa_nino_tramos = true;
     if (it.tarifa_nino_contexto) o.tarifa_nino_contexto = it.tarifa_nino_contexto;
     const tramo = t => ({ desde: t.desde, hasta: t.hasta, noches: Number(t.noches), tarifa: Number(t.tarifa), tarifa_nino: cbTarNinoTramo(it, t), tarifa_habitacion: cbTarNum(t.tarifa_habitacion), ...(t.grupos?.length ? { grupos: t.grupos.map(g => ({ adultos: Number(g.adultos), habs: Number(g.habs), tarifa: Number(g.tarifa), ...(g.variante ? { variante: g.variante } : {}) })) } : {}), ...(Number(t.pax_adic) > 0 ? { pax_adic: Number(t.pax_adic), tarifa_pax_adic: cbTarNum(t.tarifa_pax_adic) } : {}), tarifa_id: t.tarifa_id || null, fuente_archivo: t.fuente_archivo || null });
     if (it.tramos?.length) o.tramos = it.tramos.map(tramo);
@@ -35743,7 +35746,7 @@ function cbTragarClickFantasma() {
 async function cbHotelElegir(card, id) {
   const i = +card.dataset.i, it = cbItems[i], p = cbHoteles.get(Number(id)); if (!it || !p) return;
   const carga = (it._cargaHotel || 0) + 1;
-  Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tarifa_nino: '', tarifa_nino_auto: true, tarifa_nino_contexto: '', tramos: [], tarifas_contexto: '', tarifa_manual: false, unidad_manual: false, _unidadEditar: false, tarifa_variante: '', habitacion_manual: false, plan_libre: false, hab_libre: false, _cargando: true, _cargaHotel: carga, _tarifaError: false, _aviso: '' });
+  Object.assign(it, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', tarifa: '', tarifa_nino: '', tarifa_nino_auto: true, tarifa_nino_tramos: false, tarifa_nino_contexto: '', tramos: [], tarifas_contexto: '', tarifa_manual: false, unidad_manual: false, _unidadEditar: false, tarifa_variante: '', habitacion_manual: false, plan_libre: false, hab_libre: false, _cargando: true, _cargaHotel: carga, _tarifaError: false, _aviso: '' });
   try {
     cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
     await Promise.all([cbTraerTarifas(p.id), cbTraerHabitaciones(p.id)]);
@@ -35774,13 +35777,18 @@ function cbHotelRecalcular(it, aplicar = false) {
   if (Number(it.ninos) > 0) {
     const manual = it.tarifa_nino_auto === false || (it.tarifa_nino_auto == null && cbTarNum(it.tarifa_nino) !== null);
     const contexto = cbTarContexto(it);
-    if (s.ok) {
+    if (it.tarifa_nino_tramos && (aplicar || it.tarifa_nino_contexto !== contexto)) it.tarifa_nino_tramos = false;
+    if (s.ok && it.tarifa_nino_tramos) {
+      const propio = t => (it.tramos || []).find(x => x.desde <= t.desde && x.hasta >= t.hasta);
+      [...s.tramos, ...(s.salida ? [s.salida] : [])].forEach(t => { const x = propio(t); if (x) t.tarifa_nino = cbTarNum(x.tarifa_nino); });
+      it.tarifa_avisos = s.avisos;
+    } else if (s.ok) {
       if (!manual || aplicar || (it.tarifa_nino_contexto && it.tarifa_nino_contexto !== contexto)) {
         it.tarifa_nino = s.tramos.every(t => cbTarNum(t.tarifa_nino) !== null) ? s.tramos[0].tarifa_nino : '';
         it.tarifa_nino_auto = true;
       } else [...s.tramos, ...(s.salida ? [s.salida] : [])].forEach(t => { t.tarifa_nino = cbTarNum(it.tarifa_nino); });
       it.tarifa_nino_contexto = contexto;
-      if (s.tramos.some(t => t.tarifa_nino !== s.tramos[0].tarifa_nino)) s.avisos.push('La tarifa de niños cambia por fechas: el campo muestra el primer tramo; el total y el PDF usan cada tramo.');
+      if (s.tramos.some(t => t.tarifa_nino !== s.tramos[0].tarifa_nino)) s.avisos.push('La tarifa de niños cambia por fechas: revisa la de cada tramo.');
       if (it.tarifa_manual) (it.tramos || []).forEach(t => {
         const actual = s.tramos.find(x => x.desde <= t.desde && x.hasta >= t.hasta);
         if (actual) t.tarifa_nino = actual.tarifa_nino;
@@ -35885,7 +35893,7 @@ function cbHotelPrecioHtml(it, i) {
   if (it.tipo !== 'hotel') return '';
   return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span class="cb-aviso">⏳ Buscando las tarifas del hotel…</span>' : ''}${it._aviso ? `<p class="cb-aviso"><span aria-hidden="true">💡</span>${esc(it._aviso)}</p>` : ''}
     ${it._tarifaError ? '<button type="button" class="dbtn" style="min-height:44px" data-cb-reintentar>Reintentar carga de tarifas</button>' : ''}
-    ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por ${cbPorHabitacion(it) ? 'habitación' : 'persona'}/noche${Number(it.ninos) > 0 ? ` · niños: ${cbTarNinoTramo(it, t) === null ? 'por confirmar' : '$' + cbMonto(cbTarNinoTramo(it, t)) + '/noche'}` : ''}</small></span><input class="ei" aria-label="Tarifa ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>`).join('')}</div>` : ''}
+    ${it.tramos?.length > 1 ? `<div class="cb-tramos">${it.tramos.map((t, j) => `<label><span>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}<small>${cbNochesTexto(t.noches)} · USD por ${cbPorHabitacion(it) ? 'habitación' : 'adulto'}/noche</small></span><input class="ei" aria-label="Tarifa ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} del tramo ${j + 1}" data-tramo="${j}" type="number" min="0" step="0.01" value="${esc(String(t.tarifa))}"></label>${Number(it.ninos) > 0 ? `<label><span>${cbEmo(CB_PAX_EMOJI.ninos)}Niño por noche<small>${cbFechaCorta(t.desde)} → ${cbFechaCorta(t.hasta)}${cbTarNinoTramo(it, t) === null ? ' · por confirmar' : ''}</small></span><input class="ei" aria-label="Tarifa niño del tramo ${j + 1}" data-tramo-nino="${j}" type="number" min="0" step="0.01" placeholder="0.00" value="${esc(String(cbTarNinoTramo(it, t) ?? ''))}"></label>` : ''}`).join('')}</div>` : ''}
     ${it.tarifa_manual && it._sugerencia?.ok ? `<button type="button" class="btn-sm" data-cb-usar>Usar tarifa del tarifario · ${it._sugerencia.tramos.map(t => '$' + cbMonto(t.tarifa)).join(' / ')}</button>` : ''}
     ${it._desactualizado ? `<button type="button" class="btn-sm" data-cb-manual>Usar $${cbMonto(it.tarifa)} por ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} ${cbPorNoche(it) ? 'por noche' : 'por estadía'} para este viaje</button>` : ''}
     ${(it.tarifa_avisos || []).map(a => `<small class="cb-condicion">${esc(a)}</small>`).join('')}
@@ -36267,13 +36275,22 @@ async function cbCargarSeccion() {
         if (cbTarTramosValidos(it)) it.tarifas_contexto = cbTarContexto(it);
         card.querySelector('.cb-importe').textContent = cbImporteTexto(it); cbActualizarTotal(); cbProgramarBorrador(); return;
       }
+      // Niño por tramo (2026-11-11, dueño): cada tramo guarda su tarifa; el resto conserva la que mostraba.
+      if (card && e.target.dataset.tramoNino !== undefined) {
+        const it = cbItems[+card.dataset.i], j = +e.target.dataset.tramoNino;
+        it.tramos.forEach(t => { t.tarifa_nino = cbTarNinoTramo(it, t); });
+        it.tramos[j].tarifa_nino = cbTarNum(e.target.value);
+        Object.assign(it, { tarifa_nino: it.tramos[0].tarifa_nino ?? '', tarifa_nino_auto: true, tarifa_nino_tramos: true, tarifa_nino_contexto: cbTarContexto(it) });
+        const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
+        card.querySelector('.cb-importe').textContent = cbImporteTexto(it); cbActualizarTotal(); cbProgramarBorrador(); return;
+      }
       if (!k || !card) return;
       if (k === 'opcion') { cbItems[+card.dataset.i].opcion = Number(e.target.value) || 0; cbRenderItems(); cbProgramarBorrador(); return; }
       const it = cbItems[+card.dataset.i], previo = it[k]; it[k] = e.target.value;
       if (it.auto) delete it.auto[k];
       if (it.tipo === 'hotel' && k === 'unidad') {
         it.unidad_manual = true; it._unidadPendiente = false; it.tarifa_manual = false;
-        it.tarifa = ''; it.tarifa_nino = ''; it.tarifa_nino_auto = true; it.tramos = []; it.tarifas_contexto = ''; it.tarifa_variante = '';
+        it.tarifa = ''; it.tarifa_nino = ''; it.tarifa_nino_auto = true; it.tarifa_nino_tramos = false; it.tramos = []; it.tarifas_contexto = ''; it.tarifa_variante = '';
       }
       if (it.tipo === 'hotel' && k === 'tarifa_variante') { it.variante_auto = false; it.tramos = []; it.tarifa = ''; it.tarifa_manual = false; it.tarifas_contexto = ''; }
       if (e.target.dataset.busca === 'hotel') {
@@ -36296,7 +36313,7 @@ async function cbCargarSeccion() {
         if (it.tramos?.length === 1) { it.tramos[0].tarifa = Number(it.tarifa) || 0; it.tramos[0].tarifa_habitacion = null; delete it.tramos[0].grupos; }
       }
       if (it.tipo === 'hotel' && k === 'tarifa_nino') {
-        it.tarifa_nino_auto = false; it.tarifa_nino_contexto = cbTarContexto(it);
+        it.tarifa_nino_auto = false; it.tarifa_nino_tramos = false; it.tarifa_nino_contexto = cbTarContexto(it);
       }
       if (it.tipo === 'hotel' && k === 'ninos') {
         if (!(Number(previo) > 0)) it.tarifa_nino_auto = true;
@@ -36318,7 +36335,7 @@ async function cbCargarSeccion() {
       if (k === 'tipo') { cbItems[+card.dataset.i] = Object.assign(cbItemVacio(it.tipo), cbOpcionDe(it) ? { opcion: cbOpcionDe(it) } : {}); cbAutoIniciar(cbItems[+card.dataset.i]); cbAutoTodos(); cbRenderItems(); return; }
       if (k === 'ida' || k === 'vuelta' || k === 'nombre') cbPintarStop(card, it);
       card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
-      if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (k === 'infantes' && it.tipo === 'hotel' && it.infantes_gratis));
+      if (k === 'ninos' || k === 'infantes') card.querySelector(`[data-pax-precio="${k}"]`)?.classList.toggle('cb-oculto', !(Number(it[k]) > 0) || (it.tipo === 'hotel' && (k === 'infantes' ? it.infantes_gratis : it.tramos?.length > 1)));
       const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
       cbAutoSincronizar();
     });
