@@ -3854,9 +3854,10 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .cb-item-tit{display:flex;align-items:center;gap:8px;min-width:0}
 .cb-item-cab .cb-tipo{width:auto;padding:5px 10px;font-size:12.5px;font-weight:600}
 .cb-add{width:auto;margin-top:10px;padding:8px 14px}
-.cb-modo-opc{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:16px;padding:10px 12px;border:1px dashed var(--line2);border-radius:12px;font-size:13px}
-.cb-modo-opc small{flex:1 1 260px;color:var(--muted);font-size:12px}
-.cb-opc-switch{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:32px}.cb-opc-switch input{width:18px;height:18px;margin:0}
+.cb-modo-opc{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.cb-opc-switch{display:inline-flex;align-items:center;gap:7px;cursor:pointer;min-height:28px}.cb-opc-switch input{width:15px;height:15px;margin:0}
+.cb-opc-switch:has(input:checked){color:var(--text)}
+#sec-cotizacion-boletos .cb-editor>h2,#sec-cotizacion-boletos .cb-editor>.csub,.cb-cab-grid .cb-fecha-campo{display:none}
 .cb-opc-elegir{display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex-basis:100%;font-size:12.5px;color:var(--muted)}.cb-opc-elegir[hidden]{display:none}
 .cb-item-tit{flex-wrap:wrap}.cb-item-cab .cb-opcion{width:auto;padding:5px 10px;font-size:12.5px;font-weight:700;color:var(--accent);border-color:var(--accent)}.cb-item-cab .cb-opcion.cb-opcion-comun{color:var(--muted);border-color:var(--line2);font-weight:600}
 .cb-res-op{display:flex;justify-content:space-between;gap:10px;padding:12px 0 2px;font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em}.cb-res-op strong{font-variant-numeric:tabular-nums}.cb-res-comun{color:var(--muted)}
@@ -11352,12 +11353,12 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div class="cb-cab-grid">
           <div class="field cb-cliente-campo"><label class="fl">Nombre en la cotización</label><input id="cb-cliente" class="ei" placeholder="Nombre del cliente o BOLETERÍA"></div>
           <div class="field cb-solo-boleteria"><label class="fl">Enviar al asesor</label><select id="cb-asesor" class="ei"></select></div>
-          <div class="field"><label class="fl">Fecha</label><input id="cb-fecha" class="ei" type="date"></div>
-          <div class="field"><label class="fl">Válida hasta</label><input id="cb-vence" class="ei" type="date"></div>
+          <div class="field cb-fecha-campo"><label class="fl">Fecha</label><input id="cb-fecha" class="ei" type="date"></div>
+          <div class="field cb-fecha-campo"><label class="fl">Válida hasta</label><input id="cb-vence" class="ei" type="date"></div>
         </div>
         </div>
         </details>
-        <div class="cb-modo-opc"><label class="cb-opc-switch"><input type="checkbox" id="cb-opciones" onchange="cbAlternarOpciones(this.checked)"> <b>Opciones para elegir</b></label><small>Cada hotel o paquete es una opción con su propio total y no se suman. Lo marcado «En todas» (vuelo, traslado) entra en cada opción.</small><div id="cb-opc-elegir" class="cb-opc-elegir" hidden></div></div>
+        <div class="cb-modo-opc"><label class="cb-opc-switch" title="Cada hotel o paquete es una opción con su propio total y no se suman. Lo marcado «En todas» (vuelo, traslado) entra en cada opción."><input type="checkbox" id="cb-opciones" onchange="cbAlternarOpciones(this.checked)"> Opciones para elegir</label><div id="cb-opc-elegir" class="cb-opc-elegir" hidden></div></div>
         <div id="cb-items" class="cb-items"></div>
         <button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button>
         <details class="cb-textos">
