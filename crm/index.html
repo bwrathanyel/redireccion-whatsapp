@@ -3860,6 +3860,7 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .cb-item-cab .cb-tipo{width:auto;padding:5px 10px;font-size:12.5px;font-weight:600}
 .cb-add{width:auto;margin-top:10px;padding:8px 14px}
 .cb-add-barra{display:flex;flex-wrap:wrap;gap:8px}
+.cb-add[hidden]{display:none!important}
 .cb-modo-opc{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;font-size:12.5px;color:var(--muted)}
 .cb-opc-switch{display:inline-flex;align-items:center;gap:7px;cursor:pointer;min-height:28px}.cb-opc-switch input{width:15px;height:15px;margin:0}
 .cb-opc-switch:has(input:checked){color:var(--text)}
@@ -11367,7 +11368,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </details>
         <div class="cb-modo-opc"><label class="cb-opc-switch" title="Cada hotel o paquete es una opción con su propio total y no se suman. Lo marcado «En todas» (vuelo, traslado) entra en cada opción."><input type="checkbox" id="cb-opciones" onchange="cbAlternarOpciones(this.checked)"> Opciones para elegir</label><div id="cb-opc-elegir" class="cb-opc-elegir" hidden></div></div>
         <div id="cb-items" class="cb-items"></div>
-        <div class="cb-add-barra"><button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button><button class="dbtn cb-add" type="button" onclick="cbAgregarTrasladoAeropuerto()" title="Traslado común ida y vuelta: $20 por adulto, $12 por niño"><i class="fas fa-van-shuttle"></i> Traslado aeropuerto</button></div>
+        <div class="cb-add-barra"><button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button><button id="cb-traslado-apto" class="dbtn cb-add" type="button" hidden onclick="cbAgregarTrasladoAeropuerto()" title="Traslado común ida y vuelta: $20 por adulto, $12 por niño"><i class="fas fa-van-shuttle"></i> Traslado aeropuerto</button></div>
         <details class="cb-textos">
           <summary>Notas y términos del PDF</summary>
           <div class="field"><label class="fl">Notas</label><textarea id="cb-notas" class="ei" rows="2"></textarea></div>

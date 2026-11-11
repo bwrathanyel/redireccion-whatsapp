@@ -35541,7 +35541,9 @@ function cbDatosPdf(c) {
     validez: c.vence ? `Cotización válida hasta el ${cbFechaLarga(c.vence)}. Sujeta a cambio y a disponibilidad.` : '',
   };
 }
-function cbActualizarTotal() { const tot = document.getElementById('cb-total'), ops = cbComparar && cbOpciones(cbItems).length > 1; tot.textContent = '$' + cbMonto(ops ? cbTotalCot(cbItems) : cbTotalItems(cbItems)); if (tot.previousElementSibling) tot.previousElementSibling.textContent = ops ? 'Desde USD' : 'Total USD'; cbPintarResumen(); cbPintarModoOpciones(); document.querySelectorAll('#cb-items .cb-item').forEach(card => { card.querySelector('.cb-item-resumen').textContent = cbResumenServicio(cbItems[+card.dataset.i]); }); }
+// El traslado de tarifa fija es solo de Margarita (Coche comparte aeropuerto pero lleva ferry).
+const cbEsMargarita = () => cbItems.some(it => /margarita|la asuncion|porlamar|pampatar/.test(cbTarNorm(cbProductoDe(it)?.destino)));
+function cbActualizarTotal() { const bt = document.getElementById('cb-traslado-apto'); if (bt) bt.hidden = !cbEsMargarita(); const tot = document.getElementById('cb-total'), ops = cbComparar && cbOpciones(cbItems).length > 1; tot.textContent = '$' + cbMonto(ops ? cbTotalCot(cbItems) : cbTotalItems(cbItems)); if (tot.previousElementSibling) tot.previousElementSibling.textContent = ops ? 'Desde USD' : 'Total USD'; cbPintarResumen(); cbPintarModoOpciones(); document.querySelectorAll('#cb-items .cb-item').forEach(card => { card.querySelector('.cb-item-resumen').textContent = cbResumenServicio(cbItems[+card.dataset.i]); }); }
 let cbRenderizando = false;
 function cbRenderItems() {
   if (cbRenderizando) return;
