@@ -9688,6 +9688,9 @@ async function reasignarLeadAdmin(l) {
     ],
   });
   if (!r) return;
+  // Elegir un asesor en la lista ya es pedir manual: el radio arranca en «auto»
+  // y un admin que solo tocó la lista terminaba con el lead en la rotación.
+  if (r.asesor) r.modo = 'manual';
   const btn = document.getElementById('e-reasignar');
   if (btn) btn.disabled = true;
   const { data, error } = await sb.functions.invoke('reasignar-lead', { body: { p_lead_id: l.id, modo: r.modo, asesor: r.modo === 'manual' ? r.asesor : undefined } });

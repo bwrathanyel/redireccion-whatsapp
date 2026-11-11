@@ -11910,14 +11910,14 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     </section>
 
     <!-- REPARTIR NÚMEROS: la jefa pega números (texto o capturas) que le llegaron
-         directo y el CRM los reparte con el reparto de siempre. Dos pasos: detectar
+         directo y el CRM los reparte entre los asesores nuevos. Dos pasos: detectar
          (vista previa editable) y repartir. Solo admin. -->
     <section class="section" id="sec-repartir">
       <div class="ce-intro">
         Pega los números que te escribieron directo (texto copiado) o sube <b>capturas de pantalla</b>
         (también puedes pegarlas con Ctrl+V). Primero se detectan y los revisas; recién al confirmar
-        se reparten entre los asesores con <b>el reparto de siempre</b> y a cada uno le llega su aviso.
-        Quedan en <b>Leads</b> como <b>Asignado por Karlys Corro</b>, con la reasignación de siempre si nadie los atiende.
+        se reparten por partes iguales entre <b>los asesores nuevos</b> y a cada uno le llega su aviso.
+        Quedan en <b>Leads</b> como <b>Asignado por Karlys Corro</b>; si nadie los atiende, se reasignan solo entre esos mismos asesores.
       </div>
       <div class="card rep-card">
         <label class="fl" for="rep-texto">Números o mensajes copiados</label>
@@ -11931,7 +11931,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div id="rep-previas" class="rep-previas"></div>
         <div class="rep-asesor-fijo" style="margin:14px 0 0">
           <label class="fl" for="rep-asesor" style="margin:0">Asignar</label>
-          <select id="rep-asesor" class="ei"><option value="">Repartir automático (reparto de siempre)</option></select>
+          <select id="rep-asesor" class="ei"><option value="">Repartir automático (asesores nuevos)</option></select>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rep-avisar" checked> Avisar por Telegram y notificaciones del CRM</label>
         </div>
         <div class="ce-barra" style="margin:14px 0 0">

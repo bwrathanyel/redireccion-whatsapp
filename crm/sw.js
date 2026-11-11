@@ -12,7 +12,7 @@
 // './index.html' para no arrastrar el redirect.
 const CACHE_VERSION = 'lotus-crm-shell-v693';
 // Solo esta versión recarga sola las pestañas abiertas (pedido del dueño 2026-11-06): el resto de deploys sigue con el aviso, que deja elegir cuándo.
-const RECARGA_FORZADA = 'lotus-crm-shell-v621';
+const RECARGA_FORZADA = 'lotus-crm-shell-v689';
 const SHELL_FILES = [
   './',
   './app.js',
