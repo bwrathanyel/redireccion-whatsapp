@@ -13325,7 +13325,7 @@ window.addEventListener('popstate', selLotusCerrar);
   lista.addEventListener('pointerdown', e => {
     if (e.target.closest('[data-cb-hab]')) { e.preventDefault(); return; }
     const op = e.target.closest('[data-cb-hotel]');
-    if (op) { e.preventDefault(); efHotelElegir(op.closest('.ef-serv'), op.dataset.cbHotel); }
+    if (op) { e.preventDefault(); efHotelElegir(op.closest('.ef-serv'), op.dataset.cbHotel); cbTragarClickFantasma(); }
   });
   lista.addEventListener('keydown', e => {
     const t = e.target;
@@ -35733,6 +35733,13 @@ async function cbTraerTarifas(id) {
   }
   return cbHotelPeticiones.get(id);
 }
+// Elegir hotel en pointerdown cierra la lista; en el celular el click que sigue cae en lo que
+// quedó debajo del dedo (PDF / Compartir de la barra fija) y disparaba cbGuardar sin fechas.
+function cbTragarClickFantasma() {
+  const tragar = e => { e.preventDefault(); e.stopPropagation(); };
+  document.addEventListener('click', tragar, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener('click', tragar, true), 600);
+}
 async function cbHotelElegir(card, id) {
   const i = +card.dataset.i, it = cbItems[i], p = cbHoteles.get(Number(id)); if (!it || !p) return;
   const carga = (it._cargaHotel || 0) + 1;
@@ -36167,7 +36174,7 @@ async function cbCargarSeccion() {
       const hab = e.target.closest('[data-cb-hab]');
       if (hab) { e.preventDefault(); return; }
       const op = e.target.closest('[data-cb-hotel]');
-      if (op) { e.preventDefault(); cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel); }
+      if (op) { e.preventDefault(); cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel); cbTragarClickFantasma(); }
     });
     cbLista.addEventListener('keydown', e => {
       if (e.target.matches('[data-cb-hab-abrir]')) {
