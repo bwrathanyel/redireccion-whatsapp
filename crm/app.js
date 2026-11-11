@@ -35559,7 +35559,7 @@ function cbAutoCampos(it) {
 function cbValorAuto(it, k, nuevo) {
   if (k === 'destino' || k === 'ruta') {
     const d = cbDestinoViaje();
-    return k === 'destino' ? d?.iata : d?.iata && d.it.tipo === 'hotel' ? `Aeropuerto ${d.iata} - ${d.p.nombre}` : '';
+    return k === 'destino' ? d?.iata : d?.iata && d.it.tipo === 'hotel' ? `Aeropuerto ${d.iata} - ${d.p.nombre}${it.vuelta ? ` - Aeropuerto ${d.iata}` : ''}` : '';
   }
   if (k === 'cant') return ['adultos', 'ninos', 'infantes'].reduce((s, c) => s + (Number(cbValorAuto(it, c, true)) || 0), 0) || '';
   const f = cbItems.filter(x => x !== it && cbAutoCampos(x).includes(k) && String(x[k] ?? '') !== '').sort((a, b) => cbRango(a) - cbRango(b))[0];
@@ -35592,6 +35592,14 @@ function cbAutoSincronizar() {
   cbActualizarTotal();
 }
 window.cbAgregarItem = () => { cbItems.push(cbItemVacio(cbLimpiarItem(cbItems.at(-1) || {}).tipo)); cbAutoIniciar(cbItems.at(-1)); if (cbComparar && ['hotel', 'paquete'].includes(cbItems.at(-1).tipo)) cbItems.at(-1).opcion = Math.max(0, ...cbItems.map(cbOpcionDe)) + 1; cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); };
+// Botón rápido (2026-11-11): traslado común aeropuerto-hotel-aeropuerto con la tarifa fija de la agencia.
+const CB_TRASLADO_APTO = { adulto: 20, nino: 12 };
+window.cbAgregarTrasladoAeropuerto = () => {
+  const it = cbItemVacio('traslado'); cbItems.push(it); cbAutoIniciar(it);
+  Object.assign(it, { tarifa: CB_TRASLADO_APTO.adulto, tarifa_nino: CB_TRASLADO_APTO.nino, extra: 'Traslado común (compartido), ida y vuelta.' });
+  if (!it.ruta) it.ruta = 'Aeropuerto - Hotel - Aeropuerto';
+  cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
+};
 window.cbQuitarItem = i => { cbItems.splice(i, 1); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); };
 // Cotizar desde una solicitud de boletería (2026-10-15): precarga cliente, ruta,
 // fechas, personas y el asesor que la pidió; al enviarla al asesor la solicitud
