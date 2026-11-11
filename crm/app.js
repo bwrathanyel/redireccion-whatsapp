@@ -4919,7 +4919,7 @@ function abrirPostventa(c, accionInicial = null) {
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
     <div data-rv-panel="resumen"><div class="rs-wrap">
       <div class="rs-sec">Asesor de esta reserva</div>
-      <div class="rs-ro"><span id="pv-e-asesor-actual">${esc(c.asesor || 'Sin asignar')}</span>${ROL === 'admin' ? '<button class="rs-q" id="pv-e-asesor-cambiar" type="button"><i class="fas fa-user-pen" aria-hidden="true"></i> Cambiar asesor</button>' : ''}</div>
+      <div class="rs-ro"><span id="pv-e-asesor-actual">${esc(c.asesor || 'Sin asignar')}</span>${['admin', 'administrativo'].includes(ROL) ? '<button class="rs-q" id="pv-e-asesor-cambiar" type="button"><i class="fas fa-user-pen" aria-hidden="true"></i> Cambiar asesor</button>' : ''}</div>
       <div data-rv-check></div><div id="pv-e-otras"></div>
       <div class="rs-sec">Dinero <span id="pv-e-modo">Se calcula solo desde servicios y abonos</span></div>
       <div class="rs-stats" id="pv-e-balance"><div class="rs-stat"><span class="rs-lbl">Total</span><b id="pv-d-total">—</b></div><div class="rs-stat"><span class="rs-lbl">Pagado</span><b id="pv-d-pagado">—</b></div><div class="rs-stat" id="pv-d-saldo-box"><span class="rs-lbl">Saldo</span><b id="pv-d-saldo">—</b></div></div>
@@ -5002,7 +5002,7 @@ function abrirPostventa(c, accionInicial = null) {
   if (esOficina()) pvCargarEmpresas(c);
 }
 async function pvCambiarAsesor(c, btn) {
-  if (ROL !== 'admin' || !c?.id || btn.disabled) return;
+  if (!['admin', 'administrativo'].includes(ROL) || !c?.id || btn.disabled) return;
   btn.disabled = true;
   try {
     const [{ data: equipo, error: errorEquipo }, { data: asesores, error: errorAsesores }] = await Promise.all([
@@ -40696,7 +40696,7 @@ function setupTutoriales() {
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
   { fecha: '2026-11-11', emoji: '🧾', titulo: 'Lyra genera la cotización completa', texto: 'Pídele a Lyra «hazme la cotización de este cliente en tal hotel, del 10 al 14, 2 adultos» y la genera igual que la sección Cotizaciones: número COT, PDF, queda en el historial y el lead pasa a Cotización enviada. En el chat te deja botones para abrir el PDF, mandarlo por WhatsApp o verla en Cotizaciones. Si falta un dato (tarifa de niños, fechas cerradas), te avisa y la deja armada en Cotizaciones para que la termines.', roles: ['asesor', 'admin'] },
-  { fecha: '2026-11-11', emoji: '🔁', titulo: 'Cambiar el asesor de una reserva', texto: 'En el Resumen de la reserva, administración puede tocar «Cambiar» junto a «Asesor de esta reserva» y pasarla a otro asesor. Solo cambia esa reserva: el cliente y sus otras reservas siguen con su asesor, y las facturas y comisiones ya registradas no se tocan. El asesor nuevo la ve en su lista de reservas.', roles: ['admin', 'asesor'] },
+  { fecha: '2026-11-11', emoji: '🔁', titulo: 'Cambiar el asesor de una reserva', texto: 'En el Resumen de la reserva, administración y el asistente administrativo pueden tocar «Cambiar» junto a «Asesor de esta reserva» y pasarla a otro asesor. Solo cambia esa reserva: el cliente y sus otras reservas siguen con su asesor, y las facturas y comisiones ya registradas no se tocan. El asesor nuevo la ve en su lista de reservas.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-11', emoji: '🏨', titulo: 'Varias opciones en una cotización', texto: 'En Cotizaciones activa «Opciones para elegir» y agrega un hotel por opción. El PDF muestra cada opción con su propio total y no las suma, así el cliente compara y elige. El vuelo o el traslado marcados «En todas» entran en cada opción. Cuando el cliente elija, toca su opción y genera la cotización final.', roles: ROLES_TODOS },
   { fecha: '2026-11-10', emoji: '🎟️', titulo: 'Tu cola de leads', texto: 'Los leads nuevos ahora van en una sola fila, del que más espera al que acaba de llegar. La primera tarjeta es la siguiente; puedes atender cualquiera y el resto avanza solo. Al pie de cada tarjeta hay una barra de paciencia (verde, ámbar o roja) según el tiempo que lleva esperando, y en el encabezado ves cuántos hay y hace cuánto espera el más antiguo.', roles: ['asesor'] },
   { fecha: '2026-11-10', emoji: '🏦', titulo: 'Métodos de pago a un toque', texto: 'Nueva sección «Métodos de pago» en el menú: toca un dato (cuenta, correo de Zelle…) y se copia solo; cada método tiene «Copiar texto», «Foto» y «Enviar». Marca varios para mandarlos juntos, o manda el flyer completo. En los chats de WhatsApp y en las acciones del lead está el botón «Pagos», que pone los datos directo en el mensaje.', roles: ROLES_TODOS },
