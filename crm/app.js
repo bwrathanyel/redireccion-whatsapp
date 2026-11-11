@@ -34751,6 +34751,18 @@ function cbTarSinTarifaTexto(it, filas, candidatas, noches, hoy) {
     otras.length ? `Sí hay precio para: ${otras.join(', ')}.` : '',
     'Cómo seguir: carga o reactiva esa temporada en el Tarifario, o escribe la tarifa manual.'].filter(Boolean).join(' ');
 }
+// «Ocupación sin precio único» no explicaba nada (5 adultos en 1 STANDART de Margarita Village,
+// que se vende hasta cuádruple). Dice el máximo por habitación y cuántas habitaciones poner.
+function cbTarOcupacionTexto(it, precisas, precios, noche, adultosHab, ocupaciones) {
+  const dm = n => `${n.slice(8)}/${n.slice(5, 7)}`, nombres = { 1: 'sencilla', 2: 'doble', 3: 'triple', 4: 'cuádruple', 5: 'quíntuple', 6: 'séxtuple' };
+  const max = Math.max(0, ...precisas.flatMap(x => cbTarVariantes(x.t, ocupaciones).map(o => ocupaciones.get(o.clave) || Number(o.clave.replace(/^pax_/, '')) || 0)));
+  if (precios.some(p => p === null) && max && adultosHab > max) {
+    const habs = Math.ceil(Number(it.adultos) / max);
+    return `${it.hab} se vende hasta ${max} adultos por habitación (${nombres[max] || max}) y aquí hay ${adultosHab}. Sube «Habitaciones» a ${habs}${Number(it.adultos) % habs ? ' (si no se reparten iguales, separa una habitación en otro servicio)' : ''} o escribe la tarifa manual.`;
+  }
+  if (precios.some(p => p === null)) return `El tarifario no trae precio de ${it.hab} para ${adultosHab} adulto${adultosHab === 1 ? '' : 's'} por habitación la noche del ${dm(noche)}. Cambia la ocupación o escribe la tarifa manual.`;
+  return `Hay ${precisas.length} tarifas de ${it.hab} con precios distintos para la noche del ${dm(noche)} (${precisas.map(x => `«${x.t.titulo || x.t.id}»`).join(', ')}). Confirma cuál aplica y escribe la tarifa manual.`;
+}
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
   if (!noches.length) return fallo(it.ida && it.vuelta ? 'Las fechas deben sumar de 1 a 366 noches.' : 'Elige el check-in y las noches: la tarifa sale sola.');
@@ -34770,7 +34782,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     const precisas = cubren.filter(x => x.amplitud === menor);
     if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return fallo('La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.');
     const precios = precisas.map(x => porHab ? cbTarPrecioHabitacion(x.t, it.tarifa_variante, ocupaciones) : cbTarPrecioAdulto(x.t, adultosHab, ocupaciones));
-    if (precios.some(p => p === null) || precios.some(p => p !== precios[0])) return fallo(porHab ? 'Elige la variante de habitación (sencilla, doble…) para cargar el precio.' : 'Ocupación sin precio único: confirma la tarifa manualmente.');
+    if (precios.some(p => p === null) || precios.some(p => p !== precios[0])) return fallo(porHab ? 'Elige la variante de habitación (sencilla, doble…) para cargar el precio.' : cbTarOcupacionTexto(it, precisas, precios, noche, adultosHab, ocupaciones));
     precisas.sort((a, b) => (a.t.orden_pdf ?? 1e9) - (b.t.orden_pdf ?? 1e9) || a.t.id - b.t.id);
     const t = precisas[0].t, tarifa = precios[0], siguiente = cbTarIso(cbTarFecha(noche) + 864e5);
     let tarifaNino = null, paxAdic = 0, tarifaPaxAdic = null;
