@@ -34731,6 +34731,26 @@ function cbTarMinimoBloque(t, noches) {
   }
   return r;
 }
+// «No hay tarifa» a secas no le dice al asesor qué falta ni cómo seguir (Margarita Village,
+// 28/12 al 01/01: la fila de fin de año estaba retirada y el mensaje no lo decía). Nombra las
+// noches sin precio, por qué la fila que existe no sirve y qué otra habitación sí las cubre.
+function cbTarSinTarifaTexto(it, filas, candidatas, noches, hoy) {
+  const dm = n => `${n.slice(8)}/${n.slice(5, 7)}`, cubre = (ts, n) => ts.some(t => cbTarAmplitud(t, n) !== null);
+  const faltan = noches.filter(n => !cubre(candidatas, n));
+  const rangos = faltan.reduce((r, n) => { const u = r.at(-1); if (u && cbTarFecha(n) - cbTarFecha(u[1]) === 864e5) u[1] = n; else r.push([n, n]); return r; }, [])
+    .map(([a, b]) => a === b ? dm(a) : `${dm(a)} al ${dm(b)}`).join(', ');
+  const hab = `${it.hab}${it.plan ? ` · ${it.plan}` : ''}`;
+  const trabadas = cbTarDelPlan(filas, it.plan).filter(t => cbTarNorm(t.habitacion) === cbTarNorm(it.hab) && !cbTarUtil(t, hoy) && faltan.some(n => cbTarAmplitud(t, n) !== null));
+  const motivo = trabadas.map(t => t.necesita_revision ? `«${t.titulo || 'tarifa'}» está marcada para revisión en el Tarifario`
+    : (t.venta_hasta || t.fecha_venta_fin) < hoy ? `la venta de «${t.titulo || 'tarifa'}» cerró el ${dm(t.venta_hasta || t.fecha_venta_fin)}`
+    : t.venta_desde > hoy ? `«${t.titulo || 'tarifa'}» se vende recién desde el ${dm(t.venta_desde)}` : '').filter(Boolean);
+  const otras = [...new Set(cbTarDelPlan(filas.filter(t => cbTarUtil(t, hoy)), it.plan).filter(t => cbTarNorm(t.habitacion) !== cbTarNorm(it.hab)).map(t => t.habitacion))]
+    .filter(h => faltan.every(n => cubre(cbTarDelPlan(filas, it.plan).filter(t => cbTarUtil(t, hoy) && t.habitacion === h), n)));
+  return [`Sin tarifa de ${hab} para ${faltan.length === 1 ? 'la noche del' : 'las noches del'} ${rangos}.`,
+    motivo.length ? `Motivo: ${motivo.join('; ')}.` : 'El tarifario cargado no cubre esas fechas.',
+    otras.length ? `Sí hay precio para: ${otras.join(', ')}.` : '',
+    'Cómo seguir: carga o reactiva esa temporada en el Tarifario, o escribe la tarifa manual.'].filter(Boolean).join(' ');
+}
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const noches = cbTarNoches(it.ida, it.vuelta), fallo = texto => ({ ok: false, texto });
   if (!noches.length) return fallo(it.ida && it.vuelta ? 'Las fechas deben sumar de 1 a 366 noches.' : 'Elige el check-in y las noches: la tarifa sale sola.');
@@ -34745,7 +34765,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
   const tramos = [], usadas = [], avisos = new Set();
   for (const noche of noches) {
     const cubren = candidatas.map(t => ({ t, amplitud: cbTarAmplitud(t, noche) })).filter(x => x.amplitud !== null);
-    if (!cubren.length) return fallo('No hay tarifa para todas las noches. Ingresa el precio manualmente.');
+    if (!cubren.length) return fallo(cbTarSinTarifaTexto(it, filas, candidatas, noches, hoy));
     const menor = Math.min(...cubren.map(x => x.amplitud));
     const precisas = cubren.filter(x => x.amplitud === menor);
     if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return fallo('La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.');
@@ -37422,6 +37442,16 @@ function destinoDePadre(padre) {
   const ultima = PADRES_SIN_MEMORIA.includes(padre) ? null : (MI_PREFERENCIAS.ultima_hija || {})[padre];
   return vis.includes(ultima) ? ultima : (vis[0] || 'hoy');
 }
+// En el celular el buscador de Leads sale de la franja superior y comparte fila con el filtro,
+// debajo de las pestañas; en escritorio vuelve a la franja.
+let buscadorLeadsMQ = false;
+function ubicarBuscadorLeads() {
+  const s = document.getElementById('global-search')?.closest('.search'), head = document.querySelector('#sec-leads .leads-pipeline-head');
+  if (!s || !head) return;
+  if (!buscadorLeadsMQ) { buscadorLeadsMQ = true; KPI_MQ.addEventListener('change', ubicarBuscadorLeads); }
+  if (KPI_MQ.matches) { if (s.parentElement !== head) head.querySelector('.live-indicator').after(s); }
+  else if (s.parentElement === head) document.getElementById('topbar-tutorial-btn').before(s);
+}
 function pintarPestanasNav(sec, secEl) {
   document.querySelectorAll('.nav-tabs-sec').forEach(n => n.remove());
   const padre = PADRE_DE[sec];
@@ -37604,6 +37634,7 @@ function activateSection(sec, fromNav) {
     secEl.addEventListener('animationend', () => secEl.classList.remove('entrando'), { once: true });
   });
   document.querySelector('.topbar').classList.toggle('show-search', sec === 'leads');
+  ubicarBuscadorLeads();
   const t = tituloSeccion(sec);
   document.getElementById('page-title').textContent = t[0];
   document.getElementById('page-sub').textContent = t[1];

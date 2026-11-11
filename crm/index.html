@@ -7629,6 +7629,19 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] .topbar{background:linear-gradient(180deg,rgba(var(--surface-rgb),.96) 62%,rgba(var(--surface-rgb),0))}
 :root[data-paleta="sereno"] .topbar{background:var(--bg)}
 }
+/* 2026-11-11: franja superior (título + tutoriales + En vivo) fuera en todas las secciones,
+   ocupaba alto sin aportar. Solo queda el buscador de Leads; Ctrl+B sigue abriendo la búsqueda global. */
+.main .topbar{display:none}
+.main .topbar.show-search{display:flex;justify-content:flex-end;margin-bottom:12px}
+.main .topbar > div:first-child,.main .topbar .topbar-help-btn,.main .topbar .pill{display:none}
+/* Leads en celular: el buscador baja a la fila del filtro (ubicarBuscadorLeads) y las pestañas se compactan. */
+@media(max-width:760px){
+  .main .topbar.show-search{display:none}
+  #sec-leads .leads-pipeline-head .search{display:block;flex:1 1 auto;min-width:0;width:auto;order:0;margin:0}
+  #sec-leads .leads-pipeline-head .search input{height:44px;padding-block:0}
+  #sec-leads .nav-tabs-sec{margin-bottom:8px;padding:3px}
+  #sec-leads .nav-tabs-sec .seg{min-height:36px;padding:0 12px;font-size:12.5px}
+}
 /* colores que app.js escribe inline (style="color:#...") */
 :root[data-theme="light"] [style*="color:#f59e0b"]:not([style*="background:var(--accent)"]){color:#684810!important}
 :root[data-theme="light"] [style*="color:#2dd4bf"]:not([style*="background:var(--accent)"]){color:#1a574e!important}
