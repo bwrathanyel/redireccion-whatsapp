@@ -1467,11 +1467,11 @@ function setupAvisoInforme() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) jornadaAvisoRevisar(); });
   jornadaAvisoRevisar();
 }
-// Se puede cerrar cuando el día cargó y ningún cliente abierto quedó sin próximo paso.
+// Los clientes sin próximo paso no bloquean: agent_check_out_informe los pasa a mañana 9:00 (2026-11-12).
 function validarResumenJornada() {
   const faltan = Number(JORNADA_DIA?.sin_proximo || 0), falta = document.getElementById('jornada-falta');
-  document.getElementById('jornada-resumen-ok').disabled = !JORNADA_DIA || faltan > 0;
-  if (falta) { falta.hidden = !faltan; falta.innerHTML = faltan ? `<i class="fas fa-triangle-exclamation"></i> ${faltan === 1 ? 'Te falta 1 próximo paso' : `Te faltan ${faltan} próximos pasos`}` : ''; }
+  document.getElementById('jornada-resumen-ok').disabled = !JORNADA_DIA;
+  if (falta) { falta.hidden = !faltan; falta.innerHTML = faltan ? `<i class="fas fa-calendar-check"></i> ${faltan === 1 ? '1 cliente sin próximo paso queda' : `${faltan} clientes sin próximo paso quedan`} para mañana a las 9:00 al finalizar.` : ''; }
 }
 document.getElementById('jornada-ayuda')?.addEventListener('input', e => { JORNADA_BORRADOR.texto = e.target.value; jornadaBorradorGuardar(); });
 document.getElementById('jornada-resumen-cancelar')?.addEventListener('click', (e) => {
@@ -1482,6 +1482,7 @@ document.getElementById('jornada-resumen-ok')?.addEventListener('click', async (
   const btn = document.getElementById('jornada-resumen-ok');
   const cancelarBtn = document.getElementById('jornada-resumen-cancelar');
   if (!JORNADA_DIA) return;
+  const auto = Number(JORNADA_DIA.sin_proximo || 0);
   btn.disabled = true; cancelarBtn.disabled = true; btn.innerHTML = 'Enviando... <i class="fas fa-spinner fa-spin"></i>';
   const { error } = await sb.rpc('agent_check_out_informe', {
     p_clientes: jornadaEnvio(JORNADA_DIA.clientes, JORNADA_BORRADOR),
@@ -1499,7 +1500,7 @@ document.getElementById('jornada-resumen-ok')?.addEventListener('click', async (
   jornadaAvisoRevisar();
   renderJornadaUI();
   closeSheet('jornada-resumen-sheet');
-  okToast('Jornada finalizada: informe enviado. Puedes seguir atendiendo desde casa.');
+  okToast(`Jornada finalizada: informe enviado.${auto ? ` ${auto === 1 ? '1 cliente quedó' : `${auto} clientes quedaron`} con seguimiento para mañana.` : ''} Puedes seguir atendiendo desde casa.`);
 });
 window.toggleJornada = async () => { JORNADA_ACTIVA ? abrirResumenJornada() : await handleCheckIn(); };
 function renderJornadaUI() {
@@ -3463,7 +3464,7 @@ function renderInformeDiario() {
       </div>
       ${clientes.length ? `<details class="inf-det"><summary>${clientes.length === 1 ? '1 cliente' : `${clientes.length} clientes`}</summary><ul class="inf-clientes">${clientes.map(c => `<li>
         <span><button class="inf-lead" type="button" data-inf-lead="${c.id}">${esc(c.nombre || `Lead #${c.id}`)}</button>${c.ayuda ? ' <i class="fas fa-hand" style="color:var(--red)" title="Pidió ayuda"></i>' : ''}</span>
-        <small>${esc(niceEstado(c.estado))}${c.resultado ? ` · ${esc(JORNADA_RESULTADOS[c.resultado] || c.resultado)}` : ''}${c.proxima_accion_at ? ` · ${esc(tiempoSeguimiento(c.proxima_accion_at))}` : ''}</small>
+        <small>${esc(niceEstado(c.estado))}${c.resultado ? ` · ${esc(JORNADA_RESULTADOS[c.resultado] || c.resultado)}` : ''}${c.proxima_accion_at ? ` · ${esc(tiempoSeguimiento(c.proxima_accion_at))}` : ''}${c.proximo_auto ? ' (automático)' : ''}</small>
         ${c.nota ? `<em>${esc(c.nota)}</em>` : ''}</li>`).join('')}</ul></details>` : ''}
       ${f.ayuda ? `<div class="lt-texto"><div><b>Pide ayuda</b>${esc(f.ayuda)}</div></div>` : ''}
       ${f.tiene_informe && !clientes.length && (f.como_me_fue || f.resumen) ? `<div class="lt-texto">${renderInformeCampos(f)}</div>` : ''}
