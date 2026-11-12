@@ -4729,7 +4729,7 @@ function pvCardHtml(c, extra = '') {
     return `<article class="pv-card" data-id="${c.id}">
       <div class="pv-card-top"><span class="pv-chip${c.etapa === 'LISTO_PARA_VIAJAR' ? ' ok' : ''}"><i class="fas ${etapa[1]}"></i>${esc(etapa[0])}</span>${c.prioridad && c.prioridad !== 'NORMAL' ? `<span class="pv-prio ${esc(c.prioridad)}">${esc(c.prioridad)}</span>` : ''}${viajeHtml}<span class="pv-tools"><button class="pv-tool" data-pv-exportar="${c.id}" type="button" aria-label="Exportar reserva ${esc(c.codigo || '')}" title="Exportar (PDF o texto)"><i class="fas fa-file-arrow-down" aria-hidden="true"></i></button>${esOficina() ? `<button class="pv-tool del" data-pv-eliminar="${c.id}" type="button" aria-label="Eliminar reserva ${esc(c.codigo || '')}" title="Eliminar reserva"><i class="fas fa-trash-can" aria-hidden="true"></i></button>` : ''}</span></div>
       <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}${falta === null ? '' : ` · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}`}</div>${ROL !== 'asesor' && c.asesor ? `<div class="pv-dest pv-asesor-l"><i class="fas fa-user-tie" aria-hidden="true"></i> ${esc(c.asesor)}</div>` : ''}${extra}
-      <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>Saldo <b>${money(c.saldo_pendiente)}</b></span></div>
+      <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>${pagado > total ? 'Saldo a favor' : 'Saldo'} <b>${money(pagado > total ? pagado - total : Math.max(0, Number(c.saldo_pendiente) || 0))}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
       ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}
       <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>
@@ -4795,7 +4795,8 @@ function pvChkFila(k, t, docs) {
 function pvDineroPintar() {
   const tot = Number(document.getElementById('pv-e-total')?.value || 0), pag = Number(document.getElementById('pv-e-pagado')?.value || 0), saldo = Math.max(0, tot - pag);
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-  set('pv-d-total', money(tot)); set('pv-d-pagado', money(pag)); set('pv-d-saldo', money(saldo));
+  set('pv-d-total', money(tot)); set('pv-d-pagado', money(pag)); set('pv-d-saldo', money(pag > tot ? pag - tot : saldo));
+  const saldoLabel = document.querySelector('#pv-d-saldo-box .rs-lbl'); if (saldoLabel) saldoLabel.textContent = pag > tot ? 'Saldo a favor' : 'Saldo';
   document.getElementById('pv-d-saldo-box')?.classList.toggle('debe', saldo > 0);
 }
 // Atajos del seguimiento: «1»/«3» días a las 10:00, «lun» próximo lunes 09:00, «0» lo quita.
@@ -6439,7 +6440,7 @@ async function rvGuardarCosto(btn, quitar) {
   RV_FORM = null; okToast(quitar ? 'Costo quitado' : 'Costo guardado'); rvTrasCambio();
 }
 async function rvAnularServicio(id) {
-  if (!(await confirmarSheet({ titulo: '¿Anular este servicio?', detalle: 'Deja de sumar al total de la reserva y queda en el historial.', textoOk: 'Anular', destructivo: true }))) return;
+  if (!(await confirmarSheet({ titulo: '¿Anular este servicio?', detalle: 'Deja de sumar al total de la reserva y queda en el historial. Si lo abonado supera el nuevo total, la diferencia queda como saldo a favor de este cliente.', textoOk: 'Anular', destructivo: true }))) return;
   const { data, error } = await sb.rpc('anular_servicio', { p_servicio_id: id });
   if (error || !data?.ok) { errToast('No se pudo anular: ' + rvErr(error, data)); return; }
   okToast('Servicio anulado'); rvTrasCambio();
@@ -38662,7 +38663,7 @@ function setupBoleteria() {
     const b = e.target.closest('[data-bol-card]');
     if (b) {
       const accion = b.dataset.bolCard, s = accion === 'retomar' && BOL_COLA.find(x => String(x.id) === b.dataset.id);
-      if (accion === 'tomar') bolTomar(b.dataset.id, b); else if (accion === 'cotizacion') bolCorregirCotizacion(b.dataset.id, b); else if (accion === 'ver-cot') bolVerCotizacion(b.dataset.id, b); else if (s) cbDesdeSolicitud(s); else if (accion === 'resolver') bolAbrirCerrar(b.dataset.id);
+      if (accion === 'reasignar') bolReasignarAdmin(b.dataset.id, b); else if (accion === 'tomar') bolTomar(b.dataset.id, b); else if (accion === 'cotizacion') bolCorregirCotizacion(b.dataset.id, b); else if (accion === 'ver-cot') bolVerCotizacion(b.dataset.id, b); else if (s) cbDesdeSolicitud(s); else if (accion === 'resolver') bolAbrirCerrar(b.dataset.id);
       return;
     }
     const c = e.target.closest('[data-bol-abrir]'); if (c) abrirDetalleBoleteria(c.dataset.bolAbrir);
@@ -38898,6 +38899,7 @@ function bolCardHtml(s) {
   const wa = bolWaContacto(s);
   const acc = [];
   if (agente && s.estado === 'en_cola' && bolPuedoTomar(s)) acc.push(`<button class="btn-sm" type="button" data-bol-card="tomar" data-id="${s.id}"><i class="fas fa-hand"></i> Tomar</button>`);
+  if (ROL === 'admin' && bolAbierta(s) && !s.eliminado_at) acc.push(`<button class="btn-sm" type="button" data-bol-card="reasignar" data-id="${s.id}"><i class="fas fa-user-check"></i> Reasignar</button>`);
   if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo && s.pausada_en) acc.push(`<button class="btn-sm" type="button" data-bol-card="retomar" data-id="${s.id}"><i class="fas fa-play"></i> Retomar</button>`);
   if (agente && s.estado === 'atendiendo' && s.la_atiendo_yo) acc.push(`<button class="btn-sm" type="button" data-bol-card="resolver" data-id="${s.id}"><i class="fas fa-check"></i> Resolver</button>`);
   if (wa) acc.push(`<a class="btn-sm bol-wa" href="${esc(wa.url)}" target="_blank" rel="noopener" data-bol-wa aria-label="Escribirle a ${esc(wa.nombre)} por WhatsApp" title="Escribirle a ${esc(wa.nombre)} por WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>`);
@@ -39111,6 +39113,12 @@ function abrirDetalleBoleteria(id) {
   if (!s) return;
   const cuerpo = document.getElementById('bol-detalle-cuerpo');
   cuerpo.innerHTML = bolDetalleHtml(s);
+  if (ROL === 'admin' && bolAbierta(s) && !s.eliminado_at) {
+    const boton = document.createElement('button');
+    boton.className = 'dbtn gh'; boton.type = 'button'; boton.textContent = 'Reasignar solicitud';
+    boton.addEventListener('click', () => bolReasignarAdmin(id, boton));
+    cuerpo.querySelector('.bd-acc')?.append(boton);
+  }
   cuerpo.querySelector('[data-bol-tomar]')?.addEventListener('click', e => { cerrarDetalleBoleteria(); bolTomar(id, e.currentTarget); });
   cuerpo.querySelector('[data-bol-cancelar]')?.addEventListener('click', () => { cerrarDetalleBoleteria(); bolCancelar(id); });
   cuerpo.querySelector('[data-bol-eliminar]')?.addEventListener('click', () => bolEliminar(id));
@@ -39226,6 +39234,37 @@ function bolFiltrar(filtro) {
 
 // Sin id: toma la más vieja en cola. Al tomarla se abre su detalle, que es lo
 // siguiente que el agente necesita ver.
+async function bolReasignarAdmin(id, btn) {
+  if (ROL !== 'admin') return;
+  const s = BOL_COLA.find(x => String(x.id) === String(id));
+  if (!s || !bolAbierta(s) || s.eliminado_at) return;
+  if (btn) btn.disabled = true;
+  try {
+    const { data: agentes, error: cargaError } = await sb.rpc('agentes_boleteria_estado');
+    if (cargaError) { errToast('No se pudieron cargar los agentes'); return; }
+    const r = await confirmarSheet({ titulo: 'Reasignar solicitud de boletería',
+      detalle: `Solicitud #${s.id}. Ahora: ${s.tomada_por || 'en cola'}. Se conserva el borrador.`, textoOk: 'Reasignar',
+      campos: [
+        { id: 'modo', tipo: 'radio', label: 'Modo', requerido: true, valor: 'auto', opciones: [
+          { v: 'auto', t: 'Automático: otro agente con menos carga' }, { v: 'manual', t: 'Manual: elegir agente' }] },
+        { id: 'agente', tipo: 'select', label: 'Agente (solo manual)', requeridoSi: o => o.modo === 'manual',
+          opciones: [{ v: '', t: '— elegir —' }, ...(agentes || []).filter(a => a.nombre !== s.tomada_por).map(a => ({ v: a.usuario_id, t: a.nombre }))] },
+      ] });
+    if (!r) return;
+    const { data, error } = await sb.rpc('admin_reasignar_solicitud_boleteria', {
+      p_id: Number(id), p_agente_id: r.agente || null, p_tomada_en: s.tomada_en || null });
+    if (error || !data?.ok) {
+      const motivos = { sin_agente_disponible: 'No hay otro agente activo disponible', solicitud_cerrada: 'La solicitud ya está cerrada',
+        solicitud_cambio: 'La solicitud cambió. Actualiza y vuelve a intentarlo', no_disponible: 'La solicitud ya no está disponible' };
+      errToast(motivos[data?.error] || error?.message || 'No se pudo reasignar');
+      await loadColaBoleteria(true); return;
+    }
+    okToast(`Solicitud reasignada a ${data.agente}`);
+    await loadColaBoleteria(true);
+    if (document.getElementById('bol-detalle-sheet')?.classList.contains('open')) abrirDetalleBoleteria(id);
+  } catch { errToast('No se pudo conectar. Actualiza la cola antes de reintentar'); }
+  finally { if (btn) btn.disabled = false; }
+}
 async function bolTomar(id, btn) {
   if (btn) btn.disabled = true;
   const { data, error } = await sb.rpc('tomar_solicitud_boleteria', { p_id: id == null ? null : Number(id) });
@@ -40735,6 +40774,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-12', emoji: '💵', titulo: 'Saldo a favor al anular un servicio', texto: 'Si anulas un servicio de una reserva y lo que el cliente ya abonó supera el nuevo total, la reserva ya no se bloquea: la diferencia queda como «Saldo a favor» de ese cliente en la tarjeta, el resumen y los abonos. Los pagos registrados no se tocan ni se duplican.', roles: ['admin', 'administrativo', 'asesor'] },
+  { fecha: '2026-11-12', emoji: '🔀', titulo: 'Reasignar solicitudes de boletería', texto: 'Administración puede tocar «Reasignar» en una solicitud de boletería abierta (en la tarjeta o en el detalle) y pasarla a otro agente: automático al que tenga menos carga o eligiendo uno de la lista. El borrador se conserva y el nuevo agente sigue la misma solicitud.', roles: ['admin'] },
   { fecha: '2026-11-11', emoji: '🧾', titulo: 'Lyra genera la cotización completa', texto: 'Pídele a Lyra «hazme la cotización de este cliente en tal hotel, del 10 al 14, 2 adultos» y la genera igual que la sección Cotizaciones: número COT, PDF, queda en el historial y el lead pasa a Cotización enviada. En el chat te deja botones para abrir el PDF, mandarlo por WhatsApp o verla en Cotizaciones. Si falta un dato (tarifa de niños, fechas cerradas), te avisa y la deja armada en Cotizaciones para que la termines.', roles: ['asesor', 'admin'] },
   { fecha: '2026-11-11', emoji: '🔁', titulo: 'Cambiar el asesor de una reserva', texto: 'En el Resumen de la reserva, administración y el asistente administrativo pueden tocar «Cambiar» junto a «Asesor de esta reserva» y pasarla a otro asesor. Solo cambia esa reserva: el cliente y sus otras reservas siguen con su asesor, y las facturas y comisiones ya registradas no se tocan. El asesor nuevo la ve en su lista de reservas.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-11', emoji: '🏨', titulo: 'Varias opciones en una cotización', texto: 'En Cotizaciones activa «Opciones para elegir» y agrega un hotel por opción. El PDF muestra cada opción con su propio total y no las suma, así el cliente compara y elige. El vuelo o el traslado marcados «En todas» entran en cada opción. Cuando el cliente elija, toca su opción y genera la cotización final.', roles: ROLES_TODOS },

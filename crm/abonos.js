@@ -160,7 +160,7 @@ export function crearAbonos(c) {
     return `<div class="ab-top">
       <div class="ab-kpi"><span>Total</span><b>${usd(d.monto_total)}</b></div>
       <div class="ab-kpi"><span>Pagado</span><b>${usd(d.monto_pagado)}</b></div>
-      <div class="ab-kpi ab-saldo"><span>Saldo</span><b>${usd(d.saldo_pendiente)}</b></div>
+      <div class="ab-kpi ab-saldo"><span>${Number(d.monto_pagado) > Number(d.monto_total) ? 'Saldo a favor' : 'Saldo'}</span><b>${usd(Math.abs(Number(d.monto_total) - Number(d.monto_pagado)))}</b></div>
       <button class="dbtn save ab-nuevo" type="button" data-ab-accion="nuevo"><i class="fas fa-plus"></i> Abono</button>
     </div>`;
   }
