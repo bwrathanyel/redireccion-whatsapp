@@ -495,7 +495,7 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     c.querySelector('input,textarea')?.focus();
     return c;
   }
-  const HORAS = [['1h', 'En 1 hora'], ['17', 'Hoy 5 pm'], ['m9', 'Mañana 9 am'], ['', 'Sin hora']];
+  const HORAS = [['1h', 'En 1 hora'], ['17', 'Hoy 5 pm'], ['m9', 'Mañana 9 am'], ['otra', 'Otro día'], ['', 'Sin hora']];
   function venceDe(k, otra = '') {
     const n = ahora();
     if (k === '1h') return new Date(n.getTime() + 36e5).toISOString();
@@ -512,7 +512,9 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
   function nuevoRecordatorio({ leadId = null, leadNombre = '' } = {}) {
     const c = hoja('tk-hoja-rec', 'Nuevo recordatorio', `
       <div class="tk-field"><label class="tk-label" for="tk-rec-t">Qué tienes que hacer</label><input class="tk-input" id="tk-rec-t" maxlength="200" placeholder="Ej.: llamar a la posada para confirmar"></div>
-      <div class="tk-field"><span class="tk-label">Cuándo</span><div class="tk-chips" role="group">${HORAS.map(([k, t], i) => `<button class="tk-chip" data-tk-hora="${k}" aria-pressed="${i === 0}">${t}</button>`).join('')}</div></div>
+      <div class="tk-field"><span class="tk-label">Cuándo</span><div class="tk-chips" role="group">${HORAS.map(([k, t], i) => `<button class="tk-chip" data-tk-hora="${k}" aria-pressed="${i === 0}">${t}</button>`).join('')}</div>
+        <input class="tk-input" type="datetime-local" id="tk-rec-f" style="display:none;margin-top:9px" aria-label="Día y hora (Caracas)"></div>
+      <div class="tk-field"><label class="tk-label" for="tk-rec-d">Detalle (opcional)</label><textarea class="tk-input" id="tk-rec-d" maxlength="1000" placeholder="Teléfono, monto, lo que no quieres olvidar"></textarea></div>
       ${leadId ? `<div class="tk-sel"><span class="tk-av">${esc(iniciales(leadNombre))}</span><div><b>${esc(leadNombre || 'Cliente')}</b><small>Cliente de este recordatorio</small></div></div>` : ''}
       <div class="tk-note"><i class="fas fa-eye"></i> Administración también lo ve.</div>`,
       `<button class="tk-btn tk-btn-ghost" data-tk-cerrar-hoja>Cancelar</button><button class="tk-btn tk-btn-pri" data-net data-tk-rec-guardar>Guardar</button>`);
@@ -904,6 +906,8 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     if ('tkProblema' in ds) return hojaProblema();
     if ('tkMotivo' in ds || 'tkHora' in ds) {
       b.parentElement.querySelectorAll('[aria-pressed]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      const f = 'tkHora' in ds && b.closest('.tk-modal')?.querySelector('#tk-rec-f');
+      if (f) { f.style.display = ds.tkHora === 'otra' ? '' : 'none'; if (ds.tkHora === 'otra') f.focus(); }
       return;
     }
     if ('tkProbEnviar' in ds) return conBoton(b, async () => {
@@ -916,8 +920,11 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     if ('tkRecGuardar' in ds) return conBoton(b, async () => {
       const c = b.closest('.tk-overlay'), titulo = c.querySelector('#tk-rec-t').value.trim();
       if (!titulo) throw new Error('Escribe qué tienes que hacer');
-      const k = c.querySelector('[data-tk-hora][aria-pressed="true"]')?.dataset.tkHora ?? '';
-      const r = await rpc('tarea_crear', { p_datos: { titulo, vence_at: venceDe(k), destinatarios: [miId()], lead_id: c.dataset.lead || null,
+      const k = c.querySelector('[data-tk-hora][aria-pressed="true"]')?.dataset.tkHora ?? '', otra = c.querySelector('#tk-rec-f').value;
+      if (k === 'otra' && !otra) throw new Error('Elige el día y la hora');
+      const vence_at = venceDe(k, otra);
+      if (k === 'otra' && new Date(vence_at) <= ahora()) throw new Error('Esa hora ya pasó');
+      const r = await rpc('tarea_crear', { p_datos: { titulo, descripcion: c.querySelector('#tk-rec-d').value.trim(), vence_at, destinatarios: [miId()], lead_id: c.dataset.lead || null,
         cliente_token: c.dataset.token, pasos: [{ titulo, detector: 'manual' }] } });
       c.remove(); toast(r.repetida ? 'Ya estaba guardado' : 'Recordatorio guardado'); recargarPronto();
     });
