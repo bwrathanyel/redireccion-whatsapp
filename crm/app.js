@@ -28452,7 +28452,7 @@ function tarAtributosHabitacion(nombre) {
 const TAR_OCUPACION = new Map([
   ['sgl', 1], ['sencilla', 1], ['hab_sgl', 1], ['1_persona', 1],
   ['dbl', 2], ['doble', 2], ['hab_dbl', 2], ['dbl_pax', 2],
-  ['tpl', 3], ['triple', 3],
+  ['tpl', 3], ['trpl', 3], ['triple', 3],
   ['cdp', 4], ['cpl', 4], ['cdl', 4], ['cdpl', 4], ['cua', 4], ['cuad', 4], ['cuadruple', 4], ['cpl_cua', 4],
   ['qpl', 5], ['quin', 5], ['quint', 5], ['qtp', 5], ['qtpl', 5], ['qui', 5], ['qpl_qui', 5],
   ['sext', 6], ['sex', 6],
