@@ -5337,9 +5337,10 @@ const rvPanel = k => document.querySelector(`#drawerContent [data-rv-panel="${k}
 const rvOpts = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
 const rvMonedaOpts = sel => RV_MONEDAS.map(m => `<option ${m === sel ? 'selected' : ''}>${m}</option>`).join('');
 const rvServicioNombre = s => (RV_TIPOS[s.tipo] || [s.tipo])[0] + (s.descripcion ? ' · ' + s.descripcion : s.detalle?.ruta ? ' · ' + s.detalle.ruta : '') + (s.fecha_inicio ? ' · ' + pvFecha(s.fecha_inicio) : '');
-const rvBotones = (guardar, extra = '') => `<div class="edit-err" id="rv-f-err"></div>
-  <button class="dbtn save" type="button" data-rv-accion="${guardar}"><i class="fas fa-floppy-disk"></i> Guardar</button>${extra}
-  <button class="dbtn gh" type="button" data-rv-accion="cancelar" style="margin-top:9px">Cancelar</button>`;
+// Pie fijo al fondo del cajón mientras se baja por el formulario: el error y Guardar siempre a la vista.
+const rvBotones = (guardar, extra = '') => `<div class="rv-pie"><div class="edit-err" id="rv-f-err"></div><div class="rv-pie-btns">
+  <button class="dbtn gh" type="button" data-rv-accion="cancelar">Cancelar</button>
+  <button class="dbtn save" type="button" data-rv-accion="${guardar}"><i class="fas fa-floppy-disk"></i> Guardar</button></div></div>${extra}`;
 
 function rvTabsHtml(conResumen) {
   const tabs = [...(conResumen ? [['resumen', 'Resumen']] : []), ['servicios', 'Servicios'], ['pasajeros', 'Pasajeros'], ['documentos', 'Documentos']];
@@ -5877,8 +5878,9 @@ async function rvGenerarVoucherReserva(btn) {
     try {
       const { data: lista, error } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: RV_RESERVA_ID });
       if (error) throw error;
-      abonos = (lista?.abonos || []).filter(a => !a.anulado_en).sort((a, b) => Number(a.id) - Number(b.id));
-      ultimo = abonos[abonos.length - 1] || null;
+      // Orden elegido en Reservas › Abonos (reserva_abonos.orden); sin orden, por id. El «último» sigue siendo el más nuevo.
+      abonos = (lista?.abonos || []).filter(a => !a.anulado_en).sort((a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9) || Number(a.id) - Number(b.id));
+      ultimo = abonos.reduce((u, a) => !u || Number(a.id) > Number(u.id) ? a : u, null);
     } catch (e) {
       console.error('voucher: abonos', e);
     }
@@ -6113,8 +6115,13 @@ function rvFormServicio(p) {
     : 'rt';
   const horaIda = t0?.sale_en ? String(t0.sale_en).slice(11, 16) : (s?.hora ? String(s.hora).slice(0, 5) : '');
   const horaVuelta = tramosPrevios.length > 1 && tN?.sale_en ? String(tN.sale_en).slice(11, 16) : '';
-  p.innerHTML = `<div class="edit-box rv-form" data-rv-form><div class="eb-title"><i class="fas fa-suitcase-rolling"></i> ${s ? 'Editar servicio' : 'Nuevo servicio'}</div>
-    <label class="fl" for="rv-s-tipo">Tipo</label><select class="ei" id="rv-s-tipo">${rvOpts(RV_TIPOS, s?.tipo || 'hospedaje')}</select>
+  // Formulario compacto (pedido del dueño 13-nov): campos cortos lado a lado en .rv-fila, secciones con título
+  // y Guardar/Cancelar fijos abajo (.rv-pie) para no bajar hasta el final.
+  p.innerHTML = `<div class="edit-box rv-form rv-sf" data-rv-form><div class="eb-title"><i class="fas fa-suitcase-rolling"></i> ${s ? 'Editar servicio' : 'Nuevo servicio'}</div>
+    <div class="rv-fila">
+      <div><label class="fl" for="rv-s-tipo">Tipo</label><select class="ei" id="rv-s-tipo">${rvOpts(RV_TIPOS, s?.tipo || 'hospedaje')}</select></div>
+      <div><label class="fl" for="rv-s-estado">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div>
+    </div>
     <div id="rv-s-top"></div>
     <div id="rv-s-boleto-box" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>
       <label class="fl">Tipo de viaje</label>
@@ -6123,22 +6130,24 @@ function rvFormServicio(p) {
         <button class="seg${viaje === 'ow' ? ' on' : ''}" type="button" data-rv-viaje="ow"><i class="fas fa-arrow-right-long"></i> Solo ida</button>
       </div>
     </div>
+    <div class="rv-fila">
+      <div><label class="fl" for="rv-s-destino">Destino</label><select class="ei" id="rv-s-destino"><option value="">Sin destino</option>${sinCatalogo}${destinos}</select></div>
+      <div><label class="fl" for="rv-s-localizador">Localizador <span>(opcional)</span></label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div>
+    </div>
     <label class="fl" for="rv-s-desc">Descripción</label><input class="ei" id="rv-s-desc" maxlength="300" value="${esc(s?.descripcion || '')}" placeholder="Ej.: 3 noches en Los Roques, todo incluido">
-    <label class="fl" for="rv-s-destino">Destino</label><select class="ei" id="rv-s-destino"><option value="">Sin destino</option>${sinCatalogo}${destinos}</select>
-    <div class="rv-2" id="rv-s-fechas"><div><label class="fl" id="rv-s-lab-inicio">Desde</label><input class="ei" id="rv-s-inicio" type="date" value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl" id="rv-s-lab-fin">Hasta</label><input class="ei" id="rv-s-fin" type="date" value="${esc(s?.fecha_fin || '')}"></div></div>
-    <div class="rv-2" id="rv-s-horas-boleto" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>
+    <div class="rv-sec"><i class="fas fa-calendar-days"></i> Fechas y pasajeros</div>
+    <div class="rv-fila" id="rv-s-fechas"><div><label class="fl" id="rv-s-lab-inicio" for="rv-s-inicio">Desde</label><input class="ei" id="rv-s-inicio" type="date" value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl" id="rv-s-lab-fin" for="rv-s-fin">Hasta</label><input class="ei" id="rv-s-fin" type="date" value="${esc(s?.fecha_fin || '')}"></div><div id="rv-s-calc"></div></div>
+    <div class="rv-fila" id="rv-s-horas-boleto" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>
       <div><label class="fl">Hora de ida</label><input class="ei" id="rv-s-hora-ida" type="time" value="${esc(horaIda)}"></div>
       <div id="rv-s-hora-vuelta-box"><label class="fl">Hora de vuelta</label><input class="ei" id="rv-s-hora-vuelta" type="time" value="${esc(horaVuelta)}"></div>
     </div>
     <div id="rv-s-tramos-ayuda" class="csub" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>Al guardar se cargan los tramos con la ruta, las fechas y las horas.</div>
     <div id="rv-s-tramos-existe" class="csub" ${esBoleto && tramosPrevios.length ? '' : 'hidden'}>Este boleto ya tiene ${tramosPrevios.length} tramo(s) cargado(s). Las fechas y horas se editan en Tramos.</div>
-    <div id="rv-s-apto"></div>
-    <div class="rv-3"><div id="rv-s-hora-box"><label class="fl">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div><div><label class="fl">Adultos</label><input class="ei" id="rv-s-adultos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl">Niños</label><input class="ei" id="rv-s-ninos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div></div>
-    <div class="rv-2"><div><label class="fl">Localizador <span style="font-weight:400">(opcional)</span></label><input class="ei" id="rv-s-localizador" maxlength="60" value="${esc(s?.localizador || '')}"></div><div><label class="fl">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div></div>
-    ${s?.tipo === 'boleto_aereo' && rvAgente() ? `<label class="fl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
+    <div class="rv-fila"><div><label class="fl" for="rv-s-adultos">Adultos</label><input class="ei" id="rv-s-adultos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl" for="rv-s-ninos">Niños</label><input class="ei" id="rv-s-ninos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div><div id="rv-s-hora-box"><label class="fl" for="rv-s-hora">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div></div>
+    ${s?.tipo === 'boleto_aereo' && rvAgente() ? `<label class="fl" for="rv-s-tl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
     <div id="rv-s-detalle"></div>
-    <div class="eb-title" style="margin-top:14px"><i class="fas fa-tag"></i> Precio al cliente</div>
-    <div class="rv-3"><div><label class="fl">Monto</label><input class="ei" id="rv-s-precio" type="number" inputmode="decimal" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
+    <div class="rv-sec"><i class="fas fa-tag"></i> Precio al cliente</div>
+    <div class="rv-fila"><div><label class="fl" for="rv-s-precio">Monto</label><input class="ei" id="rv-s-precio" type="number" inputmode="decimal" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl" for="rv-s-moneda">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl" for="rv-s-tasa">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
     ${rvPagoHtml(s)}
     ${rvBotones('guardar-servicio')}</div>`;
   rvPagoInit(p, s);
@@ -6154,8 +6163,11 @@ function rvFormServicio(p) {
     if (!s && !rvAgente() && est.dataset.manual !== '1') est.value = val('rv-s-tipo') === 'boleto_aereo' ? 'emitido' : 'cotizado';
     rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible();
   };
-  ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = () => { rvAptoCampo(); rvNochesCampo(); }; });
-  ['rv-s-adultos', 'rv-s-ninos'].forEach(k => { document.getElementById(k).oninput = rvAptoAviso; });
+  ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = () => { rvAptoCampo(); rvNochesCampo(); rvHotelSugerir(); }; });
+  ['rv-s-adultos', 'rv-s-ninos'].forEach(k => { document.getElementById(k).oninput = () => { rvAptoAviso(); rvHotelSugerir(); }; });
+  // El precio del tarifario se escribe solo mientras la persona no lo toque (data-auto, igual que la descripción).
+  const precio = document.getElementById('rv-s-precio');
+  precio.addEventListener('input', e => { if (e.isTrusted) precio.dataset.auto = ''; });
   rvTasaVisible('rv-s');
   p.querySelectorAll('#rv-s-viaje [data-rv-viaje]').forEach(b => b.onclick = () => {
     p.querySelectorAll('#rv-s-viaje [data-rv-viaje]').forEach(x => x.classList.toggle('on', x === b));
@@ -6178,7 +6190,7 @@ function rvPagoHtml(s) {
   const resumen = s && pagado != null ? `<div class="csub">Pagado <b>${rvUsd(pagado)}</b> de ${rvUsd(precio)}${precio > pagado ? ` · falta <b>${rvUsd(precio - pagado)}</b>` : precio > 0 ? ' · pagado completo' : ''}${pagos.length ? ` (${pagos.map(a => `${rvUsd(a.monto_usd)} ${esc(a.metodo)}`).join(', ')})` : ''}</div>` : '';
   const chips = ab.METODOS.map(m => `<button class="ab-chip${m === 'Zelle' ? ' on' : ''}" type="button" data-rv-pago-metodo="${esc(m)}">${esc(m)}</button>`).join('');
   const tasas = Object.entries(ab.TASAS).map(([t, n]) => `<option value="${t}" ${ab.tasa(t) ? '' : 'disabled'}>${n}${ab.tasa(t) ? ` · ${ab.tasa(t).toLocaleString('es-VE', { maximumFractionDigits: 4 })}` : ' · sin cargar'}</option>`).join('');
-  return `<div class="eb-title" style="margin-top:14px"><i class="fas fa-money-bill-wave"></i> Pago del cliente</div>
+  return `<div class="rv-sec"><i class="fas fa-money-bill-wave"></i> Pago del cliente</div>
     ${resumen}
     <div class="seg-group seg-group-sm" id="rv-s-pago-modo">${Object.entries({ no: 'Sin pago ahora', abono: 'Abono', completo: 'Pago completo' }).map(([k, t]) => `<button class="seg${k === 'no' ? ' on' : ''}" type="button" data-rv-pago-modo="${k}">${t}</button>`).join('')}</div>
     <div id="rv-s-pago-campos" hidden>
@@ -6264,37 +6276,108 @@ const RV_APTO_ERR = {
   solapa: 'ya está ocupado en esas fechas', servicio_invalido: 'el servicio ya no es un hospedaje activo',
   fechas_invalidas: 'faltan la llegada y la salida', apartamento_invalido: 'ese apartamento ya no está disponible',
 };
+// Primero el complejo y después el apartamento de ese complejo, los dos con miniatura (pedido del dueño 13-nov).
+// RV_FORM.aptoComp = proveedor_id del complejo; RV_FORM.aptoUni = id del apartamento ('' = sin asignar).
+// El input oculto #rv-s-apto-sel es lo que lee el guardado: si no está en pantalla, no se toca lo asignado.
 async function rvAptoCampo() {
   const box = document.getElementById('rv-s-apto'); if (!box) return;
   const titulo = '<label class="fl">Apartamento</label>';
-  if (!rvPuedeEditar() || val('rv-s-tipo') !== 'hospedaje') { box.innerHTML = ''; RV_APTO_UNI = []; return; }
-  const actual = RV_FORM?.id ? RV_APTOS[RV_FORM.id] : null, propio = RV_FORM?.id || null;
-  const previo = document.getElementById('rv-s-apto-sel')?.value ?? (actual ? String(actual.apartamento_id) : '');
+  if (!rvPuedeEditar() || val('rv-s-tipo') !== 'hospedaje' || RV_FORM?.hosp !== 'apto') { RV_APTO_REQ++; box.innerHTML = ''; RV_APTO_UNI = []; return; }
+  const propio = RV_FORM.id || null;
   const ini = val('rv-s-inicio'), fin = val('rv-s-fin');
-  if (!ini || !fin || fin <= ini) { RV_APTO_UNI = []; box.innerHTML = titulo + '<div class="csub">Elige llegada y salida para ver qué apartamentos están libres.</div>'; return; }
+  if (!ini || !fin || fin <= ini) { RV_APTO_REQ++; RV_APTO_UNI = []; box.innerHTML = titulo + '<div class="csub">Elige llegada y salida para ver qué apartamentos están libres.</div>'; return; }
   const req = ++RV_APTO_REQ;
   box.innerHTML = titulo + '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Buscando apartamentos libres...</div>';
-  const { data, error } = await sb.rpc('apto_disponibilidad', { p_desde: ini, p_hasta: fin });
-  if (req !== RV_APTO_REQ || !document.getElementById('rv-s-apto')) return;
+  const [{ data, error }] = await Promise.all([sb.rpc('apto_disponibilidad', { p_desde: ini, p_hasta: fin }), rvAptoProvsCargar()]);
+  if (req !== RV_APTO_REQ || !document.getElementById('rv-s-apto') || RV_FORM?.hosp !== 'apto') return;
   if (error || !data?.ok) {
     console.error('apto_disponibilidad', error || data); RV_APTO_UNI = [];
     box.innerHTML = titulo + `<div class="csub">${data?.error === 'ventana_invalida' ? 'El rango de fechas es demasiado largo para buscar apartamentos.' : 'No se pudo consultar la disponibilidad.'}</div>`;
     return;
   }
   RV_APTO_UNI = (data.unidades || []).map(u => ({ ...u, libre: !u.bloqueos.some(b => b.servicio_id !== propio) }));
-  const suyo = actual ? String(actual.apartamento_id) : '';
-  let grupo = null, opts = '';
-  for (const u of RV_APTO_UNI) {
-    if (u.proveedor !== grupo) { if (grupo !== null) opts += '</optgroup>'; grupo = u.proveedor; opts += `<optgroup label="${esc(grupo)}">`; }
-    const ocupado = !u.libre, bloqueada = ocupado && String(u.id) !== suyo;
-    opts += `<option value="${u.id}" ${String(u.id) === previo ? 'selected' : ''} ${bloqueada ? 'disabled' : ''}>${esc(u.nombre)}${u.capacidad_max ? ` · ${u.capacidad_max} personas` : ''}${ocupado ? ' · ocupado en esas fechas' : ''}</option>`;
-  }
-  if (grupo !== null) opts += '</optgroup>';
-  const hayLibre = RV_APTO_UNI.some(u => u.libre);
-  box.innerHTML = titulo + `<select class="ei" id="rv-s-apto-sel"><option value="">Sin asignar</option>${opts}</select>`
-    + (hayLibre ? '' : '<div class="csub">No queda ningún apartamento libre en esas fechas.</div>') + '<div class="csub" id="rv-s-apto-aviso"></div>';
-  document.getElementById('rv-s-apto-sel').onchange = rvAptoAviso;
+  // El complejo elegido manda; sin complejo, sale del apartamento ya asignado. Un apartamento que ya no está activo queda sin asignar.
+  const elegida = RV_APTO_UNI.find(u => String(u.id) === RV_FORM.aptoUni);
+  if (!elegida) RV_FORM.aptoUni = '';
+  else if (RV_FORM.aptoComp == null) RV_FORM.aptoComp = elegida.proveedor_id;
+  else if (elegida.proveedor_id !== RV_FORM.aptoComp) RV_FORM.aptoUni = '';
+  rvAptoPintar();
+}
+// Complejo ↔ producto del tarifario: apto_proveedor_cfg.producto_id (listar_apto_proveedores). Si la RPC falla, el buscador
+// de hoteles se queda como antes y el complejo se muestra con el nombre del proveedor.
+let RV_APTO_PROVS = null, RV_APTO_PROVS_P = null;
+function rvAptoProvsCargar() {
+  return RV_APTO_PROVS_P ??= sb.rpc('listar_apto_proveedores').then(({ data, error }) => {
+    if (error) throw error;
+    return RV_APTO_PROVS = Array.isArray(data) ? data : [];
+  }).catch(e => { console.warn('listar_apto_proveedores', e?.message || e); RV_APTO_PROVS_P = null; return RV_APTO_PROVS ??= []; });
+}
+const rvAptoProv = pid => (RV_APTO_PROVS || []).find(p => p.id === pid) || null;
+const rvAptoCompDeProducto = id => id == null || id === '' ? null : (RV_APTO_PROVS || []).find(p => p.producto_id != null && Number(p.producto_id) === Number(id)) || null;
+const rvAptoCompNombre = pid => pid == null ? '' : rvAptoProv(pid)?.producto_nombre || rvAptoProv(pid)?.nombre || RV_APTO_UNI.find(u => u.proveedor_id === pid)?.proveedor || '';
+// Miniatura del complejo: la foto del hotel en el tarifario; sin producto ligado, la del primer apartamento con foto.
+function rvAptoCompFoto(pid) {
+  const prod = cbHoteles.get(Number(rvAptoProv(pid)?.producto_id));
+  return ordenarFotos(prod?.producto_fotos || [])[0]?.storage_path || RV_APTO_UNI.find(u => u.proveedor_id === pid && u.foto_principal)?.foto_principal || '';
+}
+const rvAptoMini = ruta => ruta ? `<img src="${esc(fotoMini(ruta, 256))}" alt="" width="44" height="44" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><small hidden>Sin foto</small>` : '<small class="cb-hab-sin-foto">Sin foto</small>';
+const rvAptoPickerHtml = (k, label, mini, texto, opciones) => `<div class="field cb-picker rv-apto-pick"><label class="fl" id="rv-apto-${k}-l" for="rv-apto-${k}">${label}</label>
+  <button type="button" id="rv-apto-${k}" class="ei cb-hab-elegida" role="combobox" data-rv-apto-abrir aria-haspopup="listbox" aria-labelledby="rv-apto-${k}-l rv-apto-${k}-t" aria-expanded="false" aria-controls="rv-apto-${k}-lista">${mini}<span id="rv-apto-${k}-t">${esc(texto)}</span><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+  <div id="rv-apto-${k}-lista" class="cb-picker-lista" role="listbox" aria-label="${label}" hidden>${opciones}</div></div>`;
+function rvAptoPintar() {
+  const box = document.getElementById('rv-s-apto'); if (!box || RV_FORM?.hosp !== 'apto') return;
+  const comps = [...new Set(RV_APTO_UNI.map(u => u.proveedor_id))];
+  if (!comps.length) { box.innerHTML = '<label class="fl">Apartamento</label><div class="csub">No hay apartamentos propios cargados en Apartamentos.</div>'; return; }
+  if (RV_FORM.aptoComp == null && comps.length === 1) RV_FORM.aptoComp = comps[0];
+  const pid = RV_FORM.aptoComp, unis = RV_APTO_UNI.filter(u => u.proveedor_id === pid), u = unis.find(x => String(x.id) === RV_FORM.aptoUni);
+  const suyo = RV_FORM.id && RV_APTOS[RV_FORM.id] ? String(RV_APTOS[RV_FORM.id].apartamento_id) : '';
+  const compInfo = id => {
+    const de = RV_APTO_UNI.filter(x => x.proveedor_id === id), libres = de.filter(x => x.libre).length;
+    return [rvAptoProv(id)?.ubicacion, libres ? `${libres} de ${de.length} libres en esas fechas` : 'Todo ocupado en esas fechas'].filter(Boolean).join(' · ');
+  };
+  const capacidad = x => x.capacidad_max ? `${x.capacidad_max} personas` : '';
+  const opcion = (attr, id, sel, bloqueada, mini, nombre, info) => `<button type="button" tabindex="-1" role="option" aria-selected="${sel}"${bloqueada ? ' aria-disabled="true"' : ''} ${attr}="${id}">${mini}<span><b>${esc(nombre)}</b>${info ? `<small>${esc(info)}</small>` : ''}</span></button>`;
+  const comp = rvAptoPickerHtml('comp', 'Complejo', pid == null ? '' : rvAptoMini(rvAptoCompFoto(pid)), pid == null ? 'Elige el complejo' : rvAptoCompNombre(pid),
+    comps.map(id => opcion('data-rv-apto-comp', id, id === pid, false, rvAptoMini(rvAptoCompFoto(id)), rvAptoCompNombre(id), compInfo(id))).join(''));
+  const uni = pid == null ? '' : !unis.length ? '<div class="csub">Ese complejo no tiene apartamentos cargados en Apartamentos.</div>'
+    : rvAptoPickerHtml('uni', 'Apartamento', u ? rvAptoMini(u.foto_principal) : '', u ? [u.nombre, capacidad(u)].filter(Boolean).join(' · ') : 'Sin asignar todavía',
+      opcion('data-rv-apto-uni', '', !u, false, '', 'Sin asignar todavía', 'Se puede asignar después')
+      + unis.map(x => opcion('data-rv-apto-uni', x.id, x === u, !x.libre && String(x.id) !== suyo, rvAptoMini(x.foto_principal), x.nombre, [capacidad(x), x.libre ? 'Libre' : 'Ocupado en esas fechas'].filter(Boolean).join(' · '))).join(''));
+  box.innerHTML = `<div class="rv-apto-picks">${comp}${uni}</div><input type="hidden" id="rv-s-apto-sel" value="${u ? u.id : ''}">`
+    + (unis.length && !unis.some(x => x.libre) ? '<div class="csub">No queda ningún apartamento libre de este complejo en esas fechas.</div>' : '') + '<div class="csub" id="rv-s-apto-aviso"></div>';
   rvAptoAviso();
+}
+function rvAptoCerrar(btn) {
+  btn.nextElementSibling.hidden = true; btn.setAttribute('aria-expanded', 'false'); btn.removeAttribute('aria-activedescendant');
+}
+const rvAptoDesc = () => rvDescAuto(rvAptoNombre() || rvAptoCompNombre(RV_FORM?.aptoComp) || 'Apartamento propio');
+function rvAptoElegirComp(op) {
+  const pid = Number(op.dataset.rvAptoComp);
+  if (pid !== RV_FORM.aptoComp) {
+    RV_FORM.aptoComp = pid;
+    if (RV_APTO_UNI.find(u => String(u.id) === RV_FORM.aptoUni)?.proveedor_id !== pid) RV_FORM.aptoUni = '';
+    const d = rvDestinoPorNombre(cbHoteles.get(Number(rvAptoProv(pid)?.producto_id))?.destino), sel = document.getElementById('rv-s-destino');
+    if (d && sel) sel.value = String(d.id);
+  }
+  rvAptoPintar(); rvAptoDesc();
+  document.getElementById('rv-apto-uni')?.focus();
+}
+function rvAptoElegirUni(op) {
+  if (op.getAttribute('aria-disabled') === 'true') return;
+  RV_FORM.aptoUni = op.dataset.rvAptoUni;
+  rvAptoPintar(); rvAptoDesc();
+  document.getElementById('rv-apto-uni')?.focus();
+}
+// Un complejo del tarifario (producto tipo 'hotel' ligado a Apartamentos) no se cotiza como hotel: pasa a «Apartamento propio».
+// elegido = lo tomaron del buscador (manda su complejo); si no, es un servicio guardado y manda el apartamento ya asignado.
+function rvHotelAComplejo(st, elegido) {
+  const comp = rvAptoCompDeProducto(st?.producto_id); if (!comp || RV_FORM?.hotel !== st) return false;
+  if (elegido || !RV_FORM.aptoUni) RV_FORM.aptoComp = comp.id;
+  Object.assign(st, { nombre: '', producto_id: null, carga: st.carga + 1, _cargando: false, _tarifaError: false, plan: '', hab: '', plan_libre: false, hab_libre: false, habitacion_manual: false, tramos: [], tarifa: '', _sugerencia: null });
+  rvHotelPintar(true);
+  if (RV_FORM.hosp !== 'apto') rvHospModo('apto');
+  else if (RV_APTO_UNI.length) { rvAptoPintar(); rvAptoDesc(); }
+  return true;
 }
 function rvAptoAviso() {
   const el = document.getElementById('rv-s-apto-aviso'), sel = document.getElementById('rv-s-apto-sel'); if (!el || !sel) return;
@@ -6337,15 +6420,19 @@ function rvNochesCampo() {
   el.textContent = n != null ? String(n) : (el.dataset.previo || 'Se calcula con las fechas');
 }
 // Hotel y boleto traen arriba sus campos principales con buscador (hotel del tarifario; ruta IATA y aerolínea); el resto del detalle va debajo.
-const RV_DETALLE_TOP = { hospedaje: ['hotel'], boleto_aereo: ['aerolinea', 'ruta'] };
+const RV_DETALLE_TOP = { hospedaje: ['hotel', 'habitacion', 'plan'], boleto_aereo: ['aerolinea', 'ruta'] };
+// Cada campo va en su celda de .rv-fila; el calculado (noches) se muestra junto a las fechas (#rv-s-calc).
 const rvCampoDetalle = (k, l, t, det) => t === 'bool'
-  ? `<label class="pv-doc" style="margin-top:10px"><input type="checkbox" data-rv-det="${k}" data-t="bool" ${det[k] ? 'checked' : ''}>${l}</label>`
+  ? `<div class="rv-ancho"><label class="pv-doc" style="margin-top:10px"><input type="checkbox" data-rv-det="${k}" data-t="bool" ${det[k] ? 'checked' : ''}>${l}</label></div>`
   : t === 'calc' ? `<label class="fl">${l}</label><div class="rv-ro" id="rv-s-${k}" data-previo="${esc(det[k] ?? '')}"></div>`
-  : `<label class="fl">${l}</label><input class="ei" data-rv-det="${k}" data-t="${t || ''}" ${t === 'num' ? 'type="number" min="0" step="1"' : 'maxlength="200"'} value="${esc(det[k] ?? '')}">`;
+  : `<div><label class="fl" for="rv-s-det-${k}">${l}</label><input class="ei" id="rv-s-det-${k}" data-rv-det="${k}" data-t="${t || ''}" ${t === 'num' ? 'type="number" min="0" step="1"' : 'maxlength="200"'} value="${esc(det[k] ?? '')}"></div>`;
 function rvDetalleCampos(det) {
   const tipo = val('rv-s-tipo'), arriba = RV_DETALLE_TOP[tipo] || [];
-  document.getElementById('rv-s-detalle').innerHTML = (RV_DETALLE[tipo] || []).filter(([k]) => !arriba.includes(k)).map(([k, l, t]) => rvCampoDetalle(k, l, t, det)).join('');
-  document.getElementById('rv-s-top').innerHTML = tipo === 'hospedaje' ? rvHotelHtml(det) : tipo === 'boleto_aereo' ? rvBoletoRutaHtml(det) : '';
+  const campos = (RV_DETALLE[tipo] || []).filter(([k]) => !arriba.includes(k));
+  const calc = campos.filter(c => c[2] === 'calc'), resto = campos.filter(c => c[2] !== 'calc');
+  document.getElementById('rv-s-calc').innerHTML = calc.map(([k, l, t]) => rvCampoDetalle(k, l, t, det)).join('');
+  document.getElementById('rv-s-detalle').innerHTML = resto.length ? `<div class="rv-sec"><i class="fas fa-list-ul"></i> Detalle</div><div class="rv-fila">${resto.map(([k, l, t]) => rvCampoDetalle(k, l, t, det)).join('')}</div>` : '';
+  document.getElementById('rv-s-top').innerHTML = tipo === 'boleto_aereo' ? rvBoletoRutaHtml(det) : '';
   if (tipo === 'hospedaje') rvHotelInit(det); else if (tipo === 'boleto_aereo') rvBoletoInit();
   rvNochesCampo();
 }
@@ -6356,15 +6443,23 @@ function rvLeerDetalle() {
     if (t === 'bool') { if (x.checked) d[k] = true; }
     else if (x.value.trim() !== '') d[k] = t === 'num' ? Number(x.value) : x.value.trim();
   });
+  // Hospedaje: hotel, habitación y plan salen del estado de los selectores (RV_FORM.hotel) o del apartamento elegido.
+  if (val('rv-s-tipo') === 'hospedaje' && RV_FORM) {
+    if (RV_FORM.hosp === 'apto') d.hotel = rvAptoNombre() || (RV_APTOS[RV_FORM.id] && RV_FORM.hospPrevio) || rvAptoCompNombre(RV_FORM.aptoComp) || 'Apartamento propio';
+    else if (RV_FORM.hotel) for (const [k, v] of [['hotel', RV_FORM.hotel.nombre], ['habitacion', RV_FORM.hotel.hab], ['plan', RV_FORM.hotel.plan]]) if (String(v || '').trim()) d[k] = String(v).trim();
+  }
   return d;
 }
+const rvAptoNombre = () => { const u = RV_APTO_UNI.find(x => String(x.id) === val('rv-s-apto-sel')); return u ? [rvAptoCompNombre(u.proveedor_id), u.nombre].filter(Boolean).join(' · ') : ''; };
 // El formulario reemplaza todo el detalle: lo que no tiene campo propio (las noches) se reenvía para no perderlo,
-// y el producto del tarifario sale del buscador de hotel (RV_FORM.prod: elegido, conservado del guardado o soltado al escribir a mano).
+// y el producto del tarifario sale del buscador de hotel (RV_FORM.hotel.producto_id: elegido, conservado del guardado o soltado al escribir a mano).
 function rvDetalleOculto(id) {
   const previo = (RV_DET.servicios || []).find(x => x.id === id);
   if (val('rv-s-tipo') !== 'hospedaje') return {};
   const o = {}, pd = previo?.detalle || {};
-  if (RV_FORM?.prod) o.producto_id = RV_FORM.prod.id;
+  // En «Apartamento propio» va el producto del complejo, si tiene: con él el servidor resuelve el destino.
+  const prod = RV_FORM?.hosp === 'apto' ? rvAptoProv(RV_FORM.aptoComp)?.producto_id : RV_FORM?.hotel?.producto_id;
+  if (prod) o.producto_id = Number(prod);
   if (pd.noches != null) o.noches = pd.noches;
   return o;
 }
@@ -6403,42 +6498,203 @@ function rvCombo(inp, lista, buscar, pintar, elegir) {
   lista.addEventListener('mousedown', e => e.preventDefault());
   lista.addEventListener('click', e => { const o = e.target.closest('[data-i]'); if (o) elegirItem(items[Number(o.dataset.i)]); });
 }
-function rvHotelHtml(det) {
-  return `<label class="fl" for="rv-s-hotel">Hotel</label>
-    <input class="ei" id="rv-s-hotel" data-rv-det="hotel" data-t="" maxlength="200" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="rv-s-hotel-lista" aria-autocomplete="list" placeholder="Busca en el tarifario o escribe el nombre" value="${esc(det.hotel ?? '')}">
-    <div class="rv-lista" id="rv-s-hotel-lista" role="listbox" hidden></div>
-    <div class="rv-auto" id="rv-s-hotel-auto"></div>`;
-}
-function rvHotelAviso() {
-  const el = document.getElementById('rv-s-hotel-auto'); if (!el) return;
-  const prod = RV_FORM?.prod, texto = val('rv-s-hotel').trim();
-  el.classList.toggle('ok', !!prod);
-  el.innerHTML = prod ? `<i class="fas fa-check"></i><span>Hotel del tarifario${prod.destino ? ' · ' + esc(prod.destino) : ''}. Al guardar se completan solos el destino, el proveedor y las noches.</span>`
-    : `<span>${texto ? 'Hotel fuera del tarifario: elige el destino a mano.' : 'Busca en el tarifario para completar el destino, el proveedor y las noches.'}</span>`;
+// Hospedaje (pedido del dueño 13-nov): «Hotel o posada» se elige del tarifario con los selectores de Cotizaciones
+// (buscador con foto, plan y habitación con foto, precio con cbHotelRecalcular), como ya hace Nueva venta (efHotelPintar);
+// «Apartamento propio» usa apto_disponibilidad. No se mezclan: el selector de apartamento ya no sale con un hotel.
+// En el tarifario no hay campo que separe hotel de posada (todo es tipo 'hotel'): por eso van juntos (OK del dueño).
+// RV_FORM.hotel hace de `it` de Cotizaciones; RV_FORM.hosp = 'tar' | 'apto'.
+function rvHotelHtml() {
+  const apto = RV_FORM?.hosp === 'apto';
+  return `<div class="seg-group seg-group-sm rv-hosp-modo" id="rv-s-hosp-modo" role="group" aria-label="Tipo de hospedaje">${[['tar', 'Hotel o posada'], ['apto', 'Apartamento propio']].map(([k, t]) => `<button class="seg${(k === 'apto') === apto ? ' on' : ''}" type="button" data-rv-hosp="${k}" aria-pressed="${(k === 'apto') === apto}">${t}</button>`).join('')}</div>
+    <div id="rv-s-hosp-tar" ${apto ? 'hidden' : ''}><div class="rv-hotel-campo"></div><div class="rv-hotel-ph"></div><div class="rv-hotel-sug" id="rv-s-hotel-auto" aria-live="polite"></div></div>
+    <div id="rv-s-apto"></div>`;
 }
 // Solo coincidencia exacta de nombre: si no hay, el destino lo resuelve el servidor al guardar.
 const rvDestinoPorNombre = txt => bolNorm(txt) ? (RV_DESTINOS || []).find(d => bolNorm(d.nombre) === bolNorm(txt)) || null : null;
 function rvHotelInit(det) {
-  const inp = document.getElementById('rv-s-hotel'), lista = document.getElementById('rv-s-hotel-lista');
-  const prod = RV_FORM ? (RV_FORM.prod = det.producto_id != null ? { id: Number(det.producto_id), nombre: String(det.hotel || ''), destino: '' } : null) : null;
-  if (prod) ssProductosHotel().then(l => { const p = l.find(x => x.id === prod.id); if (p && RV_FORM?.prod === prod) { prod.destino = p.destino || ''; rvHotelAviso(); } });
-  rvCombo(inp, lista, async q => {
-    const n = bolNorm(q); if (n.length < 2) return [];
-    const toks = n.split(/\s+/), hoteles = await ssProductosHotel();
-    return hoteles.filter(h => { const t = bolNorm(`${h.nombre} ${h.destino || ''}`); return toks.every(k => t.includes(k)); })
-      .sort((a, b) => Number(bolNorm(b.nombre).startsWith(n)) - Number(bolNorm(a.nombre).startsWith(n))).slice(0, 6);
-  }, h => `<span><b>${esc(h.nombre)}</b></span><small>${esc(h.destino || '')}${h.destino ? ' · ' : ''}Tarifario</small>`, h => {
-    inp.value = h.nombre;
-    if (RV_FORM) RV_FORM.prod = { id: h.id, nombre: h.nombre, destino: h.destino || '' };
-    const d = rvDestinoPorNombre(h.destino), sel = document.getElementById('rv-s-destino');
-    if (d && sel) sel.value = String(d.id);
-    rvDescAuto(h.nombre); rvHotelAviso();
+  if (!RV_FORM) return;
+  RV_FORM.hosp ??= RV_FORM.id && RV_APTOS[RV_FORM.id] ? 'apto' : 'tar';
+  RV_FORM.hospPrevio ??= String(det.hotel || '');
+  RV_FORM.aptoUni ??= RV_FORM.id && RV_APTOS[RV_FORM.id] ? String(RV_APTOS[RV_FORM.id].apartamento_id) : '';
+  RV_APTO_UNI = [];
+  const top = document.getElementById('rv-s-top'); top.innerHTML = rvHotelHtml();
+  // Lo guardado manda: la habitación no se recalcula sola (habitacion_manual) aunque haya otra con precio.
+  const nuevo = !RV_FORM.hotel;
+  const st = RV_FORM.hotel ??= { tipo: 'hotel', i: 'rv', nombre: RV_FORM.hosp === 'apto' ? '' : String(det.hotel || ''), producto_id: det.producto_id != null ? Number(det.producto_id) : null,
+    plan: String(det.plan || ''), hab: String(det.habitacion || ''), habitacion_manual: !!det.habitacion, plan_libre: false, hab_libre: false,
+    habitaciones: 1, infantes: 0, unidad: '', _cargando: false, _tarifaError: false, carga: 0 };
+  rvHotelEventos(top);
+  rvHotelPintar(true);
+  // La foto del hotel llega con el catálogo de Cotizaciones: se repinta solo el buscador, sin cerrar los selectores.
+  cbCargarProductos().then(() => {
+    const campo = document.querySelector('#rv-s-top .rv-hotel-campo');
+    if (campo && RV_FORM?.hotel === st && st.producto_id && document.activeElement?.id !== 'cb-hotel-rv') campo.innerHTML = cbHotelHtml(st, st.i);
+    if (RV_FORM?.hotel === st && RV_FORM.hosp === 'apto' && RV_APTO_UNI.length && !document.querySelector('#rv-s-apto .cb-picker-lista:not([hidden])')) rvAptoPintar();
   });
-  inp.addEventListener('input', () => {
-    if (RV_FORM?.prod && bolNorm(inp.value) !== bolNorm(RV_FORM.prod.nombre)) RV_FORM.prod = null;
-    rvDescAuto(inp.value.trim()); rvHotelAviso();
+  // Servicio guardado con un complejo de apartamentos como hotel: abre en «Apartamento propio» (si el vínculo aún no cargó, al llegar).
+  if (!RV_APTO_PROVS) rvAptoProvsCargar().then(() => { if (RV_FORM?.hotel === st) rvHotelAComplejo(st, false); });
+  else if (rvHotelAComplejo(st, false)) return;
+  if (nuevo && st.producto_id) rvHotelCargar(st, false); else rvHotelSugerir();
+}
+function rvHotelPintar(conHotel) {
+  const st = RV_FORM?.hotel, campo = document.querySelector('#rv-s-top .rv-hotel-campo'), ph = document.querySelector('#rv-s-top .rv-hotel-ph');
+  if (!st || !campo || !ph) return;
+  if (conHotel) campo.innerHTML = cbHotelHtml(st, st.i);
+  ph.innerHTML = st.producto_id
+    ? cbHotelSelectorHtml(st, st.i, 'plan', 'Plan') + cbHotelSelectorHtml(st, st.i, 'hab', 'Habitación')
+      + (st._tarifaError ? '<button type="button" class="btn-sm" data-rv-hotel-reintentar>Reintentar tarifas</button>' : '')
+    : `<div class="field"><label class="fl" for="cb-hab-rv">Habitación</label><input class="ei" id="cb-hab-rv" data-k="hab" maxlength="200" autocomplete="off" value="${esc(st.hab)}"></div>
+      <div class="field"><label class="fl" for="cb-plan-rv">Plan</label><input class="ei" id="cb-plan-rv" data-k="plan" maxlength="200" autocomplete="off" placeholder="Ej.: desayuno" value="${esc(st.plan)}"></div>`;
+}
+async function rvHotelCargar(st, elegir) {
+  const carga = ++st.carga;
+  Object.assign(st, { _cargando: true, _tarifaError: false });
+  rvHotelPintar(); rvHotelSugerir();
+  try {
+    await Promise.all([cbTraerTarifas(st.producto_id), cbTraerHabitaciones(st.producto_id)]);
+    if (st.carga !== carga) return;
+    if (elegir) {
+      st.plan = cbTarOpciones(cbHotelFilas(st), 'plan')[0] || '';
+      st.hab = cbTarOpciones(cbTarDelPlan(cbHotelFilas(st), st.plan), 'habitacion')[0] || '';
+    }
+  } catch (error) {
+    console.error('rvHotelCargar', error);
+    if (st.carga === carga) st._tarifaError = true;
+  } finally {
+    if (st.carga === carga) { st._cargando = false; if (RV_FORM?.hotel === st) { rvHotelSugerir(); rvHotelPintar(); } }
+  }
+}
+function rvHotelElegir(id) {
+  const st = RV_FORM?.hotel, p = cbHoteles.get(Number(id)); if (!st || !p) return;
+  Object.assign(st, { nombre: p.nombre, producto_id: Number(p.id), plan: '', hab: '', plan_libre: false, hab_libre: false, habitacion_manual: false, tarifa_variante: '', variante_auto: false,
+    habitaciones: 1, habitaciones_auto: false, unidad: '', unidad_manual: false, tramos: [], tarifa: '', _sugerencia: null });
+  const d = rvDestinoPorNombre(p.destino), sel = document.getElementById('rv-s-destino');
+  if (d && sel) sel.value = String(d.id);
+  if (rvHotelAComplejo(st, true)) { document.querySelector('#rv-s-hosp-modo [data-rv-hosp="apto"]')?.focus(); return; }
+  rvDescAuto(p.nombre);
+  rvHotelPintar(true);
+  rvHotelCargar(st, true);
+}
+function rvHabElegir(op) {
+  const st = RV_FORM?.hotel; if (!st) return;
+  cbHotelCambiarOpcion(st, 'hab', op.dataset.cbHab); rvHotelSugerir(); rvHotelPintar();
+  document.getElementById(st.hab_libre ? 'cb-hab-rv-manual' : 'cb-hab-rv')?.focus();
+}
+// Precio del tarifario con el mismo motor de Cotizaciones (cbHotelRecalcular + cbImporte), en USD.
+// Servicio nuevo: se escribe solo en «Monto» hasta que la persona lo cambie. Servicio guardado: solo el botón «Usar».
+function rvHotelSugerir() {
+  const st = RV_FORM?.hotel, el = document.getElementById('rv-s-hotel-auto');
+  if (!st || !el || RV_FORM.hosp === 'apto' || val('rv-s-tipo') !== 'hospedaje') return;
+  const pinta = (ok, html) => { el.classList.toggle('ok', ok); el.innerHTML = html; };
+  if (!st.producto_id) return pinta(false, st.nombre.trim() ? 'Fuera del tarifario: elige el destino y escribe el precio a mano.' : 'Busca el hotel o la posada: trae la foto, el plan, la habitación y el precio del tarifario.');
+  if (st._cargando) return pinta(false, 'Cargando tarifas…');
+  if (st._tarifaError) return pinta(false, 'No se pudieron cargar las tarifas: reintenta o escribe el plan, la habitación y el precio.');
+  if (st.plan_libre || st.hab_libre) return pinta(false, 'Plan o habitación escritos a mano: el precio va a mano.');
+  Object.assign(st, { ida: val('rv-s-inicio'), vuelta: val('rv-s-fin'), adultos: Number(val('rv-s-adultos')) || 0, ninos: Number(val('rv-s-ninos')) || 0 });
+  if (!st.ida || !st.vuelta) return pinta(false, 'Pon la entrada y la salida para sacar el precio del tarifario.');
+  if (!st.adultos) return pinta(false, 'Pon los adultos para sacar el precio del tarifario.');
+  const hab = st.hab;
+  cbHotelRecalcular(st);
+  if (st.hab !== hab) rvHotelPintar();
+  if (!st.tramos?.length) return pinta(false, esc(st._aviso || 'Sin precio en el tarifario para estas fechas: escríbelo a mano.'));
+  const total = cbImporte(st), precio = document.getElementById('rv-s-precio'), noches = +cbNoches(st.ida, st.vuelta) || 0;
+  if (precio && (precio.dataset.auto === '1' || (!RV_FORM.id && precio.value === ''))) {
+    if (val('rv-s-moneda') === 'USD' && Number(precio.value) !== total) { precio.value = total.toFixed(2); precio.dataset.auto = '1'; precio.dispatchEvent(new Event('input', { bubbles: true })); }
+  }
+  const usado = val('rv-s-moneda') === 'USD' && Math.abs(Number(precio?.value || 0) - total) < 0.005;
+  const datos = [cbNochesTexto(noches), st.hab, cbHabitaciones(st) > 1 ? cbHabitacionesTexto(st) : ''].filter(Boolean).map(esc).join(' · ');
+  const avisos = (st.tarifa_avisos || []).slice(0, 3);
+  pinta(true, `<div class="rv-hotel-sug-fila"><span>Tarifario: <b>$${cbMonto(total)}</b> · ${datos}</span>${usado ? '<span class="rv-hotel-sug-usado">En el monto</span>' : '<button type="button" class="btn-sm" data-rv-hotel-usar>Usar este precio</button>'}</div>${avisos.length ? `<ul>${avisos.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}`);
+}
+function rvHotelUsarPrecio() {
+  const st = RV_FORM?.hotel, precio = document.getElementById('rv-s-precio'), mon = document.getElementById('rv-s-moneda');
+  if (!st?.tramos?.length || !precio || !mon) return;
+  if (mon.value !== 'USD') { mon.value = 'USD'; mon.onchange?.(); }
+  precio.value = cbImporte(st).toFixed(2); precio.dataset.auto = '1';
+  precio.dispatchEvent(new Event('input', { bubbles: true }));
+  rvHotelSugerir();
+}
+function rvHospModo(m) {
+  if (!RV_FORM || RV_FORM.hosp === m) return;
+  RV_FORM.hosp = m;
+  document.querySelectorAll('#rv-s-hosp-modo [data-rv-hosp]').forEach(b => { const on = b.dataset.rvHosp === m; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+  document.getElementById('rv-s-hosp-tar').hidden = m === 'apto';
+  rvAptoCampo();
+  if (m === 'tar') { rvDescAuto(RV_FORM.hotel?.nombre || ''); rvHotelSugerir(); } else rvAptoDesc();
+}
+const rvEsComplejo = p => !!rvAptoCompDeProducto(p.id);
+// Mismos manejadores que Nueva venta (#ef-servicios), sobre #rv-s-top; una sola vez por formulario pintado.
+function rvHotelEventos(top) {
+  if (top._rvHosp) return;
+  top._rvHosp = true;
+  const estado = () => val('rv-s-tipo') === 'hospedaje' ? RV_FORM?.hotel || null : null;
+  top.addEventListener('error', e => { if (e.target.matches?.('.cb-hotel-foto')) e.target.remove(); }, true);
+  top.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target, rvEsComplejo); });
+  top.addEventListener('focusout', e => {
+    if (e.target.matches?.('[data-rv-apto-abrir]') && !e.target.parentElement.contains(e.relatedTarget)) { rvAptoCerrar(e.target); return; }
+    if (e.target.dataset.busca !== 'hotel') return;
+    e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false');
   });
-  rvHotelAviso();
+  top.addEventListener('pointerdown', e => {
+    if (e.target.closest('[data-cb-hab],[data-rv-apto-comp],[data-rv-apto-uni]')) { e.preventDefault(); return; }
+    const op = e.target.closest('[data-cb-hotel]');
+    if (op) { e.preventDefault(); rvHotelElegir(op.dataset.cbHotel); cbTragarClickFantasma(); }
+  });
+  top.addEventListener('keydown', e => {
+    const t = e.target;
+    if (t.matches('[data-rv-apto-abrir]')) {
+      const op = t.nextElementSibling;
+      if (e.key === 'Tab') { rvAptoCerrar(t); return; }
+      if ((e.key === 'Enter' || e.key === ' ') && op.hidden) { e.preventDefault(); op.hidden = false; t.setAttribute('aria-expanded', 'true'); return; }
+      cbPickerTeclas(e, op, o => o.dataset.rvAptoComp != null ? rvAptoElegirComp(o) : rvAptoElegirUni(o)); return;
+    }
+    if (t.matches('[data-cb-hab-abrir]')) {
+      const box = t.closest('.cb-picker'), op = box.querySelector('.cb-picker-lista');
+      if (e.key === 'Tab' || e.key === 'Escape') { cbHabCerrar(box); return; }
+      if ((e.key === 'Enter' || e.key === ' ') && op.hidden) { e.preventDefault(); op.hidden = false; t.setAttribute('aria-expanded', 'true'); return; }
+      cbPickerTeclas(e, op, rvHabElegir); return;
+    }
+    if (t.dataset.busca === 'hotel') cbPickerTeclas(e, t.parentElement.querySelector('.cb-picker-lista'), op => rvHotelElegir(op.dataset.cbHotel));
+  });
+  top.addEventListener('click', e => {
+    const t = e.target, modo = t.closest('[data-rv-hosp]');
+    if (modo) { rvHospModo(modo.dataset.rvHosp); return; }
+    const aptoAbrir = t.closest('[data-rv-apto-abrir]');
+    if (aptoAbrir) { const op = aptoAbrir.nextElementSibling; op.hidden = !op.hidden; aptoAbrir.setAttribute('aria-expanded', String(!op.hidden)); return; }
+    const comp = t.closest('[data-rv-apto-comp]'); if (comp) { rvAptoElegirComp(comp); return; }
+    const uni = t.closest('[data-rv-apto-uni]'); if (uni) { rvAptoElegirUni(uni); return; }
+    const st = estado(); if (!st) return;
+    const hab = t.closest('[data-cb-hab]'); if (hab) { rvHabElegir(hab); return; }
+    const abrir = t.closest('[data-cb-hab-abrir]');
+    if (abrir) { const op = abrir.parentElement.querySelector('.cb-picker-lista'); op.hidden = !op.hidden; abrir.setAttribute('aria-expanded', String(!op.hidden)); return; }
+    const plan = t.closest('[data-cb-plan]');
+    if (plan) { cbHotelCambiarOpcion(st, 'plan', plan.dataset.cbPlan); rvHotelSugerir(); rvHotelPintar(); if (st.plan_libre) document.getElementById('cb-plan-rv-manual')?.focus(); return; }
+    const hotel = t.closest('[data-cb-hotel]'); if (hotel) { rvHotelElegir(hotel.dataset.cbHotel); return; }
+    if (t.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(st, st.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
+    if (t.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(st.producto_id).then(() => rvHotelPintar()); return; }
+    if (t.closest('[data-rv-hotel-reintentar]')) { rvHotelCargar(st, false); return; }
+    if (t.closest('[data-rv-hotel-usar]')) rvHotelUsarPrecio();
+  });
+  top.addEventListener('change', e => {
+    const sel = e.target.closest('select[data-cb-campo]'), st = estado(); if (!sel || !st) return;
+    cbHotelCambiarOpcion(st, sel.dataset.cbCampo, sel.value);
+    rvHotelSugerir(); rvHotelPintar();
+    if (st[sel.dataset.cbCampo + '_libre']) document.getElementById(`cb-${sel.dataset.cbCampo}-rv-manual`)?.focus();
+  });
+  top.addEventListener('input', e => {
+    const t = e.target, st = estado(), k = t.dataset.k;
+    if (!st || !['nombre', 'hab', 'plan'].includes(k)) return;
+    st[k] = t.value;
+    if (k === 'nombre') {
+      if (st.producto_id) {
+        top.querySelector('.cb-hotel-foto')?.remove();
+        Object.assign(st, { producto_id: null, carga: st.carga + 1, _cargando: false, _tarifaError: false, plan: '', hab: '', plan_libre: false, hab_libre: false, habitacion_manual: false, tramos: [], _sugerencia: null });
+        rvHotelPintar();
+      }
+      cbHotelBuscar(t, rvEsComplejo); rvDescAuto(t.value.trim());
+    }
+    rvHotelSugerir();
+  });
 }
 // Lo escrito en origen o destino -> código IATA: tres letras tal cual, o el aeropuerto único cuya ciudad o nombre coincida.
 function rvIataDe(txt) {
@@ -6565,9 +6821,12 @@ async function rvGuardarServicio(btn) {
   const pago = rvVista() !== 'boleteria' ? rvPagoLeer() : null;
   if (pago?.error) { err.textContent = pago.error; return; }
   // Apartamento: solo si el selector está en pantalla (si no cargó, no se toca lo asignado).
-  const selApto = rvVista() !== 'boleteria' && datos.tipo === 'hospedaje' ? document.getElementById('rv-s-apto-sel') : null;
-  const tenia = id ? RV_APTOS[id] : null, quiere = selApto?.value || '';
-  const cambia = !!(tenia && selApto && quiere !== String(tenia.apartamento_id));
+  const hosp = rvVista() !== 'boleteria' && datos.tipo === 'hospedaje';
+  const selApto = hosp ? document.getElementById('rv-s-apto-sel') : null;
+  // Pasado a «Hotel o posada»: el apartamento que tuviera se libera (un hotel no ocupa un apartamento propio).
+  const aHotel = hosp && RV_FORM?.hosp === 'tar';
+  const tenia = id ? RV_APTOS[id] : null, quiere = aHotel ? '' : selApto?.value || '';
+  const cambia = !!(tenia && (selApto || aHotel) && quiere !== String(tenia.apartamento_id));
   // Si cambia o quita el apartamento, se libera antes: así el trigger no rechaza las fechas nuevas por chocar en el apartamento viejo.
   if (cambia) {
     const l = await sb.rpc('liberar_apartamento', { p_servicio_id: id });
@@ -13151,6 +13410,72 @@ const EF_ERRORES = {
   otro_no_combina: 'No se puede combinar "Otro" con otro tipo de venta',
 };
 
+/* Quiénes viajan: una fila por persona (adultos + niños, mínimo 1). Al repintar se conserva lo ya
+   escrito. La primera fila es el titular; si el lead tiene nombre y apellido / cédula, se precargan. */
+function efPintarViajeros(lead) {
+  const cont = document.getElementById('ef-viajeros');
+  if (!cont) return;
+  const prev = [...cont.querySelectorAll('.ef-viajero')].map(f => ({ n: f.querySelector('[data-v="n"]').value, c: f.querySelector('[data-v="c"]').value }));
+  if (lead) {
+    prev.length = 0;
+    const nom = String(lead.nombre || '').trim().replace(/\s+/g, ' ');
+    prev.push({ n: nom.includes(' ') ? nom : '', c: lead.cedula || '' });
+  }
+  const ad = Math.max(0, parseInt(val('ef-adultos'), 10) || 0), ni = Math.max(0, parseInt(val('ef-ninos'), 10) || 0);
+  const total = Math.min(30, Math.max(1, ad + ni)), nAd = ad + ni ? ad : 1;
+  cont.innerHTML = Array.from({ length: total }, (_, i) => {
+    const nino = i >= nAd, k = nino ? i - nAd + 1 : i + 1;
+    const etiqueta = nino ? `Niño ${k}` : (i === 0 ? 'Adulto 1 (titular)' : `Adulto ${k}`);
+    return `<div class="ef-viajero ef-fila" data-nino="${nino ? 1 : 0}">
+      <div style="flex:3"><label class="fl-sub">${etiqueta}</label><input data-v="n" class="ei" placeholder="Nombre y apellido" autocomplete="off" value="${esc(prev[i]?.n || '')}"></div>
+      <div style="flex:2"><label class="fl-sub">Cédula${nino ? ' (si tiene)' : ''}</label><input data-v="c" class="ei" placeholder="V-12.345.678" autocomplete="off" value="${esc(prev[i]?.c || '')}"></div>
+    </div>`;
+  }).join('');
+}
+['ef-adultos', 'ef-ninos'].forEach(id => document.getElementById(id)?.addEventListener('input', () => efPintarViajeros()));
+function efLeerViajeros() {
+  const filas = [...document.querySelectorAll('#ef-viajeros .ef-viajero')];
+  const viajeros = [];
+  for (const f of filas) {
+    const n = f.querySelector('[data-v="n"]'), c = f.querySelector('[data-v="c"]');
+    const nom = n.value.trim().replace(/\s+/g, ' '), ced = c.value.trim(), nino = f.dataset.nino === '1';
+    if (!nom) { n.focus(); return { error: 'Escribe el nombre de cada persona que viaja' }; }
+    if (!nino && !/\d/.test(ced)) { c.focus(); return { error: `Falta la cédula de ${nom}` }; }
+    viajeros.push({ nom, ced });
+  }
+  return { viajeros };
+}
+// Cédula venezolana (V-/E- + dígitos) se normaliza; cualquier otra cosa se guarda como pasaporte.
+function efDatosViajero({ nom, ced }) {
+  const i = nom.indexOf(' ');
+  const esCed = /^[VvEe]?[\s.-]*\d[\d.\s]*$/.test(ced);
+  return {
+    nombre: i < 0 ? nom : nom.slice(0, i), apellido: i < 0 ? '' : nom.slice(i + 1).trim(),
+    tipo_documento: !ced || esCed ? 'cedula' : 'pasaporte',
+    numero_documento: !ced ? '' : esCed ? rvDocMostrar(ced, 'cedula') : ced.toUpperCase().replace(/\s+/g, ''),
+  };
+}
+// La RPC ya crea un titular con nombre y teléfono del lead: ese se completa en vez de duplicarlo.
+// Los que ya están cargados con el mismo documento se saltan (reserva existente). Devuelve fallos.
+async function efGuardarViajeros(reservaId, viajeros) {
+  const { data } = await sb.rpc('reserva_detalle', { p_reserva_id: reservaId });
+  const existentes = data?.pasajeros || [];
+  const docs = new Set(existentes.map(p => String(p.numero_documento || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase()).filter(Boolean));
+  const autoTitular = existentes.find(p => p.titular && !p.numero_documento);
+  let hayTitular = existentes.some(p => p.titular), fallos = 0;
+  for (const [i, v] of viajeros.entries()) {
+    const datos = efDatosViajero(v);
+    const clave = datos.numero_documento.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+    if (clave && docs.has(clave)) continue;
+    let id = null;
+    if (i === 0 && autoTitular) { id = autoTitular.id; datos.titular = true; }
+    else { datos.titular = !hayTitular; }
+    hayTitular ||= datos.titular;
+    const { data: r, error } = await sb.rpc('guardar_pasajero', { p_reserva_id: reservaId, p_pasajero_id: id, p_datos: datos });
+    if (error || !r?.ok) { fallos++; console.error('guardar_pasajero', error || r); }
+  }
+  return fallos;
+}
 async function abrirEnviarFacturacionSheet(l) {
   EF_LEAD_ACTUAL = l; EF_COMPROBANTE = null;
   document.getElementById('ef-comp-previa')?.remove();
@@ -13162,6 +13487,7 @@ async function abrirEnviarFacturacionSheet(l) {
   ['ef-adultos', 'ef-ninos', 'ef-referencia', 'ef-monto-pagado',
    'ef-monto-total', 'ef-notas'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   document.getElementById('ef-metodo').value = '';
+  efPintarViajeros(l);
   document.getElementById('ef-abono').className = 'ef-abono';
   efComprobanteEstado('');
   EF_SOLICITUD = crypto.randomUUID();
@@ -13192,6 +13518,7 @@ function efAvisoPrecarga(texto) {
   document.getElementById('ef-precarga-limpiar').addEventListener('click', () => {
     av.remove();
     ['ef-adultos', 'ef-ninos'].forEach(id => { document.getElementById(id).value = ''; });
+    efPintarViajeros();
     document.getElementById('ef-servicios').innerHTML = ''; efAgregarServicio('hospedaje');
   });
 }
@@ -13232,6 +13559,7 @@ async function efPrecargar(l, solicitud) {
     if (maximo('adultos')) document.getElementById('ef-adultos').value = maximo('adultos');
     if (maximo('ninos')) document.getElementById('ef-ninos').value = maximo('ninos');
     efAvisoPrecarga(`Precargado desde la cotización${cot.numero ? ' ' + cot.numero : ''} del ${fechaCorta(String(cot.created_at).slice(0, 10))}`);
+    efPintarViajeros();
     efRecalcular();
     return;
   }
@@ -13239,7 +13567,7 @@ async function efPrecargar(l, solicitud) {
   if (!card || !(fecha(l.fecha_viaje_desde) || personas > 0)) return;
   efPonerCampo(card, 'f1', fecha(l.fecha_viaje_desde));
   if (fecha(l.fecha_viaje_desde)) efPonerCampo(card, 'f2', fecha(l.fecha_viaje_hasta));
-  if (personas > 0) document.getElementById('ef-adultos').value = personas;
+  if (personas > 0) { document.getElementById('ef-adultos').value = personas; efPintarViajeros(); }
   efAvisoPrecarga('Precargado con las fechas y personas del lead (no hay cotización)');
 }
 
@@ -13617,6 +13945,15 @@ window.addEventListener('popstate', selLotusCerrar);
     const hab = t.closest('[data-cb-hab]'); if (hab) { efHabElegir(hab); return; }
     const abrir = t.closest('[data-cb-hab-abrir]');
     if (abrir) { const op = abrir.parentElement.querySelector('.cb-picker-lista'); op.hidden = !op.hidden; abrir.setAttribute('aria-expanded', String(!op.hidden)); return; }
+    // Chips de plan (≤4 planes): lo mismo que el <select> de plan en 'change'.
+    const plan = t.closest('[data-cb-plan]');
+    if (plan) {
+      cbHotelCambiarOpcion(st, 'plan', plan.dataset.cbPlan);
+      if (!st.plan_libre) st.hab = cbTarOpciones(cbTarDelPlan(cbHotelFilas(st), st.plan), 'habitacion')[0] || '';
+      efHotelPintar(card);
+      if (st.plan_libre) document.getElementById(`cb-plan-${st.i}-manual`)?.focus();
+      return;
+    }
     const hotel = t.closest('[data-cb-hotel]'); if (hotel) { efHotelElegir(card, hotel.dataset.cbHotel); return; }
     if (t.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(st, st.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
     if (t.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(st.producto_id).then(() => efHotelPintar(card)); return; }
@@ -13766,6 +14103,8 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   err.textContent = '';
   const { servicios, error: errServ } = efLeerServicios();
   if (errServ) { err.textContent = errServ; return; }
+  const { viajeros, error: errViaj } = efLeerViajeros();
+  if (errViaj) { err.textContent = errViaj; return; }
   const pagado = num('ef-monto-pagado') ?? 0; // vacío = todavía no pagó
   if (pagado > 0 && !val('ef-metodo')) { err.textContent = EF_ERRORES.falta_metodo_pago; return; }
   if (pagado > 0 && !val('ef-referencia')) { err.textContent = EF_ERRORES.referencia_requerida; return; }
@@ -13783,12 +14122,16 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
     p_notas: val('ef-notas') || null,
     p_solicitud_id: EF_SOLICITUD,
   });
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
   if (error || !data?.ok) {
+    btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
     const clave = data?.error;
     err.textContent = 'No se pudo crear la reserva: ' + (EF_ERRORES[clave] || error?.message || clave || '');
     return;
   }
+  // Los pasajeros van aparte: si alguno falla la reserva ya existe y se completa desde su pestaña Pasajeros.
+  const fallosPax = await efGuardarViajeros(data.reserva_id, viajeros).catch(e => { console.error('efGuardarViajeros', e); return viajeros.length; });
+  btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
+  if (fallosPax) errToast?.(`Reserva ${data.codigo} creada, pero ${fallosPax === 1 ? 'un pasajero no se guardó' : fallosPax + ' pasajeros no se guardaron'}: cárgalos en la reserva`);
   closeSheet('enviar-facturacion-sheet');
   if (EF_COMPROBANTE && pagado > 0) WB?.marcarComprobante(EF_COMPROBANTE, 'registrado');
   if (currentSec === 'postventa') loadPostventa();
@@ -36545,7 +36888,8 @@ const cbHotelDestinoOrden = p => {
   const destino = cbTarNorm(p.destino);
   return destino.includes('margarita') ? 0 : destino.includes('los roques') ? 1 : 2;
 };
-function cbHotelBuscar(inp) {
+// esApto (solo Reservas): complejo de apartamentos propios del tarifario; se rotula así y no como hotel o posada.
+function cbHotelBuscar(inp, esApto) {
   const box = inp.parentElement.querySelector('.cb-picker-lista'), q = cbTarNorm(inp.value);
   const lista = [...cbHoteles.values()].filter(p => p.tipo === 'hotel' && cbTarNorm(p.nombre + ' ' + (p.destino || '')).includes(q))
     .sort((a, b) => Number(cbHotSalesOrden.has(Number(b.id))) - Number(cbHotSalesOrden.has(Number(a.id)))
@@ -36553,8 +36897,8 @@ function cbHotelBuscar(inp) {
       || (cbHotSalesOrden.get(Number(a.id)) ?? Infinity) - (cbHotSalesOrden.get(Number(b.id)) ?? Infinity)
       || a.nombre.localeCompare(b.nombre, 'es'));
   box.innerHTML = lista.length ? lista.map(p => {
-    const f = ordenarFotos(p.producto_fotos || [])[0];
-    return `<button type="button" role="option" data-cb-hotel="${p.id}">${f ? `<img src="${esc(fotoMini(f.storage_path, 256))}" width="44" height="44" alt="" loading="lazy" onerror="this.hidden=true">` : '<i class="fas fa-hotel" aria-hidden="true"></i>'}<span><b>${esc(p.nombre)}</b><small>${esc(p.destino || 'Hotel o posada')}</small></span></button>`;
+    const f = ordenarFotos(p.producto_fotos || [])[0], apto = esApto?.(p);
+    return `<button type="button" role="option" data-cb-hotel="${p.id}">${f ? `<img src="${esc(fotoMini(f.storage_path, 256))}" width="44" height="44" alt="" loading="lazy" onerror="this.hidden=true">` : `<i class="fas ${apto ? 'fa-door-open' : 'fa-hotel'}" aria-hidden="true"></i>`}<span><b>${esc(p.nombre)}</b><small>${esc(apto ? ['Apartamento propio', p.destino].filter(Boolean).join(' · ') : p.destino || 'Hotel o posada')}</small></span></button>`;
   }).join('') : '<div class="cb-picker-vacio">Sin coincidencias. Puedes escribir el hotel manualmente.</div>';
   box.hidden = false; inp.setAttribute('aria-expanded', 'true');
 }
@@ -41403,6 +41747,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-13', emoji: '↕️', titulo: 'Ordenar los abonos del voucher', texto: 'En Reservas › Abonos cada abono muestra su puesto (1°, 2°...) y cuánto lleva abonado del total. Arrastra el abono desde su número para cambiar el orden: el voucher sale con los abonos en ese orden.', roles: ['admin', 'administrativo', 'asesor'] },
+  { fecha: '2026-11-13', emoji: '🏨', titulo: 'Servicio de la reserva más compacto', texto: 'El formulario de servicio de la reserva ocupa menos: campos en filas, secciones con título y Guardar siempre a la vista abajo. El hospedaje se elige del tarifario («Hotel o posada», con precio sugerido) o como «Apartamento propio». En Nueva venta se cargan los viajeros uno por uno y quedan como pasajeros de la reserva.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-12', emoji: '💵', titulo: 'Saldo a favor al anular un servicio', texto: 'Si anulas un servicio de una reserva y lo que el cliente ya abonó supera el nuevo total, la reserva ya no se bloquea: la diferencia queda como «Saldo a favor» de ese cliente en la tarjeta, el resumen y los abonos. Los pagos registrados no se tocan ni se duplican.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-12', emoji: '🔀', titulo: 'Reasignar solicitudes de boletería', texto: 'Administración puede tocar «Reasignar» en una solicitud de boletería abierta (en la tarjeta o en el detalle) y pasarla a otro agente: automático al que tenga menos carga o eligiendo uno de la lista. El borrador se conserva y el nuevo agente sigue la misma solicitud.', roles: ['admin'] },
   { fecha: '2026-11-11', emoji: '🧾', titulo: 'Lyra genera la cotización completa', texto: 'Pídele a Lyra «hazme la cotización de este cliente en tal hotel, del 10 al 14, 2 adultos» y la genera igual que la sección Cotizaciones: número COT, PDF, queda en el historial y el lead pasa a Cotización enviada. En el chat te deja botones para abrir el PDF, mandarlo por WhatsApp o verla en Cotizaciones. Si falta un dato (tarifa de niños, fechas cerradas), te avisa y la deja armada en Cotizaciones para que la termines.', roles: ['asesor', 'admin'] },

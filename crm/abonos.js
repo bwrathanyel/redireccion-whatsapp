@@ -40,6 +40,7 @@ const ERRORES = {
   voucher_no_leido: 'No se pudo leer el voucher de la reserva. Toca «Reintentar documentos».',
   servicio_invalido: 'Ese servicio ya no está en la reserva. Recarga la reserva y elige otro.',
   posible_duplicado: 'Ya hay un pago con ese monto y esa referencia en las últimas 48 horas.',
+  orden_desactualizado: 'Los abonos cambiaron mientras los ordenabas: se recargó la lista, vuelve a ordenarlos.',
 };
 const TIPO_SERV = { hospedaje: 'Hospedaje', boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', full_day: 'Full day', seguro: 'Seguro', otro: 'Otro' };
 // El abono en Bs se cobra a la tasa que se elija (pedido del dueño 30-oct); USDT es Binance P2P.
@@ -85,7 +86,23 @@ const CSS = `
 .ab-mini i{margin-right:3px}
 .ab-docs{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;border-radius:6px;background:#fdf3e6;color:#a56a12}
 .ab-docs.fallo{background:#fdeceb;color:#a72b1f}
+.ab-orden-tit{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;margin:0 0 7px;font-size:11px;color:var(--muted)}
+.ab-orden-tit b{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.ab-lista + .ab-lista{margin-top:9px}
+.ab-fila.ab-mov{display:flex;gap:9px;align-items:flex-start;position:relative}
+.ab-cuerpo{flex:1;min-width:0}
+.ab-asa{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:34px;padding:4px 0;border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--muted);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.ab-asa:hover,.ab-asa:focus-visible{color:var(--txt);border-color:var(--accent)}
+.ab-asa b{font-size:12px;font-weight:800;color:var(--txt)}
+.ab-asa i{font-size:11px}
+.ab-asa:disabled{cursor:default;opacity:.6}
+.ab-pos{flex:0 0 auto;min-width:34px;padding:4px 0;text-align:center;font-size:12px;font-weight:800;border:1px solid var(--line2);border-radius:8px}
+.ab-acum{margin:4px 0 0;font-size:11px;color:var(--txt)}
+.ab-acum span{color:var(--muted)}
+.ab-fila.ab-arrastrando{z-index:2;border-color:var(--accent);box-shadow:0 10px 24px rgba(0,0,0,.18);cursor:grabbing}
+.ab-fila.ab-arrastrando .ab-asa{cursor:grabbing;color:var(--accent-ink);border-color:var(--accent)}
 @media (max-width:420px){.ab-grid{grid-template-columns:1fr}}
+@media (max-width:760px){.ab-asa{min-width:44px;min-height:44px;justify-content:center}}
 @media (max-width:760px){.ab-fila-acc{gap:12px}.ab-mini,.ab-anular{min-height:44px;padding:0 14px;font-size:13px;display:inline-flex;align-items:center}.ab-anular{border:1px solid color-mix(in srgb,var(--danger) 45%,transparent);border-radius:7px}}
 `;
 
@@ -148,6 +165,8 @@ export function crearAbonos(c) {
         actualizarTasa();
       }
     };
+    p.onpointerdown = arrastrar;
+    p.onkeydown = moverConTeclado;
     p.oninput = e => {
       if (['ab-monto', 'ab-moneda', 'ab-tasa-manual'].includes(e.target.id)) actualizarTasa();
     };
@@ -205,11 +224,17 @@ export function crearAbonos(c) {
     </div>`;
   }
   const btnComprobante = a => a.comprobante_path ? `<button class="ab-mini" type="button" data-ab-accion="comprobante" data-path="${esc(a.comprobante_path)}"><i class="fas fa-receipt"></i>Comprobante</button>` : '';
-  function filaHtml(a) {
+  // Vigentes con su puesto en el voucher (1°, 2°...) y lo que lleva abonado hasta ese abono.
+  // `mover`: se puede arrastrar (más de uno y sin el formulario abierto, que pintar() borraría).
+  function filaHtml(a, pos = 0, acum = 0, mover = false) {
     const ref = a.referencia ? ` · ${esc(a.referencia)}` : a.comprobante_path ? ' · captura adjunta' : '';
     const servs = est.datos?.servicios || [];
     const serv = servs.length > 1 && a.servicio_id ? servs.find(s => Number(s.id) === Number(a.servicio_id)) : null;
-    return `<li class="ab-fila${a.anulado_en ? ' ab-anulada' : ''}">
+    const total = Number(est.datos?.monto_total || 0);
+    const puesto = !pos ? '' : mover
+      ? `<button class="ab-asa" type="button" data-ab-asa aria-label="Abono ${pos}° en el voucher: arrastra o usa las flechas para moverlo" title="Arrastra para cambiar el orden"><b>${pos}°</b><i class="fas fa-grip-lines"></i></button>`
+      : `<span class="ab-pos" title="Puesto en el voucher">${pos}°</span>`;
+    return `<li class="ab-fila${a.anulado_en ? ' ab-anulada' : ''}${pos ? ' ab-mov' : ''}" data-id="${a.id}">${puesto}${pos ? '<div class="ab-cuerpo">' : ''}
       <div class="ab-fila-top"><b>${usd(a.monto_usd)}</b>
         <span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${a.tasa_tipo ? nombreTasa(a.tasa_tipo) + ' ' : ''}${num(a.tasa_usd_ves, 4)}` : ''}</span>
         <span class="ab-tag">${esc(a.metodo)}</span>
@@ -219,6 +244,7 @@ export function crearAbonos(c) {
         ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : ''}
       </div>
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
+      ${pos ? `<p class="ab-acum">Lleva abonado <b>${usd(acum)}</b> <span>de ${usd(total)} · resta ${usd(Math.max(0, total - acum))}</span></p>` : ''}
       ${a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
         <div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button></div>`
         : a.respaldo ? `<div class="ab-fila-acc"><button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button>${btnComprobante(a)}</div>` : `<div class="ab-fila-acc">
@@ -229,15 +255,80 @@ export function crearAbonos(c) {
           <button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button>
           <button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button>
         </div>`}
-    </li>`;
+    ${pos ? '</div>' : ''}</li>`;
   }
   function pintar() {
     const p = panel(); if (!p || !est.datos) return;
     const d = est.datos, ab = d.abonos || [];
+    const vivos = ab.filter(a => !a.anulado_en), anulados = ab.filter(a => a.anulado_en);
+    const mover = vivos.length > 1 && !est.formAbierto && !est.guardando;
+    let acum = 0;
+    const filas = vivos.map((a, i) => filaHtml(a, i + 1, acum += Number(a.monto_usd || 0), mover)).join('');
     p.innerHTML = kpis(d) + avisoCuadre(d) + (est.formAbierto ? formHtml(d) : '') +
-      (ab.length ? `<ul class="ab-lista">${ab.map(filaHtml).join('')}</ul>`
+      (ab.length ? (vivos.length ? `<p class="ab-orden-tit"><b>Orden en el voucher</b>${mover ? '<span>Arrastra <i class="fas fa-grip-lines"></i> para cambiarlo</span>' : ''}</p>
+        <ul class="ab-lista" data-ab-orden>${filas}</ul>` : '') + (anulados.length ? `<ul class="ab-lista">${anulados.map(a => filaHtml(a)).join('')}</ul>` : '')
         : '<p class="ab-vacia">Todavía no hay abonos registrados en esta reserva.</p>');
     if (est.formAbierto) actualizarTasa();
+  }
+  // Orden del voucher: se arrastra por el asa (puntero o dedo) o con flechas del teclado, y se guarda al soltar.
+  const idsLista = ul => [...ul.querySelectorAll(':scope > .ab-mov')].map(x => x.dataset.id);
+  const sinMovimiento = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function flip(els, cambio) {
+    const antes = new Map(els.map(x => [x, x.getBoundingClientRect().top]));
+    cambio();
+    if (sinMovimiento()) return;
+    els.forEach(x => { const dy = antes.get(x) - x.getBoundingClientRect().top; if (dy) x.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 160, easing: 'ease-out' }); });
+  }
+  function arrastrar(e) {
+    const asa = e.target.closest('[data-ab-asa]');
+    if (!asa || asa.disabled || e.button > 0 || est.ordenando) return;
+    const li = asa.closest('.ab-mov'), ul = li?.parentElement; if (!ul) return;
+    e.preventDefault();
+    asa.setPointerCapture?.(e.pointerId);
+    const antes = idsLista(ul), agarre = e.clientY - li.getBoundingClientRect().top;
+    li.classList.add('ab-arrastrando');
+    const seguir = y => { li.style.transform = ''; li.style.transform = `translateY(${y - agarre - li.getBoundingClientRect().top}px)`; };
+    asa.onpointermove = ev => {
+      const otros = [...ul.querySelectorAll(':scope > .ab-mov')].filter(x => x !== li);
+      const sig = otros.find(x => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; }) || null;
+      if (li.nextElementSibling !== sig && !(sig === null && !li.nextElementSibling)) flip(otros, () => ul.insertBefore(li, sig));
+      seguir(ev.clientY);
+    };
+    asa.onpointerup = asa.onpointercancel = () => {
+      asa.onpointermove = asa.onpointerup = asa.onpointercancel = null;
+      const dy = li.style.transform;
+      li.style.transform = '';
+      li.classList.remove('ab-arrastrando');
+      if (dy && !sinMovimiento()) li.animate([{ transform: dy }, { transform: 'none' }], { duration: 140, easing: 'ease-out' });
+      fijarOrden(antes, idsLista(ul));
+    };
+  }
+  function moverConTeclado(e) {
+    const asa = e.target.closest('[data-ab-asa]');
+    if (!asa || !['ArrowUp', 'ArrowDown'].includes(e.key) || est.ordenando) return;
+    const li = asa.closest('.ab-mov'), ul = li.parentElement, antes = idsLista(ul);
+    const otro = e.key === 'ArrowUp' ? li.previousElementSibling : li.nextElementSibling;
+    if (!otro?.classList.contains('ab-mov')) return;
+    e.preventDefault();
+    if (e.key === 'ArrowUp') ul.insertBefore(li, otro); else otro.after(li);
+    fijarOrden(antes, idsLista(ul), li.dataset.id);
+  }
+  async function fijarOrden(antes, nuevo, foco = null) {
+    if (antes.join() === nuevo.join()) return;
+    const d = est.datos, previo = d.abonos || [], porId = new Map(previo.map(a => [String(a.id), a]));
+    d.abonos = [...nuevo.map(id => porId.get(id)), ...previo.filter(a => a.anulado_en)];
+    est.ordenando = true;
+    pintar();
+    if (foco) panel()?.querySelector(`.ab-mov[data-id="${foco}"] [data-ab-asa]`)?.focus();
+    const { data, error } = await sb.rpc('reserva_abonos_ordenar', { p_reserva_id: est.reservaId, p_ids: nuevo.map(Number) });
+    est.ordenando = false;
+    if (est.datos !== d) return;
+    if (error || !data?.ok) {
+      c.error(error?.code === '42501' ? 'Tu usuario no puede ordenar los abonos de esta reserva.' : mensaje(error?.message || data?.error));
+      if (data?.error === 'orden_desactualizado') return cargar(est.reservaId);
+      d.abonos = previo; pintar(); return;
+    }
+    c.ok('Orden guardado: así salen los abonos en el próximo voucher.');
   }
   function actualizarTasa() {
     const box = document.getElementById('ab-tasa-box'); if (!box) return;
@@ -591,8 +682,10 @@ export function crearAbonos(c) {
   // cobrado sin fila de abono (p. ej. el pago que traía un voucher importado) va como «Pagos anteriores».
   function abonosDetalle(abono, pagado, S = null) {
     const fila = (a, nuevo) => ({ fecha: diaMesAnio(a.fecha), metodo: /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? 'Abono' : a.metodo, referencia: a.referencia, monto: Number(a.monto_usd || 0), nuevo });
-    const otros = (est.datos?.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono?.id) && delServicio(a, S));
-    const filas = [...otros.map(a => fila(a, false)), ...(abono ? [fila(abono, true)] : [])];
+    // En el orden elegido en la lista; el abono editado conserva su puesto y el nuevo va al final.
+    const vivos = (est.datos?.abonos || []).filter(a => !a.anulado_en && (Number(a.id) === Number(abono?.id) || delServicio(a, S)));
+    const filas = vivos.map(a => Number(a.id) === Number(abono?.id) ? fila(abono, true) : fila(a, false));
+    if (abono && !vivos.some(a => Number(a.id) === Number(abono.id))) filas.push(fila(abono, true));
     const sinDetalle = Math.round((Number(pagado || 0) - filas.reduce((s, f) => s + f.monto, 0)) * 100) / 100;
     return sinDetalle > 0 ? [{ fecha: '—', metodo: 'Abono anterior', referencia: '', monto: sinDetalle }, ...filas] : filas;
   }

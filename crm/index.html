@@ -5056,6 +5056,44 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-tk-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;padding:3px 7px;border-radius:999px;background:var(--accent-soft);color:var(--txt);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent)}
 .rv-tk-det{font-size:11px;color:var(--muted);margin-top:5px}
 .rv-2,.rv-3{display:grid;gap:0 10px}.rv-2{grid-template-columns:repeat(2,minmax(0,1fr))}.rv-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+/* Formulario de servicio compacto (2026-11-13): filas que se reparten solas según el ancho del cajón
+   (2-3 columnas en escritorio, 2 en el teléfono), secciones con título y pie de Guardar fijo abajo. */
+.rv-form [hidden]{display:none!important}
+.rv-fila{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr));gap:0 10px}
+.rv-fila>*{min-width:0}
+.rv-fila>.rv-ancho{grid-column:1/-1}
+#rv-s-calc:empty{display:none}
+.rv-sf .fl{margin:9px 0 4px}
+.rv-sf .fl span{font-weight:400;color:var(--muted2)}
+.rv-sf .ei{min-height:40px;padding-block:8px;font-size:14px}
+.rv-sf .rv-ro{min-height:40px}
+.rv-sec{display:flex;align-items:center;gap:7px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--accent-ink)}
+.rv-pie{position:sticky;bottom:-1px;z-index:3;margin:14px -15px 0;padding:10px 15px calc(10px + var(--safe-b));background:var(--bg2);border-top:1px solid var(--line2)}
+.rv-pie:last-child{margin-bottom:-15px;border-radius:0 0 13px 13px}
+.rv-pie .edit-err{margin:0 0 8px}
+.rv-pie .edit-err:empty{display:none}
+.rv-pie-btns{display:flex;gap:9px}
+.rv-pie-btns .dbtn{margin-top:0;padding:11px}
+.rv-pie-btns .dbtn.save{flex:2;width:auto}
+/* Hospedaje del tarifario en la reserva (2026-11-13): modo «Hotel o posada» / «Apartamento propio» y los
+   selectores de Cotizaciones (.cb-picker, .cb-hab-elegida, .cb-chips) dentro del cajón. */
+.rv-hosp-modo{margin-top:10px}
+.rv-sf .rv-hotel-campo .field,.rv-sf .rv-hotel-ph .field{margin:0}
+.rv-hotel-ph{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:0 10px;align-items:start}
+.rv-hotel-ph>.btn-sm{justify-self:start;margin-top:8px}
+.rv-sf .cb-hab-ver{margin-top:6px}
+.rv-hotel-sug{margin:10px 0 2px;padding:8px 10px;border-radius:10px;background:rgba(var(--ink-rgb),.04);font-size:12px;line-height:1.4;color:var(--muted)}
+.rv-hotel-sug:empty,#rv-s-apto:empty{display:none}
+.rv-hotel-sug.ok{color:var(--txt)}
+.rv-hotel-sug-fila{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px}
+.rv-hotel-sug b,.rv-hotel-sug-usado{color:var(--green)}
+.rv-hotel-sug-usado{font-size:11px;font-weight:600}
+.rv-hotel-sug ul{margin:6px 0 0;padding-left:16px;font-size:11.5px;color:var(--muted)}
+/* «Apartamento propio»: complejo y apartamento lado a lado, cada uno con miniatura (.cb-hab-elegida de Cotizaciones). */
+.rv-apto-picks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:0 10px;align-items:start;margin-top:6px}
+.rv-sf .rv-apto-pick{margin:0}
+.rv-apto-pick .cb-picker-lista button[aria-disabled="true"]{opacity:.5;cursor:not-allowed}
+.rv-apto-pick .cb-picker-lista button[aria-disabled="true"]:hover{background:transparent}
 .rv-bol-card{cursor:pointer}
 .rv-e-cambiado{color:var(--blue,#4a9eff);border-color:rgba(74,158,255,.35)}
 .rv-e-reembolso_solicitado{color:var(--amber);border-color:rgba(245,158,11,.35);border-style:dashed}
@@ -5270,6 +5308,7 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
   .rv-doc .rv-chip{min-height:32px;padding:6px 11px}
   .rv-subir>.rv-2{grid-template-columns:minmax(0,1fr)}
   .drawer .ei,.rv-form .ei{font-size:16px}
+  .rv-sf .ei,.rv-sf .rv-ro,.rv-pie-btns .dbtn,.rv-hotel-sug .btn-sm,.rv-hotel-ph>.btn-sm,.rv-sf .cb-hab-ver{min-height:44px}
   .rs-grid2{grid-template-columns:minmax(0,1fr);gap:10px}
   .rs-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .rs-foot{padding:12px 0 calc(14px + env(safe-area-inset-bottom,0px))}
@@ -13078,11 +13117,14 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <div id="ef-servicios"></div>
     <div class="ef-tipos ef-agregar" id="ef-agregar"></div>
 
-    <label class="fl">¿Cuántas personas? <span class="ef-opc">(opcional)</span></label>
+    <label class="fl">¿Cuántas personas viajan?</label>
     <div class="ef-fila">
       <div style="flex:1"><label class="fl-sub">Adultos</label><input id="ef-adultos" class="ei" type="number" min="0" step="1" placeholder="2"></div>
       <div style="flex:1"><label class="fl-sub">Niños</label><input id="ef-ninos" class="ei" type="number" min="0" step="1" placeholder="0"></div>
     </div>
+
+    <label class="fl">¿Quiénes viajan? <span class="ef-opc">(nombre completo y cédula de cada uno)</span></label>
+    <div id="ef-viajeros"></div>
 
     <label class="fl">Método de pago <span class="ef-opc">(si ya pagó algo)</span></label>
     <div class="ef-comprob">
