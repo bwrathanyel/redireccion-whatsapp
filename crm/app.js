@@ -32032,7 +32032,8 @@ async function chatVerDoc(m) {
     <div class="cdv-zoom"><button type="button" data-cdv="menos" aria-label="Alejar"><i class="fas fa-minus"></i></button><button type="button" data-cdv="mas" aria-label="Acercar"><i class="fas fa-plus"></i></button></div>`;
   const s = chatDocVisor = { el, m, pdf: null, urls: [], zoom: 1, base: 0 };
   el.addEventListener('click', e => {
-    const b = e.target.closest('[data-cdv]'); if (!b) return;
+    // Tocar el fondo, fuera de las páginas, cierra el visor (pedido del dueño 2026-11-12).
+    const b = e.target.closest('[data-cdv]'); if (!b) { if (e.target.classList.contains('cdv-paginas')) chatDocCerrar(); return; }
     const a = b.dataset.cdv;
     if (a === 'cerrar') chatDocCerrar();
     else if (a === 'compartir') chatCompartirAdj(m);
@@ -36345,24 +36346,10 @@ function cbTextoWhatsapp(cot) {
     ? `Hola ${cliente}, te comparto la cotización${titulos.length ? ` de ${titulos.slice(0, 3).join(' + ')}${extra}` : ''}${total ? ` por un total de $${cbMonto(total)}` : ''}.${incluye}Cualquier duda me avisas. — ${MI_NOMBRE}`
     : '';
 }
-// El navegador no puede adjuntar un archivo a un chat: el PDF viaja como link firmado (30 días)
-// en el mensaje de wa.me, que abre directo el chat del lead o, sin lead, el selector de chats.
-// Si la subida falla, cae a la hoja de compartir del sistema y, sin ella, a descargar + abrir el chat.
-const CB_PDF_LINK_SEG = 30 * 86400;
-async function cbLinkPdf(blob, nombre) {
-  const ruta = `${MI_USUARIO_ID}/${Date.now()}-${nombre.replace(/[^\w.-]+/g, '_')}`;
-  const { error } = await sb.storage.from('cotizaciones-pdf').upload(ruta, blob, { contentType: 'application/pdf', upsert: false });
-  if (error) throw error;
-  const { data, error: e2 } = await sb.storage.from('cotizaciones-pdf').createSignedUrl(ruta, CB_PDF_LINK_SEG);
-  if (e2 || !data?.signedUrl) throw e2 || new Error('sin link');
-  return data.signedUrl;
-}
+// El PDF va como archivo, no como link firmado de Supabase (pedido del dueño 2026-11-12: el link
+// larguísimo se veía mal). La hoja de compartir del sistema lo adjunta en WhatsApp (celular y
+// Chrome/Edge en Windows); sin ella, se descarga y se abre el chat para adjuntarlo a mano.
 async function cbWhatsappArchivo(blob, nombre, tel, texto) {
-  try {
-    const link = await cbLinkPdf(blob, nombre);
-    cbAbrirWhatsapp(tel, `${texto || `Te comparto la cotización. — ${MI_NOMBRE}`}\n\n📄 ${link}`);
-    return;
-  } catch (e) { console.error('cbLinkPdf', e); }
   const file = new File([blob], nombre, { type: 'application/pdf' });
   if (navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: nombre, ...(texto ? { text: texto } : {}) }); return; }
