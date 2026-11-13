@@ -3204,7 +3204,9 @@ body.en-whatsapp :is(.chat-fab,.chat-globo){display:none!important}
 .wa-lista .msg-inbox-row.wa-nuevo .msg-inbox-hora{color:var(--wa);font-weight:700}
 .wa-lista .wa-pend{background:var(--wa);color:#04210f;margin-left:auto;min-width:20px;text-align:center}
 @keyframes wa-titila{50%{background:color-mix(in srgb,var(--wa) 24%,transparent)}}
-@media(prefers-reduced-motion:reduce){.wa-lista .msg-inbox-row.wa-nuevo{animation:none}}
+body:not(:has(#sec-whatsapp.active)) .wa-avisa{animation:wa-titila 1.4s ease-in-out infinite;box-shadow:inset 3px 0 0 var(--wa)}
+body:not(:has(#sec-whatsapp.active)) .wa-avisa .badge,.wa-badge-grp{background:var(--wa);color:#04210f}
+@media(prefers-reduced-motion:reduce){.wa-lista .msg-inbox-row.wa-nuevo,body .wa-avisa{animation:none}}
 .toast.toast-wa{cursor:pointer}
 .toast.toast-wa > i{color:var(--wa)}
 /* Escritorio: body{zoom} encoge 100dvh, por eso se divide por --zoom; el pie se oculta

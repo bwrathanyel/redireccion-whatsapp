@@ -31055,6 +31055,14 @@ function waPintarAvisos() {
     const el = document.getElementById(id);
     if (el) { el.textContent = txt; el.style.display = n ? '' : 'none'; }
   }
+  // Menú: la sección (y el grupo Bandeja) titila mientras no se esté adentro (CSS con :has).
+  document.querySelectorAll('.wa-avisa').forEach(el => el.classList.remove('wa-avisa'));
+  document.querySelectorAll('.wa-badge-grp').forEach(el => el.remove());
+  if (n) {
+    const sel = ['[data-sec="grp-bandeja"]', '[data-sec="whatsapp"]', '[data-nav-tab="whatsapp"]', ...(ROL === 'admin' ? ['[data-sec="wa-bandeja"]', '[data-nav-tab="wa-bandeja"]'] : [])].join(',');
+    document.querySelectorAll(sel).forEach(el => el.classList.add('wa-avisa'));
+    document.querySelectorAll('.nav-item[data-sec="grp-bandeja"]').forEach(el => el.insertAdjacentHTML('beforeend', ` <span class="badge wa-badge-grp">${txt}</span>`));
+  }
   waTituloBase ??= document.title.replace(/^\(\d+\+?\) /, '');
   document.title = n ? `(${txt}) ${waTituloBase}` : waTituloBase;
 }
