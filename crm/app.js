@@ -31233,7 +31233,7 @@ function waAdjuntoHtml(a) {
   if (a.tipo === 'image' || a.tipo === 'sticker') return `<img class="msg-img" ${fuente}${publica ? ` data-img="${esc(a.url)}"` : ''} alt="Foto">`;
   if (a.tipo === 'audio' || a.tipo === 'voice') return `${vozHtml(fuente, a.url)}${waTranscripcionHtml(a.transcripcion)}`;
   if (a.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
-  return `<div class="msg-doc" ${publica ? `data-doc="${esc(a.url)}"` : fuente}><i class="fas fa-file"></i><div><div class="msg-doc-nombre">${esc(a.mime || 'Archivo')}</div></div></div>`;
+  return `<div class="msg-doc" ${publica ? `data-doc="${esc(a.url)}"` : fuente}><i class="fas ${iconoPorExtension(a.nombre)}"></i><div><div class="msg-doc-nombre">${esc(a.nombre || a.mime || 'Archivo')}</div></div></div>`;
 }
 // Compartido por la vista vieja (#wa-conv-log) y la pestaña WhatsApp de Meta DM (#dm-log).
 function waHtmlMensajes(lista, idAnteriores) {
