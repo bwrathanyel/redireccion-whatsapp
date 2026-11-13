@@ -30929,6 +30929,8 @@ function setupWhatsapp() {
     if (f) { e.preventDefault(); waEnviarArchivo(f); }
   });
   waSoltarArchivos();
+  navigator.serviceWorker?.addEventListener('message', e => { if (e.data?.tipo === 'abrir-wa-chat' && e.data.id) waIrAChat(String(e.data.id)); });
+  waVigiaIniciar();
   document.getElementById('wa-volver-dm').addEventListener('click', () => { wbVolviendo = waVolverA === 'wa-bandeja'; activateSection(waVolverA); });
   document.getElementById('wa-ver-lead').addEventListener('click', () => { if (waActual?.lead) abrirLeadDesdeMisVentas(waActual.lead.id); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
@@ -30972,6 +30974,7 @@ async function waCargarChats(silencioso, cursor) {
   if (cursor) waChats = [...waChats, ...r.chats.filter(c => !waChats.some(x => x.id === c.id))];
   else waChats = [...r.chats, ...(silencioso ? waChats.filter(c => !r.chats.some(n => n.id === c.id)) : [])];
   if (cursor || !silencioso || waChatsCursor === null) waChatsCursor = r.cursor;
+  if (!cursor) waRevisarNuevos(r.chats);
   // El poll de 20 s casi siempre trae lo mismo: repintar igual recreaba todos los avatares (parpadeo).
   const firma = JSON.stringify(waChats);
   if (silencioso && !cursor && firma === waFirmaChats) return;
@@ -30984,28 +30987,133 @@ function waRenderChats() {
   const q = document.getElementById('wa-buscar').value.trim().toLowerCase();
   const lista = q ? waChats.filter(c => `${c.nombre || ''} ${c.telefono} ${c.lead?.nombre || ''}`.toLowerCase().includes(q)) : waChats;
   if (!lista.length) { cont.innerHTML = `<div class="msg-empty"><i class="fa-brands fa-whatsapp"></i><br>${q ? 'Sin resultados' : 'Sin chats todavía'}</div>`; return; }
-  cont.innerHTML = lista.map(c => `
-    <div class="msg-inbox-row${waActual?.id === c.id ? ' on' : ''}" data-wa="${esc(c.id)}">
+  cont.innerHTML = lista.map(c => { const p = waActual?.id === c.id ? 0 : waPend(c); return `
+    <div class="msg-inbox-row${waActual?.id === c.id ? ' on' : ''}${p ? ' wa-nuevo' : ''}" data-wa="${esc(c.id)}">
       <div class="msg-avatar dm-avatar" data-canal="whatsapp">${c.foto ? `<img src="${esc(c.foto)}" alt="" loading="lazy" decoding="async">` : esc(initials(c.nombre || '#'))}</div>
       <div class="msg-inbox-body">
         <div class="msg-inbox-top">
           <div class="msg-inbox-nombre">${esc(c.nombre || c.telefono)}</div>
           ${c.fecha ? `<div class="msg-inbox-hora">${fmtHoraMsg(c.fecha)}</div>` : ''}
         </div>
-        <div class="msg-inbox-preview"><span>${esc(c.ultimo || '')}</span></div>
+        <div class="msg-inbox-preview"><span>${esc(c.ultimo || '')}</span>${p ? `<span class="msg-inbox-badge wa-pend" aria-label="${p} sin leer">${p > 99 ? '99+' : p}</span>` : ''}</div>
         <div class="wa-lead-linea">${c.lead ? `<i class="fas fa-user-check"></i> ${esc(c.lead.estado || 'Lead')}${c.lead.asesor ? ' · ' + esc(c.lead.asesor) : ''}` : `${esc(c.telefono)} · sin lead`}</div>
       </div>
-    </div>`).join('') + (waChatsCursor && !q ? '<button type="button" class="wa-mas" id="wa-mas-chats">Ver más chats</button>' : '');
+    </div>`; }).join('') + (waChatsCursor && !q ? '<button type="button" class="wa-mas" id="wa-mas-chats">Ver más chats</button>' : '');
   cont.querySelectorAll('[data-wa]').forEach(row => row.addEventListener('click', () => {
     const c = waChats.find(x => x.id === row.dataset.wa);
     if (c) waAbrirChat(c);
   }));
   document.getElementById('wa-mas-chats')?.addEventListener('click', () => waCargarChats(false, waChatsCursor));
 }
+// Avisos de mensajes nuevos. Zernio nunca marca leído (unreadCount solo sube aunque
+// el bot o el asesor respondan), así que lo visto se guarda en este navegador: por
+// chat, el unreadCount que tenía al abrirlo. Pendiente = lo que subió desde entonces.
+// La vigía refresca la primera página fuera de la sección para avisar en todo el CRM.
+const WA_VIGIA_MS = 30000;
+let waVigia = null, waPrevios = null, waTituloBase = null;
+const waVistos = {};
+function waVistosDe(cuenta) {
+  if (!(cuenta in waVistos)) { let v = null; try { v = JSON.parse(localStorage.getItem('wa-vistos:' + cuenta)); } catch {} waVistos[cuenta] = v && typeof v === 'object' ? v : null; }
+  return waVistos[cuenta];
+}
+function waGuardarVistos(cuenta) { try { localStorage.setItem('wa-vistos:' + cuenta, JSON.stringify(waVistos[cuenta])); } catch {} }
+function waPend(c) {
+  const b = waCuenta ? waVistosDe(waCuenta)?.[c.id] : null;
+  if (b == null) return 0;
+  return c.no_leidos >= b ? c.no_leidos - b : c.no_leidos;
+}
+function waMarcarVisto(c) {
+  const v = waCuenta && waVistosDe(waCuenta);
+  if (!v || v[c.id] === c.no_leidos) return;
+  v[c.id] = c.no_leidos; waGuardarVistos(waCuenta); waPintarAvisos();
+  const row = document.querySelector(`#wa-inbox [data-wa="${CSS.escape(c.id)}"]`);
+  row?.classList.remove('wa-nuevo'); row?.querySelector('.wa-pend')?.remove();
+}
+function waRevisarNuevos(chats) {
+  const cuenta = waCuenta;
+  let v = waVistosDe(cuenta), cambio = false;
+  const previos = waPrevios?.cuenta === cuenta ? waPrevios.m : null;
+  waPrevios = { cuenta, m: new Map(chats.map(c => [c.id, c.no_leidos])) };
+  // Primera vez en este navegador: lo que ya había queda como visto.
+  if (!v) { v = waVistos[cuenta] = {}; chats.forEach(c => { v[c.id] = c.no_leidos; }); waGuardarVistos(cuenta); waPintarAvisos(); return; }
+  const mirando = currentSec === 'whatsapp' && document.visibilityState === 'visible' ? waActual?.id : null;
+  const nuevos = [];
+  for (const c of chats) {
+    // Chat que no estaba en lo ya visto (venía de páginas sin cargar): lo anterior no se sabe, cuenta como 1.
+    if (!(c.id in v)) { v[c.id] = Math.max(0, c.no_leidos - 1); cambio = true; }
+    if (c.id === mirando) { if (v[c.id] !== c.no_leidos) { v[c.id] = c.no_leidos; cambio = true; } continue; }
+    if (previos && c.no_leidos > (previos.get(c.id) ?? 0) && waPend(c) > 0) nuevos.push(c);
+  }
+  if (cambio) waGuardarVistos(cuenta);
+  waPintarAvisos();
+  if (nuevos.length) waAvisar(nuevos);
+}
+function waPintarAvisos() {
+  const n = waChats.reduce((s, c) => s + (c.id === waActual?.id ? 0 : waPend(c)), 0), txt = n > 99 ? '99+' : String(n);
+  // Admin entra al número compartido desde «WhatsApp empresa»; el resto, desde «WhatsApp».
+  for (const id of ROL === 'admin' ? ['nav-wa-count', 'nav-wab-count'] : ['nav-wa-count']) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = txt; el.style.display = n ? '' : 'none'; }
+  }
+  waTituloBase ??= document.title.replace(/^\(\d+\+?\) /, '');
+  document.title = n ? `(${txt}) ${waTituloBase}` : waTituloBase;
+}
+function waAvisar(nuevos) {
+  chatSonar();
+  const quien = c => c.nombre || c.telefono, corto = t => t.length > 90 ? t.slice(0, 90) + '…' : t;
+  const linea = c => { const p = waPend(c); return `${p > 1 ? p + ' mensajes nuevos' : 'Mensaje nuevo'}${c.ultimo ? ' · ' + corto(c.ultimo) : ''}`; };
+  if (document.visibilityState === 'visible') {
+    const uno = nuevos.length === 1;
+    waToast(uno ? `WhatsApp · ${quien(nuevos[0])}` : `WhatsApp · ${nuevos.length} chats con mensajes nuevos`, uno ? linea(nuevos[0]) : nuevos.map(quien).join(', '), nuevos[0].id);
+    return;
+  }
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !navigator.serviceWorker) return;
+  navigator.serviceWorker.ready.then(reg => nuevos.slice(0, 5).forEach(c => reg.showNotification(`WhatsApp · ${quien(c)}`, {
+    body: linea(c), icon: './icons/icon-192.png', badge: './icons/badge-72.png', tag: 'wa-' + c.id, renotify: true,
+    data: { url: './?wa_chat=' + encodeURIComponent(c.id) },
+  }))).catch(() => {});
+}
+function waToast(titulo, texto, id) {
+  const t = document.createElement('div');
+  t.className = 'toast toast-wa'; t.setAttribute('role', 'button'); t.tabIndex = 0;
+  t.innerHTML = `<i class="fa-brands fa-whatsapp"></i> <div><b>${esc(titulo)}</b><br>${esc(texto)}</div>`;
+  const ir = () => { t.remove(); waIrAChat(id); };
+  t.addEventListener('click', ir);
+  t.addEventListener('keydown', e => { if (e.key === 'Enter') ir(); });
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(() => t.classList.add('show'), 30);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 8000);
+}
+function waIrAChat(id) {
+  const c = waChats.find(x => x.id === id);
+  if (!c) return;
+  if (currentSec !== 'whatsapp') { waVolverA = ROL === 'admin' ? 'wa-bandeja' : 'dms'; activateSection('whatsapp'); }
+  waAbrirChat(c);
+}
+function waVigiaIniciar() {
+  if (waVigia || !(ROL === 'admin' || MI_ASESOR_INTEGRAL)) return;
+  waVigia = setInterval(waVigiaTick, WA_VIGIA_MS);
+  setTimeout(waVigiaTick, 4000);
+}
+async function waVigiaTick() {
+  // Con la lista a la vista ya la refresca waTick cada 20 s.
+  if (currentSec === 'whatsapp' && !waActual) return;
+  if (!waNumeros) { try { waNumeros = (await waInvocar({ accion: 'numeros' })).numeros; } catch { return; } }
+  if (!waCuenta) {
+    let g = null; try { g = localStorage.getItem('wa-numero'); } catch {}
+    waCuenta = waNumeros.find(n => n.id === g)?.id || waNumeros.find(n => n.compartido && n.activo)?.id || waNumeros[0]?.id || null;
+    if (!waCuenta) { clearInterval(waVigia); return; }
+  }
+  await waCargarChats(true);
+  // Toque en una notificación sin el CRM abierto: llega como ?wa_chat=<id>.
+  const p = new URLSearchParams(location.search), id = p.get('wa_chat');
+  if (id) { p.delete('wa_chat'); history.replaceState(history.state, '', location.pathname + (p.toString() ? '?' + p : '') + location.hash); waIrAChat(id); }
+}
 async function waAbrirChat(c) {
   waGrabador?.cancelar();
   const miGen = ++waAbrirGen;
   waActual = c; waMensajes = []; waMsgCursor = null;
+  waMarcarVisto(c);
   document.getElementById('wa-conv-titulo').textContent = c.nombre || c.telefono;
   document.getElementById('wa-conv-sub').textContent = c.lead ? `${c.telefono} · ${c.lead.estado || 'Lead'}${c.lead.asesor ? ' · ' + c.lead.asesor : ''}` : `${c.telefono} · sin lead en el CRM`;
   document.getElementById('wa-ver-lead').style.display = c.lead ? '' : 'none';
@@ -37780,7 +37888,7 @@ const NAV_ITEMS = [
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
   // del menú; admin la abre desde la pestaña WhatsApp de Meta DM.
-  { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-bandeja', roles: '', sub: 'Chats de WhatsApp por número' },
+  { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-bandeja', roles: '', sub: 'Chats de WhatsApp por número', badge: 'nav-wa-count', badgeDefault: '0' },
   { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', padre: 'grp-bandeja', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
   { sec: 'wa-bandeja', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp empresa', padre: 'grp-bandeja', roles: '', sub: 'Clientes que respondieron al número de la empresa', badge: 'nav-wab-count', badgeDefault: '0' },
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-bandeja', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },

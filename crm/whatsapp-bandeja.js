@@ -227,7 +227,8 @@ export function crearBandejaWa({ sb, esc, rol, textoConEnlaces, etiquetaDia, fmt
 
   function pintarBadge() {
     const n = convs.reduce((s, c) => s + (c.no_leidos > 0 ? 1 : 0), 0), el = $('nav-wab-count');
-    if (el) el.textContent = String(n);
+    // El badge visible lo maneja app.js (waPintarAvisos, chats sin leer del número compartido).
+    if (el) el.dataset.wb = String(n);
   }
 
   function pintarLista() {

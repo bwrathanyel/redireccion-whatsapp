@@ -3197,6 +3197,16 @@ body.en-whatsapp :is(.chat-fab,.chat-globo){display:none!important}
 :is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-date-chip{background:var(--wa-ajena);color:var(--wa-meta);border:none;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13);text-transform:uppercase;letter-spacing:.04em;font-size:10.5px}
 :is(.dm-shell[data-canal="whatsapp"] .dm-log,.chat-wa) .msg-doc i{background:color-mix(in srgb,currentColor 10%,transparent);color:inherit}
 @media(prefers-reduced-motion:reduce){.dm-vivo.on .dm-vivo-punto,.dm-campo.recien,.dm-inbox .msg-inbox-row.llego{animation:none}.dm-canal::after,.dm-log{transition:none}}
+/* WhatsApp por número: chat con mensajes sin abrir titila hasta que se abre. */
+.wa-lista .msg-inbox-row.wa-nuevo{background:color-mix(in srgb,var(--wa) 9%,transparent);box-shadow:inset 3px 0 0 var(--wa);animation:wa-titila 1.4s ease-in-out infinite}
+.wa-lista .msg-inbox-row.wa-nuevo .msg-inbox-nombre{color:var(--txt)}
+.wa-lista .msg-inbox-row.wa-nuevo .msg-inbox-preview span:first-child{color:var(--txt);font-weight:600}
+.wa-lista .msg-inbox-row.wa-nuevo .msg-inbox-hora{color:var(--wa);font-weight:700}
+.wa-lista .wa-pend{background:var(--wa);color:#04210f;margin-left:auto;min-width:20px;text-align:center}
+@keyframes wa-titila{50%{background:color-mix(in srgb,var(--wa) 24%,transparent)}}
+@media(prefers-reduced-motion:reduce){.wa-lista .msg-inbox-row.wa-nuevo{animation:none}}
+.toast.toast-wa{cursor:pointer}
+.toast.toast-wa > i{color:var(--wa)}
 /* Escritorio: body{zoom} encoge 100dvh, por eso se divide por --zoom; el pie se oculta
    para que la cáscara llene la pantalla sin scroll de página. */
 @media(min-width:761px){
