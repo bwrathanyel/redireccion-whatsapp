@@ -4673,7 +4673,7 @@ async function pvEliminarReserva(c, btn) {
 }
 // Chips de «Falta» de la tarjeta: una por motivo (las repetidas se cuentan) y una última si no hay seguimiento.
 function pvFaltaChips(c, vencido) {
-  const m = new Map(), etq = { voucher: 'Voucher hotel', cuotas: 'Cuotas vencidas' };
+  const m = new Map(), etq = { voucher: 'Voucher hotel', hospedaje_fecha: 'Fecha hospedaje', cuotas: 'Cuotas vencidas' };
   // Cada chip lleva `cod`/`sid` (código del faltante y servicio) para que al tocarlo abra la pestaña que lo resuelve (rvIr).
   // Pasajeros y documentos ya no son faltantes (20261102235000); se filtran por si llega una respuesta vieja.
   c.falta_resumen.filter(f => f.codigo !== 'pasajeros' && f.codigo !== 'documentos').forEach(f => {
@@ -4836,6 +4836,7 @@ function rvIr(cod, sid) {
   if (cod === 'documentos') { rvTab('pasajeros'); return; }
   if (cod === 'voucher') return rvDocAbrir('voucher', sid);
   rvTab('servicios');
+  if (cod === 'hospedaje_fecha' && sid) rvForm({ tipo: 'servicio', id: Number(sid) });
 }
 // Mensajes al cliente desde la ficha (Edge Function wa-plantilla-enviar, Zernio). Los
 // parámetros los arma el servidor desde la reserva; acá solo se muestra y se confirma.
@@ -5398,7 +5399,7 @@ async function rvChecklist() {
     <div class="rs-go-list">${lista.map(x => `<button class="rs-go" type="button" data-rv-go="${esc(x.codigo)}" data-id="${x.servicio_id || ''}"><b>${esc(x.texto)}</b><i>${esc(RV_PASOS[x.codigo]?.[1] || 'Ver')} →</i></button>`).join('')}</div></div>`;
 }
 // Orden de prioridad del «Próximo paso»: [frase del título, texto del botón].
-const RV_PASOS = { cuotas: ['cobrar las cuotas vencidas', 'Ver cuotas'], saldo: ['cobrar el saldo', 'Registrar abono'], pasajeros: ['cargar los pasajeros', 'Agregar titular'], documentos: ['completar los documentos de los pasajeros', 'Completar'], voucher: ['subir el voucher del hotel', 'Subir'], servicio: ['confirmar los servicios', 'Ver servicios'] };
+const RV_PASOS = { cuotas: ['cobrar las cuotas vencidas', 'Ver cuotas'], saldo: ['cobrar el saldo', 'Registrar abono'], pasajeros: ['cargar los pasajeros', 'Agregar titular'], documentos: ['completar los documentos de los pasajeros', 'Completar'], voucher: ['subir el voucher del hotel', 'Subir'], hospedaje_fecha: ['poner la fecha del hospedaje', 'Editar'], servicio: ['confirmar los servicios', 'Ver servicios'] };
 const rvFormAbierto = (p, suave) => suave && RV_FORM && p.querySelector('.rv-form[data-rv-form]');
 // Con servicios el total lo calcula el trigger recalcular_total_reserva y guardar_postventa ignora p_monto_total.
 function rvResumenTotal(r) {
@@ -7101,7 +7102,9 @@ const rvDocServicios = tipo => {
 function rvDocTipoSugerido() {
   const vivos = (RV_DET?.servicios || []).filter(s => !s.anulado_en);
   if (rvVista() === 'boleteria') return 'boleto';
-  if (vivos.some(s => s.tipo === 'hospedaje' && !rvTieneDocDe(s, 'voucher'))) return 'voucher';
+  // Hospedaje ya pasado o sin fecha no pide voucher (misma idea que reserva_faltantes, 20261122120000).
+  const hoy = hoyCaracas();
+  if (vivos.some(s => s.tipo === 'hospedaje' && s.fecha_inicio && String(s.fecha_inicio).slice(0, 10) >= hoy && !rvTieneDocDe(s, 'voucher'))) return 'voucher';
   if (vivos.some(s => s.tipo === 'boleto_aereo' && !rvTicketsDocs(s).length)) return 'boleto';
   const ds = RV_DET?.documentos || [];
   if (Number(RV_DET?.reserva?.monto_pagado || 0) > 0 && !ds.some(d => d.tipo === 'comprobante')) return 'comprobante';
