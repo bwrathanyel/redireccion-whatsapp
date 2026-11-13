@@ -25952,18 +25952,46 @@ function aplicarTabsOcultas() {
   }
 }
 // Último TARIFARIO NACIONAL de BT Travel tal cual llegó al Drive (Edge Function tarifario-bt-pdf).
-// La ventana se abre antes del await para que no la bloqueen; la primera vez por versión tarda (copia ~12 MB del Drive).
-// Con productoId devuelve solo las páginas de ese hotel (extracto chico, cacheado por versión).
+// La primera vez por versión tarda (copia ~12 MB del Drive).
+// Con productoId la función devuelve el PDF entero + `paginas: [desde, hasta]` del hotel; el recorte
+// se hace acá con pdf-lib porque en la Edge Function daba 502, y el visor del CRM ignora `#page=`.
 // Solo las tarifas que salieron de una carga maestra de BT Travel tienen páginas
 // en su PDF: `fuente_archivo` = "<archivo>.pdf — <carga_id> — <NOMBRE> — <n>".
 // Las manuales y las de flyer no, y el botón no debe aparecer en esas fichas.
 const tarDeBtTravel = t => /— [0-9a-f-]{36} — /.test(t?.fuente_archivo || '');
-async function abrirPdfBtTravel(btn, productoId) {
+const tarBtRecortes = new Map();
+async function recortarPdf(url, desde, hasta) {
+  const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+  const res = await fetch(url); if (!res.ok) throw new Error('HTTP ' + res.status);
+  const src = await PDFDocument.load(await res.arrayBuffer(), { ignoreEncryption: true });
+  const idx = []; for (let i = desde - 1; i < Math.min(hasta, src.getPageCount()); i++) idx.push(i);
+  if (!idx.length) throw new Error('rango_vacio');
+  const out = await PDFDocument.create();
+  (await out.copyPages(src, idx)).forEach(p => out.addPage(p));
+  return new Blob([await out.save()], { type: 'application/pdf' });
+}
+async function abrirPdfBtTravel(btn, productoId, nombreHotel) {
   if (btn.disabled) return;
+  const nombre = nombreHotel ? `BT Travel - ${String(nombreHotel).replace(/[\\/:*?"<>|]/g, '')}.pdf` : 'Tarifario BT Travel.pdf';
+  if (productoId && tarBtRecortes.has(productoId)) { verPdf(tarBtRecortes.get(productoId), nombre); return; }
   btn.disabled = true; btn.classList.add('cargando');
-  const { data, error } = await sb.functions.invoke('tarifario-bt-pdf', { body: productoId ? { producto_id: productoId } : {} });
-  btn.disabled = false; btn.classList.remove('cargando');
-  if (!error && data?.ok && data.url) { verPdf(data.url, 'Tarifario BT Travel.pdf'); return; }
+  let data = null;
+  try {
+    const r = await sb.functions.invoke('tarifario-bt-pdf', { body: productoId ? { producto_id: productoId } : {} });
+    data = r.data;
+    if (!r.error && data?.ok && data.url) {
+      const [desde, hasta] = data.paginas || [];
+      if (productoId && desde) {
+        try {
+          const blob = await recortarPdf(data.url.split('#')[0], desde, hasta || desde);
+          if (tarBtRecortes.size >= 10) tarBtRecortes.delete(tarBtRecortes.keys().next().value);
+          tarBtRecortes.set(productoId, blob);
+          verPdf(blob, nombre); return;
+        } catch (e) { console.error('recorte tarifario BT', e); }
+      }
+      verPdf(data.url, 'Tarifario BT Travel.pdf'); return;
+    }
+  } finally { btn.disabled = false; btn.classList.remove('cargando'); }
   errToast(data?.error === 'sin_tarifario' ? 'Todavía no llegó ningún tarifario de BT Travel al Drive'
     : data?.error === 'sin_paginas' ? 'Este hotel no figura en el tarifario de BT Travel activo' : 'No se pudo abrir el tarifario de BT Travel');
 }
@@ -29902,7 +29930,7 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
   document.getElementById('tar-editar-ficha')?.addEventListener('click', () => tarAbrirEditorFicha(x.id));
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
-  document.querySelector('#drawerContent [data-tar-pdf]')?.addEventListener('click', e => abrirPdfBtTravel(e.currentTarget, x.id));
+  document.querySelector('#drawerContent [data-tar-pdf]')?.addEventListener('click', e => abrirPdfBtTravel(e.currentTarget, x.id, x.nombre));
   tarActivarSeleccion();
   tarWireDescClamp();
   // Las habitaciones se piden para todos los roles (la RLS le da al no-admin
