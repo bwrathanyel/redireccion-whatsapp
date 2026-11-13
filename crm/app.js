@@ -6214,6 +6214,7 @@ function rvPagoHtml(s) {
   const tasas = Object.entries(ab.TASAS).map(([t, n]) => `<option value="${t}" ${ab.tasa(t) ? '' : 'disabled'}>${n}${ab.tasa(t) ? ` · ${ab.tasa(t).toLocaleString('es-VE', { maximumFractionDigits: 4 })}` : ' · sin cargar'}</option>`).join('');
   return `<div class="rv-sec"><i class="fas fa-money-bill-wave"></i> Pago del cliente</div>
     ${resumen}
+    <div class="csub" id="rv-s-pago-ok" hidden><i class="fas fa-circle-check"></i> No hay nada que cobrar. <a href="#" id="rv-s-pago-otro">Registrar otro pago</a></div>
     <div class="seg-group seg-group-sm" id="rv-s-pago-modo">${Object.entries({ no: 'Sin pago ahora', abono: 'Abono', completo: 'Pago completo' }).map(([k, t]) => `<button class="seg${k === 'no' ? ' on' : ''}" type="button" data-rv-pago-modo="${k}">${t}</button>`).join('')}</div>
     <div id="rv-s-pago-campos" hidden>
       <div class="rv-3"><div id="rv-s-pago-monto-box"><label class="fl" for="rv-s-pago-monto">Monto del abono</label><input class="ei" id="rv-s-pago-monto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></div>
@@ -6237,7 +6238,14 @@ function rvPagoFalta(s) {
 function rvPagoInit(p, s) {
   const box = document.getElementById('rv-s-pago-campos'); if (!box) return;
   const modo = () => p.querySelector('[data-rv-pago-modo].on')?.dataset.rvPagoModo || 'no';
+  // Servicio ya saldado: se oculta el selector (no es un estado, es «registrar un pago nuevo»); si sube el precio vuelve solo.
+  let otroPago = false;
+  document.getElementById('rv-s-pago-otro').onclick = e => { e.preventDefault(); otroPago = true; pintar(); };
   const pintar = () => {
+    const saldado = !otroPago && s && Number(val('rv-s-precio') || 0) > 0 && (abonosModulo().pagadoDe(s.id) || 0) > 0 && rvPagoFalta(s) === 0;
+    if (saldado) p.querySelectorAll('[data-rv-pago-modo]').forEach(x => x.classList.toggle('on', x.dataset.rvPagoModo === 'no'));
+    document.getElementById('rv-s-pago-ok').hidden = !saldado;
+    document.getElementById('rv-s-pago-modo').hidden = saldado;
     const m = modo(), ves = val('rv-s-pago-moneda') === 'VES', ab = abonosModulo();
     box.hidden = m === 'no';
     document.getElementById('rv-s-pago-monto-box').hidden = m === 'completo';
@@ -7776,8 +7784,9 @@ async function renderAsesorLeads(panel, nombre) {
 /* ---------- Filtros de periodo en Asesores (mismo selector de rango que Leads/Reasignaciones) ---------- */
 const aseRango = (fd, fh) => { const d = new Date(fd + 'T00:00:00'); const h = addD(new Date(fh + 'T00:00:00'), 1); return [d, h]; };
 function setupAsesoresPeriodo() {
-  const hoy = new Date(), isoD = d => d.toISOString().slice(0, 10);
-  document.getElementById('ase-desde').value = isoD(addD(hoy, -6));
+  // Arranca en hoy (dueño 13-nov). Fecha local: toISOString daba mañana después de las 20:00 en Caracas.
+  const hoy = new Date(), isoD = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  document.getElementById('ase-desde').value = isoD(hoy);
   document.getElementById('ase-hasta').value = isoD(hoy);
   initDateRangePicker('ase');
   ['ase-desde', 'ase-hasta'].forEach(id => document.getElementById(id).addEventListener('change', async () => {
@@ -11574,7 +11583,7 @@ async function actQuitar(clave, btn) {
 /* --- Rendimiento de la IA comercial -------------------------------------
    El panel consume exclusivamente agregados admin-only. Los hashes de contacto
    no salen de la RPC y el navegador nunca recibe chats, nombres o teléfonos. */
-let RIA_DIAS = 7;
+let RIA_DIAS = 1;
 let RIA_FECHA = null;
 const RIA_CACHE = new Map();
 const RIA_COSTO_ENTRADA = 0.14 / 1e6;
