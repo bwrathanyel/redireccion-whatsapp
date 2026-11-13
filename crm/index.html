@@ -1869,6 +1869,17 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .confirmar-sheet-campos .csc-opcion input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--accent)}
 .confirmar-sheet-campos .csc-opciones:has(input:checked) .csc-opcion{animation:none}
 .confirmar-sheet-campos .csc-opcion:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.confirmar-sheet-campos .rv-rec-zona{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1.5px dashed var(--line2);border-radius:12px;font-size:13px;line-height:1.35;color:var(--muted);cursor:pointer}
+.confirmar-sheet-campos .rv-rec-zona:hover{border-color:var(--accent);color:var(--txt)}
+.confirmar-sheet-campos .rv-rec-zona i{color:var(--accent);font-size:16px}
+.confirmar-sheet-campos .rv-rec-lista{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.confirmar-sheet-campos .rv-rec-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--line2);border-radius:10px;font-size:13px;color:var(--txt)}
+.confirmar-sheet-campos .rv-rec-item.err{color:var(--danger)}
+.confirmar-sheet-campos .rv-rec-item img{flex:none;width:40px;height:40px;object-fit:cover;border-radius:6px}
+.confirmar-sheet-campos .rv-rec-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.confirmar-sheet-campos .rv-rec-ok{color:var(--green);font-size:12px}
+.confirmar-sheet-campos .rv-rec-no{color:var(--amber);font-size:12px}
+.confirmar-sheet-campos .rv-rec-quitar{flex:none;background:none;border:0;color:var(--muted);padding:6px;cursor:pointer}
 @keyframes csc-titila{50%{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.18)}}
 @media (prefers-reduced-motion:reduce){.confirmar-sheet-campos .csc-opcion{animation:none;border-color:rgba(var(--accent-rgb),.6)}}
 #vc-generar-btn{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;border:none;border-radius:12px;padding:15px 30px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:10px;transition:filter .15s,transform .15s,box-shadow .15s;box-shadow:0 10px 24px rgba(var(--accent-rgb),.32)}

@@ -5685,6 +5685,85 @@ function rvVoucherConAbonos(v, servs, abonos, formaPago = '') {
     })),
   });
 }
+// Recibos en la hoja de datos del voucher: cada foto pasa por leer-comprobante y, por monto (y referencia
+// para desempatar), se asocia a un abono registrado. Cada abono se usa una sola vez.
+const rvMetodoRecibo = m => (m = String(m || '').toLowerCase(), /zelle/.test(m) ? 'Zelle' : /m[oó]vil/.test(m) ? 'Pago móvil' : /transfer/.test(m) ? 'Transferencia bancaria' : /binance|usdt/.test(m) ? 'Binance / USDT' : /punto|tdc|tarjeta/.test(m) ? 'Punto de venta' : /efectivo/.test(m) ? 'Efectivo USD' : '');
+function rvReciboAbono(d, abonos, usados) {
+  if (d?.monto == null) return null;
+  const digitos = x => String(x || '').replace(/\D/g, '');
+  const refR = digitos(d.referencia);
+  const cand = abonos.filter(a => !usados.has(a.id)).map(a => {
+    const mon = String(a.moneda || 'USD').toUpperCase().replace(/^(BS|VEF)$/, 'VES');
+    const orig = Number(a.monto_original ?? a.monto_usd), usd = Number(a.monto_usd);
+    const rel = (x, y) => Math.abs(x - y) / Math.max(1, x);
+    let dif = Infinity;
+    if (!d.moneda || d.moneda === mon) dif = rel(orig, d.monto);
+    if (d.moneda !== 'VES' && Number.isFinite(usd)) dif = Math.min(dif, rel(usd, d.monto));
+    const refA = digitos(a.referencia);
+    const refOk = refR.length >= 4 && refA.length >= 4 && (refR.endsWith(refA.slice(-4)) || refA.endsWith(refR.slice(-4)));
+    return { a, dif, refOk };
+  }).filter(x => x.dif <= 0.005 || (x.refOk && x.dif <= 0.02));
+  cand.sort((x, y) => (y.refOk - x.refOk) || x.dif - y.dif);
+  return cand[0]?.a || null;
+}
+// alLeer(lista) avisa cada vez que cambia la lista, para completar forma de pago y referencia de la hoja.
+function rvRecibosCampo(abonos, alLeer) {
+  const lista = [];
+  let el = null;
+  const fmt = (n, mon) => mon === 'VES' ? `Bs ${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const dia = iso => iso ? new Date(iso).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', day: '2-digit', month: '2-digit' }) : '';
+  const asociar = () => { const usados = new Set(); lista.forEach(x => { x.abono = x.datos ? rvReciboAbono(x.datos, abonos, usados) : null; if (x.abono) usados.add(x.abono.id); }); };
+  const pintar = () => {
+    if (!el?.isConnected) return;
+    el.querySelector('.rv-rec-lista').innerHTML = lista.map((x, i) => {
+      const d = x.datos || {};
+      const linea1 = x.estado === 'leyendo' ? 'Leyendo recibo…' : x.estado === 'error' ? x.msg
+        : [d.monto != null ? fmt(d.monto, d.moneda) : 'Sin monto', rvMetodoRecibo(d.metodo) || d.metodo, d.referencia ? `ref ${d.referencia}` : ''].filter(Boolean).join(' · ');
+      const linea2 = x.estado !== 'ok' ? '' : x.abono
+        ? `<span class="rv-rec-ok"><i class="fas fa-check"></i> Abono ${dia(x.abono.fecha)} · ${fmt(x.abono.monto_original ?? x.abono.monto_usd, String(x.abono.moneda || 'USD').toUpperCase())}${x.abono.moneda && String(x.abono.moneda).toUpperCase() !== 'USD' ? ` ($${Number(x.abono.monto_usd).toFixed(2)})` : ''}</span>`
+        : `<span class="rv-rec-no"><i class="fas fa-triangle-exclamation"></i> ${abonos.length ? 'Ningún abono registrado con ese monto' : 'La reserva no tiene abonos registrados'}</span>`;
+      return `<div class="rv-rec-item${x.estado === 'error' ? ' err' : ''}"><img src="${x.url}" alt=""><div class="rv-rec-txt"><div>${esc(linea1)}</div>${linea2}</div><button type="button" class="rv-rec-quitar" data-i="${i}" aria-label="Quitar recibo"><i class="fas fa-xmark"></i></button></div>`;
+    }).join('');
+  };
+  const cambio = () => { if (!el?.isConnected) return; asociar(); pintar(); alLeer?.(lista); };
+  const leer = async x => {
+    try {
+      const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: x.file.type, imagen: await archivoABase64(x.file) } });
+      if (error || !data?.ok) {
+        const m = error ? await msgErrorFn(error, data) : (data?.error || 'extraccion_fallida');
+        Object.assign(x, { estado: 'error', msg: m === 'no_es_comprobante' ? 'No parece un recibo de pago' : `No se pudo leer: ${EF_COMP_ERRORES[m] || m}` });
+      } else Object.assign(x, { estado: 'ok', datos: data.datos || {} });
+    } catch (e) {
+      console.error('voucher: leer recibo', e);
+      Object.assign(x, { estado: 'error', msg: 'No se pudo leer el recibo' });
+    }
+    if (lista.includes(x)) cambio();
+  };
+  return {
+    id: 'recibos', label: 'Fotos de los recibos', tipo: 'custom',
+    montar: cont => {
+      el = cont;
+      el.innerHTML = `<label class="rv-rec-zona"><input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden><i class="fas fa-receipt"></i> Sube uno o varios recibos: se leen y se asocian al abono por el monto</label><div class="rv-rec-lista"></div>`;
+      el.querySelector('input').addEventListener('change', e => {
+        [...e.target.files].forEach(file => {
+          if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return errToast(`${file.name}: usa JPG, PNG o WebP.`);
+          if (file.size > 6291456) return errToast(`${file.name}: pesa más de 6 MB.`);
+          const x = { file, url: URL.createObjectURL(file), estado: 'leyendo', datos: null, abono: null };
+          lista.push(x); leer(x);
+        });
+        e.target.value = '';
+        cambio();
+      });
+      el.querySelector('.rv-rec-lista').addEventListener('click', e => {
+        const b = e.target.closest('.rv-rec-quitar'); if (!b) return;
+        const [x] = lista.splice(Number(b.dataset.i), 1);
+        if (x) URL.revokeObjectURL(x.url);
+        cambio();
+      });
+    },
+    leer: () => lista.filter(x => x.estado === 'ok').map(x => ({ datos: x.datos, abono: x.abono })),
+  };
+}
 // Voucher de la reserva (lote 3: une el del paquete y el de abonos): todos los servicios (hotel + vuelos +
 // traslados...) y, si hay abonos, cada abono. Si falta cédula, teléfono o forma de pago, la misma hoja
 // de confirmación los pide antes de armar el PDF.
@@ -5720,23 +5799,44 @@ async function rvGenerarVoucherReserva(btn) {
   if (!telefono) faltan.push('teléfono');
   if (!formaPago) faltan.push('forma de pago');
   let datos = { cliente, documento, telefono, formaPago, referencia };
+  let recibos = [];
   if (faltan.length) {
+    const campos = [
+      { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
+      { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
+      { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
+      null,
+      { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elige una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
+      { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
+    ];
+    const iForma = campos.findIndex(c => c?.id === 'formaPago'), iRef = campos.findIndex(c => c?.id === 'referencia');
+    // Lo que se lee de los recibos solo llena campos vacíos (o que llenó un recibo antes): lo escrito a mano se respeta.
+    const auto = { forma: '', ref: '' };
+    campos[3] = rvRecibosCampo(abonos, lista => {
+      const ok = lista.filter(x => x.estado === 'ok'), x = ok.find(r => r.abono) || ok[0];
+      if (!x) return;
+      const forma = RV_METODO_A_VOUCHER[x.abono?.metodo] || rvMetodoRecibo(x.datos.metodo), ref = x.datos.referencia || x.abono?.referencia || '';
+      const sel = document.getElementById(`csc-${iForma}`), inp = document.getElementById(`csc-${iRef}`);
+      if (sel && forma && (!sel.value || sel.value === auto.forma)) { sel.value = forma; auto.forma = forma; }
+      if (inp && ref && (!inp.value.trim() || inp.value === auto.ref)) { inp.value = ref; auto.ref = ref; }
+    });
     const f = await confirmarSheet({
       titulo: 'Datos del voucher de la reserva',
       detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
       textoOk: 'Generar voucher',
-      campos: [
-        { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
-        { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
-        { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
-        { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elige una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
-        { id: 'referencia', label: 'Referencia del pago móvil', valor: referencia, requeridoSi: out => out.formaPago === 'Pago móvil', placeholder: 'Número o últimos dígitos' },
-      ],
+      campos,
     });
     if (!f) return;
-    datos = f;
+    ({ recibos, ...datos } = f);
     RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
   }
+  // Un recibo asociado completa la referencia y el método del abono que no los tenía (solo en el PDF).
+  abonos = abonos.map(a => {
+    const r = (recibos || []).find(x => x.abono?.id === a.id);
+    if (!r) return a;
+    const metodo = /^(saldo anterior|sin especificar)?$/i.test(a.metodo || '') ? (rvMetodoRecibo(r.datos.metodo) || a.metodo) : a.metodo;
+    return { ...a, referencia: a.referencia || r.datos.referencia || '', metodo };
+  });
   const { v, entrada } = rvArmarVoucherPaquete(datos), codigo = v.codigo_reserva, destino = v.destino_hospedaje;
   if (abonos.length) rvVoucherConAbonos(v, servs, abonos, datos.formaPago);
   const que = 'Voucher de la reserva', base = `Voucher ${codigo || RV_RESERVA_ID}`;
@@ -40774,9 +40874,12 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
       // Radio: opciones a la vista (titilan hasta elegir una), para elecciones que en un desplegable se pasaban por alto.
       if (c.tipo === 'radio') return `${lab}<div class="csc-opciones" id="${idc}" role="radiogroup">${(c.opciones || []).map(o => `<label class="csc-opcion"><input type="radio" name="${idc}" value="${esc(o.v)}"${String(o.v) === String(val) ? ' checked' : ''}><span>${esc(o.t)}</span></label>`).join('')}</div>`;
       if (c.tipo === 'textarea') return `${lab}<textarea class="ei" id="${idc}" placeholder="${esc(c.placeholder || '')}">${esc(val)}</textarea>`;
+      // Custom: el que llama dibuja el contenido con montar(el) y entrega su valor con leer(el).
+      if (c.tipo === 'custom') return `${lab}<div class="csc-custom" id="${idc}"></div>`;
       const extra = c.tipo === 'number' ? ` inputmode="decimal" step="${c.step ?? 'any'}"${c.min != null ? ` min="${c.min}"` : ''}${c.max != null ? ` max="${c.max}"` : ''}` : '';
       return `${lab}<input class="ei" id="${idc}" type="${c.tipo || 'text'}" value="${esc(val)}" placeholder="${esc(c.placeholder || '')}"${extra}>`;
     }).join('') : '';
+    confirmarSheetCampos?.forEach((c, i) => { if (c.tipo === 'custom') c.montar?.(document.getElementById(`csc-${i}`)); });
     const err = document.getElementById('confirmar-sheet-error');
     err.textContent = ''; err.style.display = 'none';
     document.getElementById('confirmar-sheet-acciones').classList.toggle('sheet-acciones', !!confirmarSheetCampos);
@@ -40791,9 +40894,9 @@ function resolverConfirmarSheet(valor) {
     let falta = null;
     campos.forEach((c, i) => {
       const el = document.getElementById(`csc-${i}`);
-      const v = c.tipo === 'check' ? !!el?.checked : c.tipo === 'radio' ? (el?.querySelector('input:checked')?.value ?? '') : (el?.value ?? '').trim();
+      const v = c.tipo === 'custom' ? (c.leer ? c.leer(el) : null) : c.tipo === 'check' ? !!el?.checked : c.tipo === 'radio' ? (el?.querySelector('input:checked')?.value ?? '') : (el?.value ?? '').trim();
       const requerido = typeof c.requeridoSi === 'function' ? !!c.requeridoSi(out) : c.requerido;
-      if (requerido && c.tipo !== 'check' && !v && !falta) falta = c;
+      if (requerido && c.tipo !== 'check' && c.tipo !== 'custom' && !v && !falta) falta = c;
       out[c.id ?? i] = v;
     });
     if (falta) {
