@@ -31233,7 +31233,48 @@ function waAdjuntoHtml(a) {
   if (a.tipo === 'image' || a.tipo === 'sticker') return `<img class="msg-img" ${fuente}${publica ? ` data-img="${esc(a.url)}"` : ''} alt="Foto">`;
   if (a.tipo === 'audio' || a.tipo === 'voice') return `${vozHtml(fuente, a.url)}${waTranscripcionHtml(a.transcripcion)}`;
   if (a.tipo === 'video') return `<video class="msg-img" controls preload="metadata" ${fuente}></video>`;
+  if (publica && waEsPdf(a)) {
+    const clave = waClaveDoc(a.url), mini = waMiniPdf.get(clave)?.listo;
+    return `<div class="wa-pdf" data-wa-pdf="${esc(a.url)}" data-wa-nombre="${esc(a.nombre || 'Documento.pdf')}" role="button" tabindex="0">
+      <div class="wa-pdf-mini">${mini ? `<img src="${mini}" alt="">` : '<i class="fas fa-spinner fa-spin"></i>'}</div>
+      <div class="msg-doc"><i class="fas fa-file-pdf"></i><div><div class="msg-doc-nombre">${esc(a.nombre || 'Documento PDF')}</div><div class="msg-doc-peso">PDF</div></div></div></div>`;
+  }
   return `<div class="msg-doc" ${publica ? `data-doc="${esc(a.url)}"` : fuente}><i class="fas ${iconoPorExtension(a.nombre)}"></i><div><div class="msg-doc-nombre">${esc(a.nombre || a.mime || 'Archivo')}</div></div></div>`;
+}
+// PDF del chat: portada en la burbuja y visor del chat interno (chatVerDoc) al tocarlo.
+// La URL firmada cambia en cada refresco: la caché va por la ruta sin el token.
+const waEsPdf = a => /pdf/i.test(a.mime || '') || /\.pdf$/i.test(a.nombre || '');
+const waClaveDoc = url => url.split('?')[0];
+const waMiniPdf = new Map();
+function waDocExterno(el) {
+  return { externo: true, url: el.dataset.waPdf, storage_path: 'wa:' + waClaveDoc(el.dataset.waPdf), nombre_archivo: el.dataset.waNombre, peso_bytes: 0 };
+}
+function waPintarMiniPdf(el) {
+  const m = waDocExterno(el), clave = waClaveDoc(m.url);
+  let e = waMiniPdf.get(clave);
+  if (!e) {
+    e = { listo: null };
+    e.promesa = (async () => {
+      const pdf = await (await cargarPdfjs()).getDocument({ data: await (await chatBlobAdj(m)).arrayBuffer() }).promise;
+      try {
+        const page = await pdf.getPage(1), ancho = 520;
+        const vp = page.getViewport({ scale: ancho / page.getViewport({ scale: 1 }).width });
+        const c = document.createElement('canvas');
+        c.width = ancho; c.height = Math.round(Math.min(vp.height, ancho * 1.1));
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .85));
+        return (e.listo = URL.createObjectURL(blob));
+      } finally { pdf.destroy(); }
+    })().catch(err => { console.warn('miniatura pdf', err); waMiniPdf.delete(clave); return null; });
+    waMiniPdf.set(clave, e);
+    if (waMiniPdf.size > 30) { const [k, v] = waMiniPdf.entries().next().value; if (v.listo) URL.revokeObjectURL(v.listo); waMiniPdf.delete(k); }
+  }
+  e.promesa.then(u => {
+    const caja = el.querySelector('.wa-pdf-mini'); if (!caja || !el.isConnected) return;
+    caja.innerHTML = u ? `<img src="${u}" alt="">` : '<i class="fas fa-file-pdf"></i>';
+  });
 }
 // Compartido por la vista vieja (#wa-conv-log) y la pestaña WhatsApp de Meta DM (#dm-log).
 function waHtmlMensajes(lista, idAnteriores) {
@@ -31264,6 +31305,12 @@ function waEnlazarLog(log) {
   enlazarBorrar(log, id => waEliminarMensaje(log, id));
   log.querySelectorAll('[data-img]').forEach(el => el.addEventListener('click', () => openLightbox([el.dataset.img], 0)));
   log.querySelectorAll('[data-doc]').forEach(el => el.addEventListener('click', () => window.open(el.dataset.doc, '_blank', 'noopener')));
+  log.querySelectorAll('[data-wa-pdf]').forEach(el => {
+    const abrir = () => chatVerDoc(waDocExterno(el));
+    el.addEventListener('click', abrir);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(); } });
+    if (!el.querySelector('.wa-pdf-mini img')) waPintarMiniPdf(el);
+  });
   log.querySelectorAll('[data-wa-media]').forEach(el => { if (el.dataset.waListo) delete el.dataset.waListo; else waCargarMedia(el); });
 }
 function waRenderMensajes(alFinal) {
@@ -31864,7 +31911,7 @@ const chatMsgDe = el => msgMensajes.find(x => x.id === Number(el.closest('.chat-
 const chatBlobs = new Map();
 async function chatBlobAdj(m) {
   if (chatBlobs.has(m.storage_path)) return chatBlobs.get(m.storage_path);
-  const url = msgUrlsAdjuntos[m.storage_path]; if (!url) throw new Error('sin_url');
+  const url = m.url || msgUrlsAdjuntos[m.storage_path]; if (!url) throw new Error('sin_url');
   const res = await fetch(url); if (!res.ok) throw new Error('sin_archivo');
   const blob = await res.blob();
   chatBlobs.set(m.storage_path, blob);
@@ -31966,7 +32013,7 @@ async function chatVerDoc(m) {
       <button type="button" data-cdv="cerrar" aria-label="Cerrar"><i class="fas fa-arrow-left"></i></button>
       <div class="cdv-titulo">${esc(m.nombre_archivo || 'Documento')}<small>${formatBytes(m.peso_bytes)}</small></div>
       <button type="button" data-cdv="compartir" aria-label="Compartir"><i class="fas fa-share-nodes"></i><span>Compartir</span></button>
-      <button type="button" class="wa" data-cdv="wa" aria-label="Enviar por WhatsApp"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></button>
+      ${m.externo ? '' : '<button type="button" class="wa" data-cdv="wa" aria-label="Enviar por WhatsApp"><i class="fab fa-whatsapp"></i><span>WhatsApp</span></button>'}
       <button type="button" data-cdv="descargar" aria-label="Descargar"><i class="fas fa-download"></i></button>
     </div>
     <div class="cdv-paginas"><div class="cdv-aviso"><i class="fas fa-spinner fa-spin"></i> Abriendo documento…</div></div>
@@ -31987,7 +32034,9 @@ async function chatVerDoc(m) {
   const cont = el.querySelector('.cdv-paginas');
   try {
     const lib = await cargarPdfjs();
-    const pdf = await lib.getDocument({ data: await (await chatBlobAdj(m)).arrayBuffer() }).promise;
+    const blob = await chatBlobAdj(m);
+    m.peso_bytes ||= blob.size;
+    const pdf = await lib.getDocument({ data: await blob.arrayBuffer() }).promise;
     if (chatDocVisor !== s) { pdf.destroy(); return; }
     s.pdf = pdf;
     el.querySelector('.cdv-titulo small').textContent = `${formatBytes(m.peso_bytes)} · ${pdf.numPages} ${pdf.numPages === 1 ? 'página' : 'páginas'}`;
@@ -32505,7 +32554,7 @@ async function chatAccionMensaje(acc, mid) {
   }
 }
 async function chatDescargar(m) {
-  const url = msgUrlsAdjuntos[m.storage_path]; if (!url) return;
+  const url = m.url || msgUrlsAdjuntos[m.storage_path]; if (!url) return;
   try {
     const blob = await (await fetch(url)).blob();
     const a = document.createElement('a');
