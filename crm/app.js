@@ -12061,7 +12061,23 @@ function loadWaBandeja() {
     WB.enlazar();
     if (ROL === 'admin') wbCoexistencia();
   }
+  // Pedido del dueño (2026-11-12): admin entra directo al número compartido; con «Volver» se ve la bandeja.
+  const volviendo = wbVolviendo; wbVolviendo = false;
+  if (ROL === 'admin' && !volviendo) wbIrCompartido();
   return WB.abrirSeccion();
+}
+let wbVolviendo = false;
+async function wbIrCompartido() {
+  if (!waNumeros) { try { waNumeros = (await waInvocar({ accion: 'numeros' })).numeros; } catch { return; } }
+  const n = waNumeros.find(x => x.compartido && x.activo);
+  if (n && document.getElementById('sec-wa-bandeja')?.classList.contains('active')) wbAbrirNumero(n.id);
+}
+function wbAbrirNumero(id) {
+  if (waCuenta !== id) { waCuenta = id; waChats = []; waChatsCursor = null; }
+  try { localStorage.setItem('wa-numero', id); } catch {}
+  if (waSelPintado) document.getElementById('wa-numero').value = id;
+  waVolverA = 'wa-bandeja';
+  activateSection('whatsapp');
 }
 // Admin: los números en coexistencia (Zernio: asesores y compartido) se eligen
 // desde WhatsApp empresa y se abren en la vista por número.
@@ -12074,12 +12090,7 @@ async function wbCoexistencia() {
   document.getElementById('wb-coex').addEventListener('change', e => {
     const id = e.target.value;
     e.target.value = '';
-    if (!id) return;
-    if (waCuenta !== id) { waCuenta = id; waChats = []; waChatsCursor = null; }
-    try { localStorage.setItem('wa-numero', id); } catch {}
-    if (waSelPintado) document.getElementById('wa-numero').value = id;
-    waVolverA = 'wa-bandeja';
-    activateSection('whatsapp');
+    if (id) wbAbrirNumero(id);
   });
 }
 
@@ -30902,7 +30913,7 @@ function setupWhatsapp() {
     if (f) { e.preventDefault(); waEnviarArchivo(f); }
   });
   waSoltarArchivos();
-  document.getElementById('wa-volver-dm').addEventListener('click', () => activateSection(waVolverA));
+  document.getElementById('wa-volver-dm').addEventListener('click', () => { wbVolviendo = waVolverA === 'wa-bandeja'; activateSection(waVolverA); });
   document.getElementById('wa-ver-lead').addEventListener('click', () => { if (waActual?.lead) abrirLeadDesdeMisVentas(waActual.lead.id); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && currentSec === 'whatsapp') waTick(); });
 }
@@ -36270,7 +36281,7 @@ async function cbChatAbierto(leadId) {
   return ventanaWaAbierta(c) ? c : null;
 }
 async function cbPdfAlChat(c, blob, nombre) {
-  activateSection('wa-bandeja');
+  wbVolviendo = true; activateSection('wa-bandeja');
   if (!WB) loadWaBandeja();
   await WB.pdfEnChat(c, new File([blob], nombre, { type: 'application/pdf' }));
 }
