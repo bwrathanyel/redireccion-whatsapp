@@ -5785,6 +5785,17 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .ss-v-noche span{font-size:9px;font-weight:800;text-transform:uppercase;color:var(--muted2)}
 .ss-v-noche.st{background:color-mix(in srgb,var(--danger) 35%,transparent);border-color:color-mix(in srgb,var(--danger) 55%,transparent)}
 .ss-v-noche.rq{background:color-mix(in srgb,var(--amber) 22%,transparent);border:1px dashed color-mix(in srgb,var(--amber) 60%,transparent)}
+.ss-disp-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.ss-disp-form label,.ss-disp-txt{display:block}
+.ss-disp-txt{margin-top:10px}
+.ss-disp-txt textarea{width:100%;resize:vertical;font-family:inherit;line-height:1.45}
+.ss-disp-sec{margin-top:14px}
+.ss-disp-sec h4{margin:0 0 7px;font-size:12px;font-weight:800;color:var(--muted)}
+.ss-disp-lista{display:flex;flex-wrap:wrap;gap:6px}
+.ss-disp-chip{display:inline-flex;align-items:baseline;gap:6px;border:1px solid color-mix(in srgb,var(--green) 35%,transparent);background:color-mix(in srgb,var(--green) 10%,transparent);border-radius:10px;padding:5px 10px;font-size:12px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums}
+.ss-disp-chip small{font-size:11px;font-weight:600;color:var(--muted)}
+.ss-disp-chip.st{border-color:color-mix(in srgb,var(--danger) 50%,transparent);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.ss-disp-aviso{margin-top:10px;font-size:12px;color:var(--amber)}
 .ss-v-tramos{margin-top:9px;font-size:12px;color:var(--muted);line-height:1.7}
 .ss-v-tramos b{color:var(--txt)}
 .ss-rotulo{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:7px}
@@ -12219,6 +12230,27 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div id="ss-publicar-box" style="display:none;margin-top:14px">
           <div class="csub" style="margin-bottom:8px"><i class="fas fa-triangle-exclamation" style="color:#f59e0b"></i> Publicar reemplaza los bloqueos del PDF anterior de BT. Los bloqueos manuales, como los de Los Roques, se conservan.</div>
           <button class="dbtn save" id="ss-publicar"><i class="fas fa-check"></i> Confirmar y publicar</button>
+        </div>
+        </div>
+      </details>
+
+      <!-- Disponibilidad por texto (Gremary manda «3 a 5 / 1 doble»): solo pestaña Los Roques y oficina. -->
+      <details class="dsec ss-admin" id="ss-disp-box" style="margin-top:14px;display:none">
+        <summary><i class="fas fa-paste dsec-ic"></i> Cargar disponibilidad por texto <span class="ss-admin-meta" id="ss-disp-ultima"></span><i class="fas fa-chevron-down dsec-arrow"></i></summary>
+        <div class="dsec-body">
+        <div class="ce-intro">
+          Pega el mensaje tal como lo manda la posada (Gremary: «Disponibilidad Enero», «3 a 5», «1 doble»…).
+          Cada rango es <b>entrada a salida</b>. Las noches del mes que no aparecen en ningún rango quedan <b>sin cupo</b>.
+          Nada se publica hasta que confirmes.
+        </div>
+        <div class="ss-disp-form">
+          <label><span class="fl">Hotel</span><select class="ei" id="ss-disp-hotel"><option value="">— elige un hotel —</option></select></label>
+          <label><span class="fl">Mes de la disponibilidad</span><input type="month" class="ei" id="ss-disp-mes"></label>
+        </div>
+        <label class="ss-disp-txt"><span class="fl">Texto de la posada</span><textarea class="ei" id="ss-disp-texto" rows="8" placeholder="Disponibilidad Enero&#10;&#10;3 a 5&#10;1 doble&#10;&#10;4 a 6&#10;1 doble"></textarea></label>
+        <div id="ss-disp-preview"></div>
+        <div id="ss-disp-publicar-box" hidden style="margin-top:12px">
+          <button class="dbtn save" id="ss-disp-publicar" type="button"><i class="fas fa-check"></i> Confirmar y publicar</button>
         </div>
         </div>
       </details>

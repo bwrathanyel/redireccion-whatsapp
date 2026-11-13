@@ -20727,6 +20727,10 @@ function setupStopSales() {
   document.getElementById('ss-vig-buscar')?.addEventListener('input', () => ssRenderVigentes());
   document.querySelectorAll('[data-ss-destino]').forEach(b => b.addEventListener('click', () => ssCambiarDestino(b.dataset.ssDestino)));
   document.getElementById('ss-ver-pdf')?.addEventListener('click', ssVerPdfOriginal);
+  document.getElementById('ss-disp-texto')?.addEventListener('input', ssDispPreview);
+  document.getElementById('ss-disp-mes')?.addEventListener('change', () => { SS_DISP_MES_MANUAL = !!val('ss-disp-mes'); ssDispPreview(); });
+  document.getElementById('ss-disp-hotel')?.addEventListener('change', () => { ssDispUltima(); ssDispPreview(); });
+  document.getElementById('ss-disp-publicar')?.addEventListener('click', ssDispPublicar);
 
   const ent = document.getElementById('ss-v-entrada');
   const sal = document.getElementById('ss-v-salida');
@@ -20887,6 +20891,131 @@ function ssLibreDesde(rangos, desde) {
     d.setDate(d.getDate() + 1);
   }
   return null;
+}
+
+/* ---------- Disponibilidad por texto (Los Roques, Gremary) ----------
+   La posada manda las entradas que tiene libres («3 a 5 / 1 doble»): rango =
+   entrada a salida, se duerme hasta la víspera de la salida. Las noches del mes
+   que ningún rango cubre se publican como stop sale manual del hotel; lo de
+   otros meses no se toca (RPC stop_sales_disponibilidad_publicar). */
+let SS_DISP_LISTO = null, SS_DISP_MES_MANUAL = false;
+const ssDispNorm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const SS_DISP_TIPOS = [['mat', 'matrimonial'], ['dob', 'doble'], ['tri', 'triple'], ['cua', 'cuádruple'], ['sen', 'sencilla'], ['sim', 'sencilla'], ['sin', 'sencilla'], ['fam', 'familiar'], ['sui', 'suite']];
+const ssDispTipo = w => (SS_DISP_TIPOS.find(([p]) => w.startsWith(p)) || [, w])[1];
+const ssDispPlural = (n, t) => n === 1 ? t : /[aeiouáéíóú]$/.test(t) ? t + 's' : t + 'es';
+const ssDispDia = iso => { const d = ssFecha(iso); return `${d.getDate()} ${SS_MESES[d.getMonth()].slice(0, 3)}`; };
+
+function ssDispParsear(texto, hoy = new Date()) {
+  let mes = null, anio = null, otroMes = null;
+  const bloques = [], raras = [];
+  const habs = (resto, crudo) => {
+    const ms = [...resto.matchAll(/(\d+)\s*([a-z]+)/g)];
+    if (!ms.length || !bloques.length) return raras.push(crudo);
+    for (const [, n, w] of ms) bloques.at(-1).habs.push({ n: +n, tipo: ssDispTipo(w) });
+  };
+  for (const linea of String(texto || '').split(/\r?\n/)) {
+    const crudo = linea.trim(), l = ssDispNorm(crudo);
+    if (!l) continue;
+    const r = l.match(/^(?:del?\s+)?(\d{1,2})\s*(?:a|al|-|–|hasta)\s*(\d{1,2})(?!\d)\s*(.*)$/);
+    if (r) { bloques.push({ d1: +r[1], d2: +r[2], habs: [] }); if (r[3]) habs(r[3], crudo); continue; }
+    if (/^\d+\s*[a-z]/.test(l)) { habs(l, crudo); continue; }
+    const iMes = SS_MESES.findIndex(m => new RegExp(`(^|[^a-z])${m}([^a-z]|$)`).test(l));
+    if (iMes >= 0) {
+      if (mes == null) { mes = iMes; anio = +(l.match(/\b(20\d\d)\b/)?.[1] || 0) || null; }
+      else if (iMes !== mes) otroMes = SS_MESES[iMes];
+      continue;
+    }
+    raras.push(crudo);
+  }
+  if (mes != null && !anio) anio = hoy.getFullYear() + (mes < hoy.getMonth() ? 1 : 0);
+  return { mes: mes == null ? null : `${anio}-${String(mes + 1).padStart(2, '0')}`, otroMes, bloques, raras };
+}
+
+function ssDispCalcular(p, mesISO) {
+  const [a, m] = mesISO.split('-').map(Number);
+  const ultimo = new Date(a, m, 0).getDate();
+  const errores = [], libres = new Set(), rangos = [];
+  for (const b of p.bloques) {
+    const ent = new Date(a, m - 1, b.d1), sal = new Date(a, m - 1 + (b.d2 <= b.d1 ? 1 : 0), b.d2);
+    if (b.d1 < 1 || b.d1 > ultimo || b.d2 < 1 || sal.getDate() !== b.d2 || (sal - ent) / 864e5 > 21) { errores.push(`«${b.d1} a ${b.d2}» no es un rango válido de ${ssMesLargo(mesISO)}.`); continue; }
+    for (const d = new Date(ent); d < sal; d.setDate(d.getDate() + 1)) libres.add(ssISO(d));
+    rangos.push({ ...b, entrada: ssISO(ent), salida: ssISO(sal) });
+  }
+  const noches = [], bloqueos = [];
+  for (let dia = 1; dia <= ultimo; dia++) {
+    const d = new Date(a, m - 1, dia), iso = ssISO(d), libre = libres.has(iso);
+    if (!libre) { if (dia > 1 && !noches[dia - 2].libre) bloqueos.at(-1).fecha_hasta = iso; else bloqueos.push({ fecha_desde: iso, fecha_hasta: iso, estado: 'stop_sale' }); }
+    noches.push({ iso, dow: d.getDay(), libre });
+  }
+  return { desde: `${mesISO}-01`, hasta: `${mesISO}-${String(ultimo).padStart(2, '0')}`, rangos, noches, bloqueos, errores };
+}
+
+async function ssDispPintarHoteles() {
+  const sel = document.getElementById('ss-disp-hotel');
+  if (!sel) return;
+  const hoteles = (await ssProductosHotel()).filter(h => ssEsLosRoques(h.destino));
+  const actual = sel.value || String(hoteles.find(h => /gremary/i.test(h.nombre))?.id || '');
+  sel.innerHTML = '<option value="">— elige un hotel —</option>' + hoteles.map(h => `<option value="${h.id}">${esc(h.nombre)}</option>`).join('');
+  sel.value = actual;
+  ssDispUltima(); ssDispPreview();
+}
+
+async function ssDispUltima() {
+  const meta = document.getElementById('ss-disp-ultima'), pid = val('ss-disp-hotel');
+  if (!meta) return;
+  meta.textContent = '';
+  if (!pid) return;
+  const { data, error } = await sb.rpc('stop_sales_textos_ultimos', { p_producto_id: Number(pid) });
+  if (error || pid !== val('ss-disp-hotel')) return;
+  const u = data?.[0];
+  meta.textContent = u ? `· ${ssMesLargo(u.periodo_desde.slice(0, 7))}, cargado ${fmtDiaCorto(ssISO(new Date(u.creado_en)))}${u.creado_por ? ' por ' + u.creado_por : ''}` : '· sin cargas todavía';
+}
+
+function ssDispPreview() {
+  const box = document.getElementById('ss-disp-preview'), pubBox = document.getElementById('ss-disp-publicar-box');
+  if (!box) return;
+  SS_DISP_LISTO = null; pubBox.hidden = true;
+  const texto = document.getElementById('ss-disp-texto').value, mesIn = document.getElementById('ss-disp-mes');
+  if (!texto.trim()) { box.innerHTML = ''; SS_DISP_MES_MANUAL = false; return; }
+  const p = ssDispParsear(texto);
+  if (p.mes && !SS_DISP_MES_MANUAL) mesIn.value = p.mes;
+  const mes = mesIn.value, pid = val('ss-disp-hotel');
+  const errores = [];
+  if (!pid) errores.push('Elige el hotel.');
+  if (!mes) errores.push('No encontré el mes en el texto: elígelo arriba.');
+  if (!p.bloques.length) errores.push('No encontré ningún rango tipo «3 a 5».');
+  if (p.otroMes) errores.push(`El texto trae también ${p.otroMes}: carga un mes por vez.`);
+  const c = mes && p.bloques.length ? ssDispCalcular(p, mes) : null;
+  if (c) errores.push(...c.errores);
+  const avisos = [...p.raras.map(r => `No entendí «${r}»; no se tomó en cuenta.`), ...p.bloques.filter(b => !b.habs.length).map(b => `«${b.d1} a ${b.d2}» no dice habitaciones; se toma como con cupo.`)];
+  let html = errores.map(e => `<div class="ss-v-error">${esc(e)}</div>`).join('') + avisos.map(a => `<div class="ss-disp-aviso"><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</div>`).join('');
+  if (c) {
+    const hab = r => r.habs.map(h => `${h.n} ${ssDispPlural(h.n, h.tipo)}`).join(' · ') || 'sin detalle';
+    const cuantas = b => { const n = Math.round((ssFecha(b.fecha_hasta) - ssFecha(b.fecha_desde)) / 864e5) + 1; return `${n} noche${n === 1 ? '' : 's'}`; };
+    html += `<div class="ss-disp-sec"><h4>Con cupo · ${c.rangos.length} entrada${c.rangos.length === 1 ? '' : 's'}</h4><div class="ss-disp-lista">${c.rangos.map(r => `<span class="ss-disp-chip">${ssDispDia(r.entrada)} → ${ssDispDia(r.salida)}<small>${esc(hab(r))}</small></span>`).join('')}</div></div>
+      <div class="ss-disp-sec"><h4>Quedan sin cupo (stop sale)</h4><div class="ss-disp-lista">${c.bloqueos.length ? c.bloqueos.map(b => `<span class="ss-disp-chip st">${b.fecha_desde === b.fecha_hasta ? ssDispDia(b.fecha_desde) : `${ssDispDia(b.fecha_desde)} al ${ssDispDia(b.fecha_hasta)}`}<small>${cuantas(b)}</small></span>`).join('') : '<span class="ss-v-hint" style="margin:0">Ninguna: todo el mes tiene cupo.</span>'}</div></div>
+      <div class="ss-v-noches">${c.noches.map(n => `<div class="ss-v-noche${n.libre ? '' : ' st'}" title="Noche del ${fmtDiaCorto(n.iso)}: ${n.libre ? 'con cupo' : 'sin cupo'}"><b>${+n.iso.slice(8)}</b><span>${'DLMMJVS'[n.dow]}</span></div>`).join('')}</div>`;
+    if (!errores.length) {
+      const hotel = document.getElementById('ss-disp-hotel').selectedOptions[0]?.textContent || '';
+      html += `<div class="csub" style="margin-top:10px">Reemplaza los bloqueos manuales de ${esc(hotel)} del ${ssFechaCompleta(c.desde)} al ${ssFechaCompleta(c.hasta)}. Los de otros meses no cambian.</div>`;
+      SS_DISP_LISTO = { pid: Number(pid), texto: texto.trim(), ...c };
+      pubBox.hidden = false;
+    }
+  }
+  box.innerHTML = html;
+}
+
+async function ssDispPublicar() {
+  const L = SS_DISP_LISTO, btn = document.getElementById('ss-disp-publicar');
+  if (!L || btn.disabled) return;
+  btn.disabled = true;
+  const { data, error } = await sb.rpc('stop_sales_disponibilidad_publicar', { p_producto_id: L.pid, p_desde: L.desde, p_hasta: L.hasta, p_bloqueos: L.bloqueos, p_texto: L.texto });
+  btn.disabled = false;
+  if (error) return errToast('No se pudo publicar: ' + error.message);
+  okToast(`Disponibilidad de ${ssMesLargo(L.desde.slice(0, 7))} publicada: ${data?.insertados ?? 0} bloqueo${data?.insertados === 1 ? '' : 's'}`);
+  document.getElementById('ss-disp-texto').value = '';
+  ssDispPreview(); ssDispUltima();
+  loadStopSalesVigentes();
 }
 
 function ssTextoLibre(iso) {
@@ -21092,6 +21221,8 @@ function ssCambiarDestino(destino) {
   });
   document.getElementById('ss-fresco').style.display = destino === 'roques' ? 'none' : '';
   document.getElementById('ss-admin-box').style.display = destino === 'bt' && esOficina() ? '' : 'none';
+  const disp = document.getElementById('ss-disp-box');
+  if (disp) { disp.style.display = destino === 'roques' && esOficina() ? '' : 'none'; if (destino === 'roques' && esOficina()) ssDispPintarHoteles(); }
   ssRenderVigentes();
   ssPintarHotelesVerif().then(ssVerificar);
 }
