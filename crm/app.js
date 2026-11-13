@@ -6170,9 +6170,7 @@ function rvFormServicio(p) {
     <div id="rv-s-detalle"></div>
     <div class="rv-sec"><i class="fas fa-tag"></i> Precio al cliente</div>
     <div class="rv-fila"><div><label class="fl" for="rv-s-precio">Monto</label><input class="ei" id="rv-s-precio" type="number" inputmode="decimal" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl" for="rv-s-moneda">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl" for="rv-s-tasa">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
-    ${rvPagoHtml(s)}
     ${rvBotones('guardar-servicio')}</div>`;
-  rvPagoInit(p, s);
   const desc = document.getElementById('rv-s-desc');
   desc.dataset.manual = desc.value ? '1' : '';
   desc.addEventListener('input', () => { desc.dataset.manual = desc.value ? '1' : ''; });
@@ -6199,113 +6197,6 @@ function rvFormServicio(p) {
   if (viaje === 'ow') { const fin = document.getElementById('rv-s-fin'); if (fin) fin.disabled = true; }
   rvAptoCampo();
   rvHoraVisible();
-}
-// Pago del cliente al cargar o editar el servicio (pedido del dueño 04-nov): abono o pago completo con
-// método, referencia y captura. Se registra con la cadena de abonos.js (duplicados, recibo, voucher) al guardar.
-const rvUsd = n => rvMonto(Math.round(Number(n || 0) * 100), 'USD');
-const rvPuedePagar = () => rvPuedeEditar() && ['admin', 'asesor', 'administrativo'].includes(ROL);
-function rvPagoHtml(s) {
-  if (!rvPuedePagar() || s?.anulado_en) return '';
-  const ab = abonosModulo(), d = ab.datos();
-  const pagos = s && d ? (d.abonos || []).filter(a => !a.anulado_en && Number(a.servicio_id) === s.id) : [];
-  const pagado = s ? ab.pagadoDe(s.id) : null, precio = Number(s?.precio_usd_centavos || 0) / 100;
-  const resumen = s && pagado != null ? `<div class="csub">Pagado <b>${rvUsd(pagado)}</b> de ${rvUsd(precio)}${precio > pagado ? ` · falta <b>${rvUsd(precio - pagado)}</b>` : precio > 0 ? ' · pagado completo' : ''}</div>` : '';
-  // Cada pago se edita con el mismo formulario de Abonos (método, referencia, captura): una sola forma de corregir un pago.
-  const lista = pagos.map(a => `<div class="rv-pago-fila"><span><b>${rvUsd(a.monto_usd)}</b> · ${esc(a.metodo || 'sin método')} · ${a.referencia ? esc(a.referencia) : '<i>sin referencia</i>'}</span>
-    <button class="ab-mini" type="button" data-rv-pago-editar="${a.id}"><i class="fas fa-pen"></i>Editar</button></div>`).join('');
-  const chips = ab.METODOS.map(m => `<button class="ab-chip${m === 'Zelle' ? ' on' : ''}" type="button" data-rv-pago-metodo="${esc(m)}">${esc(m)}</button>`).join('');
-  const tasas = Object.entries(ab.TASAS).map(([t, n]) => `<option value="${t}" ${ab.tasa(t) ? '' : 'disabled'}>${n}${ab.tasa(t) ? ` · ${ab.tasa(t).toLocaleString('es-VE', { maximumFractionDigits: 4 })}` : ' · sin cargar'}</option>`).join('');
-  return `<div class="rv-sec"><i class="fas fa-money-bill-wave"></i> Pago del cliente</div>
-    ${resumen}${lista}
-    <div class="csub" id="rv-s-pago-ok" hidden><i class="fas fa-circle-check"></i> No hay nada que cobrar. <a href="#" id="rv-s-pago-otro">Registrar otro pago</a></div>
-    <div class="seg-group seg-group-sm" id="rv-s-pago-modo">${Object.entries({ no: 'Sin pago ahora', abono: 'Abono', completo: 'Pago completo' }).map(([k, t]) => `<button class="seg${k === 'no' ? ' on' : ''}" type="button" data-rv-pago-modo="${k}">${t}</button>`).join('')}</div>
-    <div id="rv-s-pago-campos" hidden>
-      <div class="rv-3"><div id="rv-s-pago-monto-box"><label class="fl" for="rv-s-pago-monto">Monto del abono</label><input class="ei" id="rv-s-pago-monto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></div>
-        <div><label class="fl" for="rv-s-pago-moneda">Moneda</label><select class="ei" id="rv-s-pago-moneda"><option value="USD">Dólares (USD)</option><option value="VES">Bolívares (VES)</option></select></div>
-        <div id="rv-s-pago-tasa-box" hidden><label class="fl" for="rv-s-pago-tasa">Tasa</label><select class="ei" id="rv-s-pago-tasa">${tasas}</select></div></div>
-      <div class="csub" id="rv-s-pago-eq"></div>
-      <label class="fl">Método de pago</label><div class="ab-chips" id="rv-s-pago-metodos">${chips}</div>
-      <label class="fl" for="rv-s-pago-ref">Referencia</label><input class="ei" id="rv-s-pago-ref" maxlength="120" placeholder="Número de operación">
-      <label class="fl" for="rv-s-pago-file">Captura del comprobante (opcional)</label><input class="ei" id="rv-s-pago-file" type="file" accept="image/jpeg,image/png,image/webp">
-      <div class="csub" id="rv-s-pago-ia" hidden></div>
-      <label class="fl" for="rv-s-pago-nota">Nota (opcional)</label><input class="ei" id="rv-s-pago-nota" maxlength="2000">
-      <div class="csub">Queda en Abonos con su recibo y actualiza el voucher, igual que un abono cargado desde ahí.</div>
-    </div>`;
-}
-// Lo que falta del servicio según el precio escrito (estimado: el monto real del pago completo se calcula al guardar).
-function rvPagoFalta(s) {
-  const precio = Number(val('rv-s-precio') || 0), mon = val('rv-s-moneda'), tasa = Number(val('rv-s-tasa') || 0);
-  const usd = mon === 'USD' ? precio : tasa > 0 ? precio / tasa : s && Number(s.precio_centavos || 0) / 100 === precio ? Number(s.precio_usd_centavos || 0) / 100 : null;
-  return usd == null ? null : Math.max(0, usd - (s ? abonosModulo().pagadoDe(s.id) || 0 : 0));
-}
-function rvPagoInit(p, s) {
-  const box = document.getElementById('rv-s-pago-campos'); if (!box) return;
-  const modo = () => p.querySelector('[data-rv-pago-modo].on')?.dataset.rvPagoModo || 'no';
-  // Servicio ya saldado: se oculta el selector (no es un estado, es «registrar un pago nuevo»); si sube el precio vuelve solo.
-  let otroPago = false;
-  document.getElementById('rv-s-pago-otro').onclick = e => { e.preventDefault(); otroPago = true; pintar(); };
-  p.querySelectorAll('[data-rv-pago-editar]').forEach(b => b.onclick = () => {
-    rvTab('abonos'); abonosModulo().editar(b.dataset.rvPagoEditar);
-    document.querySelector('[data-rv-panel="abonos"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  });
-  const pintar = () => {
-    const saldado = !otroPago && s && Number(val('rv-s-precio') || 0) > 0 && (abonosModulo().pagadoDe(s.id) || 0) > 0 && rvPagoFalta(s) === 0;
-    if (saldado) p.querySelectorAll('[data-rv-pago-modo]').forEach(x => x.classList.toggle('on', x.dataset.rvPagoModo === 'no'));
-    document.getElementById('rv-s-pago-ok').hidden = !saldado;
-    document.getElementById('rv-s-pago-modo').hidden = saldado;
-    const m = modo(), ves = val('rv-s-pago-moneda') === 'VES', ab = abonosModulo();
-    box.hidden = m === 'no';
-    document.getElementById('rv-s-pago-monto-box').hidden = m === 'completo';
-    document.getElementById('rv-s-pago-tasa-box').hidden = !ves;
-    const tasa = ab.tasa(val('rv-s-pago-tasa')), monto = Number(val('rv-s-pago-monto') || 0), falta = rvPagoFalta(s);
-    document.getElementById('rv-s-pago-eq').textContent = m === 'completo'
-      ? (falta == null ? 'Se cobra lo que le falte al servicio (se calcula al guardar).' : `Se cobra lo que le falta al servicio: ${rvUsd(falta)}${ves && tasa ? ` ≈ Bs ${(falta * tasa).toLocaleString('es-VE', { maximumFractionDigits: 2 })}` : ''}.`)
-      : ves && monto ? (tasa ? `Equivale a ${rvUsd(monto / tasa)}` : 'No hay tasa cargada: elige otra o cobra en dólares.') : '';
-  };
-  p.querySelectorAll('[data-rv-pago-modo]').forEach(b => b.onclick = () => { p.querySelectorAll('[data-rv-pago-modo]').forEach(x => x.classList.toggle('on', x === b)); pintar(); });
-  p.querySelectorAll('[data-rv-pago-metodo]').forEach(b => b.onclick = () => {
-    p.querySelectorAll('[data-rv-pago-metodo]').forEach(x => x.classList.toggle('on', x === b));
-    if (b.dataset.rvPagoMetodo === 'Pago móvil') document.getElementById('rv-s-pago-moneda').value = 'VES';
-    pintar();
-  });
-  ['rv-s-pago-monto', 'rv-s-pago-moneda', 'rv-s-pago-tasa', 'rv-s-precio', 'rv-s-moneda', 'rv-s-tasa'].forEach(k => document.getElementById(k)?.addEventListener('input', pintar));
-  ['rv-s-pago-moneda', 'rv-s-pago-tasa', 'rv-s-moneda'].forEach(k => document.getElementById(k)?.addEventListener('change', pintar));
-  // La captura prellena lo que esté vacío (EF analizar-comprobante, la misma de Abonos); nunca registra nada.
-  document.getElementById('rv-s-pago-file').onchange = async e => {
-    const archivo = e.target.files?.[0], aviso = document.getElementById('rv-s-pago-ia');
-    e.target.dataset.fecha = '';
-    if (!archivo) { aviso.hidden = true; return; }
-    aviso.hidden = false; aviso.textContent = 'Leyendo el comprobante…';
-    const d = await abonosModulo().analizarCaptura(archivo);
-    if (!aviso.isConnected || e.target.files?.[0] !== archivo) return;
-    if (!d) { aviso.textContent = 'No se pudo leer: completa los datos a mano.'; return; }
-    const puestos = [], monto = document.getElementById('rv-s-pago-monto'), ref = document.getElementById('rv-s-pago-ref');
-    if (d.moneda && ['USD', 'VES'].includes(d.moneda) && !monto.value) { document.getElementById('rv-s-pago-moneda').value = d.moneda; puestos.push('moneda'); }
-    if (d.monto != null && modo() === 'abono' && !monto.value) { monto.value = d.monto; puestos.push('monto'); }
-    if (d.referencia && !ref.value) { ref.value = d.referencia; puestos.push('referencia'); }
-    const chip = d.metodo && p.querySelector(`[data-rv-pago-metodo="${CSS.escape(d.metodo)}"]`);
-    if (chip) { p.querySelectorAll('[data-rv-pago-metodo]').forEach(x => x.classList.toggle('on', x === chip)); puestos.push('método'); }
-    // Pago de otro día: el abono queda con esa fecha y la tasa de ese día (abonos.js, tasas_del_dia).
-    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });
-    if (d.fecha && d.fecha < hoy && d.fecha >= '2020-01-01') { e.target.dataset.fecha = d.fecha; puestos.push(`fecha ${d.fecha.split('-').reverse().join('/')}, se cobra a la tasa de ese día`); }
-    aviso.textContent = puestos.length ? `Leído del comprobante: ${puestos.join(', ')}${d.banco ? ` (${d.banco})` : ''}. Revísalo antes de guardar.` : 'No se encontraron datos en la captura.';
-    pintar();
-  };
-  pintar();
-}
-// null = sin pago; { error } = falta algo antes de guardar el servicio.
-function rvPagoLeer() {
-  const m = document.querySelector('#rv-s-pago-modo [data-rv-pago-modo].on')?.dataset.rvPagoModo;
-  if (!m || m === 'no') return null;
-  const moneda = val('rv-s-pago-moneda'), metodo = document.querySelector('#rv-s-pago-metodos [data-rv-pago-metodo].on')?.dataset.rvPagoMetodo || '';
-  const monto = Number(val('rv-s-pago-monto') || 0);
-  if (m === 'abono' && !(monto > 0)) return { error: 'Escribe el monto del abono (mayor a cero) o elige «Sin pago ahora».' };
-  if (!metodo) return { error: 'Elige el método de pago.' };
-  if (metodo === 'Pago móvil' && moneda !== 'VES') return { error: 'El Pago móvil se registra en bolívares: elige VES.' };
-  if (moneda === 'VES' && !abonosModulo().tasa(val('rv-s-pago-tasa'))) return { error: 'No hay tasa cargada para esa opción: elige otra o cobra en dólares.' };
-  return { completo: m === 'completo', monto, moneda, metodo, tasaTipo: moneda === 'VES' ? val('rv-s-pago-tasa') : 'USD',
-    referencia: val('rv-s-pago-ref').trim(), nota: val('rv-s-pago-nota').trim(), archivo: document.getElementById('rv-s-pago-file')?.files?.[0] || null,
-    fecha: document.getElementById('rv-s-pago-file')?.dataset.fecha || null };
 }
 // Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
 // La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.
@@ -6854,9 +6745,6 @@ async function rvGuardarServicio(btn) {
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
     if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
   }
-  // El pago se valida antes de guardar el servicio: un error después ya no deja corregirlo en el formulario.
-  const pago = rvVista() !== 'boleteria' ? rvPagoLeer() : null;
-  if (pago?.error) { err.textContent = pago.error; return; }
   // Apartamento: solo si el selector está en pantalla (si no cargó, no se toca lo asignado).
   const hosp = rvVista() !== 'boleteria' && datos.tipo === 'hospedaje';
   const selApto = hosp ? document.getElementById('rv-s-apto-sel') : null;
@@ -6894,11 +6782,6 @@ async function rvGuardarServicio(btn) {
   RV_FORM = null; rvTrasCambio();
   if (falla || fallaTramos) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}${falla ? ', pero el apartamento no se asignó: ' + falla : ''}${fallaTramos ? '; los tramos no se cargaron: ' + fallaTramos : ''}`);
   else okToast((id ? 'Servicio actualizado' : 'Servicio agregado') + aviso);
-  if (pago && sid) {
-    // El servicio ya quedó: si el pago falla se avisa y se lleva a Abonos (no se vuelve a guardar el servicio).
-    const ok = await abonosModulo().pagarServicio(RV_RESERVA_ID, { ...pago, servicio: sid }, m => { if (m) errToast(`${id ? 'Servicio actualizado' : 'Servicio agregado'}, pero el pago no se registró: ${m}. Cárgalo desde Abonos.`); });
-    if (!ok) rvTab('abonos');
-  }
 }
 function rvFormCosto(p) {
   const s = (RV_DET.servicios || []).find(x => x.id === RV_FORM.id);
