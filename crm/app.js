@@ -4323,7 +4323,7 @@ async function loadPostventa(silencioso) {
     return;
   }
   // Las reservas de empresa viven solo en la pestaña Empresas.
-  POSTVENTA = (bandeja.data || []).filter(c => c.empresa_id == null);
+  POSTVENTA = pvViajoPagado((bandeja.data || []).filter(c => c.empresa_id == null));
   if (!RV_DESTINOS && (esOficina() || ROL === 'asesor')) {
     const d = await sb.rpc('listar_destinos', { p_solo_activos: true });
     if (!d.error) RV_DESTINOS = d.data || [];
@@ -4714,6 +4714,22 @@ function pvViaje(c) {
   const h = -dFin;
   return { bucket: 'volvio', orden: h, ic: 'fa-house-chimney', col: 'var(--muted)', t: h === 1 ? 'Volvió ayer' : `Volvió hace ${lapso(h)}` };
 }
+// Nadie viaja sin pagar: si el viaje ya terminó y queda saldo, es un abono que no se cargó.
+// Se muestra como pagado (sin «Saldo»/«Cuotas vencidas», fuera de «con saldo»); el saldo
+// registrado queda en `saldo_sin_cargar` y el abono real se puede cargar desde Gestionar.
+function pvViajoPagado(lista) {
+  lista.forEach(c => {
+    if (pvViaje(c).bucket !== 'volvio') return;
+    const saldo = Number(c.saldo_pendiente) || 0;
+    if (saldo > 0) {
+      c.saldo_sin_cargar = saldo;
+      c.saldo_pendiente = 0;
+      c.monto_pagado = Math.max(Number(c.monto_pagado) || 0, Number(c.monto_total) || 0);
+    }
+    if (Array.isArray(c.falta_resumen)) c.falta_resumen = c.falta_resumen.filter(f => f.codigo !== 'saldo' && f.codigo !== 'cuotas');
+  });
+  return lista;
+}
 function pvCardHtml(c, extra = '') {
     const ahora = Date.now();
     const etapa = PV_ETAPAS[c.etapa] || [c.etapa, 'fa-circle'];
@@ -4754,7 +4770,7 @@ async function pvBandejaCompleta() {
   const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: null });
   if (error) { console.error('postventa_bandeja', error); return null; }
   if (!RV_DESTINOS) { const d = await sb.rpc('listar_destinos', { p_solo_activos: true }); if (!d.error) RV_DESTINOS = d.data || []; }
-  return data || [];
+  return pvViajoPagado(data || []);
 }
 // items: [{ reserva, grupo, extra }]. Chips por grupo + grilla de tarjetas; sheetId se cierra al gestionar.
 function pvGruposGrid(cont, items, sheetId, vacio) {
