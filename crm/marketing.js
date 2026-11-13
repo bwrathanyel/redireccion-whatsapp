@@ -152,7 +152,7 @@ const ESTADOS = { scheduled: 'Programada', publishing: 'Publicando', published: 
 const DIAS_SEM = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
 const ACEPTA = 'image/jpeg,image/png,image/webp,video/mp4,video/quicktime';
 
-export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', raiz }) {
+export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', raiz, verPdf }) {
   const oficina = rol === 'admin' || rol === 'administrativo';
   let marcas = [], errores = {}, formAbierto = false, colorNuevo = 'blue', ocupado = false, iniciado = false;
   let pestana = 'calendario', mes = null, filtro = '', posts = [], erroresPosts = {}, pedido = 0, ed = null, fondo = null, cajon = null;
@@ -686,7 +686,8 @@ export function crearMarketing({ sb, esc, ok, error, confirmar, rol = 'admin', r
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(150, 150, 150);
     if (faltan.length) doc.text('Instagram no entregó parte de los datos de este mes; los recuadros con «—» quedaron sin dato.', M, pie - 14);
     doc.text(`Destino y Eventos Lotus 360 · generado el ${new Date().toLocaleDateString('es-VE', { timeZone: 'America/Caracas' })}`, M, pie);
-    doc.save(`Reporte ${plano(m.nombre)} ${ym}.pdf`);
+    const nombrePdf = `Reporte ${plano(m.nombre)} ${ym}.pdf`;
+    if (verPdf) verPdf(doc.output('blob'), nombrePdf); else doc.save(nombrePdf);
   }
 
   function pintar() {

@@ -4159,7 +4159,7 @@ let PV_CAMPANAS = null;
 let ADS_META = null;
 const adsMeta = () => ADS_META ||= crearAdsMeta({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('ads-root') });
 let MARKETING = null;
-const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root') });
+const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root'), verPdf });
 let COSTOS_DIGITALES = null;
 const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
 let METODOS_PAGO = null;
@@ -14009,6 +14009,7 @@ async function abrirComprobantePago(id) {
     prev.style.display = '';
     return;
   }
+  if (esRutaPdf(p.comprobante_path)) { verPdf(data.signedUrl, `Comprobante ${p.codigo || ''}.pdf`.replace(' .', '.')); return; }
   window.open(data.signedUrl, '_blank', 'noopener');
 }
 
@@ -15522,6 +15523,7 @@ async function guardarPostulacion() {
 async function verCVPostulacion(path) {
   const { data, error } = await sb.storage.from('postulaciones-cv').createSignedUrl(path, 3600);
   if (error || !data?.signedUrl) { errToast('No se pudo generar el link del CV'); return; }
+  if (esRutaPdf(path)) { verPdf(data.signedUrl, path.split('/').pop()); return; }
   window.open(data.signedUrl, '_blank');
 }
 document.getElementById('post-reanalizar-todas')?.addEventListener('click', reanalizarTodasLasPostulaciones);
@@ -18714,6 +18716,11 @@ function lyraAdjChip(a) {
   b.innerHTML = `<i class="fas ${lyraIconoArchivo(a)}"></i><b>${esc(a.k === 'audio' ? 'Nota de voz' : a.n)}</b><small>${lyraPeso(a.kb || 1)}</small>`;
   b.onclick = async () => {
     if (!a.r) return;
+    if (esRutaPdf(a.r) || esRutaPdf(a.n)) {
+      const { data } = await sb.storage.from(LYRA_BUCKET).createSignedUrl(a.r, 300).catch(() => ({}));
+      if (data?.signedUrl) verPdf(data.signedUrl, a.n); else errToast('No se pudo abrir el archivo');
+      return;
+    }
     const w = window.open('', '_blank');
     const { data } = await sb.storage.from(LYRA_BUCKET).createSignedUrl(a.r, 300).catch(() => ({}));
     if (w && data?.signedUrl) { w.opener = null; w.location = data.signedUrl; } else w?.close();
@@ -20628,7 +20635,7 @@ async function ssVerPdfOriginal() {
   const { data, error } = await sb.storage.from('stop-sales-pdfs').createSignedUrl(SS_PDF_ACTUAL.storage_path, 60);
   btn.disabled = false;
   if (error || !data?.signedUrl) { errToast('No se pudo abrir el PDF: ' + (error?.message || '')); return; }
-  window.open(data.signedUrl, '_blank');
+  verPdf(data.signedUrl, SS_PDF_ACTUAL.storage_path.split('/').pop());
 }
 
 async function ssProductosHotel() {
@@ -22166,7 +22173,7 @@ async function pdfEntregar(blob, nombre) {
   if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: nombre }); return; } catch (e) { if (e.name === 'AbortError') return; if (e.name === 'NotAllowedError') { docToastCompartir(file); return; } }
   }
-  cbDescargar(blob, nombre);
+  verPdf(file, nombre);
 }
 // Documento ya guardado en Storage: se entrega el archivo con nombre legible, nunca la URL
 // firmada (compartida desde el navegador, a WhatsApp llegaba el link largo de Supabase).
@@ -22187,6 +22194,7 @@ async function docEntregarBlob(blob, nombre, mime = 'application/pdf') {
     }
   }
   if (!/^(application\/pdf|image\/)/.test(file.type)) { descargarArchivo(file, nombre); return; }
+  if (file.type === 'application/pdf') { verPdf(file, nombre); return; }
   const u = URL.createObjectURL(file), w = window.open(u, '_blank');
   if (w) w.opener = null; else descargarArchivo(file, nombre);
   setTimeout(() => URL.revokeObjectURL(u), 60000);
@@ -22375,7 +22383,7 @@ async function exportarVentaPdf(id) {
     doc.text('Destino y Eventos Lotus 360 · Documento de uso interno · Montos en US$', X0, 766);
     doc.text(`Generado el ${generado} · Página ${p} de ${n}`, X1, 766, { align: 'right' });
   }
-  doc.save(docNombre([`Factura ${String(f.numero_factura).padStart(6, '0')}`, f.cliente || `Cliente ${f.lead_id}`, docFecha(f.fecha_emision)]));
+  verPdf(doc.output('blob'), docNombre([`Factura ${String(f.numero_factura).padStart(6, '0')}`, f.cliente || `Cliente ${f.lead_id}`, docFecha(f.fecha_emision)]));
 }
 window.exportarVentaPdf = exportarVentaPdf;
 function cargarMasVentas() { factVentasMostrar += TECHO_LISTA; renderVentas(); }
@@ -25793,15 +25801,10 @@ function aplicarTabsOcultas() {
 const tarDeBtTravel = t => /— [0-9a-f-]{36} — /.test(t?.fuente_archivo || '');
 async function abrirPdfBtTravel(btn, productoId) {
   if (btn.disabled) return;
-  const w = window.open('', '_blank');
   btn.disabled = true; btn.classList.add('cargando');
   const { data, error } = await sb.functions.invoke('tarifario-bt-pdf', { body: productoId ? { producto_id: productoId } : {} });
   btn.disabled = false; btn.classList.remove('cargando');
-  if (!error && data?.ok && data.url) {
-    if (w) { w.opener = null; w.location = data.url; } else window.open(data.url, '_blank', 'noopener');
-    return;
-  }
-  w?.close();
+  if (!error && data?.ok && data.url) { verPdf(data.url, 'Tarifario BT Travel.pdf'); return; }
   errToast(data?.error === 'sin_tarifario' ? 'Todavía no llegó ningún tarifario de BT Travel al Drive'
     : data?.error === 'sin_paginas' ? 'Este hotel no figura en el tarifario de BT Travel activo' : 'No se pudo abrir el tarifario de BT Travel');
 }
@@ -31871,6 +31874,7 @@ function cuerpoTextoChat(texto) {
 async function abrirAdjuntoChat(path) {
   const { data, error } = await sb.storage.from('chat-interno-adjuntos').createSignedUrl(path, 300);
   if (error || !data?.signedUrl) { errToast('No se pudo abrir el CV'); return; }
+  if (esRutaPdf(path)) { verPdf(data.signedUrl, path.split('/').pop()); return; }
   window.open(data.signedUrl, '_blank', 'noopener');
 }
 function renderConversacion(forzarAbajo) {
@@ -31906,10 +31910,18 @@ function renderConversacion(forzarAbajo) {
 
 /* ----- Adjuntos: vista previa dentro del CRM, compartir y WhatsApp ----- */
 const CHAT_ADJ_ACCIONES = '<div class="msg-adj-acc"><button type="button" data-adj-compartir><i class="fas fa-share-nodes"></i> Compartir</button><button type="button" class="wa" data-adj-wa><i class="fab fa-whatsapp"></i> WhatsApp</button></div>';
-const chatEsPdf = m => /\.pdf$/i.test(m.nombre_archivo || m.storage_path || '');
+const chatEsPdf = m => m.pdf || /\.pdf$/i.test(m.nombre_archivo || m.storage_path || '');
+// Visor de PDF del chat para cualquier PDF del CRM: blob generado o URL (firmada) de Storage.
+let verPdfN = 0;
+function verPdf(fuente, nombre = 'Documento.pdf') {
+  const blob = fuente instanceof Blob ? fuente : null;
+  return chatVerDoc({ externo: true, pdf: true, blob, url: blob ? null : fuente, nombre_archivo: nombre, storage_path: `pdf:${++verPdfN}`, peso_bytes: blob?.size || 0 });
+}
+const esRutaPdf = p => /\.pdf(\?|$)/i.test(p || '');
 const chatMsgDe = el => msgMensajes.find(x => x.id === Number(el.closest('.chat-msg')?.dataset.mid));
 const chatBlobs = new Map();
 async function chatBlobAdj(m) {
+  if (m.blob) return m.blob;
   if (chatBlobs.has(m.storage_path)) return chatBlobs.get(m.storage_path);
   const url = m.url || msgUrlsAdjuntos[m.storage_path]; if (!url) throw new Error('sin_url');
   const res = await fetch(url); if (!res.ok) throw new Error('sin_archivo');
@@ -32554,9 +32566,9 @@ async function chatAccionMensaje(acc, mid) {
   }
 }
 async function chatDescargar(m) {
-  const url = m.url || msgUrlsAdjuntos[m.storage_path]; if (!url) return;
+  const url = m.url || msgUrlsAdjuntos[m.storage_path]; if (!url && !m.blob) return;
   try {
-    const blob = await (await fetch(url)).blob();
+    const blob = m.blob || await (await fetch(url)).blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = m.nombre_archivo || 'archivo';
     document.body.appendChild(a); a.click(); a.remove();
