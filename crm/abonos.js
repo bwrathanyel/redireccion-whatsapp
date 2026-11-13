@@ -129,6 +129,7 @@ export function crearAbonos(c) {
       else if (a === 'eliminar') eliminar(Number(b.dataset.id));
       else if (a === 'editar') abrirForm(Number(b.dataset.id));
       else if (a === 'recibo') verRecibo(b.dataset.id, b);
+      else if (a === 'comprobante') verComprobante(b.dataset.path, b);
       else if (a === 'reintentar') reintentarDocumentos(Number(b.dataset.id), b);
       else if (a === 'metodo') {
         // Sin repintar: pintar() recrea el formulario y borraría lo ya escrito.
@@ -203,6 +204,7 @@ export function crearAbonos(c) {
       </div>
     </div>`;
   }
+  const btnComprobante = a => a.comprobante_path ? `<button class="ab-mini" type="button" data-ab-accion="comprobante" data-path="${esc(a.comprobante_path)}"><i class="fas fa-receipt"></i>Comprobante</button>` : '';
   function filaHtml(a) {
     const ref = a.referencia ? ` · ${esc(a.referencia)}` : a.comprobante_path ? ' · captura adjunta' : '';
     const servs = est.datos?.servicios || [];
@@ -219,7 +221,8 @@ export function crearAbonos(c) {
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
       ${a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
         <div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button></div>`
-        : a.respaldo ? `<div class="ab-fila-acc"><button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button></div>` : `<div class="ab-fila-acc">
+        : a.respaldo ? `<div class="ab-fila-acc"><button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button>${btnComprobante(a)}</div>` : `<div class="ab-fila-acc">
+          ${btnComprobante(a)}
           ${a.recibo_documento_id ? `<button class="ab-mini" type="button" data-ab-accion="recibo" data-id="${a.recibo_documento_id}"><i class="fas fa-file-pdf"></i>Recibo</button>` : ''}
           ${a.documentos_estado && a.documentos_estado !== 'listo' ? `<span class="ab-docs${a.documentos_estado === 'fallido' ? ' fallo' : ''}" title="${esc(a.documentos_error || '')}">${a.documentos_estado === 'fallido' ? 'Documentos con error' : 'Documentos pendientes'}</span>
             <button class="ab-mini" type="button" data-ab-accion="reintentar" data-id="${a.id}"><i class="fas fa-rotate"></i>${a.documentos_estado === 'fallido' ? 'Reintentar documentos' : 'Generar documentos'}</button>` : ''}
@@ -730,6 +733,20 @@ export function crearAbonos(c) {
     try { await c.entregarUrl(data.url, data.nombre || 'Recibo de abono.pdf', data.mime || 'application/pdf'); }
     catch { c.error('No se pudo abrir el recibo. Reintenta en unos segundos.'); }
     finally { if (btn) btn.disabled = false; }
+  }
+
+  // Captura del pago guardada en el abono (al registrarlo o desde el voucher de la reserva).
+  async function verComprobante(path, btn) {
+    if (!path) return;
+    if (btn) btn.disabled = true;
+    try {
+      const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(path, 300);
+      if (error || !data?.signedUrl) throw error || new Error('sin_url');
+      const ext = (path.split('.').pop() || 'jpg').toLowerCase();
+      await c.entregarUrl(data.signedUrl, `Comprobante abono.${ext}`, ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg');
+    } catch {
+      c.error('No se pudo abrir el comprobante. Solo lo ven quien lo subió y administración.');
+    } finally { if (btn) btn.disabled = false; }
   }
 
   async function reintentarDocumentos(id, btn) {

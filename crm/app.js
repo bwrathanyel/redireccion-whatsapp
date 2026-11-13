@@ -5720,7 +5720,7 @@ function rvRecibosCampo(abonos, alLeer) {
       const linea1 = x.estado === 'leyendo' ? 'Leyendo recibo…' : x.estado === 'error' ? x.msg
         : [d.monto != null ? fmt(d.monto, d.moneda) : 'Sin monto', rvMetodoRecibo(d.metodo) || d.metodo, d.referencia ? `ref ${d.referencia}` : ''].filter(Boolean).join(' · ');
       const linea2 = x.estado !== 'ok' ? '' : x.abono
-        ? `<span class="rv-rec-ok"><i class="fas fa-check"></i> Abono ${dia(x.abono.fecha)} · ${fmt(x.abono.monto_original ?? x.abono.monto_usd, String(x.abono.moneda || 'USD').toUpperCase())}${x.abono.moneda && String(x.abono.moneda).toUpperCase() !== 'USD' ? ` ($${Number(x.abono.monto_usd).toFixed(2)})` : ''}</span>`
+        ? `<span class="rv-rec-ok"><i class="fas fa-check"></i> Abono ${dia(x.abono.fecha)} · ${fmt(x.abono.monto_original ?? x.abono.monto_usd, String(x.abono.moneda || 'USD').toUpperCase())}${x.abono.moneda && String(x.abono.moneda).toUpperCase() !== 'USD' ? ` ($${Number(x.abono.monto_usd).toFixed(2)})` : ''}${x.abono.comprobante_path ? ' · ya tiene comprobante' : ' · se guarda en sus pagos'}</span>`
         : `<span class="rv-rec-no"><i class="fas fa-triangle-exclamation"></i> ${abonos.length ? 'Ningún abono registrado con ese monto' : 'La reserva no tiene abonos registrados'}</span>`;
       return `<div class="rv-rec-item${x.estado === 'error' ? ' err' : ''}"><img src="${x.url}" alt=""><div class="rv-rec-txt"><div>${esc(linea1)}</div>${linea2}</div><button type="button" class="rv-rec-quitar" data-i="${i}" aria-label="Quitar recibo"><i class="fas fa-xmark"></i></button></div>`;
     }).join('');
@@ -5761,8 +5761,36 @@ function rvRecibosCampo(abonos, alLeer) {
         cambio();
       });
     },
-    leer: () => lista.filter(x => x.estado === 'ok').map(x => ({ datos: x.datos, abono: x.abono })),
+    leer: () => lista.filter(x => x.estado === 'ok').map(x => ({ datos: x.datos, abono: x.abono, file: x.file })),
   };
+}
+// Guarda cada recibo asociado como comprobante de su abono (queda en los pagos de la reserva).
+// No pisa una captura que el abono ya tenga.
+async function rvGuardarRecibos(recibos) {
+  const aGuardar = recibos.filter(r => r.abono && !r.abono.comprobante_path);
+  const sinAbono = recibos.filter(r => !r.abono).length, yaTenian = recibos.filter(r => r.abono?.comprobante_path).length;
+  let ok = 0;
+  const fallas = [];
+  for (const r of aGuardar) {
+    try {
+      const ext = (r.file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+      const path = `${MI_USUARIO_ID}/abonos/${crypto.randomUUID()}.${ext}`;
+      const up = await sb.storage.from('vouchers-pdf').upload(path, r.file, { contentType: r.file.type || 'image/jpeg', upsert: false });
+      if (up.error) throw new Error('no se pudo subir la foto');
+      const { data, error } = await sb.rpc('abono_adjuntar_comprobante', { p_abono_id: r.abono.id, p_comprobante_path: path, p_comprobante_datos: r.datos || null, p_referencia: r.datos?.referencia || null });
+      if (error || !data?.ok) {
+        sb.storage.from('vouchers-pdf').remove([path]).catch(() => {});
+        throw new Error(error?.code === '42501' ? 'sin permiso sobre ese abono' : data?.error === 'ya_tiene_comprobante' ? 'el abono ya tenía comprobante' : (error?.message || data?.error || 'error'));
+      }
+      ok++;
+    } catch (e) {
+      fallas.push(e?.message || 'error');
+    }
+  }
+  const partes = [ok ? `${ok} recibo${ok > 1 ? 's' : ''} guardado${ok > 1 ? 's' : ''} en los pagos de la reserva` : '', yaTenian ? `${yaTenian} abono${yaTenian > 1 ? 's' : ''} ya tenía${yaTenian > 1 ? 'n' : ''} comprobante` : ''].filter(Boolean);
+  if (partes.length) okToast(partes.join(' · '));
+  if (sinAbono) errToast(`${sinAbono} recibo${sinAbono > 1 ? 's' : ''} sin abono registrado: no se guardó. Regístralo en Pagos de la reserva.`);
+  if (fallas.length) errToast(`No se guardaron ${fallas.length} recibo${fallas.length > 1 ? 's' : ''}: ${[...new Set(fallas)].join(', ')}`);
 }
 // Voucher de la reserva (lote 3: une el del paquete y el de abonos): todos los servicios (hotel + vuelos +
 // traslados...) y, si hay abonos, cada abono. Si falta cédula, teléfono o forma de pago, la misma hoja
@@ -5829,6 +5857,7 @@ async function rvGenerarVoucherReserva(btn) {
     if (!f) return;
     ({ recibos, ...datos } = f);
     RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
+    if (recibos?.length) await rvGuardarRecibos(recibos);
   }
   // Un recibo asociado completa la referencia y el método del abono que no los tenía (solo en el PDF).
   abonos = abonos.map(a => {
