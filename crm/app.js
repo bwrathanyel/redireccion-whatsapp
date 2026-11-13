@@ -41,7 +41,13 @@ const rutaDerivado = (storagePath, ancho) => `_d/${ancho}/${storagePath}.jpg`;
 // espejado (ver workers/fotos). La query no toca la clave de R2 -- el Worker
 // solo mira el pathname -- así que no invalida la caché del servidor.
 const FOTOS_VERSION = '?v=2';
-const fotoMini = (storagePath, ancho) => CDN_FOTOS + rutaDerivado(storagePath, ancho) + FOTOS_VERSION;
+// Modo liviano (html[data-lite], ver script del <head>): un escalón menos de miniatura --
+// menos datos y, sobre todo, menos RAM al decodificar en celulares de 2 GB. 2048 (lightbox,
+// Guardar/Compartir) no baja: es la foto que se le manda al cliente.
+const modoLiviano = () => document.documentElement.hasAttribute('data-lite');
+const LITE_AL_CARGAR = modoLiviano();
+const ANCHO_LIVIANO = { 384: 256, 640: 384, 1280: 640 };
+const fotoMini = (storagePath, ancho) => CDN_FOTOS + rutaDerivado(storagePath, (modoLiviano() && ANCHO_LIVIANO[ancho]) || ancho) + FOTOS_VERSION;
 // Lightbox y galerías: resolución original (q86) servida por R2 en vez del
 // original de Supabase. Casi ningún original pasa de 2048 de ancho.
 const fotoGrande = storagePath => fotoMini(storagePath, 2048);
@@ -704,6 +710,11 @@ function openPerfilDrawer() {
           <span class="tema-desc">${l.desc}</span>
         </button>`).join('')}
       </div>
+      <label class="fl" style="margin-top:12px">Rendimiento</label>
+      <div class="seg-group" id="perfil-rendimiento" style="margin-bottom:0">
+        ${[['auto', 'Automático'], ['liviano', 'Liviano'], ['completo', 'Completo']].map(([v, t]) => `<button type="button" data-v="${v}" class="seg${(MI_PREFERENCIAS.rendimiento || 'auto') === v ? ' on' : ''}">${t}</button>`).join('')}
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.4">Liviano quita animaciones, transparencias y desenfoques, usa la letra del sistema y fotos más chicas. Para compus viejas y celulares básicos. Automático: en este equipo ${window.LOTUS_EQUIPO_DEBIL ? 'usa el modo liviano' : 'usa el modo completo'}.</div>
       <label class="fl" style="margin-top:12px">Secciones extra en el menú</label>
       ${NAV_OPCIONALES.map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
         <span style="font-size:13px">${o.label}<small style="display:block;color:var(--muted);margin-top:2px">${o.desc}</small></span>
@@ -773,6 +784,10 @@ function openPerfilDrawer() {
   document.querySelectorAll('#perfil-tema button').forEach(b => b.onclick = () => guardarPreferencia('tema', b.dataset.v, 'perfil-tema'));
   document.querySelectorAll('#perfil-fuente button').forEach(b => b.onclick = () => guardarPreferencia('fuente', b.dataset.v, 'perfil-fuente'));
   document.querySelectorAll('#perfil-letra button').forEach(b => b.onclick = () => guardarPreferencia('letra', b.dataset.v, 'perfil-letra'));
+  document.querySelectorAll('#perfil-rendimiento button').forEach(b => b.onclick = async () => {
+    await guardarPreferencia('rendimiento', b.dataset.v, 'perfil-rendimiento');
+    if ((MI_PREFERENCIAS.rendimiento || 'auto') === b.dataset.v && liteDeseado() !== LITE_AL_CARGAR) { okToast('Aplicando el modo…'); setTimeout(() => location.reload(), 700); }
+  });
   cargarMuestrasLetra();
   document.querySelectorAll('#perfil-vista-rol button').forEach(b => b.onclick = () => activarVistaPreviaRol(b.dataset.v));
   pintarTogglesNavExtra();
@@ -827,6 +842,8 @@ function ponerLinkCss(linkId, href) {
   link.href = href;
 }
 const cargarLetra = id => ponerLinkCss('letra-css', id === 'inter' ? null : letraUrl(id, 'wght@400..800'));
+// Rendimiento (Mi Perfil). Misma regla que el script del <head> de index.html.
+const liteDeseado = () => { const r = MI_PREFERENCIAS.rendimiento; return r === 'liviano' || (r !== 'completo' && !!window.LOTUS_EQUIPO_DEBIL); };
 // Vista previa del perfil: misma URL completa, no un subset &text= -- ese declara otro @font-face con
 // el mismo nombre y peso, y al elegir la letra la UI podría quedarse solo con los glifos de la muestra.
 const cargarMuestrasLetra = () => Object.keys(LETRAS).filter(id => id !== 'inter').forEach(id =>
@@ -884,6 +901,11 @@ function aplicarPreferencias() {
   const letra = letraActual();
   if (letra === 'inter') delete root.dataset.letra; else root.dataset.letra = letra;
   cargarLetra(letra);
+  // Si la base dice otra cosa que el cache local (equipo nuevo), el CSS se corrige ya;
+  // la parte JS del modo liviano recién en la próxima carga.
+  const lite = liteDeseado();
+  root.toggleAttribute('data-lite', lite);
+  if (!lite) ponerLinkCss('inter-css', 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   if (window.Chart) Chart.defaults.font.family = cssVar('--font-ui') || 'Inter';
   const extra = navExtraActivas();
   NAV_OPCIONALES.forEach(o => document.body.classList.toggle('nav-ver-' + o.sec, extra.includes(o.sec)));
@@ -893,7 +915,7 @@ function aplicarPreferencias() {
   // aplicar tema/tamaño ANTES del primer paint en la próxima carga -- sin
   // esto, un usuario con tema claro ve un flash oscuro en cada refresh
   // mientras se resuelve sesión+perfil por red.
-  try { localStorage.setItem('lotus_prefs', JSON.stringify({ tema: MI_PREFERENCIAS.tema, fuente: MI_PREFERENCIAS.fuente, letra: MI_PREFERENCIAS.letra })); } catch (_e) { /* localStorage puede fallar en modo privado -- solo se pierde el cache, no rompe nada */ }
+  try { localStorage.setItem('lotus_prefs', JSON.stringify({ tema: MI_PREFERENCIAS.tema, fuente: MI_PREFERENCIAS.fuente, letra: MI_PREFERENCIAS.letra, rendimiento: MI_PREFERENCIAS.rendimiento })); } catch (_e) { /* localStorage puede fallar en modo privado -- solo se pierde el cache, no rompe nada */ }
 }
 async function guardarPreferencia(clave, valor, grupoId) {
   const anterior = MI_PREFERENCIAS;
@@ -906,7 +928,7 @@ async function guardarPreferencia(clave, valor, grupoId) {
     // que un refresh (que relee de la DB) va a revertir sin avisar.
     MI_PREFERENCIAS = anterior;
     aplicarPreferencias();
-    const valorPrevio = anterior[clave] ?? ({ 'perfil-tema': 'dark', 'perfil-letra': 'inter' }[grupoId] || 'normal');
+    const valorPrevio = anterior[clave] ?? ({ 'perfil-tema': 'dark', 'perfil-letra': 'inter', 'perfil-rendimiento': 'auto' }[grupoId] || 'normal');
     document.querySelectorAll(`#${grupoId} button`).forEach(b => b.classList.toggle('on', b.dataset.v === valorPrevio));
     errToast('No se pudo guardar: ' + error.message);
   }

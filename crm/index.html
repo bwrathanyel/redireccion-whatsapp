@@ -30,6 +30,33 @@ try {
     document.head.appendChild(k);
   }
 } catch (e) { /* localStorage no disponible (modo privado) -- se pierde el cache, no rompe nada */ }
+// Modo liviano (Mi Perfil → Rendimiento: auto | liviano | completo). Auto lo prende en
+// equipos con ≤2 GB, ≤2 núcleos, ≤4 GB con ≤4 hilos (Core 2, i3/i5 de 1ª-2ª gen, Celeron,
+// Redmi 9A) o con "ahorro de datos". Copia de liteDeseado() en app.js -- mantener en sincronía.
+// La parte JS (matchMedia, fotos) se fija al cargar: cambiar la preferencia recarga la página.
+(function () {
+  var p = {}, n = navigator, cx = n.connection || {};
+  try { p = JSON.parse(localStorage.getItem('lotus_prefs') || '{}'); } catch (e) { /* sin cache */ }
+  var mem = n.deviceMemory || 8, hw = n.hardwareConcurrency || 8;
+  window.LOTUS_EQUIPO_DEBIL = !!cx.saveData || mem <= 2 || hw <= 2 || (mem <= 4 && hw <= 4);
+  var lite = p.rendimiento === 'liviano' || (p.rendimiento !== 'completo' && window.LOTUS_EQUIPO_DEBIL);
+  if (lite) {
+    document.documentElement.setAttribute('data-lite', '');
+    // Todo el código que ya respeta prefers-reduced-motion (contadores, view transitions,
+    // ojos de Lyra, scroll suave) se apaga solo, sin tocar cada llamada.
+    var mm = window.matchMedia && window.matchMedia.bind(window), nada = function () {};
+    if (mm) window.matchMedia = function (q) {
+      if (!/prefers-reduced-motion\s*:\s*reduce/.test(q)) return mm(q);
+      return { matches: true, media: q, onchange: null, addEventListener: nada, removeEventListener: nada, addListener: nada, removeListener: nada, dispatchEvent: function () { return false; } };
+    };
+  } else {
+    // Inter solo fuera del modo liviano: ahí se usa la letra del sistema (0 KB, sin re-pintar al llegar).
+    var k = document.createElement('link'); k.rel = 'preload'; k.as = 'style'; k.id = 'inter-css';
+    k.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap';
+    k.onload = function () { this.onload = null; this.rel = 'stylesheet'; };
+    document.head.appendChild(k);
+  }
+})();
 </script>
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -45,7 +72,6 @@ try {
      de bajar (onload) -- Lighthouse render-blocking-insight bajaba ~750ms
      acá (Google Fonts + Font Awesome), Chart.js ya se carga on-demand
      aparte (ver ensureChart en app.js). noscript cubre el caso sin JS. -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
 <noscript>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -8784,6 +8810,19 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 @media(max-width:760px) and (prefers-reduced-motion:reduce){
   .drawer:has(.dhead-lead){transition:none}
 }
+
+/* ============ MODO LIVIANO (html[data-lite]) ============
+   Compus viejas (Core 2, i3/i5 1ª-2ª gen) y celulares básicos (Redmi 9A). Se prende
+   en el script del <head>. Fuera: desenfoques (backdrop-filter repinta todo lo de
+   atrás en cada scroll), paneles translúcidos, fondo decorativo fijo, animaciones y
+   transiciones (duración ~0 en vez de none: llegan al estado final y disparan
+   animationend/transitionend igual). Los spinners siguen girando: son el "cargando". */
+:root[data-lite],:root[data-lite] body{--panel:var(--panel-solid)}
+:root[data-lite]:not([data-letra]){--font-ui:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+:root[data-lite] *,:root[data-lite] *::before,:root[data-lite] *::after{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important;scroll-behavior:auto!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;text-shadow:none!important;will-change:auto!important}
+:root[data-lite] :is(.spin,.fa-spin,.fa-spinner,.fa-pulse,#boot-splash .boot-aro){animation-duration:1s!important;animation-iteration-count:infinite!important}
+:root[data-lite] body{background:var(--bg)}
+:root[data-lite] body::before,:root[data-lite] .tg-foto::before{display:none}
 </style>
 </head>
 <body>
