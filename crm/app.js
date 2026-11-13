@@ -6209,11 +6209,14 @@ function rvPagoHtml(s) {
   const ab = abonosModulo(), d = ab.datos();
   const pagos = s && d ? (d.abonos || []).filter(a => !a.anulado_en && Number(a.servicio_id) === s.id) : [];
   const pagado = s ? ab.pagadoDe(s.id) : null, precio = Number(s?.precio_usd_centavos || 0) / 100;
-  const resumen = s && pagado != null ? `<div class="csub">Pagado <b>${rvUsd(pagado)}</b> de ${rvUsd(precio)}${precio > pagado ? ` · falta <b>${rvUsd(precio - pagado)}</b>` : precio > 0 ? ' · pagado completo' : ''}${pagos.length ? ` (${pagos.map(a => `${rvUsd(a.monto_usd)} ${esc(a.metodo)}`).join(', ')})` : ''}</div>` : '';
+  const resumen = s && pagado != null ? `<div class="csub">Pagado <b>${rvUsd(pagado)}</b> de ${rvUsd(precio)}${precio > pagado ? ` · falta <b>${rvUsd(precio - pagado)}</b>` : precio > 0 ? ' · pagado completo' : ''}</div>` : '';
+  // Cada pago se edita con el mismo formulario de Abonos (método, referencia, captura): una sola forma de corregir un pago.
+  const lista = pagos.map(a => `<div class="rv-pago-fila"><span><b>${rvUsd(a.monto_usd)}</b> · ${esc(a.metodo || 'sin método')} · ${a.referencia ? esc(a.referencia) : '<i>sin referencia</i>'}</span>
+    <button class="ab-mini" type="button" data-rv-pago-editar="${a.id}"><i class="fas fa-pen"></i>Editar</button></div>`).join('');
   const chips = ab.METODOS.map(m => `<button class="ab-chip${m === 'Zelle' ? ' on' : ''}" type="button" data-rv-pago-metodo="${esc(m)}">${esc(m)}</button>`).join('');
   const tasas = Object.entries(ab.TASAS).map(([t, n]) => `<option value="${t}" ${ab.tasa(t) ? '' : 'disabled'}>${n}${ab.tasa(t) ? ` · ${ab.tasa(t).toLocaleString('es-VE', { maximumFractionDigits: 4 })}` : ' · sin cargar'}</option>`).join('');
   return `<div class="rv-sec"><i class="fas fa-money-bill-wave"></i> Pago del cliente</div>
-    ${resumen}
+    ${resumen}${lista}
     <div class="csub" id="rv-s-pago-ok" hidden><i class="fas fa-circle-check"></i> No hay nada que cobrar. <a href="#" id="rv-s-pago-otro">Registrar otro pago</a></div>
     <div class="seg-group seg-group-sm" id="rv-s-pago-modo">${Object.entries({ no: 'Sin pago ahora', abono: 'Abono', completo: 'Pago completo' }).map(([k, t]) => `<button class="seg${k === 'no' ? ' on' : ''}" type="button" data-rv-pago-modo="${k}">${t}</button>`).join('')}</div>
     <div id="rv-s-pago-campos" hidden>
@@ -6241,6 +6244,10 @@ function rvPagoInit(p, s) {
   // Servicio ya saldado: se oculta el selector (no es un estado, es «registrar un pago nuevo»); si sube el precio vuelve solo.
   let otroPago = false;
   document.getElementById('rv-s-pago-otro').onclick = e => { e.preventDefault(); otroPago = true; pintar(); };
+  p.querySelectorAll('[data-rv-pago-editar]').forEach(b => b.onclick = () => {
+    rvTab('abonos'); abonosModulo().editar(b.dataset.rvPagoEditar);
+    document.querySelector('[data-rv-panel="abonos"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
   const pintar = () => {
     const saldado = !otroPago && s && Number(val('rv-s-precio') || 0) > 0 && (abonosModulo().pagadoDe(s.id) || 0) > 0 && rvPagoFalta(s) === 0;
     if (saldado) p.querySelectorAll('[data-rv-pago-modo]').forEach(x => x.classList.toggle('on', x.dataset.rvPagoModo === 'no'));

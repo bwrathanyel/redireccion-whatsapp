@@ -895,6 +895,6 @@ export function crearAbonos(c) {
   return {
     montar, recargar: () => est.reservaId && cargar(est.reservaId),
     // Para el pago del formulario de servicio (app.js rvPagoHtml / rvGuardarServicio).
-    pagarServicio, analizarCaptura, pagadoDe, datos: () => est.datos, tasa: t => tasaDe(est.datos, t), METODOS, TASAS,
+    pagarServicio, analizarCaptura, pagadoDe, editar: id => abrirForm(Number(id)), datos: () => est.datos, tasa: t => tasaDe(est.datos, t), METODOS, TASAS,
   };
 }
