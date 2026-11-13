@@ -34805,6 +34805,15 @@ const cbTotalCot = items => cbConOpciones(items) ? Math.min(...cbOpciones(items)
 const cbTarFecha = s => { const ms = /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Date.parse(s + 'T00:00:00Z') : NaN; return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === s ? ms : NaN; };
 const cbTarIso = ms => new Date(ms).toISOString().slice(0, 10);
 const cbTarContexto = it => [it.producto_id, cbTarPlanClave(it.plan), cbTarNorm(it.hab), it.ida, it.vuelta, cbPorHabitacion(it) ? (it.tarifa_variante || '') + (Number(it.adultos) % (cbHabitaciones(it) || 1) ? `~${it.adultos}/${cbHabitaciones(it)}` : '') : it.adultos + (cbHabitaciones(it) > 1 ? '/' + cbHabitaciones(it) : ''), it.unidad].join('|');
+// Los suplementos del tarifario solo traen texto (todos los obligatorios son cenas del 24/12 o 31/12, medido
+// 2026-11-13): sin esto se avisaba de Navidad en cualquier fecha. Sin fecha reconocible, se sigue avisando.
+const cbSupFechas = s => {
+  const x = `${s.texto || ''} ${s.temporada || ''}`, f = [];
+  if (/navidad|nochebuena|\b24\s*(\/\s*12|de\s+dic|dic)/i.test(x)) f.push('12-24');
+  if (/fin\s+de\s+a[ñn]o|a[ñn]o\s+nuevo|nochevieja|\b31\s*(\/\s*12|de\s+dic|dic)/i.test(x)) f.push('12-31');
+  return f;
+};
+const cbSupAplica = (s, noches) => { const f = cbSupFechas(s); return !f.length || noches.some(n => f.includes(n.slice(5, 10))); };
 function cbTarNoches(a, b) {
   const inicio = cbTarFecha(a), fin = cbTarFecha(b), n = (fin - inicio) / 864e5;
   return Number.isInteger(n) && n > 0 && n <= 366 ? Array.from({ length: n }, (_, i) => cbTarIso(inicio + i * 864e5)) : [];
@@ -35122,7 +35131,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     if (min > noches.length) return fallo(`El hotel exige mínimo ${min} noches. Confirma una excepción y tarifa manual.`);
     for (const [clave, v] of m.dudosos) if (v > noches.length) avisos.add(`El tarifario pide mínimo ${v} noches en «${clave.slice(0, 80)}»: confirma si aplica a estas fechas.`);
     for (const c of t.condiciones || []) if (typeof c === 'string') avisos.add(c);
-    for (const s of b.suplementos || []) if (s.obligatorio) avisos.add('Suplemento obligatorio pendiente: ' + (s.texto || s.temporada || 'confirmar en la ficha'));
+    for (const s of b.suplementos || []) if (s.obligatorio && cbSupAplica(s, noches)) avisos.add('Suplemento obligatorio pendiente: ' + (s.texto || s.temporada || 'confirmar en la ficha'));
     if (b.impuestos?.igtf_pct) avisos.add(`IGTF ${b.impuestos.igtf_pct}% pendiente según forma de pago.`);
   }
   if (/on request/i.test(it.hab)) avisos.add('Habitación sujeta a confirmación del hotel.');
