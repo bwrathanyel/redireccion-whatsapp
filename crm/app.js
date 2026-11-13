@@ -18598,7 +18598,7 @@ function lyraPintarGenerada(g, previa) {
     acciones.appendChild(btn);
   };
   if (!g.error) {
-    boton('file-pdf', 'PDF', async () => { const { c, blob } = await lyraCotGenerada(g.id); cbDescargar(blob, cbArchivo(c)); });
+    boton('file-pdf', 'PDF', async () => { const { c, blob } = await lyraCotGenerada(g.id); verPdf(blob, cbArchivo(c)); });
     boton('whatsapp', 'WhatsApp', async () => {
       const { c, blob } = await lyraCotGenerada(g.id);
       const tel = c.lead_id ? (await sb.from('leads').select('telefono').eq('id', c.lead_id).maybeSingle()).data?.telefono : '';
@@ -36861,10 +36861,10 @@ window.cbGuardar = async function cbGuardar(accion) {
         if (accion === 'compartir') { if (!lead || !await cbCompartirAlChat(blob, cbArchivo(cot), lead.id)) await cbCompartir(blob, cbArchivo(cot)); }
         else if (accion === 'whatsapp') await cbWhatsappArchivo(blob, cbArchivo(cot), String(lead?.telefono || '').replace(/\D/g, ''), cbTextoWhatsapp(cot));
         else if (accion === 'lead') await pdfEntregar(blob, cbArchivo(cot));
-        else if (!lyra) cbDescargar(blob, cbArchivo(cot));
+        else if (!lyra) verPdf(blob, cbArchivo(cot));
         if (!repetida) okToast(`Cotización ${num} generada${marca}`);
       }
-      else if (!enviar || asesorId === MI_USUARIO_ID) { cbDescargar(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
+      else if (!enviar || asesorId === MI_USUARIO_ID) { verPdf(blob, cbArchivo(cot)); okToast(`Cotización ${cbNumero(cot.numero)} generada`); }
       else if (await cbEnviarAAsesor(cot, blob, asesorId)) {
         const resuelta = sol && await cbResolverSolicitud(sol.id, cot);
         okToast(`${cbNumero(cot.numero)} enviada a ${nombreUsuario(asesorId)}${resuelta ? ` · solicitud #${sol.id} resuelta` : ''}`);
@@ -36938,7 +36938,7 @@ window.cbReenviar = async function cbReenviar(id, btn) {
   btn.disabled = true;
   try {
     await ensureVoucherLibs();
-    if (asesorId === MI_USUARIO_ID) { cbDescargar(await cbPdfBlob(c), cbArchivo(c)); btn.disabled = false; return; }
+    if (asesorId === MI_USUARIO_ID) { verPdf(await cbPdfBlob(c), cbArchivo(c)); btn.disabled = false; return; }
     if (await cbEnviarAAsesor(c, await cbPdfBlob(c), asesorId)) {
       if (c.solicitud_id && MI_ES_AGENTE_BOLETERIA) await cbResolverSolicitud(c.solicitud_id, c);
       okToast(`${cbNumero(c.numero)} enviada a ${nombreUsuario(asesorId)}`); cbCargarHistorial(false);
