@@ -35940,11 +35940,55 @@ function cbPintarResumen() {
   const box = document.getElementById('cb-resumen'); if (!box) return;
   const linea = it => `<div class="cb-res-linea"><span><b>${esc(cbTitulo(it) || cbTipo(it).nombre)}</b><small>${esc([it.plan, cbPorHabitacion(it) ? cbHabitacionesTexto(it) + ' · por habitación/noche' : '', it.tipo === 'hotel' && cbNoches(it.ida, it.vuelta) ? cbNochesTexto(+cbNoches(it.ida, it.vuelta)) : '', cbEsPax(it) ? cbPaxTexto(it) : ''].filter(Boolean).join(' · '))}</small></span><strong>$${cbMonto(cbImporte(it))}</strong></div>`;
   const ops = cbComparar ? cbOpciones(cbItems) : [];
+  cbMiniProgramar();
   if (ops.length < 2) { box.innerHTML = cbItems.map(linea).join(''); return; }
   const comunes = ops[0].comunes;
   box.innerHTML = ops.map((o, k) => `<div class="cb-res-op"><span>Opción ${k + 1}</span><strong>$${cbMonto(o.total)}</strong></div>${o.propios.map(linea).join('')}`).join('')
     + (comunes.length ? `<div class="cb-res-op cb-res-comun"><span>En todas las opciones</span></div>${comunes.map(linea).join('')}` : '');
 }
+// Miniatura en vivo de la página 1 (pedido del dueño 2026-11-12). Medido: jsPDF con Poppins ~60-120 ms y
+// pdf.js ~100-200 ms, así que se regenera el PDF real. Una generación a la vez: lo que llega mientras tanto
+// se junta en la siguiente; el canvas nuevo se dibuja fuera de pantalla y reemplaza al viejo al terminar.
+const cbMini = { timer: null, ms: 0, firma: '', blob: null, trabajo: null, pendiente: false };
+function cbMiniCot() {
+  const items = cbItems.map(cbLimpiarItem).filter(d => cbTitulo(d) || d.tarifa);
+  return { cliente: val('cb-cliente').trim() || 'Cliente', fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null, items, total: cbTotalCot(items),
+    notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null, origen: cbModo, numero: 'BORRADOR' };
+}
+function cbMiniProgramar() {
+  clearTimeout(cbMini.timer);
+  cbMini.timer = setTimeout(cbMiniGenerar, Math.min(1500, Math.max(450, cbMini.ms * 1.5)));
+}
+function cbMiniGenerar() {
+  if (cbMini.trabajo) { cbMini.pendiente = true; return cbMini.trabajo; }
+  const box = document.getElementById('cb-mini'); if (!box?.offsetParent) return Promise.resolve();
+  let c; try { c = cbMiniCot(); } catch (_e) { return Promise.resolve(); }
+  const firma = JSON.stringify(c); if (firma === cbMini.firma) return Promise.resolve();
+  cbMini.trabajo = (async () => {
+    const t0 = performance.now();
+    await ensureVoucherLibs();
+    const blob = await (c.origen === 'ventas' ? pdfCotizacionCliente({ ...cbDatosPdf(c), numero: '' }) : cbPdfBlob(c));
+    const pdf = await (await cargarPdfjs()).getDocument({ data: await blob.arrayBuffer() }).promise;
+    try {
+      const page = await pdf.getPage(1), ancho = Math.min(900, Math.round(box.clientWidth * (window.devicePixelRatio || 1))) || 300;
+      const vp = page.getViewport({ scale: ancho / page.getViewport({ scale: 1 }).width });
+      const lienzo = document.createElement('canvas'); lienzo.width = ancho; lienzo.height = Math.round(vp.height);
+      const ctx = lienzo.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, lienzo.width, lienzo.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      box.replaceChildren(lienzo);
+    } finally { pdf.destroy(); }
+    cbMini.blob = blob; cbMini.firma = firma; cbMini.ms = performance.now() - t0;
+  })().catch(e => console.warn('miniatura cotización', e)).finally(() => {
+    cbMini.trabajo = null;
+    if (cbMini.pendiente) { cbMini.pendiente = false; cbMiniProgramar(); }
+  });
+  return cbMini.trabajo;
+}
+window.cbMiniAbrir = async function cbMiniAbrir() {
+  clearTimeout(cbMini.timer);
+  await cbMini.trabajo; cbMini.pendiente = false; await cbMiniGenerar();
+  if (cbMini.blob) verPdf(cbMini.blob, 'Vista previa de la cotización.pdf');
+};
 function cbPintarBusquedaLead(f) {
   const input = document.getElementById('cb-lead-q'), box = document.getElementById('cb-lead-res');
   if (!f.q) { box.innerHTML = ''; box.hidden = true; input.setAttribute('aria-expanded', 'false'); return; }
@@ -36678,8 +36722,9 @@ async function cbCargarSeccion() {
     const camposBorrador = ['cb-cliente', 'cb-fecha', 'cb-vence', 'cb-notas', 'cb-terminos', 'cb-asesor'];
     ['input', 'change'].forEach(ev => document.getElementById('sec-cotizacion-boletos').addEventListener(ev, e => {
       if (e.target.closest('#cb-items') || camposBorrador.includes(e.target.id)) cbProgramarBorrador();
-      if (camposBorrador.includes(e.target.id)) cbResumenCliente();
+      if (camposBorrador.includes(e.target.id)) { cbResumenCliente(); cbMiniProgramar(); }
     }));
+    new IntersectionObserver(es => { if (es.some(x => x.isIntersecting)) cbMiniProgramar(); }).observe(document.getElementById('cb-mini'));
     document.addEventListener('visibilitychange', () => { if (document.hidden) cbGuardarBorrador(); });
   }
   const staff = await cargarUsuariosStaff();
