@@ -35,7 +35,7 @@ const ERRORES = {
   nombre_requerido: 'El voucher no tiene nombre de cliente. Corrígelo desde Voucher.',
   selecciona_servicio: 'La reserva tiene varios servicios y ninguno es hospedaje: actualiza el voucher desde Voucher.',
   voucher_pendiente_confirmacion: 'El voucher todavía no está confirmado como venta.',
-  pago_movil_en_bs: 'El Pago móvil se registra en bolívares: elige VES y escribe el monto en Bs.',
+  pago_movil_en_bs: 'El Pago móvil se registra en bolívares: elige VES (puedes escribir el monto en dólares y se calcula en Bs).',
   sin_librerias: 'No cargaron las herramientas de PDF. Recarga la página y toca «Reintentar documentos».',
   voucher_no_leido: 'No se pudo leer el voucher de la reserva. Toca «Reintentar documentos».',
   servicio_invalido: 'Ese servicio ya no está en la reserva. Recarga la reserva y elige otro.',
@@ -59,6 +59,7 @@ const CSS = `
 .ab-tasa b{color:var(--txt)}
 .ab-tasa .ab-chips{margin:0 0 7px}
 .ab-tasa-fecha{color:var(--muted)}
+.ab-tasa .ab-grid{margin-top:4px}
 .ab-chips{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0 0}
 .ab-chip{min-height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;transition:all var(--dur-rapida) var(--ease-salida)}
 .ab-chip:hover{color:var(--txt);border-color:var(--line2)}
@@ -157,7 +158,7 @@ export function crearAbonos(c) {
         est.metodo = b.dataset.metodo;
         p.querySelectorAll('[data-ab-accion="metodo"]').forEach(x => x.classList.toggle('on', x.dataset.metodo === est.metodo));
         const mon = document.getElementById('ab-moneda');
-        if (est.metodo === 'Pago móvil' && mon) { mon.value = 'VES'; est.moneda = 'VES'; actualizarTasa(); }
+        if (est.metodo === 'Pago móvil' && mon) { if (mon.value !== 'VES') est.fuente = 'USD'; mon.value = 'VES'; est.moneda = 'VES'; actualizarTasa(); }
         // Los métodos en divisas cobran en dólares: pasar a USD (pedido del dueño 4-nov).
         else if (['Zelle', 'Binance'].includes(est.metodo) && mon && mon.value !== 'USD') { mon.value = 'USD'; est.moneda = 'USD'; actualizarTasa(); }
       }
@@ -171,8 +172,14 @@ export function crearAbonos(c) {
     };
     p.onpointerdown = arrastrar;
     p.onkeydown = moverConTeclado;
+    // Pago en Bs: el monto se escribe en dólares o en bolívares y el otro se calcula con la tasa
+    // (pedido del dueño 13-nov). `est.fuente` = el último que escribieron; ese no se recalcula.
     p.oninput = e => {
-      if (['ab-monto', 'ab-moneda', 'ab-tasa-manual'].includes(e.target.id)) actualizarTasa();
+      const id = e.target.id;
+      if (id === 'ab-monto') est.fuente = 'USD';
+      else if (id === 'ab-monto-bs') est.fuente = 'VES';
+      else if (id === 'ab-moneda') { est.fuente = 'USD'; est.moneda = e.target.value; }
+      if (['ab-monto', 'ab-monto-bs', 'ab-moneda', 'ab-tasa-manual'].includes(id)) actualizarTasa();
     };
     p.onchange = e => {
       if (e.target.id === 'ab-file') { est.archivo = e.target.files?.[0] || null; if (est.archivo) leerComprobante(est.archivo); }
@@ -202,23 +209,26 @@ export function crearAbonos(c) {
     return `<div class="ab-form">
       ${ed ? `<p class="ab-fila-sub">Editando el abono de ${usd(ed.monto_usd)} del ${esc(c.fecha(ed.fecha))}. El recibo se vuelve a generar.</p>` : ''}
       <div class="ab-grid">
-        <div><label class="fl" for="ab-monto">Monto</label><input class="ei" id="ab-monto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" value="${ed ? esc(ed.monto_original) : ''}"></div>
+        <div><label class="fl" for="ab-monto">Monto en dólares</label><input class="ei" id="ab-monto" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" value="${ed ? esc(ed.moneda === 'VES' ? ed.monto_usd : ed.monto_original) : ''}"></div>
         <div><label class="fl" for="ab-moneda">Moneda</label><select class="ei" id="ab-moneda">
           <option value="USD"${est.moneda === 'USD' ? ' selected' : ''}>Dólares (USD)</option>
           <option value="VES"${est.moneda === 'VES' ? ' selected' : ''}>Bolívares (VES)</option></select></div>
       </div>
       <div class="ab-tasa" id="ab-tasa-box" ${est.moneda === 'VES' ? '' : 'hidden'}>
         <div class="ab-chips" role="group" aria-label="Tasa del cobro">${Object.entries(TASAS).map(([t, n]) => `<button class="ab-chip ${t === est.tasaTipo ? 'on' : ''}" type="button" data-ab-accion="tasa" data-tasa="${t}"${tasaForm(t) || ed ? '' : ' disabled title="Sin tasa cargada"'}>${n}</button>`).join('')}</div>
-        Tasa <span id="ab-tasa-nombre"></span> <b id="ab-tasa">—</b> Bs/USD <span class="ab-tasa-fecha" id="ab-tasa-fecha"></span> · Equivale a <b id="ab-usd">—</b>
-        ${ed ? `<label class="fl" for="ab-tasa-manual">Tasa del día del pago (Bs/USD)</label><input class="ei" id="ab-tasa-manual" type="number" min="0" step="0.0001" inputmode="decimal" value="${ed.moneda === 'VES' ? esc(ed.tasa_usd_ves || '') : esc(tasaDe(d, est.tasaTipo) || '')}">` : ''}</div>
+        Tasa <span id="ab-tasa-nombre"></span> <b id="ab-tasa">—</b> Bs/USD <span class="ab-tasa-fecha" id="ab-tasa-fecha"></span>
+        <div class="ab-grid">
+          <div><label class="fl" for="ab-monto-bs">Monto en bolívares</label><input class="ei" id="ab-monto-bs" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Se calcula del monto en dólares" value="${ed?.moneda === 'VES' ? esc(ed.monto_original) : ''}"></div>
+          ${ed ? `<div><label class="fl" for="ab-tasa-manual">Tasa del día del pago (Bs/USD)</label><input class="ei" id="ab-tasa-manual" type="number" min="0" step="0.0001" inputmode="decimal" value="${ed.moneda === 'VES' ? esc(ed.tasa_usd_ves || '') : esc(tasaDe(d, est.tasaTipo) || '')}"></div>` : ''}
+        </div></div>
       <label class="fl">Método de pago</label>
       <div class="ab-chips">${chips}</div>
       ${servicio}
       <label class="fl" for="ab-ref">Referencia</label><input class="ei" id="ab-ref" maxlength="120" placeholder="Número de operación" value="${ed ? esc(ed.referencia || '') : ''}">
       <label class="fl" for="ab-fecha">Fecha del pago</label><input class="ei" id="ab-fecha" type="date" min="2020-01-01" max="${diaIso(new Date())}" value="${ed ? diaIso(ed.fecha) : diaIso(new Date())}">
       <label class="fl" for="ab-nota">Nota (opcional)</label><textarea class="ei" id="ab-nota" maxlength="2000" rows="2">${ed ? esc(ed.nota || '') : ''}</textarea>
-      ${ed ? '' : `<label class="fl" for="ab-file">Captura del comprobante del pago (opcional)</label>
-      <input class="ei" id="ab-file" type="file" accept="image/jpeg,image/png,image/webp">`}
+      <label class="fl" for="ab-file">${ed ? (ed.comprobante_path ? 'Leer otro comprobante (llena los datos; se conserva el guardado)' : 'Captura del comprobante (llena los datos y queda guardada)') : 'Captura del comprobante del pago (opcional)'}</label>
+      <input class="ei" id="ab-file" type="file" accept="image/jpeg,image/png,image/webp">
       <p class="ab-ia" id="ab-ia" hidden></p>
       <p class="ab-err" id="ab-err"></p>
       <div class="ab-acciones">
@@ -352,22 +362,35 @@ export function crearAbonos(c) {
     est.ordenPrevio = null; pintar();
     c.ok('Orden guardado: así salen los abonos en el próximo voucher.');
   }
+  const tasaActual = () => { const man = Number(document.getElementById('ab-tasa-manual')?.value || 0); return man > 0 ? man : tasaForm(est.tasaTipo); };
+  // Monto que se registra, en la moneda del pago (en Bs sale del campo de bolívares, ya sincronizado).
+  function montoForm() {
+    const moneda = document.getElementById('ab-moneda')?.value || 'USD';
+    actualizarTasa();
+    const usdV = Number(document.getElementById('ab-monto')?.value || 0), bsV = Number(document.getElementById('ab-monto-bs')?.value || 0);
+    if (moneda !== 'VES') return { moneda, monto: usdV };
+    if (est.fuente !== 'VES' && usdV > 0 && !(tasaActual() > 0)) return { moneda, error: 'tasa_no_disponible' };
+    return { moneda, monto: bsV };
+  }
   function actualizarTasa() {
     const box = document.getElementById('ab-tasa-box'); if (!box) return;
     const moneda = document.getElementById('ab-moneda')?.value || est.moneda;
-    const monto = Number(document.getElementById('ab-monto')?.value || 0);
     const man = Number(document.getElementById('ab-tasa-manual')?.value || 0);
-    const tasa = man > 0 ? man : tasaForm(est.tasaTipo);
+    const tasa = tasaActual();
     box.hidden = moneda !== 'VES';
     if (moneda !== 'VES') return;
+    const usdIn = document.getElementById('ab-monto'), bsIn = document.getElementById('ab-monto-bs');
+    if (tasa > 0 && usdIn && bsIn) {
+      const r2 = n => Math.round(n * 100) / 100;
+      if (est.fuente === 'VES') { const b = Number(bsIn.value || 0); usdIn.value = b > 0 ? r2(b / tasa) : ''; }
+      else { const u = Number(usdIn.value || 0); bsIn.value = u > 0 ? r2(u * tasa) : ''; }
+    }
     const en = est.datos?.tasas?.[est.tasaTipo]?.actualizado_en, delDia = est.tasasFecha?.[est.tasaTipo];
     document.getElementById('ab-tasa-nombre').textContent = nombreTasa(est.tasaTipo);
     document.getElementById('ab-tasa').textContent = tasa ? num(tasa, 4) : 'sin cargar';
     document.getElementById('ab-tasa-fecha').textContent = man > 0 && !delDia ? ''
       : delDia ? (delDia.historica ? `(del ${diaCorto(delDia.fecha)}, fecha del pago)` : '(no hay tasa guardada del día del pago: es la vigente)')
       : en ? `(${c.fecha(en)})` : '';
-    const eq = document.getElementById('ab-usd');
-    if (eq) eq.textContent = !monto || !tasa ? '—' : usd(monto / tasa);
   }
   // Si suben la captura, se aprovecha para prellenar (EF analizar-comprobante).
   // Solo completa lo que está vacío; nunca registra nada.
@@ -378,18 +401,24 @@ export function crearAbonos(c) {
     const d = await analizarCaptura(archivo);
     if (token !== est.tokenIA || !document.getElementById('ab-ia')) return;
     if (!d) { aviso.textContent = 'No se pudo leer: completa los datos a mano.'; return; }
-    const puestos = [];
-    const monto = document.getElementById('ab-monto'), moneda = document.getElementById('ab-moneda'), ref = document.getElementById('ab-ref');
-    if (d.moneda && moneda && !monto.value) { moneda.value = d.moneda; est.moneda = d.moneda; puestos.push('moneda'); }
-    if (d.monto != null && monto && !monto.value) { monto.value = d.monto; puestos.push('monto'); }
-    if (d.referencia && ref && !ref.value) { ref.value = d.referencia; puestos.push('referencia'); }
+    // Al editar, el comprobante manda (para eso lo suben); en un abono nuevo solo llena lo vacío.
+    const pisa = !!est.editando, puestos = [];
+    const monto = document.getElementById('ab-monto'), bs = document.getElementById('ab-monto-bs'), moneda = document.getElementById('ab-moneda'), ref = document.getElementById('ab-ref');
+    const montoVacio = !monto?.value && !bs?.value;
+    if (['USD', 'VES'].includes(d.moneda) && moneda && (pisa || montoVacio)) { if (moneda.value !== d.moneda) puestos.push('moneda'); moneda.value = d.moneda; est.moneda = d.moneda; }
+    if (d.monto != null && monto && (pisa || montoVacio)) {
+      // En Bs se guarda el monto exacto del comprobante; los dólares salen de la tasa.
+      if (moneda?.value === 'VES' && bs) { bs.value = d.monto; est.fuente = 'VES'; } else { monto.value = d.monto; est.fuente = 'USD'; }
+      puestos.push('monto');
+    }
+    if (d.referencia && ref && (pisa || !ref.value)) { ref.value = d.referencia; puestos.push('referencia'); }
     if (d.metodo && METODOS.includes(d.metodo)) {
       est.metodo = d.metodo; puestos.push('método');
       panel()?.querySelectorAll('[data-ab-accion="metodo"]').forEach(x => x.classList.toggle('on', x.dataset.metodo === est.metodo));
     }
     // La fecha del comprobante manda sobre la de hoy (el campo nace con hoy): de ella sale la tasa.
     const fecha = document.getElementById('ab-fecha'), hoy = diaIso(new Date());
-    if (d.fecha && fecha && d.fecha <= hoy && d.fecha >= '2020-01-01' && (!fecha.value || fecha.value === hoy)) {
+    if (d.fecha && fecha && d.fecha <= hoy && d.fecha >= '2020-01-01' && fecha.value !== d.fecha && (pisa || !fecha.value || fecha.value === hoy)) {
       fecha.value = d.fecha; puestos.push(`fecha (${diaCorto(d.fecha)})`);
       await cambiarFecha(d.fecha);
     }
@@ -422,6 +451,8 @@ export function crearAbonos(c) {
     else { est.metodo = est.metodo || 'Zelle'; est.moneda = est.metodo === 'Pago móvil' ? 'VES' : 'USD'; }
     est.archivo = null; est.formAbierto = true; est.tasasFecha = null; est.tokenFecha++;
     est.tasaTipo = ed?.tasa_tipo || 'USD';
+    // Abono en Bs ya cargado: manda el monto en bolívares guardado (no se recalcula si no lo tocan).
+    est.fuente = ed?.moneda === 'VES' ? 'VES' : 'USD';
     est.solicitud = crypto.randomUUID();
     pintar();
     document.getElementById('ab-monto')?.focus();
@@ -456,11 +487,13 @@ export function crearAbonos(c) {
     const v = id => (document.getElementById(id)?.value || '').trim();
     // La misma solicitud en cada reintento: si el primer intento sí entró, el servidor lo reconoce.
     est.solicitud = est.solicitud || crypto.randomUUID();
+    const m = montoForm();
+    if (m.error) return poner(mensaje(m.error));
     est.guardando = true;
     btn.disabled = true;
     try {
       await registrar({
-        monto: Number(v('ab-monto') || 0), moneda: v('ab-moneda') || 'USD', metodo: est.metodo, referencia: v('ab-ref'), nota: v('ab-nota'),
+        monto: m.monto, moneda: m.moneda, metodo: est.metodo, referencia: v('ab-ref'), nota: v('ab-nota'),
         archivo: est.archivo || document.getElementById('ab-file')?.files?.[0] || null, servicio: Number(v('ab-servicio') || 0) || null,
         tasaTipo: est.tasaTipo, solicitud: est.solicitud, fecha: v('ab-fecha'), tasasFecha: est.tasasFecha,
       }, poner);
@@ -477,11 +510,18 @@ export function crearAbonos(c) {
   async function registrar(p, poner) {
     if (!(p.monto > 0)) { poner(ERRORES.monto_invalido); return false; }
     if (!p.metodo) { poner(ERRORES.metodo_invalido); return false; }
-    if (p.metodo === 'Pago móvil' && p.moneda !== 'VES') { poner(ERRORES.pago_movil_en_bs); return false; }
-    const ves = p.moneda === 'VES', hoy = diaIso(new Date());
+    // Pago móvil en dólares (formulario del servicio): se registra en Bs a la tasa elegida del día del pago.
+    const pmUsd = p.metodo === 'Pago móvil' && p.moneda === 'USD';
+    const ves = p.moneda === 'VES' || pmUsd, hoy = diaIso(new Date());
     if (p.fecha && (p.fecha > hoy || p.fecha < '2020-01-01')) { poner(ERRORES.fecha_invalida); return false; }
     const fecha = p.fecha && p.fecha < hoy ? p.fecha : null;
     const tasasF = fecha && ves ? p.tasasFecha || await tasasDelDia(fecha) : null;
+    if (pmUsd) {
+      const t = Number(tasasF?.[p.tasaTipo]?.tasa || 0) || tasaDe(est.datos, p.tasaTipo);
+      if (!t) { poner(ERRORES.tasa_no_disponible); return false; }
+      p = { ...p, moneda: 'VES', monto: Math.round(p.monto * t * 100) / 100 };
+    }
+    if (p.metodo === 'Pago móvil' && p.moneda !== 'VES') { poner(ERRORES.pago_movil_en_bs); return false; }
     const comprobante = p.archivo ? await subirCaptura(p.archivo) : null;
     const llamar = forzar => sb.rpc('registrar_abono_reserva_v2', {
       p_reserva_id: est.reservaId, p_monto_original: p.monto, p_moneda: p.moneda, p_metodo: p.metodo,
@@ -563,32 +603,45 @@ export function crearAbonos(c) {
     const poner = m => { if (err) err.textContent = m || ''; };
     poner('');
     const val = id => (document.getElementById(id)?.value || '').trim();
-    const monto = Number(val('ab-monto') || 0), moneda = val('ab-moneda') || 'USD', tasa = Number(val('ab-tasa-manual') || 0);
+    const m = montoForm(), { monto, moneda } = m, tasa = moneda === 'VES' ? tasaActual() : 0;
+    if (m.error) return poner(mensaje(m.error));
     if (!(monto > 0)) return poner(ERRORES.monto_invalido);
     if (!est.metodo) return poner(ERRORES.metodo_invalido);
     if (est.metodo === 'Pago móvil' && moneda !== 'VES') return poner(ERRORES.pago_movil_en_bs);
-    if (moneda === 'VES' && !(tasa > 0) && !tasaDe(est.datos, est.tasaTipo)) return poner(ERRORES.tasa_invalida);
+    if (moneda === 'VES' && !(tasa > 0)) return poner(ERRORES.tasa_invalida);
+    // La captura se sube antes de tocar el abono: si falla, no queda nada a medias.
+    const archivo = !ed.comprobante_path && (est.archivo || document.getElementById('ab-file')?.files?.[0]) || null;
     est.guardando = true; btn.disabled = true;
     try {
+      const comprobante = archivo ? await subirCaptura(archivo) : null;
       const { data, error } = await sb.rpc('editar_abono_reserva', {
         p_abono_id: ed.id, p_monto_original: monto, p_moneda: moneda, p_metodo: est.metodo,
         p_referencia: val('ab-ref') || null, p_nota: val('ab-nota') || null,
         p_servicio_id: document.getElementById('ab-servicio') ? Number(val('ab-servicio') || 0) : null,
-        p_tasa_tipo: moneda === 'VES' ? est.tasaTipo : null, p_tasa: moneda === 'VES' && tasa > 0 ? tasa : null,
+        p_tasa_tipo: moneda === 'VES' ? est.tasaTipo : null, p_tasa: moneda === 'VES' && Number(val('ab-tasa-manual') || 0) > 0 ? Number(val('ab-tasa-manual')) : null,
         p_fecha: val('ab-fecha') || null,
       });
       if (error) throw new Error(error.code === '42501' ? 'Tu usuario no puede editar este abono.' : error.message);
       if (!data?.ok) throw new Error(data?.error || 'Sin respuesta del servidor');
-      est.formAbierto = false; est.editando = null;
-      if (data.sin_cambios) { c.ok('El abono no tenía cambios.'); pintar(); return; }
+      est.formAbierto = false; est.editando = null; est.archivo = null;
+      let adjunto = '';
+      if (comprobante) {
+        const r = await sb.rpc('abono_adjuntar_comprobante', { p_abono_id: ed.id, p_comprobante_path: comprobante });
+        adjunto = !r.error && r.data?.ok ? ' · comprobante guardado' : ` · el comprobante no quedó guardado (${mensaje(r.error?.message || r.data?.error)})`;
+      }
+      if (data.sin_cambios) {
+        c.ok(adjunto ? 'Abono sin cambios' + adjunto : 'El abono no tenía cambios.');
+        if (adjunto) { est.datos = null; await cargar(est.reservaId); } else pintar();
+        return;
+      }
       let docs = { fallo: null };
       if (data.documentos_estado !== 'listo') docs = await cadenaAbono({
         id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
         moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
         referencia: data.referencia, servicio_id: data.servicio_id ?? null, fecha: data.fecha,
       }, data.monto_pagado, data.saldo_pendiente);
-      if (docs.fallo) c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): usa «Reintentar documentos».`);
-      else c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}${docs.reciboId ? ' · Recibo nuevo' : ''}`);
+      if (docs.fallo) c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}${adjunto}. Los documentos quedaron pendientes (${docs.fallo}): usa «Reintentar documentos».`);
+      else c.ok(`Abono editado · saldo ${usd(data.saldo_pendiente)}${docs.reciboId ? ' · Recibo nuevo' : ''}${adjunto}`);
       est.datos = null;
       await cargar(est.reservaId);
       c.pagosCambiaron?.();
