@@ -14069,7 +14069,7 @@ async function efVolcarComprobante(d) {
   if (d.monto != null && d.moneda === 'USD') { usd = d.monto; partes.push(money(d.monto)); }
   else if (d.monto != null && d.moneda === 'VES') {
     const bs = d.monto.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const tasa = await tasaUsdActual();
+    const tasa = await tasaUsdActual(d.fecha);
     if (tasa) {
       usd = Math.round(d.monto / tasa * 100) / 100;
       partes.push(`Bs ${bs} ≈ ${money(usd)} (tasa BCV ${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`);
@@ -22813,10 +22813,11 @@ EXPORTABLES.balance = {
   filas: () => BAL.data?.serie || [],
   celda: (c, r) => c === 'b' ? String(r.b).slice(0, 10) : ['vendido', 'costo', 'comisiones', 'gastos', 'utilidad'].includes(c) ? balMoney(r[c]) : String(r[c] ?? ''),
 };
-let TASA_USD = null;
-async function tasaUsdActual() {
-  if (TASA_USD == null) { const { data } = await sb.from('tasas_cambio').select('tasa').eq('moneda', 'USD').limit(1); TASA_USD = Number(data?.[0]?.tasa) || 0; }
-  return TASA_USD || null;
+// Sin caché de sesión: la tasa BCV cambia durante el día (cron cada hora) y un pago de otro día lleva la tasa de ese día.
+async function tasaUsdActual(fecha) {
+  let { data, error } = await sb.rpc('tasas_del_dia', { p_fecha: fecha || null });
+  if (error && fecha) ({ data } = await sb.rpc('tasas_del_dia', { p_fecha: null }));
+  return Number(data?.USD?.tasa) || null;
 }
 async function abrirGastoSheet(g) {
   const tasaDef = await tasaUsdActual();
@@ -22877,7 +22878,7 @@ function setupBalance() {
     const a = b.dataset.bal, id = Number(b.dataset.id);
     if (a === 'sin-costo') balanceIrA('ventas', true);
     else if (a === 'ir-cxp') balanceIrA('cxp');
-    else if (a === 'ir-comisiones') balanceIrA('comisiones');
+    else if (a === 'ir-comisiones') activateSection('comisiones');
     else if (a === 'gasto-editar') { const g = (BAL.data?.gastos || []).find(x => x.id === id); if (g) abrirGastoSheet(g); }
     else if (a === 'gasto-anular') anularGastoUI(id);
   });
