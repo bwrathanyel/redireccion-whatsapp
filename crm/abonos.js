@@ -88,7 +88,9 @@ const CSS = `
 .ab-docs.fallo{background:#fdeceb;color:#a72b1f}
 .ab-orden-tit{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;margin:0 0 7px;font-size:11px;color:var(--muted)}
 .ab-orden-tit b{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
-.ab-lista + .ab-lista{margin-top:9px}
+.ab-lista + .ab-lista,.ab-orden-pie + .ab-lista{margin-top:9px}
+.ab-orden-pie{position:sticky;bottom:0;z-index:3;align-items:center;margin:9px 0 0;padding:9px 11px;border:1px solid var(--accent);border-radius:10px;background:var(--panel)}
+.ab-orden-pie span{flex:1 1 100%;font-size:11px;font-weight:700;color:var(--accent-ink)}
 .ab-fila.ab-mov{display:flex;gap:9px;align-items:flex-start;position:relative}
 .ab-cuerpo{flex:1;min-width:0}
 .ab-asa{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:34px;padding:4px 0;border:1px solid var(--line2);border-radius:8px;background:transparent;color:var(--muted);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -143,6 +145,8 @@ export function crearAbonos(c) {
       if (a === 'nuevo') abrirForm();
       else if (a === 'cerrar') { est.archivo = null; est.formAbierto = false; est.editando = null; est.tasasFecha = null; pintar(); }
       else if (a === 'guardar') guardar(b);
+      else if (a === 'guardar-orden') guardarOrden(b);
+      else if (a === 'deshacer-orden') deshacerOrden();
       else if (a === 'eliminar') eliminar(Number(b.dataset.id));
       else if (a === 'editar') abrirForm(Number(b.dataset.id));
       else if (a === 'recibo') verRecibo(b.dataset.id, b);
@@ -266,7 +270,9 @@ export function crearAbonos(c) {
     const filas = vivos.map((a, i) => filaHtml(a, i + 1, acum += Number(a.monto_usd || 0), mover)).join('');
     p.innerHTML = kpis(d) + avisoCuadre(d) + (est.formAbierto ? formHtml(d) : '') +
       (ab.length ? (vivos.length ? `<p class="ab-orden-tit"><b>Orden en el voucher</b>${mover ? '<span>Arrastra <i class="fas fa-grip-lines"></i> para cambiarlo</span>' : ''}</p>
-        <ul class="ab-lista" data-ab-orden>${filas}</ul>` : '') + (anulados.length ? `<ul class="ab-lista">${anulados.map(a => filaHtml(a)).join('')}</ul>` : '')
+        <ul class="ab-lista" data-ab-orden>${filas}</ul>${est.ordenPrevio ? `<div class="ab-acciones ab-orden-pie"><span>Orden sin guardar</span>
+          <button class="dbtn save" type="button" data-ab-accion="guardar-orden"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
+          <button class="dbtn gh" type="button" data-ab-accion="deshacer-orden">Deshacer</button></div>` : ''}` : '') + (anulados.length ? `<ul class="ab-lista">${anulados.map(a => filaHtml(a)).join('')}</ul>` : '')
         : '<p class="ab-vacia">Todavía no hay abonos registrados en esta reserva.</p>');
     if (est.formAbierto) actualizarTasa();
   }
@@ -288,20 +294,23 @@ export function crearAbonos(c) {
     const antes = idsLista(ul), agarre = e.clientY - li.getBoundingClientRect().top;
     li.classList.add('ab-arrastrando');
     const seguir = y => { li.style.transform = ''; li.style.transform = `translateY(${y - agarre - li.getBoundingClientRect().top}px)`; };
-    asa.onpointermove = ev => {
+    // En window y no en el asa: mover el <li> en el DOM suelta la captura del puntero y el pointerup
+    // no llegaba al asa (el orden nunca se guardaba, reporte del dueño 13-nov).
+    const mover = ev => {
       const otros = [...ul.querySelectorAll(':scope > .ab-mov')].filter(x => x !== li);
       const sig = otros.find(x => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; }) || null;
       if (li.nextElementSibling !== sig && !(sig === null && !li.nextElementSibling)) flip(otros, () => ul.insertBefore(li, sig));
       seguir(ev.clientY);
     };
-    asa.onpointerup = asa.onpointercancel = () => {
-      asa.onpointermove = asa.onpointerup = asa.onpointercancel = null;
+    const soltar = () => {
+      removeEventListener('pointermove', mover); removeEventListener('pointerup', soltar); removeEventListener('pointercancel', soltar);
       const dy = li.style.transform;
       li.style.transform = '';
       li.classList.remove('ab-arrastrando');
       if (dy && !sinMovimiento()) li.animate([{ transform: dy }, { transform: 'none' }], { duration: 140, easing: 'ease-out' });
       fijarOrden(antes, idsLista(ul));
     };
+    addEventListener('pointermove', mover); addEventListener('pointerup', soltar); addEventListener('pointercancel', soltar);
   }
   function moverConTeclado(e) {
     const asa = e.target.closest('[data-ab-asa]');
@@ -313,21 +322,34 @@ export function crearAbonos(c) {
     if (e.key === 'ArrowUp') ul.insertBefore(li, otro); else otro.after(li);
     fijarOrden(antes, idsLista(ul), li.dataset.id);
   }
-  async function fijarOrden(antes, nuevo, foco = null) {
+  // Mover solo cambia la lista en pantalla; «Guardar orden» lo manda al servidor (pedido del dueño 13-nov).
+  function fijarOrden(antes, nuevo, foco = null) {
     if (antes.join() === nuevo.join()) return;
     const d = est.datos, previo = d.abonos || [], porId = new Map(previo.map(a => [String(a.id), a]));
+    est.ordenPrevio = est.ordenPrevio || previo;
     d.abonos = [...nuevo.map(id => porId.get(id)), ...previo.filter(a => a.anulado_en)];
-    est.ordenando = true;
     pintar();
     if (foco) panel()?.querySelector(`.ab-mov[data-id="${foco}"] [data-ab-asa]`)?.focus();
-    const { data, error } = await sb.rpc('reserva_abonos_ordenar', { p_reserva_id: est.reservaId, p_ids: nuevo.map(Number) });
+  }
+  function deshacerOrden() {
+    if (!est.ordenPrevio || !est.datos) return;
+    est.datos.abonos = est.ordenPrevio; est.ordenPrevio = null; pintar();
+  }
+  async function guardarOrden(btn) {
+    const d = est.datos;
+    if (!est.ordenPrevio || !d || est.ordenando) return;
+    const ids = (d.abonos || []).filter(a => !a.anulado_en).map(a => Number(a.id));
+    est.ordenando = true; btn.disabled = true;
+    const { data, error } = await sb.rpc('reserva_abonos_ordenar', { p_reserva_id: est.reservaId, p_ids: ids });
     est.ordenando = false;
     if (est.datos !== d) return;
+    if (btn.isConnected) btn.disabled = false;
     if (error || !data?.ok) {
       c.error(error?.code === '42501' ? 'Tu usuario no puede ordenar los abonos de esta reserva.' : mensaje(error?.message || data?.error));
-      if (data?.error === 'orden_desactualizado') return cargar(est.reservaId);
-      d.abonos = previo; pintar(); return;
+      if (data?.error === 'orden_desactualizado') { est.ordenPrevio = null; cargar(est.reservaId); }
+      return;
     }
+    est.ordenPrevio = null; pintar();
     c.ok('Orden guardado: así salen los abonos en el próximo voucher.');
   }
   function actualizarTasa() {
@@ -406,6 +428,7 @@ export function crearAbonos(c) {
   }
   async function cargar(reservaId) {
     const token = ++est.token;
+    est.ordenPrevio = null;
     const p = panel(); if (!p) return;
     p.innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div><div class="skel-bar"></div></div>';
     const { data, error } = await sb.rpc('reserva_abonos_lista', { p_reserva_id: reservaId });
