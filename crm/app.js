@@ -35368,6 +35368,8 @@ const CB_TIPO_EMOJI = { boleto: '✈️', hotel: '🏨', paquete: '🎒', fullda
 const CB_CAMPO_EMOJI = { plan: '🍽️', ida: '📅', vuelta: '📅', ida_hora: '🕐', vuelta_hora: '🕐', aerolinea: '🛩️', cant: '🔢', tarifa: '💵' };
 const CB_PAX_EMOJI = { adultos: '🧑', ninos: '🧒', infantes: '👶' };
 const cbEmo = e => e ? `<span class="cb-emo" aria-hidden="true">${e}</span>` : '';
+// Divisor fino entre grupos del servicio (2026-11-12): reemplaza los títulos «Viajeros» y «Tarifa», que gastaban una línea cada uno.
+const CB_SEP = '<div class="cb-sep cb-full" aria-hidden="true"></div>';
 const cbPlanEmoji = s => { const n = cbTarNorm(s); return /todo incluido|all inclusive/.test(n) ? '🍹' : /desayuno/.test(n) ? '☕' : /pension/.test(n) ? '🍽️' : /solo alojamiento|sin comida/.test(n) ? '🛏️' : '🍴'; };
 const cbBonito = s => s && s === s.toUpperCase() ? s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()) : s;
 const cbSumarDias = (iso, n) => cbTarIso(cbTarFecha(iso) + n * 864e5);
@@ -35379,7 +35381,7 @@ function cbMinNoches(it) {
 const cbStepHtml = (i, k, valor, min, nombre) => `<div class="cb-step"><button type="button" class="cb-step-b" data-cb-step="-1" aria-label="Menos ${nombre}">−</button><input id="cb-${k}-${i}" class="ei" data-k="${k}" type="number" inputmode="numeric" min="${min}" step="1" placeholder="0" value="${esc(String(valor ?? ''))}"><button type="button" class="cb-step-b" data-cb-step="1" aria-label="Más ${nombre}">+</button></div>`;
 function cbPaxHtml(it, i, tipo) {
   const hotel = tipo === 'hotel', porHab = cbPorHabitacion(it), noche = hotel && cbPorNoche(it);
-  const cuentas = CB_PAX_CAMPOS.map(([c, , lc, , min]) => `<div class="field cb-cuenta"><label class="fl" for="cb-${c}-${i}">${cbEmo(CB_PAX_EMOJI[c])}${lc}</label>${cbStepHtml(i, c, it[c], min, lc.toLowerCase())}${hotel && c === 'infantes' && it.infantes_gratis ? '<small class="cb-nota">Gratis en el hotel</small>' : ''}</div>`).join('')
+  const cuentas = CB_PAX_CAMPOS.map(([c, , lc, , min]) => `<div class="field cb-cuenta"><label class="fl" for="cb-${c}-${i}">${cbEmo(CB_PAX_EMOJI[c])}${lc}${hotel && c === 'infantes' && it.infantes_gratis ? ' <small class="cb-nota" title="Gratis en el hotel">gratis</small>' : ''}</label>${cbStepHtml(i, c, it[c], min, lc.toLowerCase())}</div>`).join('')
     + (hotel && it.unidad !== 'persona' ? `<div class="field cb-cuenta"><label class="fl" for="cb-habitaciones-${i}">${cbEmo('🚪')}Habitaciones</label>${cbStepHtml(i, 'habitaciones', it.habitaciones ?? 1, 1, 'habitaciones')}</div>` : '');
   const precios = CB_PAX_CAMPOS.map(([c, t, lc, lt]) => {
     if (porHab && t !== 'tarifa_nino') return '';
@@ -35387,7 +35389,7 @@ function cbPaxHtml(it, i, tipo) {
     const label = noche ? `${{ adultos: 'Adulto', ninos: 'Niño', infantes: 'Infante' }[c]} por noche` : lt.replace(' (USD)', '');
     return `<div class="field cb-precio${oculto ? ' cb-oculto' : ''}" data-pax-precio="${c}"><label class="fl" for="cb-${t}-${i}">${cbEmo(CB_PAX_EMOJI[c])}${label}</label><div class="cb-usd"><span aria-hidden="true">$</span><input id="cb-${t}-${i}" class="ei" data-k="${t}" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00" value="${esc(String(it[t] ?? ''))}"></div></div>`;
   }).join('');
-  return { cuentas: `<div class="cb-sec cb-full">${cbEmo('👥')}Viajeros</div><div class="cb-cuentas cb-full">${cuentas}</div>`, precios: `<div class="cb-precios cb-full">${precios}</div>` };
+  return { cuentas: `${CB_SEP}<div class="cb-cuentas cb-full">${cuentas}</div>`, precios: `<div class="cb-precios cb-full">${precios}</div>` };
 }
 // Stop Sales ↔ Cotizaciones: misma RPC y regla que «¿Puedo vender?», noches [entrada, salida). Sin cupo no se genera; a confirmar solo avisa.
 let cbStops = null;
@@ -35480,20 +35482,19 @@ function cbItemHtml(it, i) {
   // La unidad (por persona o por habitación) sale del tarifario sin preguntar; el selector solo
   // aparece si el hotel no está en el catálogo, si nada la declara o si el asesor pide cambiarla.
   const unidadDetectada = hotel && it.producto_id && !it._cargando && !it._unidadPendiente && !it.unidad_manual && !it._unidadEditar && TAR_UNIDAD_TEXTO[it.unidad];
-  const chipUnidad = unidadDetectada ? `<span class="cb-unidad-chip">${porHab ? '🚪' : '🧑'} ${TAR_UNIDAD_TEXTO[it.unidad]}<button type="button" class="cb-link" data-cb-unidad-cambiar aria-label="Cambiar la unidad de la tarifa">cambiar</button></span>` : '';
-  const selUnidad = hotel && !unidadDetectada ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${it._unidadPendiente ? '<option value="" selected disabled>Elige la unidad</option>' : ''}${[['persona_noche', 'Persona por noche'], ['habitacion_noche', 'Habitación por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${!it._unidadPendiente && (it.unidad || 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
+  const chipUnidad = unidadDetectada ? `<div class="field cb-dos"><span class="fl">${cbEmo('💵')}Tarifa</span><span class="ei cb-unidad-chip">${porHab ? '🚪' : '🧑'} ${TAR_UNIDAD_TEXTO[it.unidad]}<button type="button" class="cb-link" data-cb-unidad-cambiar aria-label="Cambiar la unidad de la tarifa">cambiar</button></span></div>` : '';
+  const selUnidad = hotel && !unidadDetectada ? `<div class="field cb-dos"><label class="fl" for="cb-unidad-${i}">${cbEmo('💵')}Tarifa por</label><select id="cb-unidad-${i}" class="ei" data-k="unidad">${it._unidadPendiente ? '<option value="" selected disabled>Elige la unidad</option>' : ''}${[['persona_noche', 'Persona por noche'], ['habitacion_noche', 'Habitación por noche'], ['persona', 'Persona (estadía completa)']].map(([k, t]) => `<option value="${k}"${!it._unidadPendiente && (it.unidad || 'persona') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></div>` : '';
   const boleto = tipo === 'boleto', campos = CB_TIPOS[tipo].campos.filter(c => !(boleto && c[0] === 'ruta'));
   const pax = CB_TIPOS[tipo].pax ? cbPaxHtml(it, i, tipo) : null;
-  const tarifaSec = extra => `<div class="cb-sec cb-full">${cbEmo('💵')}Tarifa${extra}</div>`;
   const cuerpo = hotel
     ? cbHotelHtml(it, i) + cbHotelSelectorHtml(it, i, 'plan', 'Plan') + cbHotelSelectorHtml(it, i, 'hab', 'Habitación') + cbFechasHtml(it, i, f)
-      + pax.cuentas + tarifaSec(chipUnidad) + selUnidad
+      + pax.cuentas + CB_SEP + chipUnidad + selUnidad
       + (porHab ? cbHotelVariantesHtml(it, i) + (it.tramos?.length > 1 ? '' : f('tarifa', 'Habitación por noche (USD)', 'type="number" inputmode="decimal" min="0" step="0.01"', ' cb-dos')) : '')
       + pax.precios + cbHotelPrecioHtml(it, i) + cbDesgloseHtml(it)
       + (porHab ? '<small class="cb-full cb-condicion">Precio por habitación: niños y adultos adicionales se suman aparte según el tarifario.</small>' : '')
     : (boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : '')
       + campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ` list="cb-productos-${i}" autocomplete="off"`) + `<datalist id="cb-productos-${i}">${cbOpcionesProducto(it)}</datalist>` : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
-      + (pax ? pax.cuentas + tarifaSec('') + pax.precios + cbDesgloseHtml(it) : '')
+      + (pax ? pax.cuentas + CB_SEP + pax.precios + cbDesgloseHtml(it) : '')
       + (boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : '');
   return `<div class="cb-item${hotel ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
     <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select>${cbOpcionSelectHtml(it, i)}</span><span class="cb-item-acc"><b class="cb-importe" title="Importe del servicio">${cbImporteTexto(it)}</b><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-controls="cb-item-campos-${i}" aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button>${cbItems.length > 1 ? `<button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
@@ -36183,7 +36184,7 @@ function cbHabitacionHtml(it, i, opciones) {
     <button type="button" id="cb-hab-${i}" class="ei cb-hab-elegida" role="combobox" data-cb-hab-abrir aria-haspopup="listbox" aria-labelledby="cb-hab-label-${i} cb-hab-texto-${i}" aria-expanded="false" aria-controls="cb-habitaciones-${i}">${cbHabMiniHtml(it, it.hab)}<span id="cb-hab-texto-${i}">${esc(it.hab || (it._cargando ? 'Cargando habitaciones…' : 'Elige una habitación'))}</span><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
     <div id="cb-habitaciones-${i}" class="cb-picker-lista" role="listbox" aria-label="Habitaciones" hidden>${opciones.map(h => `<button type="button" tabindex="-1" role="option" aria-selected="${cbTarNorm(it.hab) === cbTarNorm(h)}" data-cb-hab="${esc(h)}">${cbHabMiniHtml(it, h)}<span>${esc(h)}</span></button>`).join('')}<button type="button" tabindex="-1" role="option" aria-selected="false" data-cb-hab="__manual__"><span>Escribir otra habitación</span></button></div>
     ${it.hab_libre ? `<input id="cb-hab-${i}-manual" class="ei" data-k="hab" value="${esc(it.hab || '')}" aria-label="Habitación manual" placeholder="Escribe la habitación confirmada">` : ''}
-    ${foto ? `<button type="button" class="btn-sm cb-hab-ver" data-cb-hab-fotos><i class="fas fa-images" aria-hidden="true"></i> Ver fotos de esta habitación</button>` : ''}
+    ${foto ? `<button type="button" class="btn-sm cb-hab-ver" data-cb-hab-fotos aria-label="Ver fotos de esta habitación" title="Ver fotos de esta habitación"><i class="fas fa-images" aria-hidden="true"></i> Fotos</button>` : ''}
     ${cbFotosErrores.has(Number(it.producto_id)) ? '<small>No se pudieron cargar las fotos. <button class="btn-sm" type="button" data-cb-fotos-reintentar>Reintentar fotos</button></small>' : ''}</div>`;
 }
 function cbHabCerrar(box) {

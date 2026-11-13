@@ -4305,6 +4305,82 @@ body.en-cotizar #lyra-fab,body.en-cotizar #chat-fab{display:none!important}
   .cb-precios{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(prefers-reduced-motion:reduce){.cb-desglose,.cb-step-b{animation:none;transition:none}}
+/* Cotizaciones compactas (2026-11-12, pedido del dueño): menos scroll y controles más finos.
+   Con mouse los campos bajan a 38px; en táctil quedan en 44px. */
+#sec-cotizacion-boletos{--cb-h:44px;--cb-h-sm:44px}
+@media(min-width:901px) and (pointer:fine){#sec-cotizacion-boletos{--cb-h:38px;--cb-h-sm:32px}}
+#sec-cotizacion-boletos .cb-cliente-seccion{margin-bottom:6px}
+#sec-cotizacion-boletos .cb-cab-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+#sec-cotizacion-boletos .cb-cab-grid>.cb-lead-buscar,#sec-cotizacion-boletos .cb-cab-grid>.cb-solo-boleteria{grid-column:span 2;margin:0}
+#sec-cotizacion-boletos .cb-items{margin-top:8px;gap:10px}
+#sec-cotizacion-boletos .cb-editor .cb-item{padding:12px 14px}
+#sec-cotizacion-boletos .cb-editor .cb-item-cab{margin-bottom:10px}
+#sec-cotizacion-boletos .cb-editor .fl{margin:0 0 5px;font-size:11.5px;letter-spacing:.01em}
+#sec-cotizacion-boletos .cb-editor .ei+.fl{margin-top:8px}
+#sec-cotizacion-boletos .cb-editor .ei{min-height:var(--cb-h);padding-block:6px}
+#sec-cotizacion-boletos .cb-editor .ei::placeholder{color:var(--muted);opacity:.7}
+#sec-cotizacion-boletos .cb-editor .ei:hover:not(:focus):not(:disabled){border-color:color-mix(in srgb,var(--accent) 35%,var(--line2))}
+#sec-cotizacion-boletos .cb-editor .cb-item-cab .ei{min-height:var(--cb-h-sm);padding-block:4px;border-radius:10px}
+#sec-cotizacion-boletos .cb-plegar{min-height:var(--cb-h-sm);padding:4px 12px;border-radius:10px;background:none;color:var(--muted)}
+#sec-cotizacion-boletos .cb-plegar:hover{color:var(--txt);border-color:var(--accent)}
+#sec-cotizacion-boletos .cb-sep{height:0;margin:1px 0;border-top:1px dashed var(--line2)}
+#sec-cotizacion-boletos .cb-cuenta .cb-nota{display:inline-block;margin:0 0 0 5px;padding:0 7px;border-radius:999px;background:color-mix(in srgb,var(--green) 15%,transparent);font-size:10px;font-weight:700;line-height:16px;vertical-align:1px}
+#sec-cotizacion-boletos .cb-servicio-hotel .cb-precios{display:contents}
+@media(min-width:901px){#sec-cotizacion-boletos .cb-servicio-hotel .cb-precios>.field{grid-column:span 2}}
+#sec-cotizacion-boletos .cb-editor .cb-unidad-chip{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:0;padding:0 3px 0 12px;border-style:dashed;background:transparent;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden}
+#sec-cotizacion-boletos .cb-unidad-chip .cb-link{padding:5px 9px}
+/* Contador −/+ como una sola pieza */
+#sec-cotizacion-boletos .cb-step{gap:0;height:var(--cb-h);border:1.5px solid var(--line2);border-radius:12px;background:rgba(10,12,28,.7);overflow:hidden;transition:border-color .16s,box-shadow .16s}
+:root[data-theme="light"] #sec-cotizacion-boletos .cb-step{background:rgba(var(--surface-rgb),.9)}
+#sec-cotizacion-boletos .cb-step:hover{border-color:color-mix(in srgb,var(--accent) 35%,var(--line2))}
+#sec-cotizacion-boletos .cb-step:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#sec-cotizacion-boletos .cb-editor .cb-step .ei,#sec-cotizacion-boletos .cb-editor .cb-step .ei:focus{height:100%;min-height:0;padding:0 2px;border:0;border-radius:0;background:transparent;box-shadow:none;font-size:14px}
+#sec-cotizacion-boletos .cb-step-b{width:calc(var(--cb-h) - 6px);height:100%;border:0;border-radius:0;color:var(--muted);font-size:17px}
+#sec-cotizacion-boletos .cb-step-b:hover{background:var(--accent-soft);color:var(--accent-txt)}
+#sec-cotizacion-boletos .cb-step-b:active{transform:none;background:rgba(var(--accent-rgb),.22)}
+#sec-cotizacion-boletos .cb-step-b:focus-visible{outline-offset:-2px}
+/* Habitación y foto del hotel a la altura del resto de los campos */
+#sec-cotizacion-boletos .cb-editor .cb-hab-elegida{gap:8px;padding-block:3px}
+#sec-cotizacion-boletos .cb-hab-elegida img{width:30px;height:30px;border-radius:6px}
+#sec-cotizacion-boletos .cb-hab-elegida .cb-hab-sin-foto{min-width:0;min-height:0;padding:2px 7px;border-radius:6px;background:rgba(var(--ink-rgb),.06);font-size:10.5px;white-space:nowrap}
+#sec-cotizacion-boletos .cb-hab-elegida>i{font-size:10px;color:var(--muted)}
+#sec-cotizacion-boletos .cb-editor .cb-picker:has(>.cb-hotel-foto){grid-template-columns:var(--cb-h) minmax(0,1fr)}
+#sec-cotizacion-boletos .cb-editor .cb-hotel-foto{width:var(--cb-h);height:var(--cb-h)}
+@media(min-width:901px){#sec-cotizacion-boletos .cb-hotel-selector .cb-hab-ver{position:absolute;top:-4px;right:0;margin:0;min-height:0;padding:2px 8px;border:0;background:none;color:var(--accent-txt);font-size:11px}}
+/* Chips, ticks y botones */
+#sec-cotizacion-boletos .cb-chips{gap:6px}
+#sec-cotizacion-boletos .cb-chip{min-height:var(--cb-h-sm);padding:4px 12px;font-size:12.5px}
+#sec-cotizacion-boletos .cb-check{min-height:var(--cb-h-sm);font-size:12.5px}
+#sec-cotizacion-boletos .cb-editor input[type=checkbox]{-webkit-appearance:none;appearance:none;flex:none;display:inline-grid;place-content:center;width:18px;height:18px;margin:0;border:1.5px solid var(--line2);border-radius:5px;background:transparent;cursor:pointer;transition:background .16s,border-color .16s}
+#sec-cotizacion-boletos .cb-editor input[type=checkbox]::before{content:"";width:10px;height:10px;background:var(--on-accent);clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%);transform:scale(0);transition:transform .14s ease-out}
+#sec-cotizacion-boletos .cb-editor input[type=checkbox]:hover{border-color:var(--accent)}
+#sec-cotizacion-boletos .cb-editor input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+#sec-cotizacion-boletos .cb-editor input[type=checkbox]:checked::before{transform:scale(1)}
+#sec-cotizacion-boletos .cb-editor input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#sec-cotizacion-boletos .cb-editor .cb-opc-switch input{width:32px;height:18px;padding:0 2px;border-radius:999px;place-content:center start;background:rgba(var(--ink-rgb),.08)}
+#sec-cotizacion-boletos .cb-editor .cb-opc-switch input::before{width:11px;height:11px;border-radius:50%;clip-path:none;background:var(--muted);transform:none;transition:transform .18s ease-out,background .18s}
+#sec-cotizacion-boletos .cb-editor .cb-opc-switch input:checked::before{transform:translateX(14px);background:var(--on-accent)}
+#sec-cotizacion-boletos .cb-add-barra{align-items:center;gap:8px;margin-top:10px}
+#sec-cotizacion-boletos .cb-add{margin:0;min-height:var(--cb-h-sm);padding:6px 14px;border:1px dashed var(--line2);border-radius:10px;background:transparent;color:var(--txt);font-size:12.5px;transition:background .16s,border-color .16s}
+#sec-cotizacion-boletos .cb-add:hover{border-color:var(--accent);background:var(--accent-soft)}
+#sec-cotizacion-boletos .cb-add>i{color:var(--accent)}
+#sec-cotizacion-boletos .cb-opc-switch{margin-left:auto;padding:0 4px;gap:9px;font-size:12.5px;font-weight:600;color:var(--muted)}
+#sec-cotizacion-boletos .cb-opc-elegir{margin-top:8px}
+#sec-cotizacion-boletos .cb-textos{margin-top:10px}
+#sec-cotizacion-boletos .cb-textos summary{margin-bottom:6px}
+#sec-cotizacion-boletos .cb-desglose{padding:8px 12px;align-items:center}
+#sec-cotizacion-boletos .cb-desglose>span:last-child{flex:1;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px}
+#sec-cotizacion-boletos .cb-desglose b{margin:0;font-size:16px}
+/* Resumen lateral: Compartir y WhatsApp lado a lado, vista previa más baja */
+@media(min-width:901px){
+  #sec-cotizacion-boletos .cb-resumen-col{padding:14px 16px}
+  #sec-cotizacion-boletos .cb-resumen-col h3{margin-bottom:8px}
+  #sec-cotizacion-boletos .cb-mini-hoja{height:min(260px,28vh)}
+  #sec-cotizacion-boletos .cb-resumen-col .cb-total{padding:10px 0}
+  #sec-cotizacion-boletos .cb-resumen-col .cb-acciones{flex-direction:row;flex-wrap:wrap}
+  #sec-cotizacion-boletos .cb-resumen-col .cb-acciones button{flex:1 1 0;min-width:0;min-height:40px;padding:8px 10px;font-size:12.5px}
+  #sec-cotizacion-boletos .cb-resumen-col .cb-acciones :is(#cb-enviar-btn,#cb-descargar-btn){flex-basis:100%}
+}
 @media(max-width:760px){
   #sec-voucher .vc-hospedaje-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   #sec-voucher .vc-hospedaje-grid>.vc-c:first-child{grid-column:1/-1}
@@ -11369,8 +11445,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <summary><span>Cliente y documento</span><small id="cb-cliente-resumen">Cliente, fecha y vigencia</small><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
         <div class="doc-contenido">
         <div id="cb-lead" class="cb-solicitud" hidden></div>
-        <div class="cb-picker cb-solo-ventas cb-lead-buscar"><label class="fl" for="cb-lead-q">Vincular cliente del CRM</label><input id="cb-lead-q" class="ei" placeholder="Buscar por nombre o teléfono…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-lead-res"><div id="cb-lead-res" class="cb-picker-lista" role="listbox" aria-label="Clientes" hidden></div></div>
         <div class="cb-cab-grid">
+          <div class="cb-picker cb-solo-ventas cb-lead-buscar"><label class="fl" for="cb-lead-q">Vincular cliente del CRM</label><input id="cb-lead-q" class="ei" placeholder="Buscar por nombre o teléfono…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-lead-res"><div id="cb-lead-res" class="cb-picker-lista" role="listbox" aria-label="Clientes" hidden></div></div>
           <div class="field cb-cliente-campo"><label class="fl">Nombre en la cotización</label><input id="cb-cliente" class="ei" placeholder="Nombre del cliente o BOLETERÍA"></div>
           <div class="field cb-solo-boleteria"><label class="fl">Enviar al asesor</label><select id="cb-asesor" class="ei"></select></div>
           <div class="field cb-fecha-campo"><label class="fl">Fecha</label><input id="cb-fecha" class="ei" type="date"></div>
@@ -11378,9 +11454,9 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
         </div>
         </details>
-        <div class="cb-modo-opc"><label class="cb-opc-switch" title="Cada hotel o paquete es una opción con su propio total y no se suman. Lo marcado «En todas» (vuelo, traslado) entra en cada opción."><input type="checkbox" id="cb-opciones" onchange="cbAlternarOpciones(this.checked)"> Opciones para elegir</label><div id="cb-opc-elegir" class="cb-opc-elegir" hidden></div></div>
         <div id="cb-items" class="cb-items"></div>
-        <div class="cb-add-barra"><button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button><button id="cb-traslado-apto" class="dbtn cb-add" type="button" hidden onclick="cbAgregarTrasladoAeropuerto()" title="Traslado común ida y vuelta: $20 por adulto, $12 por niño"><i class="fas fa-van-shuttle"></i> Traslado aeropuerto</button></div>
+        <div class="cb-add-barra"><button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button><button id="cb-traslado-apto" class="dbtn cb-add" type="button" hidden onclick="cbAgregarTrasladoAeropuerto()" title="Traslado común ida y vuelta: $20 por adulto, $12 por niño"><i class="fas fa-van-shuttle"></i> Traslado aeropuerto</button><label class="cb-opc-switch" title="Cada hotel o paquete es una opción con su propio total y no se suman. Lo marcado «En todas» (vuelo, traslado) entra en cada opción."><input type="checkbox" role="switch" id="cb-opciones" onchange="cbAlternarOpciones(this.checked)"> Opciones para elegir</label></div>
+        <div id="cb-opc-elegir" class="cb-opc-elegir" hidden></div>
         <details class="cb-textos">
           <summary>Notas y términos del PDF</summary>
           <div class="field"><label class="fl">Notas</label><textarea id="cb-notas" class="ei" rows="2"></textarea></div>
