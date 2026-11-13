@@ -5193,6 +5193,7 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .pv-rap:disabled{opacity:.45;cursor:default}
 .pv-rap:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pv-filtros{display:flex;align-items:flex-start;gap:10px}.pv-filtros .pv-stagebar{flex:1;min-width:0}
+.ph-nota{font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.5}.ph-nota b{color:var(--text)}
 .pv-selects{display:flex;gap:8px;flex:0 0 auto}.pv-selects select.flt{padding-top:7px;padding-bottom:7px;font-size:12px;max-width:230px}
 #pv-destino[hidden],#pv-asesor[hidden]{display:none}
 .pv-asesor-l{margin-top:4px}.pv-asesor-l i{color:var(--accent)}
@@ -9518,6 +9519,26 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
       </div>
       <div class="pv-grid" id="pv-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando postventa...</div></div>
+    </section>
+
+    <!-- HISTÓRICOS: reservas con viaje hasta el 30/09/2026 (reserva_historica en SQL); fuera de Clientes y del margen por proveedor -->
+    <section class="section" id="sec-historicos">
+      <div class="pv-toolbar">
+        <div class="pv-search"><i class="fas fa-search"></i><input id="ph-search" type="search" placeholder="Buscar cliente, destino o localizador..."></div>
+        <button class="pv-refresh" id="ph-refresh" type="button" title="Actualizar" aria-label="Actualizar históricos"><i class="fas fa-rotate"></i></button>
+      </div>
+      <div class="ph-nota" id="ph-nota"></div>
+      <div class="pv-filtros">
+        <div class="pv-stagebar chips-scroll" id="ph-anios" aria-label="Filtrar por año del viaje"></div>
+        <div class="pv-selects">
+          <select class="flt" id="ph-asesor" aria-label="Filtrar por asesor" hidden></select>
+          <select class="flt" id="ph-orden" aria-label="Ordenar históricos">
+            <option value="reciente">Viaje más reciente primero</option>
+            <option value="antiguo">Viaje más antiguo primero</option>
+          </select>
+        </div>
+      </div>
+      <div class="pv-grid" id="ph-grid"><div class="pv-empty"><i class="fas fa-circle-notch fa-spin"></i>Cargando históricos...</div></div>
     </section>
 
     <!-- CAMPAÑAS WHATSAPP (pestaña de Reservas; solo admin): campañas por plantilla a clientes con venta, audiencia elegible e historial de envíos -->

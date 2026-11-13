@@ -317,6 +317,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   tareas: ['Tareas', 'Tu día: lo asignado y tus recordatorios'],
   comisiones: ['Comisiones', 'Se calculan solas al pagarse la reserva · pagos el 5 y el 20'],
   'mis-ventas': ['Mis Ventas', 'Tus ventas, cobros pendientes y tu rendimiento'],
+  historicos: ['Históricos', 'Reservas con viaje hasta el 30/09/2026'],
   boleteria: ['Boletería', 'Rutas, aerolíneas, precios y requisitos de vuelo'],
   'bol-solicitudes': ['Solicitudes', 'Vuelos que piden los asesores, por orden de llegada'],
   'gestion-personal': ['Gestión de Personal', 'Equipo, asistencia, freelancers, postulaciones, reasignaciones y métricas -- todo en un solo lugar'],
@@ -1886,7 +1887,7 @@ function manejarDeepLinkAsistencia() {
 // Proyecto Constructor: pertenece a plataforma-crm y jamás se comparte desde
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
-  'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa',
+  'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa', 'historicos',
   'web-reasignados', 'contactos-directos', 'repartir', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'metodos-pago', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
@@ -4114,6 +4115,11 @@ function setupPostventa() {
     if (b) { PV_RAPIDO = PV_RAPIDO === b.dataset.rapido ? '' : b.dataset.rapido; renderPostventa(); }
   });
   document.getElementById('pv-refresh')?.addEventListener('click', loadPostventa);
+  document.getElementById('ph-refresh')?.addEventListener('click', loadHistoricos);
+  document.getElementById('ph-search')?.addEventListener('input', e => { PH_BUSCAR = e.target.value; clearTimeout(PH_TIMER); PH_TIMER = setTimeout(renderHistoricos, 150); });
+  document.getElementById('ph-asesor')?.addEventListener('change', e => { PH_ASESOR = e.target.value; renderHistoricos(); });
+  document.getElementById('ph-orden')?.addEventListener('change', e => { PH_ORDEN = e.target.value; renderHistoricos(); });
+  document.getElementById('ph-anios')?.addEventListener('click', e => { const b = e.target.closest('button[data-anio]'); if (b) { PH_ANIO = b.dataset.anio; renderHistoricos(); } });
   document.getElementById('pv-exportar')?.addEventListener('click', pvExportarVarias);
   const pvNueva = document.getElementById('pv-nueva');
   if (pvNueva) pvNueva.hidden = !(ROL === 'asesor' || esOficina());
@@ -4322,13 +4328,14 @@ async function loadPostventa(silencioso) {
     errToast('No se pudo cargar la bandeja de postventa');
     return;
   }
-  // Las reservas de empresa viven solo en la pestaña Empresas.
-  POSTVENTA = pvViajoPagado((bandeja.data || []).filter(c => c.empresa_id == null));
+  // Las reservas de empresa viven solo en la pestaña Empresas; las históricas, en Históricos.
+  POSTVENTA = pvViajoPagado((bandeja.data || []).filter(c => c.empresa_id == null && !c.historico));
   if (!RV_DESTINOS && (esOficina() || ROL === 'asesor')) {
     const d = await sb.rpc('listar_destinos', { p_solo_activos: true });
     if (!d.error) RV_DESTINOS = d.data || [];
   }
   renderPostventa();
+  if (currentSec === 'historicos') loadHistoricos();
   const badge = document.getElementById('nav-postventa-count');
   const pendientes = Number(resumen.data?.total || 0);
   if (badge) { badge.textContent = pendientes; badge.style.display = pendientes > 0 ? '' : 'none'; }
@@ -4668,6 +4675,7 @@ async function pvEliminarReserva(c, btn) {
   btn.closest('.pv-card')?.remove();
   POSTVENTA = POSTVENTA.filter(x => x.id !== c.id);
   if (currentSec === 'postventa') loadPostventa(true);
+  if (currentSec === 'historicos') loadHistoricos();
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
   if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
 }
@@ -4771,6 +4779,61 @@ async function pvBandejaCompleta() {
   if (error) { console.error('postventa_bandeja', error); return null; }
   if (!RV_DESTINOS) { const d = await sb.rpc('listar_destinos', { p_solo_activos: true }); if (!d.error) RV_DESTINOS = d.data || []; }
   return pvViajoPagado(data || []);
+}
+/* ---------- Históricos (2026-11-13) ----------
+   Reservas con viaje hasta el 30/09/2026 (reserva_historica en SQL, campo `historico` de
+   postventa_bandeja): salen de Clientes y del margen real por proveedor. Mismas tarjetas que Clientes. */
+let PV_HIST = [], PH_ANIO = '', PH_ASESOR = '', PH_ORDEN = 'reciente', PH_BUSCAR = '', PH_TIMER = null;
+const phFecha = c => String(c.fecha_viaje_inicio || c.fecha_cierre || '').slice(0, 10);
+const phAnio = c => phFecha(c).slice(0, 4) || 'Sin fecha';
+async function loadHistoricos() {
+  const grid = document.getElementById('ph-grid');
+  if (!grid || ROL === 'marketing') return;
+  if (!grid.querySelector('.pv-card')) grid.innerHTML = '<div class="skel-card"></div>'.repeat(6);
+  const lista = await pvBandejaCompleta();
+  if (!lista) {
+    grid.innerHTML = '<div class="pv-empty"><i class="fas fa-triangle-exclamation"></i>No se pudieron cargar los históricos</div>';
+    errToast('No se pudieron cargar los históricos');
+    return;
+  }
+  PV_HIST = lista.filter(c => c.historico && c.empresa_id == null);
+  renderHistoricos();
+}
+function renderHistoricos() {
+  const grid = document.getElementById('ph-grid');
+  if (!grid) return;
+  const q = PH_BUSCAR.trim().toLowerCase();
+  const buscados = PV_HIST.filter(c => reCoincide([c.nombre, c.telefono, c.destino, c.codigo, c.localizador_reserva], q));
+  const sel = document.getElementById('ph-asesor');
+  if (sel) {
+    const cuenta = new Map();
+    buscados.forEach(c => cuenta.set(pvAsesorDe(c), (cuenta.get(pvAsesorDe(c)) || 0) + 1));
+    const orden = [...cuenta.keys()].sort((a, b) => (a === 'Sin asesor') - (b === 'Sin asesor') || a.localeCompare(b, 'es'));
+    if (PH_ASESOR && !cuenta.has(PH_ASESOR)) orden.push(PH_ASESOR);
+    sel.hidden = orden.length < 2 && !PH_ASESOR;
+    sel.innerHTML = [['', `Todos los asesores (${buscados.length})`], ...orden.map(a => [a, `${a} (${cuenta.get(a) || 0})`])]
+      .map(([k, l]) => `<option value="${esc(k)}"${k === PH_ASESOR ? ' selected' : ''}>${esc(l)}</option>`).join('');
+  }
+  const delAsesor = PH_ASESOR ? buscados.filter(c => pvAsesorDe(c) === PH_ASESOR) : buscados;
+  const anios = new Map();
+  delAsesor.forEach(c => anios.set(phAnio(c), (anios.get(phAnio(c)) || 0) + 1));
+  if (PH_ANIO && !anios.has(PH_ANIO)) anios.set(PH_ANIO, 0);
+  const chip = (k, l, n) => `<button class="pv-stage${PH_ANIO === k ? ' on' : ''}" type="button" data-anio="${esc(k)}" aria-pressed="${PH_ANIO === k}">${esc(l)} <b class="pv-n">${fmt(n)}</b></button>`;
+  document.getElementById('ph-anios').innerHTML = chip('', 'Todos', delAsesor.length)
+    + [...anios.keys()].sort((a, b) => (a === 'Sin fecha') - (b === 'Sin fecha') || b.localeCompare(a)).map(a => chip(a, a, anios.get(a))).join('');
+  const casos = PH_ANIO ? delAsesor.filter(c => phAnio(c) === PH_ANIO) : delAsesor;
+  const nota = document.getElementById('ph-nota');
+  if (nota) nota.innerHTML = `Viajes hasta el 30/09/2026: no entran en Clientes ni en el margen real de Proveedores · <b>${fmt(casos.length)}</b> ${casos.length === 1 ? 'reserva' : 'reservas'} · <b>${money(casos.reduce((s, c) => s + Number(c.monto_total || 0), 0))}</b> vendidos`;
+  if (!casos.length) {
+    grid.innerHTML = `<div class="pv-empty"><i class="fas fa-box-archive"></i><b>Sin históricos</b><br>${PV_HIST.length ? 'Ninguna reserva coincide con el filtro' : 'Todavía no hay reservas con viaje hasta el 30/09/2026'}</div>`;
+    return;
+  }
+  const f = c => phFecha(c) || '0000';
+  const ord = [...casos].sort((a, b) => PH_ORDEN === 'antiguo' ? f(a).localeCompare(f(b)) || a.id - b.id : f(b).localeCompare(f(a)) || b.id - a.id);
+  grid.classList.toggle('pv-compacta', PV_VISTA === 'compacta');
+  grid.innerHTML = ord.map(c => pvCardHtml(c)).join('');
+  pvWire(grid, PV_HIST);
+  entradaLista(grid);
 }
 // items: [{ reserva, grupo, extra }]. Chips por grupo + grilla de tarjetas; sheetId se cierra al gestionar.
 function pvGruposGrid(cont, items, sheetId, vacio) {
@@ -5418,6 +5481,7 @@ function rvForm(f) { RV_FORM = f; rvRenderServicios(); rvRenderPasajeros(); }
 function rvTrasCambio() {
   rvCargar();
   if (currentSec === 'postventa' && (esOficina() || ROL === 'asesor')) loadPostventa();
+  if (currentSec === 'historicos') loadHistoricos();
   if (currentSec === 'reservas-empresas') loadReservasEmpresas();
   if (currentSec === 'apartamentos' && APTO_TAB === 'disp') loadDisponibilidad();
   if (currentSec === 'boleteria' && bolTab === 'reservas') loadBolReservas();
@@ -13728,6 +13792,7 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   closeSheet('enviar-facturacion-sheet');
   if (EF_COMPROBANTE && pagado > 0) WB?.marcarComprobante(EF_COMPROBANTE, 'registrado');
   if (currentSec === 'postventa') loadPostventa();
+  if (currentSec === 'historicos') loadHistoricos();
   okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
 });
 
@@ -38196,6 +38261,7 @@ const NAV_ITEMS = [
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
   { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
+  { sec: 'historicos', icon: 'fas fa-box-archive', label: 'Históricos', padre: 'grp-reservas', roles: '', sub: 'Reservas con viaje hasta el 30/09/2026' },
   { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-reservas', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   { sec: 'campanas-wa', icon: 'fa-brands fa-whatsapp', label: 'Campañas WhatsApp', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-no', sub: 'Plantillas a clientes con venta: campañas, audiencia y envíos' },
@@ -38642,6 +38708,7 @@ function cargarSeccion(sec) {
   if (sec === 'comisiones') loadComisiones();
   if (sec === 'gestion-personal') loadGestionPersonal();
   if (sec === 'postventa') loadPostventa();
+  if (sec === 'historicos') loadHistoricos();
   if (sec === 'informe-diario') loadInformeDiario();
   if (sec === 'hoy') renderHoy();
   if (sec === 'leads') { if (ROL === 'asesor') loadInboxLeads(); iniciarPollLeads(); }
