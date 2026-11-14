@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/+esm';
 import { crearDocumentosRevisiones } from './documentos-revisiones.js';
-import { crearAbonos } from './abonos.js';
+import { crearAbonos, verificarAbono } from './abonos.js';
 import { crearPropuestas } from './propuestas.js';
 import { crearBandejaWa, ventanaWaAbierta, vozHtml, vozSync, borrarHtml, enlazarBorrar } from './whatsapp-bandeja.js';
 import { crearGrabadorVoz } from './voz-grabar.js';
@@ -5108,7 +5108,7 @@ function abrirPostventa(c, accionInicial = null) {
   // Desde la ficha del lead el cajón ya está abierto: no empujar otra entrada de historial.
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
-  rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : accionInicial === 'abonos' ? 'abonos' : 'resumen', accionInicial);
+  rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : accionInicial === 'abonos' || accionInicial === 'ver-abonos' ? 'abonos' : 'resumen', accionInicial);
   if (esOficina()) pvCargarEmpresas(c);
 }
 async function pvCambiarAsesor(c, btn) {
@@ -10264,13 +10264,13 @@ async function cargarReservasLead(l) {
   box.querySelectorAll('[data-res-facturar]').forEach(b => b.onclick = () => facturarReservaLead(l, Number(b.dataset.resFacturar), b));
 }
 // El código (R-000057) es único y la bandeja lo busca (migración B2): un solo resultado exacto.
-async function abrirReservaDeLead(reservaId, codigo, btn) {
+async function abrirReservaDeLead(reservaId, codigo, btn, accionInicial = null) {
   if (btn) btn.disabled = true;
   const { data, error } = await sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: codigo });
   if (btn) btn.disabled = false;
   const c = (data || []).find(x => x.id === reservaId);
   if (error || !c) { errToast(error ? 'No se pudo abrir la reserva' : 'La reserva no está activa en Postventa'); return; }
-  abrirPostventa(c);
+  abrirPostventa(c, accionInicial);
 }
 async function crearReservaLead(l) {
   const btn = document.getElementById('res-nueva'), err = document.getElementById('res-err');
@@ -14555,6 +14555,58 @@ function pagoWebCard(p) {
     </div>`;
 }
 
+// Finanzas Fase 1: abono que cargó un asesor en la reserva. No suma al pagado hasta verificarlo.
+function pagoAbonoCard(p) {
+  const bs = p.moneda === 'VES' ? `Bs ${Number(p.monto_original).toLocaleString('es-VE', { minimumFractionDigits: 2 })} · tasa ${p.tasa_usd_ves}` : '';
+  const saldo = Math.max(0, Number(p.monto_total || 0) - Number(p.monto_pagado || 0));
+  return `
+    <div class="entity-card inbox-card" data-pago="${esc(p.id)}">
+      <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div>
+        <span class="badge-st" style="color:var(--amber)">Abono por verificar</span></div>
+      <div style="margin-top:10px;${PAGO_WEB_MONO};font-size:22px;font-weight:800;line-height:1.2;color:var(--txt)">$${esc(pagoWebDec(Number(p.monto_usd) * 100))}</div>
+      <div class="ec-row" style="margin-top:2px">${esc([p.metodo, bs].filter(Boolean).join(' · '))}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <span style="font-size:12px;color:var(--muted)">Ref.</span>
+        <span style="${PAGO_WEB_MONO};font-size:15px;font-weight:700;color:var(--txt);user-select:all;word-break:break-all;flex:1">${esc(p.referencia || '—')}</span>
+      </div>
+      <div class="ec-row"><i class="fas fa-ticket"></i> ${esc(p.codigo || '')} · total $${esc(pagoWebDec(Number(p.monto_total || 0) * 100))} · saldo $${esc(pagoWebDec(saldo * 100))}</div>
+      <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.creado_por && p.creado_por !== p.asesor ? ' · cargó ' + esc(p.creado_por) : ''}</div>
+      <div class="ec-row"><i class="fas fa-clock"></i> Cargado ${esc(tiempoRelativo(p.fecha))}</div>
+      ${p.nota ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(p.nota)}</div>` : ''}
+      <div class="inbox-actions">
+        ${p.comprobante_path ? `<button type="button" class="inbox-btn pagos-sec" data-abono-comprobante="${p.abono_id}"><i class="fas fa-receipt"></i> Ver comprobante</button>` : '<span class="ec-row" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin comprobante</span>'}
+        <button type="button" class="inbox-btn atender" data-abono-verificar="${p.abono_id}"><i class="fas fa-check"></i> Verificar</button>
+        <button type="button" class="inbox-btn nopuedo" data-abono-rechazar="${p.abono_id}"><i class="fas fa-xmark"></i> Rechazar</button>
+        <button type="button" class="inbox-btn" data-abono-reserva="${p.abono_id}"><i class="fas fa-folder-open"></i> Ver reserva</button>
+      </div>
+    </div>`;
+}
+// Desde el tablero no se arman voucher ni recibo (viven en el módulo de la reserva): quedan en «Generar documentos».
+async function verificarAbonoTablero(abonoId, aprobar, btn) {
+  const p = PAGOS_CACHE.find(x => x._abono && x.abono_id === abonoId);
+  if (!p) return;
+  let motivo = null;
+  if (!aprobar) {
+    motivo = await pedirTexto({ titulo: 'Rechazar abono', detalle: `$${pagoWebDec(Number(p.monto_usd) * 100)} · ${p.metodo}${p.referencia ? ' · ' + p.referencia : ''} · ${p.codigo}. No suma al pagado; el asesor ve el motivo y puede corregirlo.`,
+      label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Rechazar', destructivo: true });
+    if (!motivo) return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    await verificarAbono(sb, abonoId, aprobar, motivo);
+    okToast(aprobar ? `Abono verificado en ${p.codigo}. Voucher y recibo: abre la reserva y toca «Generar documentos».` : 'Abono rechazado.');
+    loadPagos(true);
+  } catch (e) { errToast(e.message); if (btn?.isConnected) btn.disabled = false; }
+}
+async function abrirComprobanteAbono(abonoId) {
+  const p = PAGOS_CACHE.find(x => x._abono && x.abono_id === abonoId);
+  if (!p?.comprobante_path) return;
+  const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(p.comprobante_path, 300);
+  if (error || !data?.signedUrl) return errToast('No se pudo abrir el comprobante.');
+  const ext = (p.comprobante_path.split('.').pop() || 'jpg').toLowerCase();
+  docEntregarUrl(data.signedUrl, `Comprobante abono.${ext}`, ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg').catch(() => errToast('No se pudo abrir el comprobante.'));
+}
+
 // Tablero de Pagos (2026-10-22): el recorrido completo de un pago, cada tarjeta
 // avanza sola. La reserva cuenta como confirmada cuando cada servicio (sin los
 // cargos IGTF/gestión) tiene localizador del proveedor (pagos_web_cola los cuenta).
@@ -14565,7 +14617,7 @@ const PAGOS_ETAPAS = [
 ];
 const PAGOS_CONFIRMADAS_MAX = 20;
 function pagoEtapa(p) {
-  if (p.estado === 'pendiente_verificacion') return 'verificar';
+  if (p._abono || p.estado === 'pendiente_verificacion') return 'verificar';
   if (!p._web) return null;
   if (p.estado === 'emitido' || p.estado === 'vencido') return 'espera';
   if (p.estado !== 'verificado') return null;
@@ -14588,10 +14640,11 @@ async function loadPagos(silencioso = false) {
   if (!silencioso) { loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = ''; }
   // La cola de pendientes se pide siempre: sus ids se sacan de la lista general (cuyo botón «Aprobar» no sirve
   // para una compra web). La cola completa trae además las verificadas y las que esperan el pago.
-  const [rLista, rWeb, rWebTodas] = await Promise.all([
+  const [rLista, rWeb, rWebTodas, rAbonos] = await Promise.all([
     sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' }),
     sb.rpc('pagos_web_cola', { p_solo_pendientes: true, p_limite: 300 }),
     sb.rpc('pagos_web_cola', { p_solo_pendientes: false, p_limite: 300 }),
+    sb.rpc('finanzas_por_verificar_listar'),
   ]);
   if (carga !== PAGOS_CARGA) return; // llegó una recarga más nueva: la que pinta es esa
   loading.classList.remove('show');
@@ -14614,8 +14667,10 @@ async function loadPagos(silencioso = false) {
   const vence = w => w.estado === 'pendiente_verificacion' && w.verificar_antes_de ? Date.parse(w.verificar_antes_de) : Infinity;
   web.sort((a, b) => vence(a) - vence(b));
   const idsWeb = new Set([...idsPendientes, ...web.map(w => w.id)]);
-  PAGOS_CACHE = [...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))].filter(p => pagoEtapa(p));
-  pintarAvisoPagos((rLista.data.pagos || []).length);
+  // Finanzas Fase 1: abonos que cargó un asesor (id con prefijo: no choca con los de pagos).
+  const abonos = (rAbonos?.data?.abonos || []).map(a => ({ ...a, _abono: true, abono_id: a.id, id: 'ab' + a.id, lead_nombre: a.cliente, created_at: a.fecha }));
+  PAGOS_CACHE = [...abonos, ...web, ...(rLista.data.pagos || []).filter(p => !idsWeb.has(p.id))].filter(p => pagoEtapa(p));
+  pintarAvisoPagos((rLista.data.pagos || []).length + abonos.length);
   empty.classList.toggle('show', !PAGOS_CACHE.length);
   if (!PAGOS_CACHE.length) { lista.innerHTML = ''; return; }
   pintarTableroPagos(lista, silencioso);
@@ -14623,8 +14678,8 @@ async function loadPagos(silencioso = false) {
 
 // Compras de la web vs links/capturas que mandan los asesores. Las filas de listar_pagos
 // no traen origen y nunca son web (pagos_web_cola ya trae todas las de origen web).
-const pagoCanal = p => p._web && pagoEsWeb(p) ? 'web' : 'asesor';
-const PAGOS_CANALES = [['todos', 'Todos'], ['web', 'Compras web'], ['asesor', 'Links de asesores']];
+const pagoCanal = p => p._abono ? 'abono' : p._web && pagoEsWeb(p) ? 'web' : 'asesor';
+const PAGOS_CANALES = [['todos', 'Todos'], ['web', 'Compras web'], ['asesor', 'Links de asesores'], ['abono', 'Abonos de asesores']];
 let PAGOS_CANAL = localStorage.getItem('pagos_canal') || 'todos';
 function pintarTableroPagos(lista, silencioso) {
   if (!PAGOS_CANALES.some(([k]) => k === PAGOS_CANAL)) PAGOS_CANAL = 'todos';
@@ -14634,9 +14689,9 @@ function pintarTableroPagos(lista, silencioso) {
   // Las confirmadas se acumulan para siempre: solo las más recientes (la cola ya viene de la más nueva a la más vieja).
   const cols = { verificar: de('verificar'), reserva: de('reserva'), confirmada: de('confirmada').slice(0, PAGOS_CONFIRMADAS_MAX) };
   const espera = de('espera');
-  const card = p => p._web ? pagoWebCard(p) : pagoAsesorCard(p);
+  const card = p => p._abono ? pagoAbonoCard(p) : p._web ? pagoWebCard(p) : pagoAsesorCard(p);
   lista.innerHTML = `<div class="seg-group pagos-canales" role="tablist">${PAGOS_CANALES.map(([k, t]) => { const n = porVerificar(k); return `
-    <button class="seg${k === PAGOS_CANAL ? ' on' : ''}" type="button" role="tab" aria-selected="${k === PAGOS_CANAL}" data-pagos-canal="${k}"><i class="fas fa-${k === 'web' ? 'globe' : k === 'asesor' ? 'link' : 'layer-group'}"></i> ${t}${n ? ` <span class="pagos-canal-n" title="${n} por verificar">${n}</span>` : ''}</button>`; }).join('')}</div>
+    <button class="seg${k === PAGOS_CANAL ? ' on' : ''}" type="button" role="tab" aria-selected="${k === PAGOS_CANAL}" data-pagos-canal="${k}"><i class="fas fa-${k === 'web' ? 'globe' : k === 'asesor' ? 'link' : k === 'abono' ? 'hand-holding-dollar' : 'layer-group'}"></i> ${t}${n ? ` <span class="pagos-canal-n" title="${n} por verificar">${n}</span>` : ''}</button>`; }).join('')}</div>
     <div class="pagos-tablero">${PAGOS_ETAPAS.map(e => `
     <section class="pagos-col" data-etapa="${e.k}" style="--etapa:${e.color}">
       <header class="pagos-col-head"><span class="pagos-col-punto"></span><h3>${esc(e.t)}</h3><span class="pagos-col-n">${cols[e.k].length}</span></header>
@@ -15100,6 +15155,17 @@ function setupPagos() {
   lista.addEventListener('click', e => {
     const lp = e.target.closest('[data-lp-copiar]');
     if (lp) return copiarLinkPago(lp.dataset.lpCopiar);
+    const abV = e.target.closest('[data-abono-verificar]');
+    if (abV) return verificarAbonoTablero(Number(abV.dataset.abonoVerificar), true, abV);
+    const abR = e.target.closest('[data-abono-rechazar]');
+    if (abR) return verificarAbonoTablero(Number(abR.dataset.abonoRechazar), false, abR);
+    const abC = e.target.closest('[data-abono-comprobante]');
+    if (abC) return abrirComprobanteAbono(Number(abC.dataset.abonoComprobante));
+    const abRes = e.target.closest('[data-abono-reserva]');
+    if (abRes) {
+      const p = PAGOS_CACHE.find(x => x._abono && x.abono_id === Number(abRes.dataset.abonoReserva));
+      if (p) return abrirReservaDeLead(p.reserva_id, p.codigo, abRes, 'ver-abonos');
+    }
     const ver = e.target.closest('[data-pago-comprobante]');
     if (ver) return abrirComprobantePago(Number(ver.dataset.pagoComprobante));
     const apr = e.target.closest('[data-pago-aprobar]');
@@ -33926,7 +33992,7 @@ function drRotularPdf(doc, texto) {
 let AB = null;
 function abonosModulo() {
   if (!AB) AB = crearAbonos({ sb, esc, usuario: () => MI_USUARIO_ID, fecha: fmtFechaHoraCaracas,
-    ok: okToast, error: errToast, pedir: pedirTexto,
+    ok: okToast, error: errToast, pedir: pedirTexto, oficina: esOficina,
     // Un abono nuevo o anulado cambia el pagado en el servidor: refresca el resumen del drawer.
     pagosCambiaron: () => rvTrasCambio(),
     // Fase 3: con esto el módulo arma la revisión del voucher y el recibo del abono.
@@ -39807,8 +39873,8 @@ function setupAvisoPagos() {
   }, 60000);
 }
 async function contarPagosPendientes() {
-  const { data, error } = await sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' });
-  if (!error && data?.ok) pintarAvisoPagos((data.pagos || []).length);
+  const [{ data, error }, rAb] = await Promise.all([sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' }), sb.rpc('finanzas_por_verificar_listar')]);
+  if (!error && data?.ok) pintarAvisoPagos((data.pagos || []).length + (rAb.data?.abonos || []).length);
 }
 function pintarAvisoPagos(n) {
   const badge = document.getElementById('nav-pagos-count'), aviso = document.getElementById('nav-pagos-aviso');
@@ -41879,6 +41945,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-14', emoji: '✅', titulo: 'Abonos por verificar', texto: 'El abono que registra un asesor queda «Por verificar»: no suma al pagado, no pasa el lead a Pago realizado y no genera recibo hasta que administración lo confirme con el banco. Sí ocupa saldo, para no cargar dos veces el mismo pago. Administración lo verifica o lo rechaza (con motivo) en Pagos por verificar › Abonos de asesores o en la reserva. Un abono rechazado se corrige con «Editar» y vuelve a verificación. Los abonos que carga administración entran verificados.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-13', emoji: '↕️', titulo: 'Ordenar los abonos del voucher', texto: 'En Reservas › Abonos cada abono muestra su puesto (1°, 2°...) y cuánto lleva abonado del total. Arrastra el abono desde su número para cambiar el orden: el voucher sale con los abonos en ese orden.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-13', emoji: '🏨', titulo: 'Servicio de la reserva más compacto', texto: 'El formulario de servicio de la reserva ocupa menos: campos en filas, secciones con título y Guardar siempre a la vista abajo. El hospedaje se elige del tarifario («Hotel o posada», con precio sugerido) o como «Apartamento propio». En Nueva venta se cargan los viajeros uno por uno y quedan como pasajeros de la reserva.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-12', emoji: '💵', titulo: 'Saldo a favor al anular un servicio', texto: 'Si anulas un servicio de una reserva y lo que el cliente ya abonó supera el nuevo total, la reserva ya no se bloquea: la diferencia queda como «Saldo a favor» de ese cliente en la tarjeta, el resumen y los abonos. Los pagos registrados no se tocan ni se duplican.', roles: ['admin', 'administrativo', 'asesor'] },

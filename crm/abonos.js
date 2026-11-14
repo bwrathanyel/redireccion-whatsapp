@@ -41,7 +41,17 @@ const ERRORES = {
   servicio_invalido: 'Ese servicio ya no está en la reserva. Recarga la reserva y elige otro.',
   posible_duplicado: 'Ya hay un pago con ese monto y esa referencia en las últimas 48 horas.',
   orden_desactualizado: 'Los abonos cambiaron mientras los ordenabas: se recargó la lista, vuelve a ordenarlos.',
+  abono_no_pendiente: 'Ese abono ya no está por verificar: otra persona lo resolvió. Recarga.',
+  datos_invalidos: 'Faltan datos para verificar el abono.',
+  abono_verificado: 'Ese abono ya fue verificado por administración: pídele a administración que corrija el monto, el método o la referencia.',
 };
+// Finanzas Fase 1: aprobar o rechazar un abono por verificar. También lo usa el tablero de Pagos (app.js).
+export async function verificarAbono(sb, id, aprobar, motivo = null) {
+  const { data, error } = await sb.rpc('finanzas_abono_verificar', { p_abono_id: id, p_aprobar: aprobar, p_motivo: motivo });
+  if (error) throw new Error(error.code === '42501' ? 'Solo administración verifica abonos.' : error.message);
+  if (!data?.ok) throw new Error(ERRORES[data?.error] || data?.error || 'Sin respuesta del servidor');
+  return data;
+}
 const TIPO_SERV = { hospedaje: 'Hospedaje', boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado', full_day: 'Full day', seguro: 'Seguro', otro: 'Otro' };
 // El abono en Bs se cobra a la tasa que se elija (pedido del dueño 30-oct); USDT es Binance P2P.
 const TASAS = { USD: 'BCV dólar', EUR: 'BCV euro', USDT: 'USDT' };
@@ -74,6 +84,8 @@ const CSS = `
 .ab-tag{padding:2px 9px;border-radius:999px;border:1px solid var(--line2);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .ab-tag.ab-respaldo{color:var(--amber);border-color:var(--amber)}
 .ab-tag.ab-anulada-tag{color:var(--danger);border-color:var(--danger)}
+.ab-tag.ab-pend-tag{color:var(--amber);border-color:var(--amber)}
+.ab-fila.ab-rechazada{opacity:.75}
 .ab-fila-sub{margin:4px 0 0;font-size:11px;color:var(--muted)}
 .ab-fila.ab-anulada{opacity:.72}
 .ab-anular{margin:7px 0 0;padding:0;border:0;background:none;color:var(--danger);font-size:11px;font-weight:700;cursor:pointer}
@@ -130,6 +142,10 @@ export function crearAbonos(c) {
     const { data, error } = await sb.rpc('tasas_del_dia', { p_fecha: f });
     return error || !data ? null : data;
   }
+  // Finanzas Fase 1: solo lo verificado suma al pagado y entra al voucher. Lo por verificar sí ocupa saldo.
+  const cuenta = a => !a.anulado_en && (a.estado || 'verificado') === 'verificado';
+  const ocupa = a => !a.anulado_en && a.estado !== 'rechazado';
+  const oficina = () => !!c.oficina?.();
   let est = { reservaId: null, datos: null, token: 0, tokenIA: 0, tokenFecha: 0, metodo: '', moneda: 'USD', tasaTipo: 'USD', archivo: null, guardando: false, formAbierto: false, tasasFecha: null };
 
   function inyectarCss() {
@@ -153,6 +169,7 @@ export function crearAbonos(c) {
       else if (a === 'recibo') verRecibo(b.dataset.id, b);
       else if (a === 'comprobante') verComprobante(b.dataset.path, b);
       else if (a === 'reintentar') reintentarDocumentos(Number(b.dataset.id), b);
+      else if (a === 'verificar' || a === 'rechazar') verificar(Number(b.dataset.id), a === 'verificar', b);
       else if (a === 'metodo') {
         // Sin repintar: pintar() recrea el formulario y borraría lo ya escrito.
         est.metodo = b.dataset.metodo;
@@ -191,6 +208,7 @@ export function crearAbonos(c) {
     return `<div class="ab-top">
       <div class="ab-kpi"><span>Total</span><b>${usd(d.monto_total)}</b></div>
       <div class="ab-kpi"><span>Pagado</span><b>${usd(d.monto_pagado)}</b></div>
+      ${Number(d.monto_por_verificar) > 0 ? `<div class="ab-kpi" title="Cargado por el asesor: suma al pagado cuando administración lo verifique"><span>Por verificar</span><b>${usd(d.monto_por_verificar)}</b></div>` : ''}
       <div class="ab-kpi ab-saldo"><span>${Number(d.monto_pagado) > Number(d.monto_total) ? 'Saldo a favor' : 'Saldo'}</span><b>${usd(Math.abs(Number(d.monto_total) - Number(d.monto_pagado)))}</b></div>
       <button class="dbtn save ab-nuevo" type="button" data-ab-accion="nuevo"><i class="fas fa-plus"></i> Abono</button>
     </div>`;
@@ -248,19 +266,27 @@ export function crearAbonos(c) {
     const puesto = !pos ? '' : mover
       ? `<button class="ab-asa" type="button" data-ab-asa aria-label="Abono ${pos}° en el voucher: arrastra o usa las flechas para moverlo" title="Arrastra para cambiar el orden"><b>${pos}°</b><i class="fas fa-grip-lines"></i></button>`
       : `<span class="ab-pos" title="Puesto en el voucher">${pos}°</span>`;
-    return `<li class="ab-fila${a.anulado_en ? ' ab-anulada' : ''}${pos ? ' ab-mov' : ''}" data-id="${a.id}">${puesto}${pos ? '<div class="ab-cuerpo">' : ''}
+    return `<li class="ab-fila${a.anulado_en ? ' ab-anulada' : a.estado === 'rechazado' ? ' ab-rechazada' : ''}${pos ? ' ab-mov' : ''}" data-id="${a.id}">${puesto}${pos ? '<div class="ab-cuerpo">' : ''}
       <div class="ab-fila-top"><b>${usd(a.monto_usd)}</b>
         <span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${a.tasa_tipo ? nombreTasa(a.tasa_tipo) + ' ' : ''}${num(a.tasa_usd_ves, 4)}` : ''}</span>
         <span class="ab-tag">${esc(a.metodo)}</span>
         ${serv ? `<span class="ab-tag" title="${esc(nombreServ(serv))}">${esc(TIPO_SERV[serv.tipo] || serv.tipo)}</span>` : ''}
         ${/^inicial/i.test(a.nota || '') ? '<span class="ab-tag">Inicial reserva</span>' : ''}
         ${a.respaldo ? '<span class="ab-tag ab-respaldo" title="Lo cobrado antes de que existiera el registro de abonos: no tiene recibo propio">Cobrado antes</span>' : ''}
-        ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : ''}
+        ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : a.estado === 'por_verificar' ? '<span class="ab-tag ab-pend-tag" title="Suma al pagado cuando administración lo verifique">Por verificar</span>' : a.estado === 'rechazado' ? '<span class="ab-tag ab-anulada-tag">Rechazado</span>' : ''}
       </div>
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
       ${pos ? `<p class="ab-acum">Lleva abonado <b>${usd(acum)}</b> <span>de ${usd(total)} · resta ${usd(Math.max(0, total - acum))}</span></p>` : ''}
       ${a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
         <div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button></div>`
+        : a.estado === 'por_verificar' || a.estado === 'rechazado' ? `${a.estado === 'rechazado' ? `<p class="ab-fila-sub">Rechazado: ${esc(a.rechazado_motivo || 'sin motivo')}${oficina() ? '' : '. Corrígelo con «Editar» y vuelve a verificación.'}</p>` : ''}
+        <div class="ab-fila-acc">
+          ${btnComprobante(a)}
+          ${a.estado === 'por_verificar' && oficina() ? `<button class="ab-mini" type="button" data-ab-accion="verificar" data-id="${a.id}"><i class="fas fa-check"></i>Verificar</button>
+          <button class="ab-mini" type="button" data-ab-accion="rechazar" data-id="${a.id}"><i class="fas fa-xmark"></i>Rechazar</button>` : ''}
+          <button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button>
+          <button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button>
+        </div>`
         : a.respaldo ? `<div class="ab-fila-acc"><button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button>${btnComprobante(a)}</div>` : `<div class="ab-fila-acc">
           ${btnComprobante(a)}
           ${a.recibo_documento_id ? `<button class="ab-mini" type="button" data-ab-accion="recibo" data-id="${a.recibo_documento_id}"><i class="fas fa-file-pdf"></i>Recibo</button>` : ''}
@@ -274,7 +300,8 @@ export function crearAbonos(c) {
   function pintar() {
     const p = panel(); if (!p || !est.datos) return;
     const d = est.datos, ab = d.abonos || [];
-    const vivos = ab.filter(a => !a.anulado_en), anulados = ab.filter(a => a.anulado_en);
+    const vivos = ab.filter(cuenta), anulados = ab.filter(a => !cuenta(a));
+    anulados.sort((x, y) => (x.estado === 'por_verificar' && !x.anulado_en ? 0 : 1) - (y.estado === 'por_verificar' && !y.anulado_en ? 0 : 1));
     const mover = vivos.length > 1 && !est.formAbierto && !est.guardando;
     let acum = 0;
     const filas = vivos.map((a, i) => filaHtml(a, i + 1, acum += Number(a.monto_usd || 0), mover)).join('');
@@ -337,7 +364,7 @@ export function crearAbonos(c) {
     if (antes.join() === nuevo.join()) return;
     const d = est.datos, previo = d.abonos || [], porId = new Map(previo.map(a => [String(a.id), a]));
     est.ordenPrevio = est.ordenPrevio || previo;
-    d.abonos = [...nuevo.map(id => porId.get(id)), ...previo.filter(a => a.anulado_en)];
+    d.abonos = [...nuevo.map(id => porId.get(id)), ...previo.filter(a => !cuenta(a))];
     pintar();
     if (foco) panel()?.querySelector(`.ab-mov[data-id="${foco}"] [data-ab-asa]`)?.focus();
   }
@@ -348,7 +375,7 @@ export function crearAbonos(c) {
   async function guardarOrden(btn) {
     const d = est.datos;
     if (!est.ordenPrevio || !d || est.ordenando) return;
-    const ids = (d.abonos || []).filter(a => !a.anulado_en).map(a => Number(a.id));
+    const ids = (d.abonos || []).filter(cuenta).map(a => Number(a.id));
     est.ordenando = true; btn.disabled = true;
     const { data, error } = await sb.rpc('reserva_abonos_ordenar', { p_reserva_id: est.reservaId, p_ids: ids });
     est.ordenando = false;
@@ -551,6 +578,14 @@ export function crearAbonos(c) {
     if (!data?.ok) throw new Error(data?.error || 'Sin respuesta del servidor');
     est.archivo = null; est.solicitud = null;
     est.formAbierto = false;
+    // Abono de asesor: queda por verificar. Voucher y recibo salen cuando administración lo verifica.
+    if (data.estado === 'por_verificar') {
+      c.ok(`Abono enviado a verificación · ${usd(data.monto_usd)}. Suma al pagado cuando administración lo confirme.`);
+      est.datos = null;
+      await cargar(est.reservaId);
+      c.pagosCambiaron?.();
+      return true;
+    }
     // El pago ya quedó: ahora los documentos (voucher revisado + recibo).
     const docs = await cadenaAbono({
       id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
@@ -571,7 +606,7 @@ export function crearAbonos(c) {
   function pagadoDe(sid) {
     const d = est.datos; if (!d) return null;
     const servs = d.servicios || [], propio = (servs.length === 1 && Number(servs[0].id) === sid) || hospUnico(d) === sid;
-    const suma = (d.abonos || []).filter(a => !a.anulado_en && (Number(a.servicio_id) === sid || (propio && a.servicio_id == null))).reduce((s, a) => s + Number(a.monto_usd || 0), 0);
+    const suma = (d.abonos || []).filter(a => ocupa(a) && (Number(a.servicio_id) === sid || (propio && a.servicio_id == null))).reduce((s, a) => s + Number(a.monto_usd || 0), 0);
     return Math.round((suma + (propio ? Math.max(0, Number(d.monto_pagado || 0) - Number(d.pagado_con_detalle || 0)) : 0)) * 100) / 100;
   }
   // Pago cargado desde el formulario del servicio (recién guardado: se relee la reserva para que esté su
@@ -586,7 +621,7 @@ export function crearAbonos(c) {
       if (p.completo) {
         const s = (est.datos.servicios || []).find(x => Number(x.id) === p.servicio);
         if (!s) throw new Error('servicio_invalido');
-        const falta = Math.min(Math.round((Number(s.precio_usd || 0) - pagadoDe(p.servicio)) * 100) / 100, Number(est.datos.saldo_pendiente || 0));
+        const falta = Math.min(Math.round((Number(s.precio_usd || 0) - pagadoDe(p.servicio)) * 100) / 100, Number(est.datos.saldo_pendiente || 0) - Number(est.datos.monto_por_verificar || 0));
         if (!(falta > 0)) { poner('Ese servicio ya está pagado completo.'); return false; }
         const tasasFecha = p.moneda === 'VES' ? await tasasDelDia(p.fecha) : null;
         const tasa = Number(tasasFecha?.[p.tasaTipo]?.tasa || 0) || tasaDe(est.datos, p.tasaTipo);
@@ -635,6 +670,8 @@ export function crearAbonos(c) {
         return;
       }
       let docs = { fallo: null };
+      // Por verificar o rechazado: sin documentos hasta que administración lo apruebe.
+      if (data.estado && data.estado !== 'verificado') { c.ok(`Abono editado${adjunto} · ${data.estado === 'por_verificar' ? 'queda por verificar' : 'sigue rechazado'}`); est.datos = null; await cargar(est.reservaId); c.pagosCambiaron?.(); return; }
       if (data.documentos_estado !== 'listo') docs = await cadenaAbono({
         id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
         moneda: data.moneda, tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo,
@@ -670,7 +707,7 @@ export function crearAbonos(c) {
     c.pagosCambiaron?.();
     // El voucher se reimprime sin ese abono (un anulado ya no estaba en el voucher).
     let aviso = '';
-    if (!a.anulado_en && est.datos?.voucher?.id && puedeGenerar()) {
+    if (cuenta(a) && est.datos?.voucher?.id && puedeGenerar()) {
       try {
         const actual = (await rpcDoc('documento_historial', { p_tipo: 'voucher', p_id: String(est.datos.voucher.id) }))?.actual || null;
         // El abono ya no existe: sin abono_id, documento_preparar no lo busca.
@@ -748,7 +785,7 @@ export function crearAbonos(c) {
   // Lo pagado del servicio: sus abonos vivos (+ el nuevo) y, en el hospedaje, lo cobrado sin detalle.
   function pagadoServicio(S, abono, anulacion) {
     const d = est.datos || {};
-    const otros = (d.abonos || []).filter(a => !a.anulado_en && Number(a.id) !== Number(abono.id) && delServicio(a, S));
+    const otros = (d.abonos || []).filter(a => cuenta(a) && Number(a.id) !== Number(abono.id) && delServicio(a, S));
     const sinDetalle = S === hospUnico(d) ? Math.max(0, Number(d.monto_pagado || 0) - Number(d.pagado_con_detalle || 0)) : 0;
     const suma = otros.reduce((s, a) => s + Number(a.monto_usd || 0), 0) + (anulacion ? 0 : Number(abono.monto_usd || 0)) + sinDetalle;
     return Math.round(suma * 100) / 100;
@@ -759,7 +796,7 @@ export function crearAbonos(c) {
   function abonosDetalle(abono, pagado, S = null) {
     const fila = (a, nuevo) => ({ fecha: diaMesAnio(a.fecha), metodo: /^(saldo anterior|sin especificar)$/i.test(a.metodo || '') ? 'Abono' : a.metodo, referencia: a.referencia, monto: Number(a.monto_usd || 0), nuevo });
     // En el orden elegido en la lista; el abono editado conserva su puesto y el nuevo va al final.
-    const vivos = (est.datos?.abonos || []).filter(a => !a.anulado_en && (Number(a.id) === Number(abono?.id) || delServicio(a, S)));
+    const vivos = (est.datos?.abonos || []).filter(a => !a.anulado_en && (Number(a.id) === Number(abono?.id) || (cuenta(a) && delServicio(a, S))));
     const filas = vivos.map(a => Number(a.id) === Number(abono?.id) ? fila(abono, true) : fila(a, false));
     if (abono && !vivos.some(a => Number(a.id) === Number(abono.id))) filas.push(fila(abono, true));
     const sinDetalle = Math.round((Number(pagado || 0) - filas.reduce((s, f) => s + f.monto, 0)) * 100) / 100;
@@ -925,7 +962,7 @@ export function crearAbonos(c) {
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...'; }
     // El recibo de un abono viejo lleva el pagado y el saldo de ese momento: sus abonos vivos hasta
     // él + lo cobrado sin fila. El voucher sí se revisa con lo de hoy.
-    const d = est.datos, vivos = (d.abonos || []).filter(x => !x.anulado_en);
+    const d = est.datos, vivos = (d.abonos || []).filter(cuenta);
     const suma = l => l.reduce((s, x) => s + Number(x.monto_usd || 0), 0);
     const pagadoAlAbono = Math.round((suma(vivos.filter(x => Number(x.id) <= id)) + Math.max(0, Number(d.monto_pagado || 0) - suma(vivos))) * 100) / 100;
     const alAbono = { pagado: pagadoAlAbono, saldo: Math.max(0, Math.round((Number(d.monto_total || 0) - pagadoAlAbono) * 100) / 100) };
@@ -935,6 +972,33 @@ export function crearAbonos(c) {
     else c.ok('Documentos del abono generados.');
     est.datos = null; await cargar(est.reservaId);
     await ofrecerDocumento(docs, est.datos?.saldo_pendiente ?? a.saldo);
+  }
+
+  // Oficina aprueba o rechaza un abono por verificar. Al aprobar salen voucher y recibo, como en un alta.
+  async function verificar(id, aprobar, btn) {
+    const a = (est.datos?.abonos || []).find(x => Number(x.id) === id);
+    if (!a || est.guardando) return;
+    let motivo = null;
+    if (!aprobar) {
+      motivo = await c.pedir({ titulo: 'Rechazar abono', detalle: `${usd(a.monto_usd)} · ${a.metodo}${a.referencia ? ' · ' + a.referencia : ''}. No suma al pagado; el asesor ve el motivo y puede corregirlo.`,
+        label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Rechazar', destructivo: true });
+      if (!motivo) return;
+    }
+    est.guardando = true; if (btn) btn.disabled = true;
+    try {
+      const data = await verificarAbono(sb, id, aprobar, motivo);
+      c.pagosCambiaron?.();
+      // Rechazo, o ya lo había resuelto otra persona (sus documentos los armó quien lo verificó).
+      if (!aprobar || data.reutilizado) { est.datos = null; await cargar(est.reservaId); return c.ok(!aprobar ? 'Abono rechazado.' : 'Ese abono ya estaba verificado.'); }
+      const docs = await cadenaAbono({ id, monto_usd: data.monto_usd, monto_original: data.monto_original, moneda: data.moneda,
+        tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo, referencia: data.referencia,
+        servicio_id: data.servicio_id ?? null, fecha: data.fecha }, data.monto_pagado, data.saldo_pendiente);
+      if (docs.fallo) c.ok(`Abono verificado · saldo ${usd(data.saldo_pendiente)}. Los documentos quedaron pendientes (${docs.fallo}): usa «Reintentar documentos».`);
+      else c.ok(`Abono verificado · saldo ${usd(data.saldo_pendiente)}${docs.reciboId ? ' · Recibo' : ''}`);
+      est.datos = null; await cargar(est.reservaId);
+      await ofrecerDocumento(docs, data.saldo_pendiente);
+    } catch (e) { c.error(mensaje(e)); }
+    finally { est.guardando = false; if (btn?.isConnected) btn.disabled = false; }
   }
 
   // Punto de montaje que llama app.js desde rvIniciar.
