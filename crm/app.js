@@ -38791,9 +38791,10 @@ const NAV_ITEMS = [
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
   { sec: 'metodos-pago', icon: 'fas fa-building-columns', label: 'Métodos de pago', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Cuentas de la agencia para copiar o enviar al cliente en texto o foto' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
+  // Finanzas Fase 1 (2026-11-14): las facturas a empresas son dinero, salen de Corporativo.
+  { sec: 'facturas-empresa', icon: 'fas fa-file-invoice', label: 'Facturas a empresas', padre: 'grp-cobros', roles: 'nav-admin-only', sub: 'Facturas a empresas: emitir, PDF y cobro' },
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
-  { sec: 'facturas-empresa', icon: 'fas fa-file-invoice', label: 'Facturas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Facturas a empresas: emitir, PDF y cobro' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
   { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-directorio', roles: 'nav-admin-only nav-administrativo-no', sub: 'Quienes escriben al bot para ofrecer algo' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, calidad, errores y costos' },
@@ -38830,7 +38831,9 @@ const NAV_PADRES = [
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },
   { sec: 'grp-reservas', icon: 'fas fa-handshake-angle', label: 'Reservas', badge: 'nav-postventa-count', badgeDefault: '0' },
-  { sec: 'grp-cobros', icon: 'fas fa-file-invoice-dollar', label: 'Cobros' },
+  // Finanzas (2026-11-14, antes «Cobros»): se conserva el id grp-cobros porque los favoritos guardados lo usan.
+  // Pagos y Métodos de pago siguen como entradas propias: Pagos late en rojo con pendientes y Métodos de pago lo usan marketing y boletería.
+  { sec: 'grp-cobros', icon: 'fas fa-coins', label: 'Finanzas' },
   { sec: 'pagos', hoja: true },
   { sec: 'metodos-pago', hoja: true },
   { divisor: 'Gestión' },
