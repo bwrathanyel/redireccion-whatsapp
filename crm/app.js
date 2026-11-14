@@ -5076,7 +5076,7 @@ function abrirPostventa(c, accionInicial = null) {
       </div></details>
       <div class="edit-err" id="pv-e-error"></div>
       <div class="rs-foot"><button class="dbtn save" id="pv-e-guardar" type="button"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
-      ${(c.principal === false ? !c.factura_id : !VENTA.includes(c.estado_lead)) ? '<button class="dbtn gh" id="pv-e-pago" type="button"><i class="fas fa-circle-check"></i> Registrar pago completo</button>' : ''}</div>
+      ${(c.principal === false ? !c.factura_id : !VENTA.includes(c.estado_lead)) ? (pvSaldo(c) > 0.005 ? '<button class="dbtn gh" id="pv-e-pago" type="button" data-abonar="1"><i class="fas fa-money-bill-wave"></i> Registrar pago</button>' : '<button class="dbtn gh" id="pv-e-pago" type="button"><i class="fas fa-circle-check"></i> Cerrar como pagada</button>') : ''}</div>
     </div></div>
     <div data-rv-panel="servicios" hidden></div><div data-rv-panel="pasajeros" hidden></div><div data-rv-panel="documentos" hidden></div><div data-rv-panel="abonos" hidden></div>`;
   pvDineroPintar();
@@ -5101,8 +5101,10 @@ function abrirPostventa(c, accionInicial = null) {
   PV_HAB_SEL = new Map();
   resumen.addEventListener('change', e => { const h = e.target.closest('[data-pv-hab]'); if (h) PV_HAB_SEL.set(Number(h.dataset.pvHab), h.value); });
   document.getElementById('pv-e-guardar').onclick = () => guardarPostventa(false);
-  document.getElementById('pv-e-pago')?.addEventListener('click', () => {
-    document.getElementById('pv-e-pagado').value = document.getElementById('pv-e-total').value;
+  // Fase 1 paso 3: el dinero entra solo como abono (con comprobante y cuenta). «Cerrar como pagada»
+  // queda para cuando los abonos verificados ya cubren el total; el servidor lo exige igual.
+  document.getElementById('pv-e-pago')?.addEventListener('click', e => {
+    if (e.currentTarget.dataset.abonar) { rvTab('abonos'); abonosModulo().montar(c.id, true); return; }
     guardarPostventa(true);
   });
   // Desde la ficha del lead el cajón ya está abierto: no empujar otra entrada de historial.
@@ -5239,6 +5241,7 @@ async function pvGuardarHabitaciones() {
   }
   return null;
 }
+const pvSaldo = c => Number(c.monto_total || 0) - Number(c.monto_pagado || 0);
 async function guardarPostventa(marcarPagado) {
   if (!PV_ACTUAL) return;
   const btn = document.getElementById(marcarPagado ? 'pv-e-pago' : 'pv-e-guardar');
@@ -5375,6 +5378,8 @@ function rvTab(k) {
   document.querySelectorAll('#drawerContent [data-rv-panel]').forEach(p => p.hidden = p.dataset.rvPanel !== k);
 }
 let RV_APERTURA = 0;
+// Comprobante que trae quien abre la reserva para registrar un pago (Pagos, Crear reserva, Nuevo cliente).
+let RV_CAPTURA = null;
 function rvIniciar(reservaId, tab, accionInicial = null) {
   const apertura = ++RV_APERTURA;
   RV_RESERVA_ID = reservaId; RV_DET = null; RV_FORM = null; RV_APTOS = {};
@@ -5385,7 +5390,7 @@ function rvIniciar(reservaId, tab, accionInicial = null) {
     p.onclick = e => { const b = e.target.closest('[data-rv-accion]'); if (b && !b.disabled) rvAccion(b.dataset.rvAccion, b.dataset.id, b); };
   });
   rvTab(tab);
-  abonosModulo().montar(reservaId, accionInicial === 'abonos');
+  abonosModulo().montar(reservaId, accionInicial === 'abonos', RV_CAPTURA); RV_CAPTURA = null;
   const carga = rvCargar();
   // Venida desde un chip de «Falta» de la tarjeta: lleva a la pestaña que resuelve ese faltante.
   if (accionInicial?.falta === 'seguimiento') {
@@ -13512,6 +13517,8 @@ window.abrirClienteDesdeFacturacion = async (leadId) => {
 // la hoja `enviar-facturacion-sheet` conservan el nombre de cuando esto era "Enviar a facturación".
 let EF_LEAD_ACTUAL = null;
 let EF_SOLICITUD = null; // mismo uuid en los reintentos del mismo envío: el abono no se duplica
+// Fase 1 paso 3: el comprobante del pago inicial se guarda con el abono (antes solo se leía).
+let EF_ARCHIVO = null, EF_FOTO = null, EF_OCR = null;
 
 const EF_ERRORES = {
   servicios_invalidos: 'Revisa los servicios: agrega al menos uno y completa sus datos',
@@ -13608,7 +13615,7 @@ async function efGuardarViajeros(reservaId, viajeros) {
   return fallos;
 }
 async function abrirEnviarFacturacionSheet(l) {
-  EF_LEAD_ACTUAL = l; EF_COMPROBANTE = null;
+  EF_LEAD_ACTUAL = l; EF_COMPROBANTE = null; EF_ARCHIVO = null; EF_FOTO = null; EF_OCR = null;
   document.getElementById('ef-comp-previa')?.remove();
   document.getElementById('ef-err').textContent = '';
   efCalCerrar();
@@ -14169,6 +14176,7 @@ async function efVolcarComprobante(d) {
     } else partes.push(`Bs ${bs} (no hay tasa BCV cargada: escribe el monto en USD)`);
   } else if (d.monto != null) partes.push(`monto ${d.monto} (moneda no clara: escribe el monto en USD)`);
   if (usd != null) { const m = document.getElementById('ef-monto-pagado'); m.value = usd.toFixed(2); m.dispatchEvent(new Event('input')); }
+  EF_OCR = { datos: d, usd };
   if (d.fecha) partes.push(`fecha ${d.fecha.split('-').reverse().join('/')}`);
   if (!partes.length) { efComprobanteEstado('No pude leer datos del comprobante. Llénalos a mano.', true); return; }
   efComprobanteEstado(`Leído: ${partes.join(' · ')}.${d.confianza < 0.6 ? ' Lectura dudosa.' : ''} Revisa que coincida con el comprobante antes de crear la reserva.`);
@@ -14193,7 +14201,7 @@ async function efDesdeComprobante(leadId, c, foto) {
     return;
   }
   await abrirEnviarFacturacionSheet(l);
-  EF_COMPROBANTE = c.id;
+  EF_COMPROBANTE = c.id; EF_FOTO = foto || null;
   await efVolcarComprobante(c.datos || {});
   if (c.duplicado_de) efComprobanteEstado(`Esta referencia ya aparece en otro pago, revísala. ${document.getElementById('ef-comprobante-st').textContent}`, true);
   if (foto) { const img = new Image(); img.id = 'ef-comp-previa'; img.src = foto; img.alt = 'Comprobante del cliente'; img.style.cssText = 'display:block;max-height:180px;max-width:100%;margin-top:8px;border-radius:8px'; document.querySelector('.ef-comprob')?.append(img); }
@@ -14204,7 +14212,7 @@ async function efLeerComprobante(file) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { efComprobanteEstado('Sube una captura en JPG, PNG o WebP.', true); return; }
   if (file.size > 6291456) { efComprobanteEstado('La imagen pesa más de 6 MB.', true); return; }
   // Otra captura reemplaza al comprobante del chat: ese ya no es el pago que se va a registrar.
-  EF_COMPROBANTE = null; document.getElementById('ef-comp-previa')?.remove();
+  EF_COMPROBANTE = null; EF_FOTO = null; EF_ARCHIVO = file; EF_OCR = null; document.getElementById('ef-comp-previa')?.remove();
   caja.classList.add('leyendo');
   efComprobanteEstado('Leyendo comprobante…');
   try {
@@ -14224,6 +14232,17 @@ async function efLeerComprobante(file) {
   }
 }
 document.getElementById('ef-comprobante')?.addEventListener('change', e => efLeerComprobante(e.target.files?.[0]));
+// Sube la captura (local o la del chat) a la carpeta del usuario, como el form de abonos. Nombre por envío: reintentar no duplica.
+async function efSubirComprobante() {
+  let f = EF_ARCHIVO;
+  if (!f && EF_FOTO) { const r = await fetch(EF_FOTO); if (r.ok) { const b = await r.blob(); if (b.type.startsWith('image/')) f = b; } }
+  if (!f) return null;
+  const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[f.type] || 'jpg';
+  const path = `${MI_USUARIO_ID}/abonos/${EF_SOLICITUD}.${ext}`;
+  const up = await sb.storage.from('vouchers-pdf').upload(path, f, { contentType: f.type || 'image/jpeg', upsert: false });
+  if (up.error && !/exist|duplicate/i.test(up.error.message || '')) throw up.error;
+  return path;
+}
 
 document.getElementById('ef-cancelar')?.addEventListener('click', () => closeSheet('enviar-facturacion-sheet'));
 document.getElementById('ef-enviar')?.addEventListener('click', async () => {
@@ -14240,8 +14259,12 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   if (pagado > 0 && !val('ef-metodo')) { err.textContent = EF_ERRORES.falta_metodo_pago; return; }
   if (pagado > 0 && !val('ef-referencia')) { err.textContent = EF_ERRORES.referencia_requerida; return; }
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
+  // Sin captura el abono entra igual (con referencia); oficina lo verifica contra el banco.
+  const comp = pagado > 0 ? await efSubirComprobante().catch(e => { console.error('efSubirComprobante', e); return null; }) : null;
+  // Pago en Bs leído del comprobante y sin tocar el monto: va el monto exacto en Bs (la cuenta en Bs sale de ahí).
+  const ves = pagado > 0 && EF_OCR?.datos?.moneda === 'VES' && Number(EF_OCR.datos.monto) > 0 && EF_OCR.usd != null && Math.abs(pagado - EF_OCR.usd) < 0.005;
   // Una sola llamada crea la reserva con sus servicios y registra el abono; si algo falla no
-  // queda nada a medias (crear_reserva_con_servicios). No pasa por ningún admin.
+  // queda nada a medias (crear_reserva_con_servicios). El abono del asesor queda por verificar.
   const { data, error } = await sb.rpc('crear_reserva_con_servicios', {
     p_lead_id: EF_LEAD_ACTUAL.id,
     p_servicios: servicios,
@@ -14252,6 +14275,8 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
     p_monto_pagado: pagado,
     p_notas: val('ef-notas') || null,
     p_solicitud_id: EF_SOLICITUD,
+    p_comprobante_path: comp, p_comprobante_datos: pagado > 0 ? EF_OCR?.datos || null : null,
+    p_pago_moneda: ves ? 'VES' : 'USD', p_pago_monto_original: ves ? Number(EF_OCR.datos.monto) : null,
   });
   if (error || !data?.ok) {
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
@@ -14853,13 +14878,6 @@ ${pagoEsWeb(p)
 }
 
 /* ---------- Pagos del asesor: su lista, el alta con captura y el link del drawer ---------- */
-const RPA_ERR = {
-  reserva_no_disponible: 'La reserva ya no está activa.', riel_invalido: 'Elige el método de pago.',
-  falta_referencia: 'Escribe la referencia del pago.', comprobante_path_invalido: 'No se pudo guardar la captura. Vuelve a pegarla.',
-  monto_invalido: 'Pon un monto mayor a 0.', tasa_invalida: 'Elige la tasa BCV.',
-  tasa_no_disponible: 'No hay tasa BCV cargada hoy. Avísale a oficina.', referencia_duplicada: 'Esa referencia ya está registrada para este cliente.',
-  falta_cliente: 'Elige el cliente.',
-};
 const PAGO_MIO_COLOR = { emitido: 'var(--muted)', pendiente_verificacion: 'var(--amber)', verificado: 'var(--green)', rechazado: 'var(--danger)', vencido: 'var(--muted)' };
 const lpUrl = token => `https://destinoyeventoslotus360.com/pagar/${token}`;
 const resOpcion = r => `<option value="${r.id}" data-saldo="${Math.max(Number(r.monto_total || 0) - Number(r.monto_pagado || 0) - Number(r.en_links || 0), 0).toFixed(2)}">${esc(r.codigo)} · ${money(Number(r.monto_pagado || 0))} de ${money(Number(r.monto_total || 0))}</option>`;
@@ -14902,7 +14920,9 @@ async function copiarLinkPago(token) {
   catch { errToast('El navegador no dejó copiar'); }
 }
 
-let RPA = null, RPA_BUSQ = 0, RPA_TASAS = null;
+// Fase 1 paso 3: Pagos ya no tiene formulario propio. Elige cliente y reserva, guarda la captura y
+// abre el formulario de abonos de esa reserva (el único registro de pago: comprobante, cuenta y verificación).
+let RPA = null, RPA_BUSQ = 0;
 const rpaEl = id => document.getElementById(id);
 const rpaErr = t => { rpaEl('rpa-err').textContent = t || ''; };
 function rpaEstado(texto, malo) {
@@ -14919,34 +14939,19 @@ function rpaPreview(file) {
 function rpaReservas(rs) {
   const sel = rpaEl('rpa-reserva');
   sel.disabled = true;
-  if (!RPA?.lead) sel.innerHTML = '<option value="">Elige primero el cliente</option>';
-  else { sel.disabled = false; sel.innerHTML = (rs || []).map(resOpcion).join('') + SIN_RESERVA_OPT; }
-}
-function rpaRielCambio() {
-  const riel = val('rpa-riel'), bs = riel === 'pago_movil' || riel === 'transferencia';
-  rpaEl('rpa-tasa-box').hidden = !bs;
-  rpaEl('rpa-monto-l').textContent = bs ? 'Monto en Bs' : riel === 'binance' ? 'Monto en USDT' : 'Monto en USD';
-  rpaEquiv();
-}
-async function rpaEquiv() {
-  const box = rpaEl('rpa-equiv'), riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto'));
-  box.textContent = '';
-  if (!(riel === 'pago_movil' || riel === 'transferencia') || !(monto > 0)) return;
-  // Las tasas se actualizan durante el día: la caché dura 10 minutos.
-  if (!RPA_TASAS || Date.now() - RPA_TASAS._en > 600000) {
-    const { data } = await sb.from('tasas_cambio').select('moneda,tasa');
-    if (data?.length || !RPA_TASAS) RPA_TASAS = { ...Object.fromEntries((data || []).map(t => [t.moneda, Number(t.tasa)])), _en: Date.now() };
-  }
-  const tasa = RPA_TASAS[val('rpa-tasa')];
-  box.textContent = tasa ? `≈ ${money(monto / tasa)} a tasa BCV ${val('rpa-tasa') === 'EUR' ? 'euro' : 'dólar'} de hoy (${tasa.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : 'No hay tasa BCV cargada hoy.';
+  if (!RPA?.lead) { sel.innerHTML = '<option value="">Elige primero el cliente</option>'; return; }
+  if (rs === null) { sel.innerHTML = '<option value="">No se pudieron cargar las reservas</option>'; return; }
+  if (!rs.length) { sel.innerHTML = '<option value="">Sin reserva activa: créala primero</option>'; return; }
+  sel.disabled = false;
+  sel.innerHTML = rs.map(r => resOpcion(r).replace('<option ', `<option data-codigo="${esc(r.codigo || '')}" `)).join('');
 }
 function rpaAbrir() {
-  RPA = { lead: null, file: null, ocr: null, sol: crypto.randomUUID(), leads: [] };
-  ['rpa-buscar', 'rpa-monto', 'rpa-referencia', 'rpa-riel'].forEach(id => { rpaEl(id).value = ''; });
+  RPA = { lead: null, file: null, leads: [] };
+  rpaEl('rpa-buscar').value = '';
   rpaEl('rpa-resultados').innerHTML = '';
   rpaEl('rpa-cliente').hidden = true;
   rpaEl('rpa-buscar').hidden = false;
-  rpaReservas(null); rpaPreview(null); rpaEstado(''); rpaErr(''); rpaRielCambio();
+  rpaReservas(); rpaPreview(null); rpaEstado(''); rpaErr('');
   openSheet('rpa-sheet');
   setTimeout(() => rpaEl('rpa-buscar').focus(), 60);
 }
@@ -14972,76 +14977,34 @@ async function rpaElegir(l) {
   const cli = rpaEl('rpa-cliente');
   cli.hidden = false;
   cli.innerHTML = `<b>${esc(l.nombre || 'Sin nombre')}</b> ${esc(l.telefono || '')} <button type="button" class="rpa-link" id="rpa-cambiar" style="background:none;border:0;font:inherit">Cambiar</button>`;
-  rpaEl('rpa-cambiar').onclick = () => { RPA.lead = null; cli.hidden = true; rpaEl('rpa-buscar').hidden = false; rpaEl('rpa-buscar').focus(); rpaReservas(null); };
+  rpaEl('rpa-cambiar').onclick = () => { RPA.lead = null; cli.hidden = true; rpaEl('rpa-buscar').hidden = false; rpaEl('rpa-buscar').focus(); rpaReservas(); };
   const sel = rpaEl('rpa-reserva');
   sel.disabled = true; sel.innerHTML = '<option value="">Cargando reservas…</option>';
   const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
   if (RPA?.lead !== l) return;
   rpaReservas(error || !data?.ok ? null : (data.reservas || []).filter(r => r.activo));
 }
-async function rpaCaptura(file) {
+function rpaCaptura(file) {
   if (!file || !RPA) return;
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { rpaEstado('Usa una captura JPG, PNG o WebP.', true); return; }
   if (file.size > 5242880) { rpaEstado('La imagen pesa más de 5 MB.', true); return; }
-  Object.assign(RPA, { file, ocr: null, sol: crypto.randomUUID() });
+  RPA.file = file;
   rpaPreview(file);
-  const caja = rpaEl('rpa-pegar');
-  caja.classList.add('leyendo'); rpaEstado('Leyendo comprobante…');
-  try {
-    const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } });
-    if (RPA?.file !== file) return;
-    if (error || !data?.ok) {
-      const m = error ? await msgErrorFn(error, data) : (data?.error || 'extraccion_fallida');
-      rpaEstado(m === 'no_es_comprobante' ? 'Esa imagen no parece un comprobante. Revísala.' : `No pude leerla: ${EF_COMP_ERRORES[m] || m}. Llena los datos a mano.`, true);
-      return;
-    }
-    const d = data.datos || {}, met = String(d.metodo || '').toLowerCase();
-    RPA.ocr = d;
-    const riel = /zelle/.test(met) ? 'zelle' : /m[oó]vil/.test(met) ? 'pago_movil' : /transfer/.test(met) ? 'transferencia' : /binance|usdt/.test(met) ? 'binance' : '';
-    if (riel) rpaEl('rpa-riel').value = riel;
-    if (d.referencia) rpaEl('rpa-referencia').value = d.referencia;
-    if (d.monto != null) rpaEl('rpa-monto').value = Number(d.monto).toFixed(2);
-    rpaRielCambio();
-    rpaEstado(`Leído${d.confianza < 0.6 ? ' (lectura dudosa)' : ''}. Revisa que coincida con la captura antes de enviar.`);
-  } catch (e) {
-    console.error('leer-comprobante', e);
-    rpaEstado('No pude leer la captura. Llena los datos a mano.', true);
-  } finally {
-    caja.classList.remove('leyendo');
-    rpaEl('rpa-archivo').value = '';
-  }
+  rpaEstado('Captura lista: se lee al abrir la reserva.');
+  rpaEl('rpa-archivo').value = '';
 }
 async function rpaEnviar() {
-  const btn = rpaEl('rpa-enviar');
-  const reserva = Number(val('rpa-reserva')) || null, riel = val('rpa-riel'), monto = parseFloat(val('rpa-monto')), ref = val('rpa-referencia').trim();
   if (!RPA?.lead) return rpaErr('Elige el cliente.');
-  if (!RPA.file) return rpaErr('Pega la captura del pago.');
-  if (!riel) return rpaErr(RPA_ERR.riel_invalido);
-  if (!(monto > 0)) return rpaErr(RPA_ERR.monto_invalido);
-  if (!ref) return rpaErr(RPA_ERR.falta_referencia);
+  const opt = rpaEl('rpa-reserva').selectedOptions[0], reserva = Number(opt?.value) || null;
+  if (!reserva) return rpaErr('Este cliente no tiene reserva activa. Créala primero y registra el pago en ella.');
   rpaErr('');
+  const btn = rpaEl('rpa-enviar');
   btn.disabled = true;
-  const antes = btn.innerHTML;
-  btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando...';
   try {
-    // La policy del bucket solo deja subir bajo asesor/<uid>/; el nombre es por intento, así reintentar no duplica.
-    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[RPA.file.type];
-    const path = `asesor/${MI_USUARIO_ID}/${RPA.sol}.${ext}`;
-    const up = await sb.storage.from('comprobantes-pago').upload(path, RPA.file, { contentType: RPA.file.type, upsert: false });
-    if (up.error && !/exist|duplicate/i.test(up.error.message || '')) throw new Error('No se pudo subir la captura: ' + up.error.message);
-    const { data, error } = await sb.rpc('registrar_pago_asesor', {
-      p_reserva_id: reserva, p_monto: monto, p_riel: riel, p_tasa_tipo: val('rpa-tasa'),
-      p_referencia: ref, p_comprobante_path: path, p_comprobante_datos: RPA.ocr, p_lead_id: RPA.lead.id,
-    });
-    if (error || !data?.ok) { rpaErr(data?.error === 'supera_saldo' ? errSaldo(data) : RPA_ERR[data?.error] || error?.message || data?.error || 'No se pudo registrar el pago.'); return; }
+    RV_CAPTURA = RPA.file || null;
     closeSheet('rpa-sheet');
-    okToast(`Pago enviado a verificar (${money(data.monto_usd)})`);
-    loadPagos();
-  } catch (e) {
-    rpaErr(e.message || 'No se pudo registrar el pago.');
-  } finally {
-    btn.disabled = false; btn.innerHTML = antes;
-  }
+    await abrirReservaDeLead(reserva, opt.dataset.codigo || '', null, 'abonos');
+  } finally { RV_CAPTURA = null; btn.disabled = false; }
 }
 function setupRegistrarPagoAsesor() {
   rpaEl('rpa-abrir')?.addEventListener('click', rpaAbrir);
@@ -15053,12 +15016,9 @@ function setupRegistrarPagoAsesor() {
     if (l) rpaElegir(l);
   });
   rpaEl('rpa-archivo')?.addEventListener('change', e => rpaCaptura(e.target.files?.[0]));
-  rpaEl('rpa-riel')?.addEventListener('change', rpaRielCambio);
-  rpaEl('rpa-tasa')?.addEventListener('change', rpaEquiv);
-  rpaEl('rpa-monto')?.addEventListener('input', rpaEquiv);
   rpaEl('rpa-cancelar')?.addEventListener('click', () => closeSheet('rpa-sheet'));
   rpaEl('rpa-enviar')?.addEventListener('click', rpaEnviar);
-  // Ctrl+V con la hoja abierta: solo se intercepta si hay una imagen, así pegar texto en Referencia sigue igual.
+  // Ctrl+V con la hoja abierta: solo se intercepta si hay una imagen, así pegar texto sigue igual.
   document.addEventListener('paste', e => {
     if (sheetAbierta !== 'rpa-sheet') return;
     const item = [...(e.clipboardData?.items || [])].find(i => i.kind === 'file' && i.type.startsWith('image/'));
@@ -15196,6 +15156,7 @@ function setupPagos() {
 
 /* ---------- Nuevo lead manual (botón "Nuevo lead" en Leads, admin + asesor) /
    Nuevo cliente de Facturación (mismo sheet, modo distinto) ---------- */
+const NL_BTN_FACT = '<i class="fas fa-floppy-disk"></i> Guardar y registrar pago';
 let NL_MODO_FACTURACION = false, NL_BANDEJA_LEAD_ID = null, NL_BANDEJA_RESERVA_ID = null, NL_BUSCAR_DEBOUNCE = null;
 
 async function poblarAsesoresSheetNuevoLead() {
@@ -15271,7 +15232,7 @@ window.abrirNuevoClienteFacturacion = async (bandejaItem) => {
   NL_BANDEJA_LEAD_ID = bandejaItem ? bandejaItem.lead_id : null;
   NL_BANDEJA_RESERVA_ID = bandejaItem?.reserva_id ?? null;
   document.getElementById('nl-titulo').innerHTML = '<i class="fas fa-file-invoice-dollar"></i> Nuevo cliente';
-  document.getElementById('nl-crear').innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar';
+  document.getElementById('nl-crear').innerHTML = NL_BTN_FACT;
   document.getElementById('nl-fact-box').style.display = '';
   document.getElementById('nl-prueba-label').style.display = 'none';
   await Promise.all([poblarAsesoresSheetNuevoLead(), poblarEmpresasSheetNuevoLead()]);
@@ -15408,10 +15369,8 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   }
 
   // ---------- Modo Facturación: crear/reusar lead + venta + postventa,
-  // encadenando 3 RPCs ya existentes (crear_lead_manual, actualizar_lead,
-  // guardar_postventa con p_marcar_pagado:true) -- ver diseño en
-  // vivid-bubbling-bachman.md. Genera factura+comisión+cuenta por pagar
-  // automáticamente vía los triggers ya existentes, sin RPC nuevo. ----------
+  // encadenando crear_lead_manual, actualizar_lead y guardar_postventa; el pago se
+  // registra después en la reserva y al verificarse factura solo. ----------
   const precioVenta = Number(val('nl-precio-venta') || 0);
   if (precioVenta <= 0) { err.textContent = 'Define un precio de venta mayor a cero'; return; }
   const costoNetoRaw = val('nl-costo-neto');
@@ -15426,21 +15385,30 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
       p_nombre: nombre, p_telefono: val('nl-telefono').trim(), p_destino: val('nl-destino').trim(),
       p_personas: val('nl-personas').trim(), p_asesor: asesorSel, p_canal: val('nl-canal').trim(),
     });
-    if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo crear el cliente: ' + (error?.message || data?.error || ''); return; }
+    if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = NL_BTN_FACT; err.textContent = 'No se pudo crear el cliente: ' + (error?.message || data?.error || ''); return; }
     leadId = data.lead_id;
   }
   await nlAsignarEmpresa(leadId);
 
   const upd = await sb.rpc('actualizar_lead', { p_lead_id: leadId, p_estado: 'COTIZACION ENVIADA', p_asesor: asesorSel, p_monto: precioVenta });
-  if (upd.error || !upd.data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo actualizar el lead: ' + (upd.error?.message || upd.data?.error || ''); return; }
+  if (upd.error || !upd.data?.ok) { btn.disabled = false; btn.innerHTML = NL_BTN_FACT; err.textContent = 'No se pudo actualizar el lead: ' + (upd.error?.message || upd.data?.error || ''); return; }
 
   const pv = await sb.rpc('guardar_postventa', {
     p_lead_id: leadId, p_etapa: 'COBRO_PENDIENTE', p_prioridad: 'NORMAL',
-    p_monto_total: precioVenta, p_monto_pagado: precioVenta,
+    p_monto_total: precioVenta, p_monto_pagado: 0,
     p_proveedor: val('nl-proveedor').trim() || null, p_costo_neto: costoNeto,
-    p_marcar_pagado: true,
+    p_marcar_pagado: false,
   });
-  if (pv.error || !pv.data?.ok) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar'; err.textContent = 'No se pudo facturar: ' + (pv.error?.message || pv.data?.error || ''); return; }
+  if (pv.error || !pv.data?.ok) { btn.disabled = false; btn.innerHTML = NL_BTN_FACT; err.textContent = 'No se pudo crear la reserva: ' + (pv.error?.message || pv.data?.error || ''); return; }
+  // Fase 1 paso 3: el pago entra como abono en la reserva (comprobante + cuenta). Al quedar
+  // verificado, el lead pasa a PAGO REALIZADO y el trigger factura (regla D2 de registrar_abono_reserva_v2).
+  // Reserva que ya venía cubierta por abonos verificados (lead de la Bandeja ya cobrado): se cierra
+  // como pagada; pasarla a En espera la dejaría trabada, porque ningún abono nuevo la vuelve a cerrar.
+  const pvc = pv.data.caso || {}, cubierta = Number(pvc.monto_total) > 0 && Number(pvc.monto_pagado) >= Number(pvc.monto_total) - 0.005;
+  const esp = cubierta
+    ? await sb.rpc('guardar_postventa', { p_lead_id: leadId, p_reserva_id: pvc.id, p_etapa: pvc.etapa || 'COBRO_PENDIENTE', p_prioridad: pvc.prioridad || 'NORMAL', p_monto_total: pvc.monto_total, p_monto_pagado: pvc.monto_pagado, p_proveedor: pvc.proveedor ?? null, p_costo_neto: costoNeto, p_marcar_pagado: true })
+    : await sb.rpc('actualizar_lead', { p_lead_id: leadId, p_estado: 'EN ESPERA DE PAGO' });
+  if (esp.error || !esp.data?.ok) { btn.disabled = false; btn.innerHTML = NL_BTN_FACT; err.textContent = 'La reserva quedó creada, pero no se pudo ' + (cubierta ? 'cerrar como pagada: ' : 'pasar el lead a En espera de pago: ') + (esp.error?.message || esp.data?.error || ''); return; }
 
   if (NL_BANDEJA_LEAD_ID) {
     const marc = await sb.rpc('marcar_bandeja_procesada', { p_lead_id: NL_BANDEJA_LEAD_ID, p_reserva_id: NL_BANDEJA_RESERVA_ID });
@@ -15451,11 +15419,12 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
     if (marc.error || !marc.data?.ok) console.error('marcar_bandeja_procesada', marc.error || marc.data);
   }
 
-  btn.disabled = false; btn.innerHTML = '<i class="fas fa-floppy-disk"></i> Guardar y facturar';
+  btn.disabled = false; btn.innerHTML = NL_BTN_FACT;
   closeSheet('nuevo-lead-sheet');
-  okToast('Cliente facturado');
+  okToast(cubierta ? 'Cliente facturado' : 'Reserva creada: registra el pago para facturar');
   loadFacturacion();
   loadBandejaFacturacion();
+  if (pvc.id && !cubierta) await abrirReservaDeLead(pvc.id, pvc.codigo || '', null, 'abonos');
 });
 window.closeDrawer = (fromNav) => {
   guardarPendientesLead(); // ficha del lead: lo escrito sin "salir" del campo se guarda igual
@@ -41945,6 +41914,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-14', emoji: '💳', titulo: 'Un solo lugar para registrar pagos', texto: 'Todo pago de cliente se registra como abono de su reserva, con captura y cuenta. «Registrar pago de cliente» (Pagos) ahora elige el cliente y la reserva y abre el formulario de abonos con la captura ya puesta. En Postventa, «Registrar pago completo» pasa a «Registrar pago» (abre Abonos); «Cerrar como pagada» solo aparece cuando lo cobrado ya cubre el total. En Facturación, «Nuevo cliente» crea la reserva y abre Abonos: factura al verificarse el pago. Al crear una reserva con pago inicial, la captura queda guardada con el abono.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-14', emoji: '✅', titulo: 'Abonos por verificar', texto: 'El abono que registra un asesor queda «Por verificar»: no suma al pagado, no pasa el lead a Pago realizado y no genera recibo hasta que administración lo confirme con el banco. Sí ocupa saldo, para no cargar dos veces el mismo pago. Administración lo verifica o lo rechaza (con motivo) en Pagos por verificar › Abonos de asesores o en la reserva. Un abono rechazado se corrige con «Editar» y vuelve a verificación. Los abonos que carga administración entran verificados.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-13', emoji: '↕️', titulo: 'Ordenar los abonos del voucher', texto: 'En Reservas › Abonos cada abono muestra su puesto (1°, 2°...) y cuánto lleva abonado del total. Arrastra el abono desde su número para cambiar el orden: el voucher sale con los abonos en ese orden.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-13', emoji: '🏨', titulo: 'Servicio de la reserva más compacto', texto: 'El formulario de servicio de la reserva ocupa menos: campos en filas, secciones con título y Guardar siempre a la vista abajo. El hospedaje se elige del tarifario («Hotel o posada», con precio sugerido) o como «Apartamento propio». En Nueva venta se cargan los viajeros uno por uno y quedan como pasajeros de la reserva.', roles: ['admin', 'administrativo', 'asesor'] },

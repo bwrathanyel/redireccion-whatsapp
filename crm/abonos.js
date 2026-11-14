@@ -1002,12 +1002,18 @@ export function crearAbonos(c) {
   }
 
   // Punto de montaje que llama app.js desde rvIniciar.
-  function montar(reservaId, conForm) {
+  // `captura`: comprobante que el usuario ya pegó en otra pantalla (Pagos, Crear reserva): entra al form y se lee.
+  function montar(reservaId, conForm, captura = null) {
     if (!asentar()) return;
     est.reservaId = reservaId;
     est.datos = null; est.archivo = null; est.editando = null; est.metodo = conForm ? 'Pago móvil' : ''; est.formAbierto = !!conForm;
     est.moneda = conForm ? 'VES' : 'USD'; est.solicitud = conForm ? crypto.randomUUID() : null;
-    cargar(reservaId);
+    cargar(reservaId).then(() => {
+      if (!captura || !conForm || est.reservaId !== reservaId || !est.formAbierto) return;
+      est.archivo = captura;
+      try { const dt = new DataTransfer(); dt.items.add(captura); const f = document.getElementById('ab-file'); if (f) f.files = dt.files; } catch { /* sin DataTransfer el archivo igual va en est.archivo */ }
+      leerComprobante(captura);
+    });
   }
   return {
     montar, recargar: () => est.reservaId && cargar(est.reservaId),

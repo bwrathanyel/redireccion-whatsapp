@@ -13232,39 +13232,12 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <img id="rpa-preview" alt="Captura del pago" hidden>
     </div>
     <div class="ef-comprob-st" id="rpa-st"></div>
-
-    <div class="ef-fila">
-      <div style="flex:1">
-        <label class="fl">Método</label>
-        <select id="rpa-riel" class="ei">
-          <option value="">Elige uno...</option>
-          <option value="zelle">Zelle</option>
-          <option value="pago_movil">Pago Móvil</option>
-          <option value="transferencia">Transferencia</option>
-          <option value="binance">Binance (USDT)</option>
-        </select>
-      </div>
-      <div style="flex:1" id="rpa-tasa-box" hidden>
-        <label class="fl">Tasa BCV</label>
-        <select id="rpa-tasa" class="ei"><option value="USD">Dólar</option><option value="EUR">Euro</option></select>
-      </div>
-    </div>
-    <div class="ef-fila">
-      <div style="flex:1">
-        <label class="fl" id="rpa-monto-l">Monto</label>
-        <input id="rpa-monto" class="ei" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
-      </div>
-      <div style="flex:1">
-        <label class="fl">Referencia</label>
-        <input id="rpa-referencia" class="ei" placeholder="Número de referencia" autocomplete="off">
-      </div>
-    </div>
-    <div class="csub" id="rpa-equiv"></div>
+    <div class="csub">Monto, método y referencia se completan en la reserva: la captura se lee ahí y el pago queda con su cuenta.</div>
     <div class="edit-err" id="rpa-err"></div>
   </div>
   <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
     <button class="dbtn" id="rpa-cancelar" type="button" style="flex:1">Cancelar</button>
-    <button class="dbtn save" id="rpa-enviar" type="button" style="flex:1"><i class="fas fa-paper-plane"></i> Enviar a verificar</button>
+    <button class="dbtn save" id="rpa-enviar" type="button" style="flex:1"><i class="fas fa-arrow-right"></i> Continuar en la reserva</button>
   </div>
 </div>
 
