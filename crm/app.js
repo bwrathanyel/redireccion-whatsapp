@@ -19104,7 +19104,7 @@ function lyraPintarHistorial() {
   // Con adjuntos, content es la lectura que armó la EF; en pantalla va lo que escribió el usuario.
   asisChatHistory.forEach(m => {
     if (m.role === 'user' && m.vista?.a) lyraBurbuja('user', m.vista.t || '', false, 'neutral', m.vista);
-    else if (m.role === 'assistant' && Array.isArray(m.cot) && typeof m.r === 'string') { lyraBurbuja('bot', m.r); m.cot.forEach(lyraPintarCotizacion); (m.gens || []).forEach(g => lyraPintarGenerada(g)); if (LYRA_STICKERS.includes(m.st)) lyraPintarSticker(m.st); }
+    else if (m.role === 'assistant' && Array.isArray(m.cot) && typeof m.r === 'string') { lyraBurbuja('bot', m.r); m.cot.forEach(lyraPintarCotizacion); (m.gens || []).forEach(g => lyraPintarGenerada(g)); (m.res || []).forEach(lyraPintarReserva); if (LYRA_STICKERS.includes(m.st)) lyraPintarSticker(m.st); }
     else lyraBurbuja(m.role === 'user' ? 'user' : 'bot', m.content);
   });
   lyraSugerencias();
@@ -19281,12 +19281,14 @@ function lyraPintarSticker(nombre) {
 function lyraTurnoAsistente(respuesta, bloques, sticker) {
   const cot = Array.isArray(bloques) ? bloques.filter(b => b?.tipo === 'cotizacion') : [];
   const gen = Array.isArray(bloques) ? bloques.filter(b => b?.tipo === 'generar_cotizacion' && Array.isArray(b.servicios)) : [];
+  const res = Array.isArray(bloques) ? bloques.filter(b => b?.tipo === 'reserva_creada' && b.reserva_id) : [];
   const st = LYRA_STICKERS.includes(sticker) ? sticker : '';
-  if (!cot.length && !st && !gen.length) return { role: 'assistant', content: respuesta };
+  if (!cot.length && !st && !gen.length && !res.length) return { role: 'assistant', content: respuesta };
   cot.forEach(lyraPintarCotizacion);
+  res.forEach(lyraPintarReserva);
   if (st) lyraPintarSticker(st);
-  const content = [respuesta, ...cot.map(b => String(b.texto || '').replaceAll('---BLOQUE---', '\n\n'))].join('\n\n') + (st ? `\n[sticker:${st}]` : '');
-  const turno = st ? { role: 'assistant', content, r: respuesta, cot, st } : { role: 'assistant', content, r: respuesta, cot };
+  const content = [respuesta, ...cot.map(b => String(b.texto || '').replaceAll('---BLOQUE---', '\n\n')), ...res.map(b => String(b.texto || ''))].join('\n\n') + (st ? `\n[sticker:${st}]` : '');
+  const turno = { role: 'assistant', content, r: respuesta, cot, ...(st ? { st } : {}), ...(res.length ? { res } : {}) };
   gen.reduce((cola, b) => cola.then(() => lyraGenerarCotizacion(b, turno)), Promise.resolve());
   return turno;
 }
@@ -19344,6 +19346,31 @@ function lyraPintarGenerada(g, previa) {
   row.after(filaAcc);
   log.scrollTop = log.scrollHeight;
   return row;
+}
+// crear_reserva (2026-11-14): la reserva ya quedó creada en la base; la tarjeta da el código, el saldo y la abre.
+function lyraPintarReserva(b) {
+  const log = document.getElementById('lyra-log'), row = document.createElement('div');
+  row.className = 'chat-row';
+  row.innerHTML = lyraMini('feliz');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg bot';
+  const pend = Array.isArray(b.pendientes) ? b.pendientes.filter(Boolean) : [];
+  msg.innerHTML = `<i class="fas fa-circle-check"></i> Reserva <b>${esc(b.codigo || '')}</b> · ${esc(b.cliente || '')}<br>Total <b>$${esc(cbMonto(b.monto_total))}</b> · saldo <b>$${esc(cbMonto(b.saldo_pendiente))}</b>`
+    + (b.abono ? `<br><small>${esc(b.abono)}</small>` : '')
+    + (pend.length ? `<br><small><b>Pendiente:</b> ${pend.map(esc).join(' · ')}</small>` : '');
+  row.appendChild(msg);
+  log.appendChild(row);
+  const acciones = document.createElement('div');
+  acciones.className = 'cot-acciones';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'btn-sm';
+  btn.innerHTML = '<i class="fas fa-suitcase"></i> Abrir reserva';
+  btn.onclick = () => lyraTrasCerrar(() => rvAbrirReserva(Number(b.reserva_id), 'Reserva ' + (b.codigo || ''), b.cliente || ''));
+  acciones.appendChild(btn);
+  const filaAcc = document.createElement('div');
+  filaAcc.className = 'chat-row'; filaAcc.innerHTML = lyraMini('neutral'); filaAcc.appendChild(acciones);
+  row.after(filaAcc);
+  log.scrollTop = log.scrollHeight;
 }
 // La fila guardada y su PDF: el mismo que bajó Cotizaciones si sigue en memoria, si no se regenera igual (cbPdfDe).
 async function lyraCotGenerada(id) {
