@@ -9,6 +9,7 @@ import { crearCampanasWa } from './wa-campanas.js';
 import { crearAdsMeta } from './ads-meta.js';
 import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
+import { crearDocumentosEmpresa } from './documentos-empresa.js';
 import { crearMetodosPago } from './metodos-pago.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
@@ -1912,7 +1913,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa', 'historicos',
   'web-reasignados', 'contactos-directos', 'repartir', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'metodos-pago', 'proveedores', 'empresas', 'bt-travel', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
+  'facturacion', 'pagos', 'metodos-pago', 'proveedores', 'empresas', 'bt-travel', 'documentos-empresa', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
@@ -4189,6 +4190,8 @@ let ADS_META = null;
 const adsMeta = () => ADS_META ||= crearAdsMeta({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('ads-root') });
 let MARKETING = null;
 const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root'), verPdf });
+let DOCUMENTOS_EMPRESA = null;
+const documentosEmpresa = () => DOCUMENTOS_EMPRESA ||= crearDocumentosEmpresa({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('documentos-empresa-root'), supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_KEY });
 let COSTOS_DIGITALES = null;
 const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
 let FINANZAS_BANCO = null;
@@ -38832,6 +38835,8 @@ const NAV_ITEMS = [
   { sec: 'proveedores', icon: 'fas fa-truck-field', label: 'Proveedores', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles, posadas y operadores: contacto, crédito y datos de pago' },
   { sec: 'empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Agencias, corporativos y alianzas: crédito y reservas' },
   { sec: 'bt-travel', icon: 'fas fa-umbrella-beach', label: 'BT Travel', padre: 'grp-directorio', roles: 'nav-admin-only', sub: 'Hoteles todo incluido, stop sales, reservas y pagos' },
+  // Documentos (2026-11-15): admin todo; asesor, administrativo y boletería solo leen lo marcado visible.
+  { sec: 'documentos-empresa', icon: 'fas fa-folder-open', label: 'Documentos', padre: 'grp-directorio', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'RIF, registro, contratos y pólizas de la empresa' },
   { sec: 'propuestas', icon: 'fas fa-handshake', label: 'Alianzas y propuestas', padre: 'grp-directorio', roles: 'nav-admin-only nav-administrativo-no', sub: 'Quienes escriben al bot para ofrecer algo' },
   { sec: 'rendimiento-ia', icon: 'fas fa-chart-line', label: 'Rendimiento IA', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, calidad, errores y costos' },
   { sec: 'costos-digitales', icon: 'fas fa-wallet', label: 'Costos digitales', padre: 'grp-ia', roles: 'nav-admin-only nav-administrativo-no', sub: 'Suscripciones y consumo de IA, por mes' },
@@ -39283,6 +39288,7 @@ function cargarSeccion(sec) {
   if (sec === 'ads') adsMeta().cargar();
   if (sec === 'contenido') marketing().cargar();
   if (sec === 'costos-digitales') costosDigitales().cargar();
+  if (sec === 'documentos-empresa') documentosEmpresa().cargar();
   if (sec === 'metodos-pago') metodosPago().cargar();
   if (sec === 'llamadas') llamadasPanel().cargar();
   if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
@@ -41953,6 +41959,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-15', emoji: '📁', titulo: 'Documentos de la empresa en Corporativo', texto: 'Nueva pestaña Corporativo › Documentos con el RIF, el registro, contratos, pólizas y demás papeles de la agencia. Al subir uno, Lyra lo clasifica sola y saca la fecha de vencimiento; los que vencen en 30 días se marcan y avisan por Telegram. Puede verlos y descargarlos desde acá, o pedírselos a Lyra por Telegram o WhatsApp, que también los manda por correo o WhatsApp a quien usted le diga, siempre pidiendo confirmación antes.', roles: ['admin'] },
+  { fecha: '2026-11-15', emoji: '📁', titulo: 'Documentos de la empresa en Corporativo', texto: 'Nueva pestaña Corporativo › Documentos: ahí están el RIF y los demás documentos de la agencia que administración comparte con el equipo, para verlos o descargarlos cuando un cliente o proveedor los pida.', roles: ['asesor'] },
   { fecha: '2026-11-15', emoji: '🏦', titulo: 'Lyra verifica los Zelle de Wells Fargo', texto: 'Los avisos de Zelle que Wells Fargo manda por correo ahora entran solos al CRM. Si un abono por Zelle calza con un Zelle recibido (confirmación y monto), Lyra lo verifica sola; si algo no cuadra, avisa a los admin por Telegram y la tarjeta de «Por verificar» dice por qué. En Pagos, abajo, el panel «Banco» muestra lo verificado por Lyra (con «Deshacer» para admin), el saldo de cada día y los movimientos.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-14', emoji: '💳', titulo: 'Un solo lugar para registrar pagos', texto: 'Todo pago de cliente se registra como abono de su reserva, con captura y cuenta. «Registrar pago de cliente» (Pagos) ahora elige el cliente y la reserva y abre el formulario de abonos con la captura ya puesta. En Postventa, «Registrar pago completo» pasa a «Registrar pago» (abre Abonos); «Cerrar como pagada» solo aparece cuando lo cobrado ya cubre el total. En Facturación, «Nuevo cliente» crea la reserva y abre Abonos: factura al verificarse el pago. Al crear una reserva con pago inicial, la captura queda guardada con el abono.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-14', emoji: '✅', titulo: 'Abonos por verificar', texto: 'El abono que registra un asesor queda «Por verificar»: no suma al pagado, no pasa el lead a Pago realizado y no genera recibo hasta que administración lo confirme con el banco. Sí ocupa saldo, para no cargar dos veces el mismo pago. Administración lo verifica o lo rechaza (con motivo) en Pagos por verificar › Abonos de asesores o en la reserva. Un abono rechazado se corrige con «Editar» y vuelve a verificación. Los abonos que carga administración entran verificados.', roles: ['admin', 'administrativo', 'asesor'] },
