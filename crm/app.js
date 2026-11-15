@@ -10,6 +10,7 @@ import { crearAdsMeta } from './ads-meta.js';
 import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
 import { crearMetodosPago } from './metodos-pago.js';
+import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
@@ -4190,6 +4191,9 @@ let MARKETING = null;
 const marketing = () => MARKETING ||= crearMarketing({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('contenido-root'), verPdf });
 let COSTOS_DIGITALES = null;
 const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: ROL, raiz: document.getElementById('costos-digitales-root') });
+let FINANZAS_BANCO = null;
+const finanzasBanco = () => FINANZAS_BANCO ||= crearFinanzasBanco({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
+  raiz: document.getElementById('finanzas-banco-root'), alCambiar: () => loadPagos(true) });
 let METODOS_PAGO = null;
 const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
@@ -14468,6 +14472,7 @@ const MSG_VERIFICAR_PAGO = {
 // Compras directas de la web: se verifican con verificar_pago_web (puente a reserva, abono, lead y correo),
 // nunca con verificar_pago a secas, que solo marcaría el pago y dejaría la reserva sin confirmar.
 let PAGOS_CARGA = 0;
+let PAGOS_PROBLEMAS = new Map(); // abono_id -> motivo por el que Lyra no lo verificó (finanzas-banco.js)
 const PAGO_ESTADO_LABEL = {
   emitido: 'Sin declarar', pendiente_verificacion: 'Por verificar', verificado: 'Verificado',
   rechazado: 'Rechazado', vencido: 'Vencido',
@@ -14598,6 +14603,7 @@ function pagoAbonoCard(p) {
       <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.creado_por && p.creado_por !== p.asesor ? ' · cargó ' + esc(p.creado_por) : ''}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> Cargado ${esc(tiempoRelativo(p.fecha))}</div>
       ${p.nota ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(p.nota)}</div>` : ''}
+      ${PAGOS_PROBLEMAS.get(p.abono_id) ? `<div class="ec-row" style="color:var(--amber)"><i class="fas fa-robot"></i> Lyra: ${esc(PAGOS_PROBLEMAS.get(p.abono_id))}</div>` : ''}
       <div class="inbox-actions">
         ${p.comprobante_path ? `<button type="button" class="inbox-btn pagos-sec" data-abono-comprobante="${p.abono_id}"><i class="fas fa-receipt"></i> Ver comprobante</button>` : '<span class="ec-row" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin comprobante</span>'}
         <button type="button" class="inbox-btn atender" data-abono-verificar="${p.abono_id}"><i class="fas fa-check"></i> Verificar</button>
@@ -14665,12 +14671,15 @@ async function loadPagos(silencioso = false) {
   if (!silencioso) { loading.classList.add('show'); empty.classList.remove('show'); lista.innerHTML = ''; }
   // La cola de pendientes se pide siempre: sus ids se sacan de la lista general (cuyo botón «Aprobar» no sirve
   // para una compra web). La cola completa trae además las verificadas y las que esperan el pago.
+  const banco = document.getElementById('finanzas-banco-root') ? finanzasBanco() : null;
   const [rLista, rWeb, rWebTodas, rAbonos] = await Promise.all([
     sb.rpc('listar_pagos', { p_estado: 'pendiente_verificacion' }),
     sb.rpc('pagos_web_cola', { p_solo_pendientes: true, p_limite: 300 }),
     sb.rpc('pagos_web_cola', { p_solo_pendientes: false, p_limite: 300 }),
     sb.rpc('finanzas_por_verificar_listar'),
+    banco?.cargar().catch(() => null),
   ]);
+  PAGOS_PROBLEMAS = banco ? banco.problemas() : new Map();
   if (carga !== PAGOS_CARGA) return; // llegó una recarga más nueva: la que pinta es esa
   loading.classList.remove('show');
   if (rLista.error || !rLista.data?.ok) {
@@ -41944,6 +41953,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-15', emoji: '🏦', titulo: 'Lyra verifica los Zelle de Wells Fargo', texto: 'Los avisos de Zelle que Wells Fargo manda por correo ahora entran solos al CRM. Si un abono por Zelle calza con un Zelle recibido (confirmación y monto), Lyra lo verifica sola; si algo no cuadra, avisa a los admin por Telegram y la tarjeta de «Por verificar» dice por qué. En Pagos, abajo, el panel «Banco» muestra lo verificado por Lyra (con «Deshacer» para admin), el saldo de cada día y los movimientos.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-14', emoji: '💳', titulo: 'Un solo lugar para registrar pagos', texto: 'Todo pago de cliente se registra como abono de su reserva, con captura y cuenta. «Registrar pago de cliente» (Pagos) ahora elige el cliente y la reserva y abre el formulario de abonos con la captura ya puesta. En Postventa, «Registrar pago completo» pasa a «Registrar pago» (abre Abonos); «Cerrar como pagada» solo aparece cuando lo cobrado ya cubre el total. En Facturación, «Nuevo cliente» crea la reserva y abre Abonos: factura al verificarse el pago. Al crear una reserva con pago inicial, la captura queda guardada con el abono.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-14', emoji: '✅', titulo: 'Abonos por verificar', texto: 'El abono que registra un asesor queda «Por verificar»: no suma al pagado, no pasa el lead a Pago realizado y no genera recibo hasta que administración lo confirme con el banco. Sí ocupa saldo, para no cargar dos veces el mismo pago. Administración lo verifica o lo rechaza (con motivo) en Pagos por verificar › Abonos de asesores o en la reserva. Un abono rechazado se corrige con «Editar» y vuelve a verificación. Los abonos que carga administración entran verificados.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-13', emoji: '↕️', titulo: 'Ordenar los abonos del voucher', texto: 'En Reservas › Abonos cada abono muestra su puesto (1°, 2°...) y cuánto lleva abonado del total. Arrastra el abono desde su número para cambiar el orden: el voucher sale con los abonos en ese orden.', roles: ['admin', 'administrativo', 'asesor'] },
