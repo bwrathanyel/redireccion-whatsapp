@@ -330,7 +330,7 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
       if (tk !== visTk) return;
     }
     limpiar();
-    if (esPdf(d)) cuerpo.insertAdjacentHTML('afterbegin', `<iframe title="${esc(d.titulo)}" src="${u}${u.startsWith('blob:') ? '#view=FitH' : ''}"></iframe>`);
+    if (esPdf(d)) cuerpo.insertAdjacentHTML('afterbegin', `<iframe title="${esc(d.titulo)}" src="${u}${u.startsWith('blob:') ? '#navpanes=0&view=FitH' : ''}"></iframe>`);
     else cuerpo.insertAdjacentHTML('afterbegin', `<div class="de-img"><img src="${u}" alt="${esc(d.titulo)}" data-dv="zoom"></div>`);
   }
 
