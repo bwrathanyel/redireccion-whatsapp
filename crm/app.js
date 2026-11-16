@@ -9649,15 +9649,69 @@ async function atenderInboxLead(l) {
   // para heredar), se ofrece el link a mano en vez de fallar en silencio.
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const winRef = wa ? window.open(`https://wa.me/${wa}`, '_blank') : null;
-  const { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' });
+  let { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' });
+  // Se reasignó por timeout con la ficha abierta (caso lead 54925, 2026-11-16):
+  // dentro de los 10 min siguientes el asesor original todavía lo recupera.
+  let rescatado = false;
+  if (error && LEAD_YA_NO_ES_MIO.test(error.message || '')) {
+    const r = await sb.rpc('rescatar_lead_timeout', { p_lead_id: l.id });
+    if (r.error || !r.data?.ok) { winRef?.close(); avisarLeadYaNoEsMio(l, r.data?.asesor_actual); return false; }
+    ({ data, error } = r); rescatado = true; l.asesor = MI_NOMBRE;
+  }
   if (error || !data?.ok) { errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return false; }
   // El mismo objeto lo usa la ficha abierta para repintar estado y botón principal.
   l.estado = 'ATENDIDO'; l.fecha_primer_contacto = l.fecha_primer_contacto || new Date().toISOString();
   quitarDeInbox(l.id, 'atendido');
-  okToast('Lead marcado como atendido');
+  if (currentLead?.id === l.id) pintarAvisoReasignacion(null);
+  okToast(rescatado ? 'Recuperaste el lead y quedó como atendido' : 'Lead marcado como atendido');
   if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">toca aquí para abrir WhatsApp</a>`);
   loadTable();
   return true;
+}
+
+// Lead reasignado con la ficha abierta. Realtime no avisa: la RLS de leads deja
+// de mandarle el UPDATE al asesor apenas el lead deja de ser suyo, así que la
+// ficha pregunta cada 20 s (y al volver a la pestaña) mientras siga sin atender.
+const LEAD_YA_NO_ES_MIO = /no autorizado para modificar este lead|lead sin asignar/;
+const horaCorta = iso => new Date(iso).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+function pintarAvisoReasignacion(info) {
+  let el = document.getElementById('d-reasig');
+  if (!info) { el?.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'd-reasig'; el.setAttribute('role', 'alert'); document.querySelector('#drawerContent .dacc')?.before(el); }
+  const quien = info.asesor_actual ? esc(info.asesor_actual) : 'otro asesor';
+  const porTimeout = info.motivo === 'timeout_no_respuesta' ? ' por falta de respuesta' : '';
+  el.className = 'd-reasig' + (info.rescatable ? '' : ' fin');
+  el.innerHTML = info.rescatable
+    ? `<i class="fas fa-triangle-exclamation"></i><span>Este lead pasó a ${quien}${porTimeout}. Todavía puedes recuperarlo hasta las ${horaCorta(info.rescatable_hasta)}: toca <b>Atender</b>.</span>`
+    : `<i class="fas fa-ban"></i><span>Este lead pasó a ${quien}${porTimeout}. Ya no puedes atenderlo.</span>`;
+  const cta = document.getElementById('e-a-cta');
+  if (cta?.dataset.accion === 'atender') cta.hidden = !info.rescatable;
+}
+function avisarLeadYaNoEsMio(l, asesor) {
+  quitarDeInbox(l.id, 'fuera');
+  errToast(asesor ? `Este lead ya pasó a ${asesor} y no se puede recuperar.` : 'Este lead ya no está asignado a ti.');
+  if (currentLead?.id === l.id) pintarAvisoReasignacion({ asesor_actual: asesor, motivo: 'timeout_no_respuesta', rescatable: false });
+  loadTable();
+}
+let vigiaReasigTimer = null, vigiaReasigFn = null;
+function pararVigiaReasignacion() { clearInterval(vigiaReasigTimer); vigiaReasigTimer = vigiaReasigFn = null; }
+function vigilarReasignacionFicha(l) {
+  pararVigiaReasignacion();
+  if (ROL !== 'asesor' || l.estado !== 'POR ATENDER' || l.fecha_primer_contacto) return;
+  const revisar = async () => {
+    const abierta = document.getElementById('drawer')?.classList.contains('open') && currentLead?.id === l.id;
+    if (!abierta || l.estado !== 'POR ATENDER') { if (vigiaReasigFn === revisar) pararVigiaReasignacion(); return; }
+    if (document.hidden) return;
+    const { data, error } = await sb.rpc('estado_reasignacion_lead', { p_lead_id: l.id });
+    if (error || !data?.ok || currentLead?.id !== l.id || l.estado !== 'POR ATENDER') return;
+    if (data.mio) { pintarAvisoReasignacion(null); return; }
+    pintarAvisoReasignacion(data.asesor_actual ? data : { rescatable: false });
+    if (!data.rescatable) { quitarDeInbox(l.id, 'fuera'); if (vigiaReasigFn === revisar) pararVigiaReasignacion(); }
+  };
+  if (!vigilarReasignacionFicha.oyendo) { vigilarReasignacionFicha.oyendo = true; document.addEventListener('visibilitychange', () => { if (!document.hidden) vigiaReasigFn?.(); }); }
+  vigiaReasigFn = revisar;
+  vigiaReasigTimer = setInterval(revisar, 20000);
+  setTimeout(revisar, 1500);
 }
 
 /* ---------- Hoy (mobile-only, punto de entrada del bottom-nav) ----------
@@ -10089,6 +10143,7 @@ function openDrawer(l, opciones = {}) {
   const mas = document.getElementById('dacc-mas'), btnMas = document.getElementById('e-a-mas');
   btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
   document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
+  vigilarReasignacionFicha(l);
   document.getElementById('e-a-recordar')?.addEventListener('click', () => { document.getElementById('dacc-mas').hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); recordarLeadManana(l); });
   document.getElementById('e-a-llamar')?.addEventListener('click', () => llamadasApp?.llamar(l, postWa(l.telefono)));
   document.getElementById('e-a-wa-msg')?.addEventListener('click', () => waElegirMensaje(l));
@@ -10413,9 +10468,19 @@ document.addEventListener('click', e => {
 }, true);
 function marcarLeadAtendido(id) {
   if (leadSoloLectura()) return;
-  sb.rpc('actualizar_lead', { p_lead_id: id, p_estado: 'ATENDIDO' }).then(({ data, error }) => {
-    if (error || !data?.ok) return;
-    if (currentLead?.id === id) { currentLead.estado = 'ATENDIDO'; currentLead.fecha_primer_contacto ||= new Date().toISOString(); const sel = document.getElementById('e-estado'); if (sel) sel.value = 'ATENDIDO'; }
+  sb.rpc('actualizar_lead', { p_lead_id: id, p_estado: 'ATENDIDO' }).then(async ({ data, error }) => {
+    // Antes fallaba en silencio: el chat se abría y el lead seguía POR ATENDER.
+    if (error && LEAD_YA_NO_ES_MIO.test(error.message || '')) {
+      const r = await sb.rpc('rescatar_lead_timeout', { p_lead_id: id });
+      if (r.error || !r.data?.ok) { avisarLeadYaNoEsMio({ id }, r.data?.asesor_actual); return; }
+      ({ data, error } = r); okToast('Recuperaste el lead y quedó como atendido');
+    }
+    if (error || !data?.ok) { errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return; }
+    if (currentLead?.id === id) {
+      currentLead.estado = 'ATENDIDO'; currentLead.fecha_primer_contacto ||= new Date().toISOString(); currentLead.asesor = MI_NOMBRE;
+      const sel = document.getElementById('e-estado'); if (sel) sel.value = 'ATENDIDO';
+      pintarEstadoFicha('ATENDIDO'); pintarCtaDrawer(currentLead); pintarAvisoReasignacion(null);
+    }
     quitarDeInbox(id, 'atendido'); loadTable();
   });
 }
