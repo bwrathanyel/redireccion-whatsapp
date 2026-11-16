@@ -1507,6 +1507,10 @@ td.td-wa .wa-msg{margin-left:4px}
 .toast.show{transform:translateX(0);opacity:1}
 .toast i{color:var(--green);font-size:16px}.toast b{color:#fff;font-weight:700}
 .toast-err{border-color:rgba(239,68,68,.4);border-left-color:#ef4444}.toast-err i{color:#ef4444}
+/* Modo sin conexión (app.js pintarOffline): píldora fija arriba; fija para no mover el layout de la app */
+#red-banner{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:9000;display:flex;align-items:center;justify-content:center;gap:10px;max-width:calc(100% - 32px);padding:7px 14px;border-radius:999px;background:#f5b544;color:#1a1000;box-shadow:0 6px 20px rgba(0,0,0,.28);font-size:13px;line-height:1.35;text-align:center}
+#red-banner.volvio{background:#10b981;color:#04210f}
+#red-banner button{border:0;border-radius:8px;padding:5px 12px;font:inherit;font-weight:700;background:rgba(0,0,0,.22);color:inherit;cursor:pointer}
 .toast-undo{flex-shrink:0;background:transparent;border:1px solid var(--line2);color:var(--accent-ink);font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer}
 .toast-undo:hover{border-color:var(--accent);background:var(--accent-soft)}
 

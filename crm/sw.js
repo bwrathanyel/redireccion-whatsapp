@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v758';
+const CACHE_VERSION = 'lotus-crm-shell-v759';
 // Solo esta versión recarga sola las pestañas abiertas (pedido del dueño 2026-11-06): el resto de deploys sigue con el aviso, que deja elegir cuándo.
 const RECARGA_FORZADA = 'lotus-crm-shell-v689';
 const SHELL_FILES = [
@@ -35,6 +35,7 @@ const SHELL_FILES = [
   './llamadas-wa.js',
   './llamadas-app.js',
   './llamadas-panel.js',
+  './offline-cache.js',
   './manifest.json',
   './logolotus.png',
   './logolotus-integrado.png',
@@ -47,7 +48,25 @@ const SHELL_FILES = [
   './icons/badge-72.png',
 ];
 
+// Librerías y letras de CDN (supabase-js, Font Awesome, Inter, chart.js, jspdf...).
+// Sin esto el CRM no arrancaba sin red: app.js importa supabase-js de jsdelivr.
+// Caché aparte que no se purga en cada deploy. URL con versión fija = inmutable,
+// cache-first; sin versión (CSS de Google Fonts, @main) = red primero, copia si no hay red.
+const CACHE_LIBS = 'lotus-crm-libs-v1';
+const CDN_LIBS = new Set(['cdn.jsdelivr.net', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com']);
+const SUPABASE_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/+esm';
+const conVersion = (url) => url.hostname === 'fonts.gstatic.com' || /@\d+\.\d+\.\d+|\/ajax\/libs\/[^/]+\/\d/.test(url.pathname);
+async function desdeCdn(request, url) {
+  const cache = await caches.open(CACHE_LIBS);
+  const guardar = (res) => { if (res.ok || res.type === 'opaque') cache.put(request, res.clone()).catch(() => {}); return res; };
+  if (conVersion(url)) return (await cache.match(request)) || fetch(request).then(guardar);
+  try { return guardar(await fetch(request)); }
+  catch (e) { const c = await cache.match(request); if (c) return c; throw e; }
+}
+
 self.addEventListener('install', (event) => {
+  // Sin bloquear el install: si el CDN falla, el shell igual se actualiza.
+  event.waitUntil(caches.open(CACHE_LIBS).then((c) => c.match(SUPABASE_ESM).then((h) => h || c.add(SUPABASE_ESM))).catch(() => {}));
   event.waitUntil(
     // `cache: 'reload'` obliga a ir a la red por cada archivo del shell,
     // salteando el caché HTTP del navegador.
@@ -67,7 +86,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    const viejas = keys.filter((k) => k !== CACHE_VERSION && k !== CACHE_IDENTIDAD);
+    const viejas = keys.filter((k) => k !== CACHE_VERSION && k !== CACHE_IDENTIDAD && k !== CACHE_LIBS);
     await Promise.all(viejas.map((k) => caches.delete(k)));
     await self.clients.claim();
     // Instalación nueva (sin shell viejo): no hay nada que actualizar, y recargar interrumpiría el primer arranque.
@@ -83,7 +102,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // Supabase/CDN externos: siempre red
+  if (CDN_LIBS.has(url.hostname)) { event.respondWith(desdeCdn(request, url)); return; }
+  if (url.origin !== self.location.origin) return; // Supabase y demás externos: siempre red
   if (url.pathname.startsWith('/prueba/')) return; // modo prueba: app aparte, nunca del shell cacheado
 
   // Chrome/Chromium rechaza (net::ERR_FAILED) cualquier respuesta con
@@ -113,7 +133,7 @@ self.addEventListener('fetch', (event) => {
   // tiene, se va a la red, pero no se guarda -- guardarlo es justo lo que
   // rompía la atomicidad. El shell nuevo entra cuando el service worker nuevo
   // instala y activa (skipWaiting + clients.claim), los dos archivos juntos.
-  const isCoreShell = url.pathname.endsWith('/app.js') || url.pathname.endsWith('/documentos-revisiones.js') || url.pathname.endsWith('/abonos.js') || url.pathname.endsWith('/propuestas.js') || url.pathname.endsWith('/whatsapp-bandeja.js') || url.pathname.endsWith('/tareas.js') || url.pathname.endsWith('/wa-campanas.js') || url.pathname.endsWith('/ads-meta.js') || url.pathname.endsWith('/marketing.js') || url.pathname.endsWith('/costos-digitales.js') || url.pathname.endsWith('/finanzas-banco.js') || url.pathname.endsWith('/finanzas-por-pagar.js') || url.pathname === '/' || url.pathname.endsWith('/crm/');
+  const isCoreShell = url.pathname.endsWith('/app.js') || url.pathname.endsWith('/documentos-revisiones.js') || url.pathname.endsWith('/abonos.js') || url.pathname.endsWith('/propuestas.js') || url.pathname.endsWith('/whatsapp-bandeja.js') || url.pathname.endsWith('/tareas.js') || url.pathname.endsWith('/wa-campanas.js') || url.pathname.endsWith('/ads-meta.js') || url.pathname.endsWith('/marketing.js') || url.pathname.endsWith('/costos-digitales.js') || url.pathname.endsWith('/finanzas-banco.js') || url.pathname.endsWith('/offline-cache.js') || url.pathname.endsWith('/finanzas-por-pagar.js') || url.pathname === '/' || url.pathname.endsWith('/crm/');
   if (isCoreShell) {
     event.respondWith(
       caches.open(CACHE_VERSION).then(async (cache) => {

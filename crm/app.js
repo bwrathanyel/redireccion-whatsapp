@@ -18,6 +18,7 @@ import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
 import { crearLlamadasApp } from './llamadas-app.js';
 import { crearLlamadasPanel } from './llamadas-panel.js';
+import * as copiaOffline from './offline-cache.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -459,8 +460,11 @@ async function cargarUsuariosLogin() {
 initAuth();
 arrancar(montarOjosLogin);
 async function initAuth() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) await afterLogin(); else showOverlay('login');
+  const { data: { session }, error } = await sb.auth.getSession();
+  // Sin red con el token vencido, supabase-js no lo puede renovar y no da sesión, pero la deja guardada.
+  if (session || (sinRed(error) && perfilOffline())) return afterLogin();
+  showOverlay('login');
+  if (!navigator.onLine) document.getElementById('loginErr').textContent = 'Sin conexión: para entrar por primera vez en este equipo necesitas internet';
 }
 
 // Solo cierra la sesión si la cuenta no existe (PGRST116) o el token ya no se
@@ -468,6 +472,36 @@ async function initAuth() {
 // suspensión y recargar por versión nueva) deslogueaba (2026-10-25). signOut
 // local: el global tumbaba la sesión del mismo usuario en sus otros equipos.
 const esErrorRed = e => !!e && (e.name === 'AuthRetryableFetchError' || !e.status || e.status >= 500);
+
+// ── Modo sin conexión (solo lectura) ──────────────────────────────────────────
+// Entrar sin red exige una sesión previa en este equipo: el perfil queda guardado al
+// entrar con red y se usa solo si el id coincide con la sesión guardada por supabase-js.
+const PERFIL_OFFLINE_KEY = 'lotus_perfil_offline';
+const SESION_SB_KEY = 'sb-begbjhrdbsqftbbleecb-auth-token';
+let ESTADO_RED = 'ok', ARRANQUE_OFFLINE = false;
+const sinRed = e => !navigator.onLine || esErrorRed(e);
+function idSesionGuardada() { try { return JSON.parse(localStorage.getItem(SESION_SB_KEY))?.user?.id || null; } catch { return null; } }
+function perfilOffline() {
+  try { const p = JSON.parse(localStorage.getItem(PERFIL_OFFLINE_KEY)); return p && p.id === idSesionGuardada() ? p : null; } catch { return null; }
+}
+const guardarPerfilOffline = u => { try { localStorage.setItem(PERFIL_OFFLINE_KEY, JSON.stringify(u)); } catch { /* sin cuota: sin entrada offline */ } };
+function entrarOffline(p) { ARRANQUE_OFFLINE = true; copiaOffline.fijarUsuario(p.id); pintarOffline(true); return p; }
+const respuestaSinRed = lectura => new Response(JSON.stringify({ code: 'OFFLINE', message: lectura ? 'Sin conexión: esto no estaba guardado en este equipo' : 'Sin conexión: no se guardó, intenta cuando vuelva la red' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+function pintarOffline(caida) {
+  ESTADO_RED = caida ? 'caida' : ARRANQUE_OFFLINE ? 'volvio' : 'ok';
+  let b = document.getElementById('red-banner');
+  if (ESTADO_RED === 'ok') { b?.remove(); document.body.classList.remove('sin-red'); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'red-banner'; b.setAttribute('role', 'status'); document.body.prepend(b); }
+  document.body.classList.toggle('sin-red', caida);
+  b.classList.toggle('volvio', !caida);
+  const t = copiaOffline.ultimaSync();
+  const cuando = t ? ` · datos guardados del ${new Date(t).toLocaleString('es', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : '';
+  b.innerHTML = caida
+    ? `<i class="fas fa-wifi"></i> <span><b>Sin conexión</b>${cuando} · solo lectura</span>`
+    : `<i class="fas fa-circle-check"></i> <span><b>Volvió la conexión</b></span><button type="button" onclick="location.reload()">Actualizar</button>`;
+}
+window.addEventListener('offline', () => pintarOffline(true));
+window.addEventListener('online', () => pintarOffline(false));
 async function sesionInvalida(msg) {
   await sb.auth.signOut({ scope: 'local' });
   showOverlay('login');
@@ -491,8 +525,19 @@ const renovarSesion = () => renovando ??= sb.auth.refreshSession().then(r => {
   return r;
 }).finally(() => { renovando = null; });
 async function fetchConSesion(input, init = {}) {
-  const res = await fetch(input, init);
-  const url = typeof input === 'string' ? input : input.url;
+  const url = typeof input === 'string' ? input : input.url ?? String(input);
+  const metodo = (init.method || input.method || 'GET').toUpperCase();
+  const lectura = copiaOffline.esLectura(url, metodo);
+  let res;
+  try { res = await fetch(input, init); }
+  catch (e) {
+    // Sin red: la lectura sale de la copia local; la escritura se corta con un error legible. Auth y Storage siguen su manejo propio.
+    if (e?.name === 'AbortError' || !/\/(rest|functions)\/v1\//.test(url)) throw e;
+    const copia = lectura ? await copiaOffline.leer(url, metodo, init) : null;
+    pintarOffline(true);
+    return copia || respuestaSinRed(lectura);
+  }
+  if (lectura && res.ok) { copiaOffline.guardar(url, metodo, init, res.clone()); if (ESTADO_RED === 'caida' && navigator.onLine && !ARRANQUE_OFFLINE) pintarOffline(false); }
   // Storage responde 400/403 (no 401) con "jwt expired" / "exp claim".
   if (![400, 401, 403].includes(res.status) || url.includes('/auth/v1/') || !/jwt|exp claim/i.test(await res.clone().text())) return res;
   const { data, error } = await renovarSesion();
@@ -521,7 +566,13 @@ sb.auth.onAuthStateChange((evento, session) => {
   // desfasado: se renueva una vez por pestaña y desde ahí manda el contador.
   // Solo con contador en 0, si no dos pestañas se renovarían en ping-pong.
   if ((evento === 'INITIAL_SESSION' || evento === 'SIGNED_IN') && session && !sesionEmitidaEn) setTimeout(renovarSesion, 0);
-  else if (evento === 'SIGNED_OUT') { clearTimeout(timerSesion); sesionEmitidaEn = 0; if (MI_USUARIO_ID) showOverlay('login'); }
+  else if (evento === 'SIGNED_OUT') {
+    clearTimeout(timerSesion); sesionEmitidaEn = 0;
+    // Los datos de clientes no quedan en el equipo al salir.
+    try { localStorage.removeItem(PERFIL_OFFLINE_KEY); } catch { /* idem */ }
+    copiaOffline.borrarTodo();
+    if (MI_USUARIO_ID) showOverlay('login');
+  }
 });
 const revisarSesion = () => { if (!document.hidden && sesionPorVencer()) renovarSesion(); };
 document.addEventListener('visibilitychange', revisarSesion);
@@ -530,6 +581,8 @@ window.addEventListener('online', revisarSesion);
 
 async function cargarUsuario(intento = 0) {
   let { data: { user }, error: eu } = await sb.auth.getUser();
+  if (!user && sinRed(eu) && perfilOffline()) return entrarOffline(perfilOffline());
+  if (user) copiaOffline.fijarUsuario(user.id);
   if (!user && !esErrorRed(eu)) {
     const { error: er } = await sb.auth.refreshSession();
     if (er) eu = er; else ({ data: { user }, error: eu } = await sb.auth.getUser());
@@ -544,6 +597,7 @@ async function cargarUsuario(intento = 0) {
     window.addEventListener('online', initAuth, { once: true });
     return null;
   }
+  guardarPerfilOffline(data);
   return data;
 }
 
@@ -38625,7 +38679,10 @@ function recibirLeadNuevoInbox(lead) {
 }
 function toast(l) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-bolt"></i> <div><b>Nuevo lead en vivo</b><br>${esc(l.nombre)} · ${esc(l.destino || '')}</div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5200); }
 function okToast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.innerHTML = `<i class="fas fa-check"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500); }
-function errToast(msg) { const t = document.createElement('div'); t.className = 'toast toast-err'; t.innerHTML = `<i class="fas fa-triangle-exclamation"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5000); }
+function errToast(msg) {
+  // Sin red, cada sección que arranca falla a la vez: un aviso basta, el banner ya lo explica.
+  if (/Sin conexión|Failed to fetch/.test(String(msg))) { if (Date.now() - (errToast.sinRedEn || 0) < 8000) return; errToast.sinRedEn = Date.now(); }
+  const t = document.createElement('div'); t.className = 'toast toast-err'; t.innerHTML = `<i class="fas fa-triangle-exclamation"></i> <div><b>${esc(msg)}</b></div>`; document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30); setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 5000); }
 
 // `sb.functions.invoke` con status != 2xx deja `data=null` y el cuerpo JSON
 // real (el { ok:false, error } que arma la Edge Function) adentro de
