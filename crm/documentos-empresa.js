@@ -44,9 +44,9 @@ const CSS = `
 .de-esq{height:64px;margin:6px 4px;border-radius:12px;background:linear-gradient(90deg,var(--line),transparent,var(--line));background-size:200% 100%;animation:de-brillo 1.4s linear infinite}
 @keyframes de-brillo{to{background-position:-200% 0}}
 /* Visor y compartir */
-.de-vis{position:fixed;inset:0;z-index:960;display:flex;align-items:center;justify-content:center;padding:max(14px,env(safe-area-inset-top)) 14px max(14px,env(safe-area-inset-bottom));background:rgba(4,6,12,.72);backdrop-filter:blur(4px)}
+.de-vis{position:fixed;inset:0;z-index:960;display:flex;align-items:center;justify-content:center;padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom));background:rgba(4,6,12,.72);backdrop-filter:blur(4px)}
 .de-vis[hidden]{display:none}
-.de-caja{--dc:var(--muted);display:flex;flex-direction:column;width:min(1080px,100%);height:100%;max-height:100%;background:var(--bg2);border:1px solid var(--line2);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden}
+.de-caja{--dc:var(--muted);display:flex;flex-direction:column;width:min(1320px,100%);height:100%;max-height:100%;background:var(--bg2);border:1px solid var(--line2);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden}
 .de-caja[data-cat=legal]{--dc:var(--blue)}.de-caja[data-cat=fiscal]{--dc:var(--amber)}.de-caja[data-cat=contrato]{--dc:var(--purple)}
 .de-caja[data-cat=bancario]{--dc:var(--green)}.de-caja[data-cat=seguro]{--dc:var(--pink)}
 .de-cab{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
@@ -67,6 +67,12 @@ const CSS = `
 .de-img.zoom img{max-width:none;max-height:none;cursor:zoom-out}
 .de-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;color:var(--muted);font-size:13px}
 .de-msg>i{font-size:30px;opacity:.55}
+.de-pdf{position:absolute;inset:0;overflow:auto;padding:14px 0 70px}
+.de-pdf .pg{display:block;margin:0 auto 14px;background:#fff;border-radius:4px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+.de-zoom{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:var(--panel-solid);border:1px solid var(--line2);box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:2}
+.de-zoom button{width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--txt);cursor:pointer;font-size:13px}
+.de-zoom button:hover{background:var(--line)}
+.de-zoom span{min-width:46px;text-align:center;font-size:12px;font-weight:700;color:var(--muted)}
 .de-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid var(--line2);background:var(--panel-solid);color:var(--txt);cursor:pointer;display:grid;place-items:center;opacity:.9;z-index:2}
 .de-nav:hover{border-color:var(--accent)}
 .de-nav.ant{left:12px}.de-nav.sig{right:12px}
@@ -256,6 +262,9 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
       else if (a === 'pestana') abrir(d, false);
       else if (a === 'editar') { cerrarVisor(); editar(d); }
       else if (a === 'zoom') b.closest('.de-img')?.classList.toggle('zoom');
+      else if (a === 'zmas') pdfCtl?.zoom(1.25);
+      else if (a === 'zmenos') pdfCtl?.zoom(0.8);
+      else if (a === 'zfit') pdfCtl?.zoom(0);
     });
     document.addEventListener('keydown', e => {
       if (vis.hidden || compId) return;
@@ -265,6 +274,50 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
     });
     document.body.appendChild(vis);
     return vis;
+  }
+
+  /* PDF propio (pdf.js): ajustado al ancho del visor y centrado, con zoom; si no carga, queda el visor del navegador. */
+  const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  let pdfLib = null, pdfCtl = null;
+  const cargarPdfjs = () => pdfLib ||= new Promise((res, rej) => {
+    if (window.pdfjsLib) { res(window.pdfjsLib); return; }
+    const s = document.createElement('script'); s.src = PDFJS + 'pdf.min.js';
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js'; res(window.pdfjsLib); };
+    s.onerror = () => { pdfLib = null; rej(new Error('pdfjs')); };
+    document.head.appendChild(s);
+  });
+
+  async function pintarPdf(cuerpo, u, tk) {
+    const lib = await cargarPdfjs();
+    const pdf = await lib.getDocument({ url: u }).promise;
+    if (tk !== visTk) { pdf.destroy(); return; }
+    cuerpo.querySelectorAll('.de-msg').forEach(n => n.remove());
+    const cont = document.createElement('div'); cont.className = 'de-pdf';
+    const zb = document.createElement('div'); zb.className = 'de-zoom';
+    zb.innerHTML = '<button type="button" data-dv="zmenos" aria-label="Alejar"><i class="fas fa-minus"></i></button><span data-zv>100%</span><button type="button" data-dv="zmas" aria-label="Acercar"><i class="fas fa-plus"></i></button><button type="button" data-dv="zfit" aria-label="Ajustar al ancho"><i class="fas fa-expand"></i></button>';
+    cuerpo.prepend(cont); cuerpo.appendChild(zb);
+    const paginas = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const cv = document.createElement('canvas'); cv.className = 'pg'; cont.appendChild(cv);
+      paginas.push({ n, cv });
+    }
+    let z = 1, ren = 0;
+    const pintar = async () => {
+      const mi = ++ren, dpr = Math.min(window.devicePixelRatio || 1, 2);
+      zb.querySelector('[data-zv]').textContent = `${Math.round(z * 100)}%`;
+      for (const p of paginas) {
+        if (mi !== ren || tk !== visTk) return;
+        const pg = await pdf.getPage(p.n), v1 = pg.getViewport({ scale: 1 });
+        const esc1 = Math.min(Math.max((cont.clientWidth - 28) / v1.width, 0.2), 2.2) * z, vp = pg.getViewport({ scale: esc1 * dpr });
+        p.cv.width = Math.floor(vp.width); p.cv.height = Math.floor(vp.height);
+        p.cv.style.width = `${Math.floor(vp.width / dpr)}px`; p.cv.style.height = `${Math.floor(vp.height / dpr)}px`;
+        await pg.render({ canvasContext: p.cv.getContext('2d'), viewport: vp }).promise;
+      }
+    };
+    pdfCtl = { zoom: f => { z = f === 0 ? 1 : Math.min(4, Math.max(0.5, z * f)); pintar(); } };
+    const reajuste = () => { if (tk === visTk) { clearTimeout(reajuste.t); reajuste.t = setTimeout(pintar, 150); } else removeEventListener('resize', reajuste); };
+    addEventListener('resize', reajuste);
+    await pintar();
   }
 
   function mover(p) {
@@ -312,7 +365,6 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
     const limpiar = () => cuerpo.querySelectorAll('.de-msg,iframe,.de-img').forEach(n => n.remove());
 
     if (!esPdf(d) && !esImg(d)) { limpiar(); mensaje('fa-file-image', 'Este formato no se puede mostrar acá.', '<button class="de-pill pri" type="button" data-dv="bajar"><i class="fas fa-download"></i>Descargar</button>'); return; }
-    if (esPdf(d) && !pdfEnPagina()) { limpiar(); mensaje('fa-file-pdf', 'Este navegador no muestra PDF dentro de la página.', '<button class="de-pill pri" type="button" data-dv="pestana"><i class="fas fa-arrow-up-right-from-square"></i>Abrir PDF</button>'); return; }
 
     let u = blobs.get(id)?.url;
     if (!u) {
@@ -330,7 +382,14 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
       if (tk !== visTk) return;
     }
     limpiar();
-    if (esPdf(d)) cuerpo.insertAdjacentHTML('afterbegin', `<iframe title="${esc(d.titulo)}" src="${u}${u.startsWith('blob:') ? '#navpanes=0&view=FitH' : ''}"></iframe>`);
+    if (esPdf(d)) {
+      try { await pintarPdf(cuerpo, u, tk); }
+      catch {
+        if (tk !== visTk) return;
+        if (pdfEnPagina()) cuerpo.insertAdjacentHTML('afterbegin', `<iframe title="${esc(d.titulo)}" src="${u}${u.startsWith('blob:') ? '#navpanes=0&view=FitH' : ''}"></iframe>`);
+        else mensaje('fa-file-pdf', 'Este navegador no muestra PDF dentro de la página.', '<button class="de-pill pri" type="button" data-dv="pestana"><i class="fas fa-arrow-up-right-from-square"></i>Abrir PDF</button>');
+      }
+    }
     else cuerpo.insertAdjacentHTML('afterbegin', `<div class="de-img"><img src="${u}" alt="${esc(d.titulo)}" data-dv="zoom"></div>`);
   }
 
