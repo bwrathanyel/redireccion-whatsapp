@@ -308,7 +308,7 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
       for (const p of paginas) {
         if (mi !== ren || tk !== visTk) return;
         const pg = await pdf.getPage(p.n), v1 = pg.getViewport({ scale: 1 });
-        const esc1 = Math.min(Math.max((cont.clientWidth - 28) / v1.width, 0.2), 2.2) * z, vp = pg.getViewport({ scale: esc1 * dpr });
+        const esc1 = Math.min(Math.max(Math.min((cont.clientWidth - 28) / v1.width, (cont.clientHeight - 84) / v1.height), 0.2), 2.2) * z, vp = pg.getViewport({ scale: esc1 * dpr });
         p.cv.width = Math.floor(vp.width); p.cv.height = Math.floor(vp.height);
         p.cv.style.width = `${Math.floor(vp.width / dpr)}px`; p.cv.style.height = `${Math.floor(vp.height / dpr)}px`;
         await pg.render({ canvasContext: p.cv.getContext('2d'), viewport: vp }).promise;
