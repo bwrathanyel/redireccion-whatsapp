@@ -10579,6 +10579,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="cxp" style="display:none">
+        <div class="card" id="finanzas-por-pagar-root" hidden></div>
         <div class="fact-barra">
           <input class="ei bt-buscar" id="cxp-search" type="search" placeholder="Buscar proveedor o cliente..." aria-label="Buscar proveedor o cliente">
           <div class="seg-group seg-group-sm" role="group" aria-label="Tipo de vista">
@@ -10917,6 +10918,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 
         <div class="edit-err" id="prov-err"></div>
 
+        <div id="prov-productos-wrap" hidden style="margin-top:10px">
+          <label class="fl">Productos del tarifario que se le pagan</label>
+          <div id="prov-productos"></div>
+        </div>
         <div id="prov-correos-wrap" hidden style="margin-top:10px">
           <label class="fl">Correos con este proveedor</label>
           <div id="prov-correos-box" class="muted" style="font-size:11px">Cargando…</div>
@@ -11256,6 +11261,11 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <div class="ce-campo">
           <label class="ce-lbl">Notas internas (no salen a la web ni a la IA)</label>
           <textarea class="ei" id="tf-notas" rows="3"></textarea>
+        </div>
+        <div class="ce-campo" id="tf-proveedor-campo" hidden>
+          <label class="ce-lbl" for="tf-proveedor">Proveedor (a quién se le paga; se guarda al elegir)</label>
+          <div style="display:flex;gap:7px;align-items:center"><select class="ei" id="tf-proveedor" style="flex:1"></select>
+            <button class="btn-sm" type="button" id="tf-proveedor-ver" title="Abrir la ficha del proveedor"><i class="fas fa-arrow-up-right-from-square"></i> Ver ficha</button></div>
         </div>
 
         <div class="tf-sec">
@@ -13347,6 +13357,11 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   <div class="sheet-handle"></div>
   <div class="sheet-title">Datos de pago</div>
   <div id="mp-sheet-root"></div>
+</div>
+<div class="sheet" id="pp-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="pp-sheet-titulo">Registrar pago a proveedor</div>
+  <div id="pp-sheet-root"></div>
 </div>
 <div class="sheet" id="confirmar-sheet">
   <div class="sheet-handle"></div>

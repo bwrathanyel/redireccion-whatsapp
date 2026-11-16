@@ -10,7 +10,7 @@
 // apuntando a index.html) siempre pegaba ese camino roto; una pestaña normal
 // del navegador no, porque pedía '/' directo. Se cachea './' en vez de
 // './index.html' para no arrastrar el redirect.
-const CACHE_VERSION = 'lotus-crm-shell-v756';
+const CACHE_VERSION = 'lotus-crm-shell-v758';
 // Solo esta versión recarga sola las pestañas abiertas (pedido del dueño 2026-11-06): el resto de deploys sigue con el aviso, que deja elegir cuándo.
 const RECARGA_FORZADA = 'lotus-crm-shell-v689';
 const SHELL_FILES = [
@@ -29,6 +29,7 @@ const SHELL_FILES = [
   './documentos-empresa.js',
   './metodos-pago.js',
   './finanzas-banco.js',
+  './finanzas-por-pagar.js',
   './boletos-emitidos.js',
   './facturas-empresa.js',
   './llamadas-wa.js',
@@ -112,7 +113,7 @@ self.addEventListener('fetch', (event) => {
   // tiene, se va a la red, pero no se guarda -- guardarlo es justo lo que
   // rompía la atomicidad. El shell nuevo entra cuando el service worker nuevo
   // instala y activa (skipWaiting + clients.claim), los dos archivos juntos.
-  const isCoreShell = url.pathname.endsWith('/app.js') || url.pathname.endsWith('/documentos-revisiones.js') || url.pathname.endsWith('/abonos.js') || url.pathname.endsWith('/propuestas.js') || url.pathname.endsWith('/whatsapp-bandeja.js') || url.pathname.endsWith('/tareas.js') || url.pathname.endsWith('/wa-campanas.js') || url.pathname.endsWith('/ads-meta.js') || url.pathname.endsWith('/marketing.js') || url.pathname.endsWith('/costos-digitales.js') || url.pathname.endsWith('/finanzas-banco.js') || url.pathname === '/' || url.pathname.endsWith('/crm/');
+  const isCoreShell = url.pathname.endsWith('/app.js') || url.pathname.endsWith('/documentos-revisiones.js') || url.pathname.endsWith('/abonos.js') || url.pathname.endsWith('/propuestas.js') || url.pathname.endsWith('/whatsapp-bandeja.js') || url.pathname.endsWith('/tareas.js') || url.pathname.endsWith('/wa-campanas.js') || url.pathname.endsWith('/ads-meta.js') || url.pathname.endsWith('/marketing.js') || url.pathname.endsWith('/costos-digitales.js') || url.pathname.endsWith('/finanzas-banco.js') || url.pathname.endsWith('/finanzas-por-pagar.js') || url.pathname === '/' || url.pathname.endsWith('/crm/');
   if (isCoreShell) {
     event.respondWith(
       caches.open(CACHE_VERSION).then(async (cache) => {

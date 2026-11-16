@@ -12,6 +12,7 @@ import { crearCostosDigitales } from './costos-digitales.js';
 import { crearDocumentosEmpresa } from './documentos-empresa.js';
 import { crearMetodosPago } from './metodos-pago.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
+import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
@@ -4197,6 +4198,11 @@ const costosDigitales = () => COSTOS_DIGITALES ||= crearCostosDigitales({ sb, es
 let FINANZAS_BANCO = null;
 const finanzasBanco = () => FINANZAS_BANCO ||= crearFinanzasBanco({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('finanzas-banco-root'), alCambiar: () => loadPagos(true) });
+let FINANZAS_POR_PAGAR = null;
+const finanzasPorPagar = () => FINANZAS_POR_PAGAR ||= crearFinanzasPorPagar({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
+  raiz: document.getElementById('finanzas-por-pagar-root'), hoja: document.getElementById('pp-sheet-root'),
+  abrirSheet: openSheet, cerrarSheet: closeSheet, hoy: hoyCaracas, uid: () => MI_USUARIO_ID,
+  irTarifario: id => window.abrirProductoTarifario(id), alCambiar: () => loadCuentasPorPagar(true) });
 let METODOS_PAGO = null;
 const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
@@ -23506,7 +23512,8 @@ window.pagarComisionesAsesorUI = async (clave, btn) => {
 };
 function cargarMasComisiones() { factComMostrar += TECHO_LISTA; renderComisiones(); }
 window.cargarMasComisiones = cargarMasComisiones;
-async function loadCuentasPorPagar() {
+async function loadCuentasPorPagar(soloLista = false) {
+  if (!soloLista && document.getElementById('finanzas-por-pagar-root') && (ROL === 'admin' || ROL === 'administrativo')) finanzasPorPagar().cargar();
   DR?.cargarCreditos();
   document.getElementById('cxp-loading')?.classList.add('show');
   const { data, error } = await sb.rpc('listar_cuentas_por_pagar');
@@ -23670,14 +23677,11 @@ window.abrirEditarComisionUI = (comisionId, porcentajeActual) => {
   document.getElementById('monto-sheet-error').textContent = '';
   openSheet('monto-sheet'); input.focus();
 };
-window.abrirRegistrarAbonoUI = (cxpId, saldoPendiente) => {
-  MONTO_SHEET_ACCION = { tipo: 'abono', id: cxpId, saldoPendiente };
-  document.getElementById('monto-sheet-title').textContent = 'Registrar abono al proveedor';
-  document.getElementById('monto-sheet-label').textContent = `Monto a abonar (saldo: ${money(saldoPendiente)})`;
-  const input = document.getElementById('monto-sheet-input');
-  input.min = 0; input.max = saldoPendiente; input.step = 0.01; input.value = '';
-  document.getElementById('monto-sheet-error').textContent = '';
-  openSheet('monto-sheet'); input.focus();
+// Desde Fase 2.1 el abono es un pago real (finanzas-por-pagar.js): abre ese formulario con la CxP precargada.
+window.abrirRegistrarAbonoUI = (cxpId) => {
+  const c = CXP_CACHE.find(x => x.id === cxpId);
+  if (!c?.proveedor_id) { errToast('Esta cuenta no tiene proveedor: asignáselo antes de pagarla.'); return; }
+  finanzasPorPagar().abrirPago({ proveedorId: c.proveedor_id, cxpId });
 };
 async function confirmarMontoSheet() {
   if (!MONTO_SHEET_ACCION) return;
@@ -23691,9 +23695,6 @@ async function confirmarMontoSheet() {
   if (MONTO_SHEET_ACCION.tipo === 'comision') {
     if (valor > 100) { err.textContent = 'El porcentaje no puede superar 100.'; btn.disabled = false; btn.innerHTML = previo; return; }
     resultado = await sb.rpc('editar_comision_manual', { p_comision_id: MONTO_SHEET_ACCION.id, p_porcentaje: valor });
-  } else {
-    if (valor > MONTO_SHEET_ACCION.saldoPendiente) { err.textContent = 'El abono no puede superar el saldo pendiente.'; btn.disabled = false; btn.innerHTML = previo; return; }
-    resultado = await sb.rpc('registrar_abono_proveedor', { p_cxp_id: MONTO_SHEET_ACCION.id, p_monto: valor });
   }
   btn.disabled = false; btn.innerHTML = previo;
   const { data, error } = resultado;
@@ -24132,9 +24133,28 @@ function abrirProveedorSheet(id = null) {
   provTab('ficha');
   document.getElementById('prov-tabs').hidden = !p;
   document.getElementById('prov-correos-wrap').hidden = !p;
-  if (p) { provCargarReservas(p); cargarCorreoProveedor(p); }
+  document.getElementById('prov-productos-wrap').hidden = !p;
+  if (p) { provCargarReservas(p); cargarCorreoProveedor(p); provCargarProductos(p); }
   openSheet('proveedor-sheet');
 }
+// Productos del tarifario con este proveedor (Fase 2.1): de ahí nace la CxP de cada servicio vendido.
+async function provCargarProductos(p) {
+  const caja = document.getElementById('prov-productos');
+  caja.innerHTML = '<div class="csub">Cargando...</div>';
+  const { data, error } = await sb.rpc('proveedor_productos_listar', { p_proveedor_id: p.id });
+  if (PROV_EDITANDO !== p) return;
+  if (error) { caja.innerHTML = `<div class="csub">No se pudieron cargar: ${esc(error.message)}</div>`; return; }
+  caja.innerHTML = (data || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:7px">${data.map(x =>
+    `<button type="button" class="btn-sm" onclick="abrirProductoTarifario(${Number(x.producto_id)})"${x.activo ? '' : ' style="opacity:.55" title="Inactivo"'}>${esc(x.nombre)}</button>`).join('')}</div>`
+    : '<div class="csub">Ningún producto del tarifario tiene este proveedor.</div>';
+}
+// Abre la ficha de un producto en el editor del tarifario desde cualquier sección.
+window.abrirProductoTarifario = async id => {
+  const { data, error } = await tarConsultaProductos(sb.from('productos').select(TAR_SEL_PRODUCTOS)).eq('id', id).maybeSingle();
+  if (error || !data) { errToast('No se pudo abrir el producto'); return; }
+  TAR_DRAWER_ITEM = data;
+  tarAbrirEditorFicha(id);
+};
 let PROV_RES = null, PROV_TAB = 'ficha';
 function provTab(tab) {
   PROV_TAB = tab;
@@ -28526,9 +28546,42 @@ function tarAbrirEditorFicha(id) {
       .map(d => `<option value="${esc(d)}">`).join('');
   tfRenderTarifas();
   tfInitProtegido();
+  tfInitProveedor(p);
   cargarFotosAdmin('producto_fotos', 'producto_id', p.id, 'hoteles', 'tf-fotos-admin');
   window.closeDrawer(true);
   openSheet('tar-ficha-sheet');
+}
+
+// Proveedor del producto (Fase 2.1): los servicios vendidos de este producto nacen con él y su CxP.
+let TF_PROVEEDORES = null;
+async function tfInitProveedor(p) {
+  const campo = document.getElementById('tf-proveedor-campo'), sel = document.getElementById('tf-proveedor');
+  campo.hidden = !(ROL === 'admin' || ROL === 'administrativo');
+  if (campo.hidden) return;
+  if (!TF_PROVEEDORES) {
+    const { data, error } = await sb.rpc('listar_proveedores', { p_solo_activos: false });
+    if (error) { campo.hidden = true; return; }
+    TF_PROVEEDORES = data || [];
+  }
+  if (TAR_EDIT_PROD !== p) return;
+  const actual = p.proveedor_id == null ? null : Number(p.proveedor_id);
+  sel.innerHTML = `<option value="">— Sin proveedor —</option>${TF_PROVEEDORES.filter(x => x.activo || x.id === actual)
+    .map(x => `<option value="${x.id}"${x.id === actual ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}`;
+  sel.onchange = async () => {
+    const nuevo = sel.value ? Number(sel.value) : null;
+    sel.disabled = true;
+    const { data, error } = await sb.rpc('producto_asignar_proveedor', { p_producto_id: p.id, p_proveedor_id: nuevo });
+    sel.disabled = false;
+    if (error || !data?.ok) { sel.value = p.proveedor_id ?? ''; errToast('No se pudo guardar el proveedor: ' + (error?.message || data?.error || '')); return; }
+    p.proveedor_id = nuevo;
+    okToast(nuevo ? 'Proveedor del producto guardado' : 'Producto sin proveedor');
+  };
+  document.getElementById('tf-proveedor-ver').onclick = async () => {
+    const id = sel.value ? Number(sel.value) : null;
+    if (!id) return;
+    if (!PROV_CACHE.some(x => x.id === id)) await loadProveedores();
+    abrirProveedorSheet(id);
+  };
 }
 
 function tfVigentes() { return (TAR_EDIT_PROD?.tarifas || []).filter(t => t.vigente); }
@@ -42024,6 +42077,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-16', emoji: '💸', titulo: 'Pagos a proveedores', texto: 'En Facturación › Cuentas por pagar ahora se registra cada pago real a un proveedor: de qué cuenta salió, la fecha, el comprobante y a qué cuentas por pagar se reparte (lo que sobra queda a favor). Los Zelle enviados de Wells Fargo aparecen para clasificar, y los servicios sin proveedor tienen su lista para asignarlo. El botón «Abonar» abre este formulario nuevo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-15', emoji: '📁', titulo: 'Documentos de la empresa en Corporativo', texto: 'Nueva pestaña Corporativo › Documentos con el RIF, el registro, contratos, pólizas y demás papeles de la agencia. Al subir uno, Lyra lo clasifica sola y saca la fecha de vencimiento; los que vencen en 30 días se marcan y avisan por Telegram. Puede verlos y descargarlos desde acá, o pedírselos a Lyra por Telegram o WhatsApp, que también los manda por correo o WhatsApp a quien usted le diga, siempre pidiendo confirmación antes.', roles: ['admin'] },
   { fecha: '2026-11-15', emoji: '📁', titulo: 'Documentos de la empresa en Corporativo', texto: 'Nueva pestaña Corporativo › Documentos: ahí están el RIF y los demás documentos de la agencia que administración comparte con el equipo, para verlos o descargarlos cuando un cliente o proveedor los pida.', roles: ['asesor'] },
   { fecha: '2026-11-15', emoji: '🏦', titulo: 'Lyra verifica los Zelle de Wells Fargo', texto: 'Los avisos de Zelle que Wells Fargo manda por correo ahora entran solos al CRM. Si un abono por Zelle calza con un Zelle recibido (confirmación y monto), Lyra lo verifica sola; si algo no cuadra, avisa a los admin por Telegram y la tarjeta de «Por verificar» dice por qué. En Pagos, abajo, el panel «Banco» muestra lo verificado por Lyra (con «Deshacer» para admin), el saldo de cada día y los movimientos.', roles: ['admin', 'administrativo'] },
