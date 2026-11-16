@@ -40,8 +40,24 @@ const CSS = `
 .pp-err{color:var(--danger);font-size:12px;font-weight:700;min-height:16px}
 .pp-pie{display:flex;gap:9px;padding-top:11px}
 .pp-pie .dbtn{flex:1}
-@media (max-width:560px){.pp-form{grid-template-columns:1fr}.pp-rep-fila{grid-template-columns:1fr 96px}}
+.sal{border:1px solid var(--line);border-radius:12px;padding:11px 14px 4px;margin-bottom:14px;background:var(--bg2)}
+.sal-cab{display:flex;justify-content:space-between;align-items:baseline;gap:7px 11px;flex-wrap:wrap;margin-bottom:4px}
+.sal-cab h3{margin:0;font-size:13px;font-weight:800}
+.sal-fila{display:grid;grid-template-columns:18px 1fr 44px 110px 14px;gap:9px;align-items:center;min-height:32px;padding:4px 0;border:0;border-top:1px solid var(--line);background:none;color:inherit;font:inherit;font-size:12px;text-align:left;width:100%}
+button.sal-fila{min-height:44px;cursor:pointer;transition:background .16s}
+button.sal-fila:hover{background:var(--accent-soft)}
+.sal-fila small{display:block;font-size:11px;color:var(--muted)}
+.sal-ic{text-align:center}
+.sal-n,.sal-monto{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+.sal-fila.ok .sal-ic,.sal-fila.ok .sal-n{color:var(--green)}
+.sal-fila.alerta .sal-ic,.sal-fila.alerta .sal-n,.sal-fila.alerta .sal-monto{color:var(--amber)}
+.sal-ir{color:var(--muted);font-size:10px}
+@media (max-width:560px){.pp-form{grid-template-columns:1fr}.pp-rep-fila{grid-template-columns:1fr 96px}.sal-fila{grid-template-columns:18px 1fr 36px 84px 14px}}
 `;
+const SALUD = [['salida_wf_sin_clasificar', 'Salidas WF sin clasificar (más de 3 días)', 'salidas'], ['servicio_sin_proveedor', 'Servicios con costo y sin proveedor', 'servicios'],
+  ['cxp_sin_proveedor', 'Cuentas por pagar sin proveedor', null], ['venta_sin_factura', 'Ventas cobradas sin factura pagada', null],
+  ['pagado_sin_abono', 'Reservas con pago y sin abono registrado', null], ['abono_sin_comprobante', 'Abonos sin comprobante', null],
+  ['total_distinto_factura', 'Total de la reserva distinto al de la factura', null], ['reserva_sin_costo', 'Reservas facturadas sin costo', null]];
 const TABS = [['prov', 'Por proveedor', 'fa-truck-field'], ['salidas', 'Salidas WF por clasificar', 'fa-building-columns'],
   ['servicios', 'Servicios sin proveedor', 'fa-circle-question'], ['saldo', 'Saldo a favor', 'fa-piggy-bank']];
 const CATEGORIAS = [['gasto', 'Gasto de la agencia'], ['nomina', 'Nómina'], ['comision', 'Comisión']];
@@ -67,7 +83,7 @@ const ERRORES = {
 
 export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz, hoja, abrirSheet, cerrarSheet, hoy, uid, irTarifario, alCambiar }) {
   const admin = rol === 'admin';
-  let tab = 'prov', pedido = 0, provs = null, salidas = [], servicios = [], catalogo = [], cuentas = [];
+  let tab = 'prov', pedido = 0, provs = null, salidas = [], servicios = [], catalogo = [], cuentas = [], salud = null;
   const cxpDe = new Map(), pagosDe = new Map(), abiertos = new Set(), clasificadas = new Map();
   let form = null;
   try { tab = localStorage.getItem('pp_tab') || 'prov'; } catch {}
@@ -90,6 +106,7 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
     const id = Number(b.dataset.id), d = b.dataset;
     switch (d.pp) {
       case 'tab': tab = d.tab; try { localStorage.setItem('pp_tab', tab); } catch {} return pintar();
+      case 'salud-ir': tab = d.tab; try { localStorage.setItem('pp_tab', tab); } catch {} pintar(); return raiz.querySelector('.pp-tabs')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       case 'ver': return alternar(id);
       case 'pagar': return abrirPago({ proveedorId: id || null });
       case 'pagar-cxp': return abrirPago({ proveedorId: Number(d.prov), cxpId: id });
@@ -107,10 +124,12 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
 
   async function cargar() {
     const n = ++pedido;
-    const [a, s, v, p, c] = await Promise.all([sb.rpc('por_pagar_proveedores_listar'), sb.rpc('banco_salidas_por_clasificar'),
+    const [a, s, v, p, c, h] = await Promise.all([sb.rpc('por_pagar_proveedores_listar'), sb.rpc('banco_salidas_por_clasificar'),
       sb.rpc('servicios_sin_proveedor_listar'), catalogo.length ? { data: catalogo } : sb.rpc('listar_proveedores', { p_solo_activos: false }),
-      cuentas.length ? { data: cuentas } : sb.rpc('cuentas_financieras_listar')]);
+      cuentas.length ? { data: cuentas } : sb.rpc('cuentas_financieras_listar'), admin ? sb.rpc('finanzas_salud') : { data: null }]);
     if (n !== pedido) return;
+    if (h.error) console.warn('finanzas_salud', h.error.message);
+    salud = h.error ? null : h.data;
     // PGRST202: CRM publicado antes de la migración; sin permiso: no es admin/administrativo.
     if (a.error) { if (a.error.code !== 'PGRST202') console.warn('por_pagar_proveedores_listar', a.error.message); raiz.hidden = true; return; }
     provs = a.data || []; salidas = s.data || []; servicios = v.data || []; catalogo = p.data || []; cuentas = c.data || [];
@@ -140,13 +159,29 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
     if (tab === 'saldo' && provs.some(x => x.saldo_a_favor > 0 && !cxpDe.has(x.proveedor_id))) { cargar(); return; }
     const pend = provs.reduce((s, x) => s + Number(x.pendiente), 0), venc = provs.reduce((s, x) => s + Number(x.vencido), 0);
     const n = { prov: provs.filter(x => x.vencido > 0).length, salidas: salidas.length, servicios: servicios.length, saldo: provs.filter(x => x.saldo_a_favor > 0).length };
-    raiz.innerHTML = `
+    raiz.innerHTML = `${tarjetaSalud()}
       <div class="pp-cab"><div><h2><i class="fas fa-hand-holding-dollar"></i> Pagos a proveedores</h2>
         <div class="csub">Pendiente ${usd(pend)}${venc > 0 ? ` · <span class="pp-alerta">vencido ${usd(venc)}</span>` : ''}. Cada pago sale de una cuenta y se reparte entre las cuentas por pagar del proveedor; lo que sobra queda a favor.</div></div>
         <button class="btn-sm lt-primario" type="button" data-pp="pagar"><i class="fas fa-plus"></i> Registrar pago</button></div>
       <div class="seg-group pp-tabs" role="tablist">${TABS.map(([k, t, ic]) => `
         <button class="seg${k === tab ? ' on' : ''}" type="button" role="tab" aria-selected="${k === tab}" data-pp="tab" data-tab="${k}"><i class="fas ${ic}"></i> ${t}${n[k] ? `<span class="seg-n">${n[k]}</span>` : ''}</button>`).join('')}</div>
       <div class="pp-scroll">${tab === 'prov' ? tablaProv() : tab === 'salidas' ? tablaSalidas() : tab === 'servicios' ? tablaServicios() : tablaSaldo()}</div>`;
+  }
+
+  function tarjetaSalud() {
+    if (!admin || !salud?.checks) return '';
+    const nombreTab = k => TABS.find(([t]) => t === k)?.[1] || '';
+    const filas = SALUD.map(([k, t, dest]) => {
+      const c = salud.checks[k] || { n: 0, monto: 0, n_historico: 0 }, cero = !c.n, ir = !cero && dest;
+      const cuerpo = `<i class="fas ${cero ? 'fa-circle-check' : 'fa-triangle-exclamation'} sal-ic" aria-hidden="true"></i>
+        <span>${t}${c.n_historico ? `<small>+${c.n_historico} históricas, aparte</small>` : ''}</span>
+        <span class="sal-n">${c.n}</span><span class="sal-monto">${cero ? '' : usd(c.monto)}</span>${ir ? '<i class="fas fa-chevron-right sal-ir" aria-hidden="true"></i>' : '<span></span>'}`;
+      return ir ? `<button type="button" class="sal-fila alerta" data-pp="salud-ir" data-tab="${dest}" title="Resolver en «${esc(nombreTab(dest))}»">${cuerpo}</button>`
+        : `<div class="sal-fila ${cero ? 'ok' : 'alerta'}">${cuerpo}</div>`;
+    }).join('');
+    const total = Number(salud.total) || 0;
+    return `<section class="sal" aria-label="Salud de finanzas"><div class="sal-cab"><h3><i class="fas fa-heart-pulse"></i> Salud de finanzas</h3>
+      ${total ? `<span class="pp-alerta">${total} por resolver</span>` : '<span class="pp-verde">Todo en orden</span>'}</div>${filas}</section>`;
   }
 
   function tablaProv() {
