@@ -64,6 +64,22 @@ async function desdeCdn(request, url) {
   catch (e) { const c = await cache.match(request); if (c) return c; throw e; }
 }
 
+// Sin red. Caso real 2026-11-16 (celular, «No se puede acceder a este sitio»): `/?accion=...`
+// (avisos push) no coincide con `./` en el cache por la query, y el respaldo offline.html
+// estaba guardado tras el 308 a `/offline` -- respuesta redirected=true, que Chrome rechaza
+// en una navegación. Ahora una navegación sin red recibe la app (ignorando la query), y se
+// rearma la Response para que nunca viaje con redirected=true.
+const limpia = (res) => (res && res.redirected ? new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers }) : res);
+async function sinRed(request) {
+  const cache = await caches.open(CACHE_VERSION);
+  if (request.mode === 'navigate') {
+    const app = (await cache.match(request, { ignoreSearch: true })) || (await cache.match('./'));
+    if (app) return limpia(app);
+  }
+  const off = await cache.match('./offline.html');
+  return limpia(off) || new Response('Sin conexión', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+}
+
 self.addEventListener('install', (event) => {
   // Sin bloquear el install: si el CDN falla, el shell igual se actualiza.
   event.waitUntil(caches.open(CACHE_LIBS).then((c) => c.match(SUPABASE_ESM).then((h) => h || c.add(SUPABASE_ESM))).catch(() => {}));
@@ -139,16 +155,16 @@ self.addEventListener('fetch', (event) => {
       caches.open(CACHE_VERSION).then(async (cache) => {
         const cached = await cache.match(request);
         if (cached) return cached;
-        return fetch(request).catch(() => cache.match('./offline.html'));
+        return fetch(request).catch(() => sinRed(request));
       })
     );
     return;
   }
 
-  // Navegaciones (ej. deep link directo, refresh): si no hay cache ni red, mostrar offline.html
+  // Navegaciones (ej. deep link directo, refresh): si no hay cache ni red, la app cacheada
   if (request.mode === 'navigate') {
     event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request).catch(() => caches.match('./offline.html')))
+      caches.match(request).then((cached) => cached || fetch(request).catch(() => sinRed(request)))
     );
     return;
   }
