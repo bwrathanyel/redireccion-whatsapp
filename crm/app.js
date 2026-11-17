@@ -26868,6 +26868,7 @@ async function abrirPdfBtTravel(btn, productoId, nombreHotel) {
   const nombre = nombreHotel ? `BT Travel - ${String(nombreHotel).replace(/[\\/:*?"<>|]/g, '')}.pdf` : 'Tarifario BT Travel.pdf';
   if (productoId && tarBtRecortes.has(productoId)) { verPdf(tarBtRecortes.get(productoId), nombre); return; }
   btn.disabled = true; btn.classList.add('cargando');
+  okToast('Abriendo el tarifario de BT Travel…');
   let data = null;
   try {
     const r = await sb.functions.invoke('tarifario-bt-pdf', { body: productoId ? { producto_id: productoId } : {} });
@@ -26884,7 +26885,8 @@ async function abrirPdfBtTravel(btn, productoId, nombreHotel) {
       }
       verPdf(data.url, 'Tarifario BT Travel.pdf'); return;
     }
-  } finally { btn.disabled = false; btn.classList.remove('cargando'); }
+  } catch (e) { console.error('tarifario BT', e); errToast('No se pudo abrir el tarifario de BT Travel: ' + (e?.message || 'error de red')); return; }
+  finally { btn.disabled = false; btn.classList.remove('cargando'); }
   errToast(data?.error === 'sin_tarifario' ? 'Todavía no llegó ningún tarifario de BT Travel al Drive'
     : data?.error === 'sin_paginas' ? 'Este hotel no figura en el tarifario de BT Travel activo' : 'No se pudo abrir el tarifario de BT Travel');
 }
