@@ -26866,7 +26866,7 @@ async function recortarPdf(url, desde, hasta) {
 async function abrirPdfBtTravel(btn, productoId, nombreHotel) {
   if (btn.disabled) return;
   const nombre = nombreHotel ? `BT Travel - ${String(nombreHotel).replace(/[\\/:*?"<>|]/g, '')}.pdf` : 'Tarifario BT Travel.pdf';
-  if (productoId && tarBtRecortes.has(productoId)) { verPdf(tarBtRecortes.get(productoId), nombre); return; }
+  if (productoId && tarBtRecortes.has(productoId)) { verPdf(tarBtRecortes.get(productoId), nombre, 1.15); return; }
   btn.disabled = true; btn.classList.add('cargando');
   okToast('Abriendo el tarifario de BT Travel…');
   let data = null;
@@ -26880,10 +26880,10 @@ async function abrirPdfBtTravel(btn, productoId, nombreHotel) {
           const blob = await recortarPdf(data.url.split('#')[0], desde, hasta || desde);
           if (tarBtRecortes.size >= 10) tarBtRecortes.delete(tarBtRecortes.keys().next().value);
           tarBtRecortes.set(productoId, blob);
-          verPdf(blob, nombre); return;
+          verPdf(blob, nombre, 1.15); return;
         } catch (e) { console.error('recorte tarifario BT', e); }
       }
-      verPdf(data.url, 'Tarifario BT Travel.pdf'); return;
+      verPdf(data.url, 'Tarifario BT Travel.pdf', 1.15); return;
     }
   } catch (e) { console.error('tarifario BT', e); errToast('No se pudo abrir el tarifario de BT Travel: ' + (e?.message || 'error de red')); return; }
   finally { btn.disabled = false; btn.classList.remove('cargando'); }
@@ -33150,9 +33150,9 @@ const CHAT_ADJ_ACCIONES = '<div class="msg-adj-acc"><button type="button" data-a
 const chatEsPdf = m => m.pdf || /\.pdf$/i.test(m.nombre_archivo || m.storage_path || '');
 // Visor de PDF del chat para cualquier PDF del CRM: blob generado o URL (firmada) de Storage.
 let verPdfN = 0;
-function verPdf(fuente, nombre = 'Documento.pdf') {
+function verPdf(fuente, nombre = 'Documento.pdf', zoom = 1) {
   const blob = fuente instanceof Blob ? fuente : null;
-  return chatVerDoc({ externo: true, pdf: true, blob, url: blob ? null : fuente, nombre_archivo: nombre, storage_path: `pdf:${++verPdfN}`, peso_bytes: blob?.size || 0 });
+  return chatVerDoc({ externo: true, pdf: true, blob, url: blob ? null : fuente, nombre_archivo: nombre, storage_path: `pdf:${++verPdfN}`, peso_bytes: blob?.size || 0, zoom });
 }
 const esRutaPdf = p => /\.pdf(\?|$)/i.test(p || '');
 const chatMsgDe = el => msgMensajes.find(x => x.id === Number(el.closest('.chat-msg')?.dataset.mid));
@@ -33267,7 +33267,7 @@ async function chatVerDoc(m) {
     </div>
     <div class="cdv-paginas"><div class="cdv-aviso"><i class="fas fa-spinner fa-spin"></i> Abriendo documento…</div></div>
     <div class="cdv-zoom"><button type="button" data-cdv="menos" aria-label="Alejar"><i class="fas fa-minus"></i></button><button type="button" data-cdv="mas" aria-label="Acercar"><i class="fas fa-plus"></i></button></div>`;
-  const s = chatDocVisor = { el, m, pdf: null, urls: [], zoom: 1, base: 0 };
+  const s = chatDocVisor = { el, m, pdf: null, urls: [], zoom: m.zoom || 1, base: 0 };
   el.addEventListener('click', e => {
     // Tocar el fondo, fuera de las páginas, cierra el visor (pedido del dueño 2026-11-12).
     const b = e.target.closest('[data-cdv]'); if (!b) { if (e.target.classList.contains('cdv-paginas')) chatDocCerrar(); return; }
@@ -33316,7 +33316,7 @@ async function chatVerDoc(m) {
 function chatDocZoom(dir) {
   const s = chatDocVisor; if (!s?.base) return;
   const pasos = [1, 1.5, 2, 2.5], cont = s.el.querySelector('.cdv-paginas');
-  const z = pasos[Math.max(0, Math.min(pasos.length - 1, pasos.indexOf(s.zoom) + dir))];
+  const z = pasos[Math.max(0, Math.min(pasos.length - 1, Math.max(0, pasos.indexOf(s.zoom)) + dir))];
   if (z === s.zoom) return;
   const rel = cont.scrollTop / (cont.scrollHeight || 1);
   s.zoom = z;
