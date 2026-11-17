@@ -145,7 +145,7 @@ export async function construirPdf(f, c) {
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
   fuentes.forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
   let logo = null;
-  try { const u = await c.imagen('logo-color.png'); if (String(u).startsWith('data:image/png')) logo = u; } catch (_e) { /* membrete sin logo */ }
+  try { const u = await c.imagen('logo-bn.png'); if (String(u).startsWith('data:image/png')) logo = u; } catch (_e) { /* membrete sin logo */ }
   const P = c.paleta, limpiar = c.limpiar || (s => String(s ?? '').trim());
   const tinte = (col, k) => col.map(v => Math.round(v + (255 - v) * k));
   const font = (s, size, col) => { doc.setFont(F, st(s)); doc.setFontSize(size); doc.setTextColor(...col); };

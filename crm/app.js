@@ -36382,7 +36382,7 @@ function cbTarEstadiaDe(t) {
   const exacta = txt.match(/(?:^|\/)\s*\(?(\d+)\)?\s*noches?\b/);
   return exacta ? { exacta: +exacta[1] } : null;
 }
-function cbTarDesempatar(precisas, noche, totalNoches) {
+function cbTarDesempatar(precisas, noche, totalNoches, hoy = cbHoy()) {
   if (precisas.length < 2) return precisas;
   const angostar = (xs, ok) => { const r = xs.filter(ok); return r.length ? r : xs; };
   const dow = new Date(cbTarFecha(noche)).getUTCDay();
@@ -36390,6 +36390,8 @@ function cbTarDesempatar(precisas, noche, totalNoches) {
   // «JUEVES A DOMINGO» + «DOMINGO A MIERCOLES»: la noche del domingo es del rango que empieza ese día.
   if (r.filter(x => cbTarDiasDe(x.t)).length > 1) r = angostar(r, x => cbTarDiasDe(x.t)?.inicio === dow);
   r = angostar(r, x => { const e = cbTarEstadiaDe(x.t); return !e || (e.min ? totalNoches >= e.min : totalNoches === e.exacta); });
+  // «PREVENTA DE TEMPORADA BAJA» + «TEMPORADA BAJA» con las mismas fechas: mientras la venta de la preventa siga abierta, es la que rige.
+  r = angostar(r, x => cbEsPreventa(x.t) && (x.t.venta_hasta || x.t.fecha_venta_fin || '9999-12-31') >= hoy);
   return r;
 }
 function cbTarSugerir(it, filas, hoy, ocupaciones) {
@@ -36410,7 +36412,7 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     const cubren = candidatas.map(t => ({ t, amplitud: cbTarAmplitud(t, noche) })).filter(x => x.amplitud !== null);
     if (!cubren.length) return { sin: true };
     const menor = Math.min(...cubren.map(x => x.amplitud));
-    const precisas = cbTarDesempatar(cubren.filter(x => x.amplitud === menor), noche, noches.length);
+    const precisas = cbTarDesempatar(cubren.filter(x => x.amplitud === menor), noche, noches.length, hoy);
     if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return { texto: 'La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.' };
     // Por habitación: con reparto desigual y variante automática, cada grupo lleva su variante (triple + doble).
     const variantes = porHab ? grupos.map(g => grupos.length > 1 && (it.variante_auto || !it.tarifa_variante) ? cbVarianteAuto(precisas.map(x => x.t), g.adultos) : it.tarifa_variante) : [];
@@ -37622,6 +37624,7 @@ function cbHotelPrecioHtml(it, i) {
   if (it.tipo !== 'hotel') return '';
   return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span class="cb-aviso">⏳ Buscando las tarifas del hotel…</span>' : ''}${it._aviso ? `<p class="cb-aviso"><span aria-hidden="true">💡</span>${esc(it._aviso)}</p>` : ''}
     ${it._tarifaError ? '<button type="button" class="dbtn" style="min-height:44px" data-cb-reintentar>Reintentar carga de tarifas</button>' : ''}
+    ${it.producto_id && ROL !== 'marketing' && (cbHotelTarifas.get(Number(it.producto_id)) || []).some(tarDeBtTravel) ? '<button type="button" class="btn-sm cb-bt-pdf" data-cb-bt-pdf><i class="fas fa-file-pdf"></i> Ver en tarifario BT Travel</button>' : ''}
     ${cbTramosHtml(it)}
     ${it.tarifa_manual && it._sugerencia?.ok ? `<button type="button" class="btn-sm" data-cb-usar>Usar tarifa del tarifario · ${it._sugerencia.tramos.map(t => '$' + cbMonto(t.tarifa)).join(' / ')}</button>` : ''}
     ${it._desactualizado ? `<button type="button" class="btn-sm" data-cb-manual>Usar $${cbMonto(it.tarifa)} por ${cbPorHabitacion(it) ? 'habitación' : 'adulto'} ${cbPorNoche(it) ? 'por noche' : 'por estadía'} para este viaje</button>` : ''}
@@ -37977,6 +37980,7 @@ async function cbCargarSeccion() {
       if (e.target.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }); return; }
       if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
       if (e.target.closest('[data-cb-ss]')) { cbVerStopSales(it); return; }
+      const btPdf = e.target.closest('[data-cb-bt-pdf]'); if (btPdf) { abrirPdfBtTravel(btPdf, Number(it.producto_id), cbHoteles.get(Number(it.producto_id))?.nombre || it.nombre); return; }
       if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); document.querySelector(`#cb-items .cb-item[data-i="${card.dataset.i}"] [data-cb-plegar]`).focus({ preventScroll: true }); return; }
       if (e.target.closest('[data-cb-unidad-cambiar]')) { it._unidadEditar = true; cbRenderItems(); document.getElementById(`cb-unidad-${card.dataset.i}`)?.focus(); return; }
       if (e.target.closest('[data-cb-usar]')) { cbHotelRecalcular(it, true); cbRenderItems(); cbProgramarBorrador(); return; }
