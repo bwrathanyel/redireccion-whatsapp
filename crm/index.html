@@ -2664,6 +2664,15 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .inbox-card.cola-roja .inbox-paciencia i{background:var(--danger)}
 .inbox-card.sale-nopuedo{border-color:var(--danger)}
 .inbox-sello{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green);font-size:34px;pointer-events:none}
+.inbox-card.inbox-caliente{border-color:#f97316;background:linear-gradient(180deg,rgba(249,115,22,.16),rgba(249,115,22,.04))}
+.inbox-cola>.inbox-card.inbox-caliente.es-siguiente{border-color:#f97316}
+.inbox-hot{flex:none;display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;background:#f97316;color:#2a1000;font-size:10px;font-weight:800;white-space:nowrap}
+.inbox-card:not(.inbox-caliente) .inbox-paciencia{display:none}
+.inbox-card.inbox-caliente .inbox-orden{margin-left:6px}
+.inbox-cola>.inbox-card.inbox-caliente.es-siguiente .inbox-orden{background:#ef4444;color:#fff;font-size:11px;letter-spacing:.2px}
+@keyframes inbox-titila{0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,0)}50%{box-shadow:0 0 0 4px rgba(249,115,22,.55),0 0 14px rgba(249,115,22,.45)}}
+.inbox-card.inbox-caliente{animation:inbox-titila 1.2s ease-in-out infinite}
+.inbox-card.inbox-caliente.inbox-entra{animation:inbox-entra .3s cubic-bezier(.2,.8,.2,1),inbox-titila 1.2s ease-in-out .3s infinite}
 @keyframes inbox-entra{from{transform:translateX(40px);opacity:0}to{transform:none;opacity:1}}
 .inbox-card.inbox-entra{animation:inbox-entra .3s cubic-bezier(.2,.8,.2,1)}
 @media(max-width:760px){
@@ -2685,7 +2694,7 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
   .inbox-cola>.inbox-card .inbox-paciencia{margin-top:7px}
 }
 @media(prefers-reduced-motion:reduce){
-  .inbox-card.inbox-entra,.lih-count.late{animation:none}
+  .inbox-card.inbox-entra,.lih-count.late,.inbox-card.inbox-caliente{animation:none}
   .inbox-paciencia i{transition:none}
 }
 /* Pagos por verificar: tablero de 3 etapas (loadPagos). --etapa la pone cada columna. */
@@ -3931,6 +3940,8 @@ body.en-cotizar #lyra-fab,body.en-cotizar #chat-fab{display:none!important}
 .cb-res-op{display:flex;justify-content:space-between;gap:10px;padding:12px 0 2px;font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em}.cb-res-op strong{font-variant-numeric:tabular-nums}.cb-res-comun{color:var(--muted)}
 .cb-total{display:flex;justify-content:flex-end;align-items:baseline;gap:12px;margin-top:14px;font-size:13px;color:var(--muted)}
 .cb-total b{font-size:20px;color:var(--txt)}
+.cb-moneda{margin-top:10px}.cb-moneda .lt-orden-op{min-height:36px}.cb-moneda .lt-orden-op[aria-pressed=true]{color:var(--accent-ink);border-color:var(--accent);background:var(--accent-soft)}
+.cb-tasa-nota{display:block;font-size:11.5px;line-height:1.4;color:var(--muted);margin:-6px 0 10px}.cb-tasa-nota[hidden]{display:none}
 .cb-textos{margin-top:14px}
 .cb-textos summary{cursor:pointer;font-size:12.5px;color:var(--muted);margin-bottom:8px}
 .cb-textos textarea{resize:vertical;font-family:inherit}
@@ -11640,7 +11651,9 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <section id="cb-lead-ficha" class="cb-lead-ficha cb-solo-ventas" aria-label="Cliente vinculado" hidden></section>
       <aside class="card cb-resumen-col" aria-label="Resumen de cotización"><h3>Tu cotización</h3><div id="cb-resumen"></div>
         <button type="button" class="cb-mini" onclick="cbMiniAbrir()" aria-label="Abrir la vista previa del PDF" title="Abrir el PDF"><span id="cb-mini" class="cb-mini-hoja"><i class="fas fa-file-pdf"></i></span><small>Vista previa del PDF</small></button>
+        <div class="lt-orden cb-moneda" role="group" aria-label="Moneda de la cotización"><button class="lt-orden-op" type="button" data-cb-moneda="USD" aria-pressed="true" onclick="cbCambiarMoneda('USD').then(cbProgramarBorrador)">Divisas ($)</button><button class="lt-orden-op" type="button" data-cb-moneda="VES" aria-pressed="false" onclick="cbCambiarMoneda('VES').then(cbProgramarBorrador)">Bolívares</button></div>
         <div class="cb-total"><span>Total USD</span> <b id="cb-total">$0.00</b></div>
+        <small id="cb-tasa-nota" class="cb-tasa-nota" hidden></small>
 
         <div class="cb-acciones">
           <button id="cb-enviar-btn" class="cb-solo-boleteria" type="button" onclick="cbGuardar('enviar')"><i class="fas fa-paper-plane"></i> Generar y enviar al asesor</button>
