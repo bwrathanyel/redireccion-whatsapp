@@ -36854,7 +36854,7 @@ function cbItemHtml(it, i) {
       + (porHab ? '<small class="cb-full cb-condicion">Precio por habitación: niños y adultos adicionales se suman aparte según el tarifario.</small>' : '')
     : (boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : '')
       + campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ` list="cb-productos-${i}" autocomplete="off"`) + `<datalist id="cb-productos-${i}">${cbOpcionesProducto(it)}</datalist>` : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
-      + (pax ? pax.cuentas + CB_SEP + pax.precios + cbDesgloseHtml(it) : '')
+      + (pax ? pax.cuentas + CB_SEP + cbExcHtml(it, i) + pax.precios + cbDesgloseHtml(it) : '')
       + (boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : '');
   return `<div class="cb-item${hotel ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
     <div class="cb-item-cab"><span class="cb-item-tit"><b>${i + 1}.</b><select class="ei cb-tipo" data-k="tipo" aria-label="Tipo de servicio ${i + 1}">${opciones}</select>${cbOpcionSelectHtml(it, i)}</span><span class="cb-item-acc"><b class="cb-importe" title="Importe del servicio">${cbImporteTexto(it)}</b><button type="button" class="btn-sm cb-plegar" data-cb-plegar aria-controls="cb-item-campos-${i}" aria-expanded="${!it._plegado}">${it._plegado ? 'Editar' : 'Contraer'}</button>${cbItems.length > 1 ? `<button class="cb-item-quitar" type="button" title="Quitar servicio" aria-label="Quitar servicio ${i + 1}" onclick="cbQuitarItem(${i})"><i class="fas fa-trash"></i></button>` : ''}</span></div>
@@ -37113,7 +37113,7 @@ async function cbAplicarProducto(id, fechas = null) {
     const it = cbItems[i];
     if (!it.auto) cbAutoIniciar(it);
     if (tipo === 'hotel') { cbRenderItems(); await cbHotelElegir(document.querySelector(`#cb-items .cb-item[data-i="${i}"]`), id); }
-    else { it[cbTipo(it).campos[0][0]] = p.nombre; cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); }
+    else { it[cbTipo(it).campos[0][0]] = p.nombre; cbAutoTodos(); if (cbEsExc(it)) await cbExcAplicar(it); cbRenderItems(); cbProgramarBorrador(); }
   }
   if (fechas && tipo === 'hotel') {
     const it = cbItems[i]; Object.assign(it, fechas);
@@ -37122,6 +37122,64 @@ async function cbAplicarProducto(id, fechas = null) {
   }
   document.querySelector(`#cb-items .cb-item[data-i="${i}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
   return cbItems[i];
+}
+// Excursión / tour (2026-11-18, dueño): al elegirla del tarifario se ponen solas las tarifas adulto/niño/infante
+// (la que cubre la fecha, o la elegida en «Tarifa del tarifario»). Un precio escrito a mano se respeta.
+const cbExcTarifas = new Map();
+const cbEsExc = it => it.tipo === 'fullday' || it.tipo === 'tour';
+const cbExcProducto = it => cbEsExc(it) && cbTitulo(it) ? [...cbHoteles.values()].find(p => p.tipo === 'excursion' && cbTarNorm(p.nombre) === cbTarNorm(it.nombre)) : null;
+function cbExcTraer(id) {
+  if (!cbExcTarifas.has(id)) cbExcTarifas.set(id, (async () => {
+    const { data, error } = await sb.from('tarifas').select('id,titulo,moneda,precios,vigente').eq('producto_id', id).order('id').limit(50);
+    if (error) { cbExcTarifas.delete(id); throw error; }
+    return (data || []).filter(t => t.vigente !== false && t.precios && t.precios.modalidad !== 'suplemento' && t.precios.adulto != null);
+  })());
+  return cbExcTarifas.get(id);
+}
+function cbExcTarifaDe(it, ts) {
+  const elegida = ts.find(t => t.id === Number(it.exc_tarifa_id)); if (elegida) return elegida;
+  const f = it.ida, cubre = t => t.precios.vigencia_desde && f && f >= t.precios.vigencia_desde && (!t.precios.vigencia_hasta || f <= t.precios.vigencia_hasta);
+  return ts.find(cubre) || ts.find(t => !t.precios.vigencia_desde) || ts[0] || null;
+}
+// true = cambió algo que hay que repintar.
+async function cbExcAplicar(it) {
+  const p = cbExcProducto(it);
+  if (!p) {
+    if (!it.producto_id || !cbEsExc(it)) return false;
+    if (it._excAuto) Object.assign(it, { tarifa: '', tarifa_nino: '', tarifa_infante: '' });
+    delete it.producto_id; delete it.exc_tarifa_id; Object.assign(it, { _excTarifas: null, _excNota: '', _excAuto: false, _excManual: false });
+    return true;
+  }
+  if (Number(it.producto_id) !== p.id) { it.producto_id = p.id; delete it.exc_tarifa_id; it._excManual = false; }
+  let ts;
+  try { ts = await cbExcTraer(p.id); } catch (e) { console.error('cbExcTraer', e); it._excNota = 'No se pudo cargar la tarifa: escribe el precio a mano.'; return true; }
+  if (!cbItems.includes(it) || Number(it.producto_id) !== p.id) return false;
+  it._excTarifas = ts;
+  const t = cbExcTarifaDe(it, ts);
+  if (!t) { it._excNota = 'Esta excursión no tiene tarifa vigente: escribe el precio a mano.'; return true; }
+  const pr = t.precios, mf = n => tarMontoFmt(n, t.moneda), notas = [];
+  if (pr.base === 'grupo') notas.push(`Precio por grupo: ${mf(pr.adulto)} en total, reparte la tarifa a mano.`);
+  else if (!it._excManual) { Object.assign(it, { tarifa: Number(pr.adulto), tarifa_nino: Number(pr.nino ?? pr.adulto), tarifa_infante: Number(pr.infante) || 0, _excAuto: true }); }
+  if (pr.min_pax && (Number(it.adultos) || 0) + (Number(it.ninos) || 0) < pr.min_pax) notas.push(`Mínimo ${pr.min_pax} pasajeros.`);
+  if (pr.nino == null) notas.push('Sin precio de niño en el tarifario: va como adulto.');
+  else if (pr.edad_nino?.length === 2) notas.push(`Niño de ${pr.edad_nino[0]} a ${pr.edad_nino[1]} años.`);
+  (pr.no_incluye || []).forEach(n => notas.push(`No incluye: ${n.concepto}${n.monto != null ? ' ' + mf(n.monto) : ''}${n.aplica ? ' ' + n.aplica : ''}`));
+  if (pr.notas) notas.push(pr.notas);
+  it._excNota = notas.join(' · ');
+  return true;
+}
+async function cbExcRefrescar(it) {
+  if (!await cbExcAplicar(it) || !cbItems.includes(it)) return;
+  const foco = document.activeElement, id = foco?.id, pos = foco?.selectionStart;
+  cbRenderItems(); cbProgramarBorrador();
+  const el = id && document.getElementById(id);
+  if (el && foco !== el && el.matches('input:not([type=date]):not([type=number])')) { el.focus({ preventScroll: true }); if (pos != null) el.setSelectionRange(pos, pos); }
+}
+function cbExcHtml(it, i) {
+  if (!cbEsExc(it) || !it.producto_id) return '';
+  const ts = it._excTarifas || [], t = ts.length > 1 ? cbExcTarifaDe(it, ts) : null;
+  return (t ? `<div class="field cb-full"><label class="fl" for="cb-exc-${i}">${cbEmo('💵')}Tarifa del tarifario</label><select id="cb-exc-${i}" class="ei" data-cb-exc>${ts.map(x => `<option value="${x.id}"${x.id === t.id ? ' selected' : ''}>${esc(`${x.titulo || 'Tarifa general'} · ${tarMontoFmt(x.precios.adulto, x.moneda)}`)}</option>`).join('')}</select></div>` : '')
+    + (it._excNota ? `<small class="cb-full cb-condicion">${esc(it._excNota)}</small>` : '');
 }
 // Con Cotizaciones ya abierta (ficha abierta desde el buscador o el chat), activateSection no recarga: se aplica a mano.
 // «Cotizar» en otro lead es una cotización nueva: lo precargado del anterior (hotel, fechas, personas) no se arrastra.
@@ -37155,6 +37213,7 @@ async function cbAplicarLyra(spec) {
     if (!it) return { error: `No se pudo cargar ${s.nombre}` };
     Object.assign(it, { ida: s.ida, vuelta: s.vuelta, adultos: s.adultos, ninos: s.ninos || '', infantes: s.infantes || '' });
     if (it.auto) ['ida', 'vuelta', 'adultos', 'ninos', 'infantes'].forEach(k => delete it.auto[k]);
+    if (cbEsExc(it)) await cbExcAplicar(it);
     if (it.tipo !== 'hotel') continue;
     const filas = cbHotelFilas(it), plan = parecido(cbTarOpciones(filas, 'plan'), s.plan);
     if (plan) Object.assign(it, { plan, hab: '', habitacion_manual: false });
@@ -38025,6 +38084,10 @@ async function cbCargarSeccion() {
       if (k === 'opcion') { cbItems[+card.dataset.i].opcion = Number(e.target.value) || 0; cbRenderItems(); cbProgramarBorrador(); return; }
       const it = cbItems[+card.dataset.i], previo = it[k]; it[k] = e.target.value;
       if (it.auto) delete it.auto[k];
+      if (cbEsExc(it)) {
+        if (['tarifa', 'tarifa_nino', 'tarifa_infante'].includes(k)) Object.assign(it, { _excManual: true, _excAuto: false });
+        if (k === 'nombre' || (k === 'ida' && it.producto_id)) cbExcRefrescar(it);
+      }
       if (it.tipo === 'hotel' && k === 'unidad') {
         it.unidad_manual = true; it._unidadPendiente = false; it.tarifa_manual = false;
         it.tarifa = ''; it.tarifa_nino = ''; it.tarifa_nino_auto = true; it.tarifa_nino_tramos = false; it.tramos = []; it.tarifas_contexto = ''; it.tarifa_variante = '';
@@ -38079,6 +38142,7 @@ async function cbCargarSeccion() {
     cbLista.addEventListener('change', e => {
       const k = e.target.dataset.k, card = e.target.closest('.cb-item'); if (!card) return;
       const it = cbItems[+card.dataset.i];
+      if (e.target.dataset.cbExc !== undefined) { Object.assign(it, { exc_tarifa_id: Number(e.target.value), _excManual: false }); cbExcRefrescar(it); return; }
       if (it.tipo !== 'hotel') return;
       if (e.target.dataset.cbExtra) { it[e.target.dataset.cbExtra] = e.target.checked; cbRenderItems(); cbProgramarBorrador(); document.querySelector(`#cb-items .cb-item[data-i="${card.dataset.i}"] [data-cb-extra="${e.target.dataset.cbExtra}"]`)?.focus({ preventScroll: true }); return; }
       if (k === 'habitaciones') { it.habitaciones_auto = false; delete it.habitaciones_antes; }
@@ -42294,6 +42358,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-18', emoji: '🏝️', titulo: 'Precio de excursiones automático', texto: 'En Cotizaciones, al elegir un full day, excursión o tour del tarifario se ponen solas las tarifas de adulto, niño e infante (la vigente para la fecha). Si tiene varias tarifas, eliges cuál en «Tarifa del tarifario». Si escribes un precio a mano, se respeta.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-16', emoji: '🩺', titulo: 'Salud de finanzas', texto: 'En Facturación › Cuentas por pagar hay una tarjeta nueva con los pendientes de finanzas: salidas del banco por clasificar, servicios sin proveedor, abonos sin comprobante y más. Lo que está en cero sale en verde; lo que tiene pendientes, en ámbar, y con un clic vas a la lista donde se resuelve.', roles: ['admin'] },
   { fecha: '2026-11-16', emoji: '💸', titulo: 'Pagos a proveedores', texto: 'En Facturación › Cuentas por pagar ahora se registra cada pago real a un proveedor: de qué cuenta salió, la fecha, el comprobante y a qué cuentas por pagar se reparte (lo que sobra queda a favor). Los Zelle enviados de Wells Fargo aparecen para clasificar, y los servicios sin proveedor tienen su lista para asignarlo. El botón «Abonar» abre este formulario nuevo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-15', emoji: '📁', titulo: 'Documentos de la empresa en Corporativo', texto: 'Nueva pestaña Corporativo › Documentos con el RIF, el registro, contratos, pólizas y demás papeles de la agencia. Al subir uno, Lyra lo clasifica sola y saca la fecha de vencimiento; los que vencen en 30 días se marcan y avisan por Telegram. Puede verlos y descargarlos desde acá, o pedírselos a Lyra por Telegram o WhatsApp, que también los manda por correo o WhatsApp a quien usted le diga, siempre pidiendo confirmación antes.', roles: ['admin'] },
