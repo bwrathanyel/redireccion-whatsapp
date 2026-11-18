@@ -36411,9 +36411,11 @@ function cbTarDesempatar(precisas, noche, totalNoches, hoy = cbHoy()) {
   let r = angostar(precisas, x => { const d = cbTarDiasDe(x.t); return !d || d.dias.includes(dow); });
   // «JUEVES A DOMINGO» + «DOMINGO A MIERCOLES»: la noche del domingo es del rango que empieza ese día.
   if (r.filter(x => cbTarDiasDe(x.t)).length > 1) r = angostar(r, x => cbTarDiasDe(x.t)?.inicio === dow);
-  // «PROMOCION MIDWEEK / DOMINGO A MIERCOLES» + «TEMPORADA BAJA» con las mismas fechas (LD Palm Beach):
-  // la fila que nombra los días es la más específica para esa noche, igual que la ventana más angosta.
+  // Regla del dueño (2026-11-18): la temporada es el precio general; una promoción específica en esas mismas
+  // fechas («PROMOCION MIDWEEK / DOMINGO A MIERCOLES» sobre «TEMPORADA BAJA», LD Palm Beach) se aplica siempre.
   r = angostar(r, x => !!cbTarDiasDe(x.t)?.dias.includes(dow));
+  // «HOT SALE VERANO» sobre «VERANO» (LD Palm Beach, LD Plus): también es la promoción de esas fechas.
+  r = angostar(r, x => /\b(promo|hot\s*sale|oferta)/i.test(`${x.t.titulo || ''} ${x.t.vigencia_texto || ''}`));
   r = angostar(r, x => { const e = cbTarEstadiaDe(x.t); return !e || (e.min ? totalNoches >= e.min : totalNoches === e.exacta); });
   // «PREVENTA DE TEMPORADA BAJA» + «TEMPORADA BAJA» con las mismas fechas: mientras la venta de la preventa siga abierta, es la que rige.
   r = angostar(r, x => cbEsPreventa(x.t) && (x.t.venta_hasta || x.t.fecha_venta_fin || '9999-12-31') >= hoy);
