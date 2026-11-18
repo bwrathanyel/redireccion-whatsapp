@@ -36106,8 +36106,10 @@ function cbTarPrecioAdulto(t, adultos, ocupaciones) {
 }
 // Unidad de precio de una tarifa (2026-10-26). Una sola regla para tarjeta, cotización, web y bot:
 // manda la fila (`precios.base`), luego el bloque del PDF (`base_precio`), y solo si ninguno la
-// declara se deduce de la grilla: DBL > SGL = por habitación, DBL < SGL = por persona, iguales = sin
-// decidir. 'persona' sin más siempre fue por persona POR NOCHE en hoteles (confirmado por el dueño).
+// declara se deduce de la grilla: PAX ADIC < mitad del DBL o DBL >= SGL = por habitación, DBL < SGL = por persona.
+// 'persona' sin más siempre fue por persona POR NOCHE en hoteles (confirmado por el dueño).
+// 2026-11-18 (dueño): DBL = SGL ya no queda sin decidir (Cala Margarita «por habitación por noche» se
+// cobraba por persona: 2 adultos = 1740 en vez de 870), y se leen también `doble`/`sencilla`.
 // Espejo: pagina-web-next/lib/tarifas.ts (unidadTarifa) y supabase/functions/_shared/presupuesto.ts.
 const TAR_UNIDADES = { persona: 'persona_noche', persona_noche: 'persona_noche', habitacion: 'habitacion_noche', habitacion_noche: 'habitacion_noche' };
 function tarUnidad(t) {
@@ -36115,9 +36117,12 @@ function tarUnidad(t) {
   const fila = cbTarNorm(t?.precios?.base), bloque = cbTarNorm(cbTarBloque(t || {}).base_precio);
   if (fila) return { unidad: TAR_UNIDADES[fila] || fila, origen: 'fila' };
   if (bloque) return { unidad: TAR_UNIDADES[bloque] || bloque, origen: 'bloque' };
-  const sgl = cbTarNum(t?.precios?.sgl), dbl = cbTarNum(t?.precios?.dbl);
-  if (sgl === null || dbl === null || sgl === dbl) return { unidad: '', origen: null };
-  return { unidad: dbl > sgl ? 'habitacion_noche' : 'persona_noche', origen: 'deducida' };
+  // PAX ADIC por debajo de la mitad del DBL = adulto extra de una habitación (Cala 60 sobre 290). Cerca del DBL
+  // es un precio por persona más (La Laguna By LD: DBL 310, SGL 405, PAX ADIC 280) y manda SGL/DBL.
+  const p = t?.precios || {}, sgl = cbTarNum(p.sgl ?? p.sencilla), dbl = cbTarNum(p.dbl ?? p.doble), adic = cbTarPaxAdic(t);
+  if (adic && (dbl === null || adic.monto < dbl / 2)) return { unidad: 'habitacion_noche', origen: 'deducida' };
+  if (sgl === null || dbl === null) return { unidad: '', origen: null };
+  return { unidad: dbl >= sgl ? 'habitacion_noche' : 'persona_noche', origen: 'deducida' };
 }
 const TAR_UNIDAD_TEXTO = { persona_noche: 'por persona por noche', habitacion_noche: 'por habitación por noche', persona: 'por persona, paquete completo' };
 const cbTarBase = t => { if (t._unidad) return t._unidad; const u = tarUnidad(t).unidad; return TAR_UNIDAD_TEXTO[u] ? u : ''; };
@@ -36150,12 +36155,14 @@ function cbTarAnotarUnidades(filas) {
 }
 function cbTarVariantes(t, ocupaciones) {
   const nombres = { 1: 'Sencilla', 2: 'Doble', 3: 'Triple', 4: 'Cuádruple', 5: 'Quíntuple', 6: 'Séxtuple', 7: 'Séptuple', 8: 'Óctuple' };
-  return Object.entries(t.precios || {}).filter(([k, v]) => (ocupaciones.has(k) || /^pax_[1-9]\d*$/.test(k)) && cbTarNum(v) !== null)
+  const adic = new Set(cbTarAdicDisfrazadas(t).map(d => d.clave));
+  return Object.entries(t.precios || {}).filter(([k, v]) => !adic.has(k) && (ocupaciones.has(k) || /^pax_[1-9]\d*$/.test(k)) && cbTarNum(v) !== null)
     .map(([clave, precio]) => ({ clave, precio: Number(precio), nombre: nombres[ocupaciones.get(clave)] || clave.replace(/^pax_(\d+)$/, '$1 personas') }));
 }
 function cbTarPrecioHabitacion(t, variante, ocupaciones) {
   const opciones = cbTarVariantes(t, ocupaciones);
-  if (variante) return opciones.find(o => o.clave === variante)?.precio ?? null;
+  // Otra fila del mismo hotel puede nombrar la ocupación con un alias (`doble` en una, `dbl` en otra; Cala 2026-11-18).
+  if (variante) return (opciones.find(o => o.clave === variante) || opciones.find(o => cbTarCupo(o.clave) === cbTarCupo(variante) && cbTarCupo(variante) > 0))?.precio ?? null;
   return opciones.length && opciones.every(o => o.precio === opciones[0].precio) ? opciones[0].precio : null;
 }
 const cbTarCupo = clave => TAR_OCUPACION.get(clave) || Number((/^pax_(\d+)$/.exec(clave || '') || [])[1]) || 0;
@@ -36168,7 +36175,20 @@ const TAR_PAX_ADIC = new Map([['pax_adic', null], ['pax_adicional', null], ['pax
 const CB_RECARGO_SENCILLA = 0.3;
 function cbTarPaxAdic(t) {
   for (const [clave, tope] of TAR_PAX_ADIC) { const monto = cbTarNum(t?.precios?.[clave]); if (monto !== null) return { clave, monto, tope }; }
-  return null;
+  const d = cbTarAdicDisfrazadas(t)[0];
+  return d ? { clave: d.clave, monto: d.monto, tope: null } : null;
+}
+// PAX ADIC disfrazado de ocupación (2026-11-18, dueño): Cala Margarita carga DBL = SGL = 290 y TPL = 60; el 60
+// es el adulto extra, no una triple de 60. Una ocupación de 3 o más por debajo de la mitad del DBL es PAX ADIC
+// y deja de ser variante (cbTarVariantes).
+function cbTarAdicDisfrazadas(t) {
+  const p = t?.precios || {}, dbl = cbTarNum(p.dbl ?? p.doble), r = [];
+  if (!(dbl > 0)) return r;
+  for (const [clave, v] of Object.entries(p)) {
+    const n = TAR_OCUPACION.get(cbTarNorm(clave)) || 0, monto = cbTarNum(v);
+    if (n >= 3 && monto > 0 && monto < dbl / 2) r.push({ clave, monto, n });
+  }
+  return r.sort((a, b) => a.n - b.n);
 }
 // El recargo de sencilla solo va donde «por habitación» es seguro: lo declara la fila o el bloque, hay PAX ADIC,
 // o el precio cambia con la ocupación (Terra Nostra 90/180/270). Con DBL = TPL = CPL y sin SGL (America, Yaque
@@ -36391,6 +36411,9 @@ function cbTarDesempatar(precisas, noche, totalNoches, hoy = cbHoy()) {
   let r = angostar(precisas, x => { const d = cbTarDiasDe(x.t); return !d || d.dias.includes(dow); });
   // «JUEVES A DOMINGO» + «DOMINGO A MIERCOLES»: la noche del domingo es del rango que empieza ese día.
   if (r.filter(x => cbTarDiasDe(x.t)).length > 1) r = angostar(r, x => cbTarDiasDe(x.t)?.inicio === dow);
+  // «PROMOCION MIDWEEK / DOMINGO A MIERCOLES» + «TEMPORADA BAJA» con las mismas fechas (LD Palm Beach):
+  // la fila que nombra los días es la más específica para esa noche, igual que la ventana más angosta.
+  r = angostar(r, x => !!cbTarDiasDe(x.t)?.dias.includes(dow));
   r = angostar(r, x => { const e = cbTarEstadiaDe(x.t); return !e || (e.min ? totalNoches >= e.min : totalNoches === e.exacta); });
   // «PREVENTA DE TEMPORADA BAJA» + «TEMPORADA BAJA» con las mismas fechas: mientras la venta de la preventa siga abierta, es la que rige.
   r = angostar(r, x => cbEsPreventa(x.t) && (x.t.venta_hasta || x.t.fecha_venta_fin || '9999-12-31') >= hoy);
@@ -36414,11 +36437,18 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     const cubren = candidatas.map(t => ({ t, amplitud: cbTarAmplitud(t, noche) })).filter(x => x.amplitud !== null);
     if (!cubren.length) return { sin: true };
     const menor = Math.min(...cubren.map(x => x.amplitud));
-    const precisas = cbTarDesempatar(cubren.filter(x => x.amplitud === menor), noche, noches.length, hoy);
+    let precisas = cbTarDesempatar(cubren.filter(x => x.amplitud === menor), noche, noches.length, hoy);
     if (precisas.some(x => cbTarBase(x.t) && cbTarBase(x.t) !== it.unidad)) return { texto: 'La unidad elegida no corresponde a esta tarifa. Ingresa y confirma un precio manual.' };
     // Por habitación: con reparto desigual y variante automática, cada grupo lleva su variante (triple + doble).
     const variantes = porHab ? grupos.map(g => grupos.length > 1 && (it.variante_auto || !it.tarifa_variante) ? cbVarianteAuto(precisas.map(x => x.t), g.adultos) : it.tarifa_variante) : [];
-    const ps = grupos.map((g, k) => precisas.map(x => porHab ? cbTarPrecioHabitacion(x.t, variantes[k], ocupaciones) : cbTarPrecioAdulto(x.t, g.adultos, ocupaciones)));
+    let ps = grupos.map((g, k) => precisas.map(x => porHab ? cbTarPrecioHabitacion(x.t, variantes[k], ocupaciones) : cbTarPrecioAdulto(x.t, g.adultos, ocupaciones)));
+    // Web pública (dueño 2026-11-18: el precio nunca se bloquea): si tras desempatar quedan filas con precio
+    // para la ocupación pero distinto, se cobra la mayor y se avisa. El CRM no lo pide: el asesor elige.
+    if (it.empate_mayor && precisas.length > 1 && ps.every(p => p.every(v => v !== null)) && ps.some(p => p.some(v => v !== p[0]))) {
+      const total = k => ps.reduce((s, p) => s + p[k], 0), k = precisas.reduce((m, _, i) => total(i) > total(m) ? i : m, 0);
+      avisos.add(`El tarifario trae ${precisas.length} precios para la noche del ${cbFechaCorta(noche)} (${precisas.map(x => `«${x.t.titulo || x.t.id}»`).join(', ')}): se cotiza el mayor y el asesor confirma.`);
+      precisas = [precisas[k]]; ps = ps.map(p => [p[k]]);
+    }
     const malo = ps.findIndex(p => p.some(v => v === null) || p.some(v => v !== p[0]));
     if (malo >= 0) {
       if (!porHab) return { texto: cbTarOcupacionTexto(it, precisas, ps[malo], noche, grupos[malo].adultos, ocupaciones) };
@@ -41165,8 +41195,8 @@ function bolMoverCola(hostId) {
 let bolCatalogo = null;
 // var y no let: activateSection lo lee y podría correr antes de esta línea (TDZ tumbaría el arranque).
 var bolTab = 'reservas';
-// Mismo recargo y redondeo que ventas-ia.ts (montosVuelo) y la web.
-const bolPublico = p => Math.ceil(Math.round(p * 1.2 * 100) / 100);
+// Precio de referencia tal cual (ya trae el fee de la agencia, regla del dueño 2026-11-18): mismo redondeo que la web (vuelo.ts) y ventas-ia.ts.
+const bolPublico = p => Math.ceil(Math.round(p * 100) / 100);
 // Asesor + Boletería (rol asesor con la marca) también edita: assert_editor_boleteria (20261015280000).
 const bolPuedeEditar = () => ROL === 'admin' || ROL === 'boleteria' || (ROL === 'asesor' && MI_ES_BOLETERIA);
 function setupBoleteriaSeccion() {
