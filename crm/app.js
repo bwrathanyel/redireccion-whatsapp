@@ -36718,7 +36718,7 @@ function cbResumenServicio(it) {
 }
 function cbResumenCliente(plegar = false) {
   const nombre = val('cb-cliente').trim();
-  document.getElementById('cb-cliente-resumen').textContent = [nombre, val('cb-vence') && 'Válida hasta ' + cbFechaLarga(val('cb-vence'))].filter(Boolean).join(' · ') || 'Cliente, fecha y vigencia';
+  document.getElementById('cb-cliente-resumen').textContent = [nombre, val('cb-fecha') && cbFechaLarga(val('cb-fecha'))].filter(Boolean).join(' · ') || 'Cliente y fecha';
   if (plegar && nombre) { document.getElementById('cb-cliente-seccion').open = false; document.querySelector('#cb-cliente-seccion > summary').focus({ preventScroll: true }); }
 }
 // Editor con personalidad (2026-10-29, pedido del dueño): emojis por tipo y campo, contadores −/+
@@ -36987,7 +36987,8 @@ function cbDatosPdf(c) {
       ? ops.map((o, k) => ({ titulo: o.titulo || `Opción ${k + 1}`, precio_texto: `Total de esta opción: ${din(o.total, cbBsBase(o.items))}`, lineas: [], tabla: { filas: o.items.map(fila), totales: [[`Total opción ${k + 1}`, din(o.total, cbBsBase(o.items))]] } }))
       : [{ titulo: 'Servicios cotizados', lineas: [], tabla: { filas: items.map(fila), totales: [['Total', totalTxt]] } }],
     notas: [ops.length > 1 ? 'Cada opción tiene su propio precio; los totales no se suman. Elija la que prefiera.' : '', notaBs, c.notas, c.terminos].filter(Boolean).flatMap(t => String(t).split('\n')).map(l => l.trim()).filter(Boolean),
-    validez: c.vence ? `Cotización válida hasta el ${cbFechaLarga(c.vence)}. Sujeta a cambio y a disponibilidad.` : '',
+    // Sin fecha de vigencia: las tarifas (sobre todo aéreas) no se pueden garantizar (pedido del dueño 2026-11-18).
+    validez: 'Tarifas sujetas a cambio y a disponibilidad hasta la emisión del boleto o la confirmación del servicio.',
   };
 }
 // El traslado de tarifa fija es solo de Margarita (Coche comparte aeropuerto pero lleva ferry).
@@ -38524,7 +38525,7 @@ async function cbPdfBlob(c) {
 
   doc.setFontSize(9.5);
   doc.text('Fecha de la cotización:', W - M - 110, 196, { align: 'right' }); doc.text(cbFechaLarga(c.fecha), W - M, 196, { align: 'right' });
-  if (c.vence) { doc.text('Válida hasta:', W - M - 110, 212, { align: 'right' }); doc.text(cbFechaLarga(c.vence), W - M, 212, { align: 'right' }); }
+  doc.text('Tarifa sujeta a disponibilidad', W - M, 212, { align: 'right' });
   doc.text('Facturar a', M, 204);
   doc.setFont('helvetica', 'bold'); doc.setTextColor(20, 20, 20);
   doc.text(doc.splitTextToSize(c.cliente.toUpperCase(), 260), M, 216);
