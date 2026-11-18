@@ -9313,7 +9313,8 @@ function aplicarActualizacionLeadAbierto(lead) {
   if (actualizados.includes('e-estado')) { pintarEstadoFicha(lead.estado); pintarCtaDrawer(lead); }
   // Llega también el eco de nuestro propio autoguardado: si no hubo nada que
   // refrescar ni conflicto, no se muestra la barra.
-  if (actualizados.length || conflictivos.length) mostrarConflictoLead(actualizados, conflictivos);
+  // el UPDATE de la IA de notas ya se avisa en su propia línea bajo la nota
+  if ((actualizados.length && !notaIaEnVuelo) || conflictivos.length) mostrarConflictoLead(actualizados, conflictivos);
 }
 function mostrarConflictoLead(actualizados, conflictivos) {
   const bar = document.getElementById('lead-conflict-bar');
@@ -10165,6 +10166,8 @@ function openDrawer(l, opciones = {}) {
         <section class="dbloque" data-dtab="resumen">
           <div class="dbloque-h"><span><i class="fas fa-note-sticky"></i> Nota del equipo</span><span class="dnotas-meta" id="e-notas-meta"></span></div>
           <textarea id="e-notas" class="ei" rows="3" placeholder="Qué se habló, qué quedó pendiente… solo la ve el equipo">${esc(l.notas || '')}</textarea>
+          <div class="dnotas-rapidas">${NOTAS_RAPIDAS.map(t => `<button type="button" class="dnotas-chip" data-nota-rapida="${esc(t)}">${esc(t)}</button>`).join('')}<button type="button" class="dnotas-chip dnotas-mic" id="e-notas-mic" title="Dictar nota" aria-label="Dictar nota"><i class="fas fa-microphone"></i></button></div>
+          <div class="dnotas-ia" id="e-notas-ia" hidden></div>
         </section>
 
         <details class="dsec" data-dsec="historial" data-dtab="hist">
@@ -10207,8 +10210,11 @@ function openDrawer(l, opciones = {}) {
     e.currentTarget.textContent = abierta ? 'Ver menos' : 'Ver más';
   });
   const notas = document.getElementById('e-notas');
-  notas.addEventListener('input', () => { clearTimeout(notasTimer); notasTimer = setTimeout(guardarNotasLead, 1500); });
-  notas.addEventListener('blur', () => guardarNotasLead());
+  notas.addEventListener('input', () => { clearTimeout(notasTimer); notasTimer = setTimeout(guardarNotasLead, 1500); clearTimeout(notaIaTimer); notaIaTimer = setTimeout(procesarNotaIA, 20000); });
+  notas.addEventListener('blur', () => procesarNotaIA());
+  l._notaIaEnviada ??= (l.notas || '').trim(); // abrir y salir sin escribir no llama a la IA
+  document.querySelectorAll('[data-nota-rapida]').forEach(b => b.addEventListener('click', () => anexarNotaRapida(b.dataset.notaRapida)));
+  attachVoiceInput(document.getElementById('e-notas-mic'), notas);
   const mas = document.getElementById('dacc-mas'), btnMas = document.getElementById('e-a-mas');
   btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
   document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
@@ -11010,6 +11016,8 @@ async function cargarActividadLead(l) {
       ? { hora: e.created_at, texto: `✨ <b>La IA rellenó</b> desde el chat de WhatsApp: ${Object.entries(e.detalle?.campos || {}).map(([k, v]) => `${esc(k.replace(/_/g, ' '))} → <b>${esc(String(v?.despues ?? ''))}</b>`).join(', ')}` }
       : e.tipo === 'proxima_accion'
       ? { hora: e.created_at, texto: `📅 <b>${esc(e.detalle?.por || 'Sistema')}</b> ${e.detalle?.accion === 'quitada' ? 'quitó la próxima acción' : `fijó la próxima acción para <b>${esc(fmtFechaHoraCaracas(e.detalle?.at))}</b>${e.detalle?.nota ? ' — ' + esc(e.detalle.nota) : ''}`}` }
+      : e.tipo === 'nota_ia'
+      ? { hora: e.created_at, texto: `✨ <b>La IA leyó la nota</b>${e.asesor ? ' de ' + esc(e.asesor) : ''}: ${notaIaTexto(e.detalle) || 'sin cambios'}${e.detalle?.deshecho ? ' <i>(deshecho)</i>' : ''}` }
       : { hora: e.created_at, texto: `${e.asesor ? esc(e.asesor) + ': ' : ''}cambió de <b>${esc(niceEstado(e.estado_de))}</b> a <b>${esc(niceEstado(e.estado_a))}</b>` }),
     // reasignaciones: RLS es admin-only -- para asesor esta consulta vuelve
     // vacía en silencio (no es un error), la Actividad les queda sin este
@@ -11203,7 +11211,7 @@ async function autoguardarLeadUnaVez(opts = {}) {
 // Cerrar el drawer con algo escrito y sin "salir" del campo: se guarda igual.
 function guardarPendientesLead() {
   if (!document.getElementById('e-estado') || !currentLead) return;
-  if (notasTimer) { clearTimeout(notasTimer); notasTimer = null; guardarNotasLead(); }
+  if (notasTimer || notaIaTimer) { clearTimeout(notasTimer); notasTimer = null; procesarNotaIA(); }
   if (camposSuciosLead.size) autoguardarLead({ alCerrar: true }); // los ids en conflicto quedan fuera solos
 }
 
@@ -13642,6 +13650,79 @@ async function guardarNotasLead() {
   }
   lead.notas = notas || null;
   if (meta && enFicha) meta.textContent = 'Guardado ' + fmtHoraCaracas(new Date().toISOString());
+}
+
+// IA sobre la nota (EF procesar-nota-lead): sin preguntas ni popups. Aplica sola y deja
+// una línea discreta con Deshacer; PAGO REALIZADO solo como botón de 1 clic.
+const NOTAS_RAPIDAS = ['Llamé, no contestó', 'Envié cotización', 'Lo va a pensar'];
+let notaIaTimer = null, notaIaEnVuelo = false;
+const NOTA_IA_CAMPOS = { estado: 'estado', destino: 'destino', fecha_estimada: 'fecha', personas: 'personas', presupuesto: 'presupuesto' };
+const NOTA_IA_INPUT = { destino: 'e-destino', fecha_estimada: 'e-fecha-estimada', personas: 'e-personas' };
+function notaIaTexto(d) {
+  const x = d?.despues || {};
+  const partes = Object.entries(NOTA_IA_CAMPOS).filter(([k]) => x[k] != null)
+    .map(([k, t]) => `${t} → <b>${esc(k === 'estado' ? niceEstado(x[k]) : k === 'presupuesto' ? money(x[k]) : String(x[k]))}</b>`);
+  if (x.proxima_accion_at) partes.push(`seguimiento <b>${esc(fmtFechaHoraCaracas(x.proxima_accion_at))}</b>${x.proxima_accion_nota ? ' — ' + esc(x.proxima_accion_nota) : ''}`);
+  if (d?.bot_retoma) partes.push('4 intentos sin respuesta: queda marcado para que lo retome el bot');
+  return partes.join(' · ');
+}
+function anexarNotaRapida(texto) {
+  const el = document.getElementById('e-notas');
+  if (!el || el.disabled) return;
+  const d = new Date(), linea = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${texto}`;
+  el.value = el.value.trim() ? el.value.trimEnd() + '\n' + linea : linea;
+  procesarNotaIA();
+}
+function notaIaPintarFicha(lead, campos) {
+  Object.assign(lead, campos);
+  if (currentLead?.id !== lead.id) return;
+  Object.assign(currentLead, campos);
+  for (const [k, id] of Object.entries(NOTA_IA_INPUT)) if (k in campos) { const el = document.getElementById(id); if (el && !camposSuciosLead.has(id)) el.value = campos[k] ?? ''; }
+  if ('estado' in campos) {
+    const sel = document.getElementById('e-estado');
+    if (sel && !camposSuciosLead.has('e-estado')) { sel.value = campos.estado; document.getElementById('venta-box')?.classList.toggle('show', VENTA.includes(campos.estado)); pintarEstadoFicha(campos.estado); pintarCtaDrawer(currentLead); }
+  }
+  if ('proxima_accion_at' in campos) dsegPintar(lead);
+  pintarLecturaDatos();
+  ACTIVIDAD_CACHE = null;
+  loadTable(); refrescarKpisHoyAsesor();
+}
+async function procesarNotaIA() {
+  clearTimeout(notaIaTimer); notaIaTimer = null;
+  const lead = currentLead;
+  if (!lead || !document.getElementById('e-notas')) return;
+  await guardarNotasLead();
+  const notas = (lead.notas || '').trim();
+  if (!notas || notas === lead._notaIaEnviada) return;
+  lead._notaIaEnviada = notas;
+  notaIaEnVuelo = true;
+  const { data, error } = await sb.functions.invoke('procesar-nota-lead', { body: { lead_id: lead.id } });
+  if (error || !data?.ok) { notaIaEnVuelo = false; lead._notaIaEnviada = null; return; } // silencioso: la nota ya quedó guardada
+  const d = { despues: data.despues || {}, bot_retoma: data.bot_retoma };
+  if (data.evento_id) notaIaPintarFicha(lead, d.despues);
+  setTimeout(() => { notaIaEnVuelo = false; }, 4000); // eco de realtime que llega después de la respuesta
+  if (!data.evento_id) return;
+  const box = document.getElementById('e-notas-ia');
+  if (!box || currentLead?.id !== lead.id) return;
+  const texto = notaIaTexto(d);
+  const pago = data.sugerir_pago && !VENTA.includes(lead.estado);
+  if (!texto && !pago) { box.hidden = true; return; }
+  box.innerHTML = `${texto ? `<span>✨ IA aplicó: ${texto}</span> <button type="button" class="dnotas-ia-btn" data-nia="deshacer">Deshacer</button>` : ''}${pago ? ` <button type="button" class="dnotas-ia-btn pago" data-nia="pago"><i class="fas fa-check"></i> Marcar pago realizado</button>` : ''}`;
+  box.hidden = false;
+  box.querySelector('[data-nia="deshacer"]')?.addEventListener('click', async e => {
+    e.currentTarget.disabled = true;
+    const r = await sb.rpc('deshacer_nota_ia', { p_evento_id: data.evento_id });
+    if (r.error || !r.data?.ok) { e.currentTarget.disabled = false; errToast('No se pudo deshacer'); return; }
+    const { data: f } = await sb.from('leads').select('estado,destino,fecha_estimada,personas,presupuesto,proxima_accion_at,proxima_accion_nota,proxima_accion_aviso_at').eq('id', lead.id).single();
+    if (f) notaIaPintarFicha(lead, f);
+    box.hidden = true;
+  });
+  box.querySelector('[data-nia="pago"]')?.addEventListener('click', e => {
+    const sel = document.getElementById('e-estado');
+    if (!sel || sel.disabled) return;
+    sel.value = 'PAGO REALIZADO'; sel.dispatchEvent(new Event('change'));
+    e.currentTarget.remove();
+  });
 }
 
 // Abre el drawer de edición completo de un lead/cliente desde Facturación
@@ -42444,6 +42525,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-18', emoji: '✨', titulo: 'La nota del lead se aplica sola', texto: 'Escribe la nota como siempre («hablé con ella, Colonia Tovar 24/12, 2 adultos, le envié cotización, llamarla el jueves 4pm»). Al salir del campo la IA actualiza estado, destino, fecha, personas, presupuesto y el seguimiento, y te deja una línea abajo con lo que cambió y un botón Deshacer. Hay botones rápidos (Llamé, no contestó / Envié cotización / Lo va a pensar) y micrófono para dictar. Pago realizado nunca se marca solo: aparece un botón para hacerlo con un clic.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-18', emoji: '🏝️', titulo: 'Precio de excursiones automático', texto: 'En Cotizaciones, al elegir un full day, excursión o tour del tarifario se ponen solas las tarifas de adulto, niño e infante (la vigente para la fecha). Si tiene varias tarifas, eliges cuál en «Tarifa del tarifario». Si escribes un precio a mano, se respeta. El buscador ahora muestra foto, destino y precio de cada excursión, agrupadas por destino y con las del destino del viaje primero.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-16', emoji: '🩺', titulo: 'Salud de finanzas', texto: 'En Facturación › Cuentas por pagar hay una tarjeta nueva con los pendientes de finanzas: salidas del banco por clasificar, servicios sin proveedor, abonos sin comprobante y más. Lo que está en cero sale en verde; lo que tiene pendientes, en ámbar, y con un clic vas a la lista donde se resuelve.', roles: ['admin'] },
   { fecha: '2026-11-16', emoji: '💸', titulo: 'Pagos a proveedores', texto: 'En Facturación › Cuentas por pagar ahora se registra cada pago real a un proveedor: de qué cuenta salió, la fecha, el comprobante y a qué cuentas por pagar se reparte (lo que sobra queda a favor). Los Zelle enviados de Wells Fargo aparecen para clasificar, y los servicios sin proveedor tienen su lista para asignarlo. El botón «Abonar» abre este formulario nuevo.', roles: ['admin', 'administrativo'] },
