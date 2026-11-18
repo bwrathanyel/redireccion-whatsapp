@@ -205,7 +205,7 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     const pct = porHacer + hechasHoy ? Math.round(100 * hechasHoy / (porHacer + hechasHoy)) : 0;
     const totalLote = (lote.pendientes || 0) + (lote.hechas_hoy || 0);
     const cola = totalLote ? `<button class="tk-cola" data-tk-cola><span class="tk-cola-ico"><i class="fas fa-user-clock"></i></span>
-      <span class="tk-cola-b"><b>Clientes de hoy</b><small>Tu cola diaria: se marcan solos al contactarlos</small>${segs(Math.min(totalLote, 30), Math.round(Math.min(totalLote, 30) * (lote.hechas_hoy || 0) / totalLote))}</span>
+      <span class="tk-cola-b"><b>Recontactos de hoy</b><small>Clientes viejos para retomar: se marcan solos al contactarlos</small>${segs(Math.min(totalLote, 30), Math.round(Math.min(totalLote, 30) * (lote.hechas_hoy || 0) / totalLote))}</span>
       <span class="tk-cola-n">${lote.hechas_hoy || 0}<small>/${totalLote}</small></span></button>` : '';
     const abiertas = g.vencidas.length + g.hoy.length + g.semana.length + g.despues.length + g.esperando.length;
     const vacio = !abiertas && !hechasHoy ? `<div class="tk-empty" style="--c:var(--green)"><div class="tk-empty-ico"><i class="fas fa-mug-hot"></i></div>
@@ -235,7 +235,7 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
         g.vencidas.length ? ` · <span class="is-bad">${g.vencidas.length} vencida${g.vencidas.length > 1 ? 's' : ''}</span>` : ''}${g.esperando.length ? ` · ${g.esperando.length} esperando` : ''}</small></span><i class="fas fa-chevron-right"></i></button>
       ${top.map(t => { const v = vence(t); return `<div class="tk-hoy-i" data-tk-open="${t.id}" role="button" tabindex="0">${t.visto_at ? '' : '<span class="tk-unread" title="Nueva"></span>'}<div><b>${esc(t.titulo)}</b><small>${
         v ? `<span${v.mal ? ' class="is-bad"' : ''}>${esc(v.txt)}</span>` : 'sin fecha'}${t.proximo ? ' · ' + esc(t.proximo.titulo) : ''}</small></div>${botonPaso(t)}</div>`; }).join('')}
-      ${totalLote ? `<button class="tk-hoy-i" data-tk-cola><span class="tk-cola-ico"><i class="fas fa-user-clock"></i></span><div><b>Clientes de hoy ${lote.hechas_hoy || 0}/${totalLote}</b><small>Tu cola diaria</small></div><i class="fas fa-chevron-right"></i></button>` : ''}
+      ${totalLote ? `<button class="tk-hoy-i" data-tk-cola><span class="tk-cola-ico"><i class="fas fa-user-clock"></i></span><div><b>Recontactos de hoy ${lote.hechas_hoy || 0}/${totalLote}</b><small>Clientes viejos para retomar</small></div><i class="fas fa-chevron-right"></i></button>` : ''}
       ${atn ? `<button class="tk-hoy-i" data-tk-equipo><span class="tk-cola-ico" style="--c:var(--amber)"><i class="fas fa-users"></i></span><div><b>Equipo: ${atn} necesita${atn > 1 ? 'n' : ''} tu atención</b><small>Problemas, revisiones y vencidas</small></div><i class="fas fa-chevron-right"></i></button>` : ''}</section>`;
   }
 
@@ -271,9 +271,9 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     return `<div class="tk-person${sube ? ' is-flash' : ''}" data-tk-persona="${p.id}" role="button" tabindex="0">
       <span class="tk-av tk-av-lg" data-pres="${p.inactivo ? 'off' : pr}">${esc(iniciales(p.nombre))}</span>
       <div class="tk-person-who"><b>${esc(p.nombre)}</b><small>${esc(ROLES[p.rol] || p.rol || '')} · ${p.inactivo ? 'inactivo' : prT}</small>
-        ${tl ? `<div class="tk-cola-mini"><span>Clientes ${lote.hechas_hoy || 0}/${tl}</span><span class="tk-bar is-cola"><span style="width:${Math.round(100 * (lote.hechas_hoy || 0) / tl)}%"></span></span></div>` : ''}</div>
+        ${tl ? `<div class="tk-cola-mini"><span>Recontacto ${lote.hechas_hoy || 0}/${tl}</span><span class="tk-bar is-cola"><span style="width:${Math.round(100 * (lote.hechas_hoy || 0) / tl)}%"></span></span></div>` : ''}</div>
       <div class="tk-person-cur">${c ? `<small>En curso · ${c.progreso || 0}%</small><span class="tk-ell">${esc(c.titulo)}</span><div class="tk-bar"><span${sube ? ' class="is-grow"' : ''} style="width:${c.progreso || 0}%;--from:${sube ? antes.p : c.progreso || 0}%"></span></div>` : '<small>Sin tarea en curso</small>'}</div>
-      <div class="tk-person-n"><span><b>${p.abiertas}</b>abiertas</span><span class="${p.vencidas ? 'is-bad' : ''}"><b>${p.vencidas}</b>vencidas</span><span><b>${p.hechas_hoy}</b>hechas</span></div></div>`;
+      <div class="tk-person-n"><span title="Clientes que pasó de POR ATENDER a otro estado hoy"><b>${p.atendidos_hoy || 0}</b>atendidos</span><span><b>${p.abiertas}</b>abiertas</span><span class="${p.vencidas ? 'is-bad' : ''}"><b>${p.vencidas}</b>vencidas</span><span><b>${p.hechas_hoy}</b>hechas</span></div></div>`;
   }
   function htmlEquipo() {
     if (!tablero) return falloTab ? errorTab() : skelTab();

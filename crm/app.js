@@ -26358,7 +26358,7 @@ function setupTarMas() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape') abrir(false); });
 }
 function setupTarifarioTabs() {
-  fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas']);
+  fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo']);
   const mesSel = document.getElementById('tar-f-mes');
   const mesActual = new Date().getMonth() + 1;
   mesSel.innerHTML = '<option value="">Cualquier mes</option>'
@@ -27731,7 +27731,7 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
     crossfade(0);
   });
 }
-const DESTINO_ORDEN = ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas'];
+const DESTINO_ORDEN = ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo'];
 // Divide un párrafo de descripción en oraciones para mostrarlo como lista —
 // parte en los espacios que siguen a . ! ? (nunca dentro de un número como
 // "$150.000" porque ahí no hay espacio después del punto), así ningún
@@ -29154,7 +29154,8 @@ async function loadTarifarioInfo() {
    funcionando igual que antes -- solo que con una tarjeta por fila. */
 const TAR_ETQ_ORDEN = ['sgl', 'dbl', 'tpl', 'cdp', 'qpl', 'pax_adic'];
 // Dueño 2026-11-17: el número de BT se muestra tal cual con $, también si BT lo
-// da en €. En Bs se cobra a tasa BCV euro (+16% IVA si el bloque tiene iva_en_bs).
+// da en €. En Bs se cobra a la tasa BCV de la moneda de la tarifa: USD dólar, EUR euro
+// (dueño 2026-11-18; +16% IVA si el bloque tiene iva_en_bs).
 function tarSimbolo() { return '$'; }
 const tarTextoUsd = s => s == null ? s : String(s).replace(/€\s?/g, '$').replace(/\bEUR\b/g, 'USD');
 const tarMonto = (n, m) => tarSimbolo(m) + (Number(n) % 1 === 0 ? String(Number(n)) : Number(n).toFixed(2));
@@ -30275,8 +30276,8 @@ function tgCabeceraHtml(x, nombre, fotos, n) {
   const conteo = new Map();
   vivas.forEach(t => { const m = String(t.moneda || 'USD').toUpperCase(); conteo.set(m, (conteo.get(m) || 0) + 1); });
   const moneda = [...conteo.entries()].sort((p, q) => q[1] - p[1])[0]?.[0] || null;
-  // Precio BT tal cual en $; en Bs, tasa BCV euro para todas las tarifas.
-  const precioChip = [moneda ? 'Precios en $ · en Bs: tasa BCV euro' + (b?.iva_en_bs ? ' + 16% IVA' : '') : '',
+  // Precio BT tal cual en $; en Bs, la tasa BCV de la moneda de la tarifa (USD dólar, EUR euro).
+  const precioChip = [moneda ? `Precios en $ · en Bs: tasa BCV ${moneda === 'EUR' ? 'euro' : 'dólar'}` + (b?.iva_en_bs ? ' + 16% IVA' : '') : '',
     unidadHotel === 'habitacion_noche' ? 'por habitación por noche' : unidadHotel === 'persona_noche' ? 'por persona por noche' : ''].filter(Boolean).join(' · ');
   const chip = (ic, txt) => `<span class="tg-dato"><i class="fas ${ic}"></i>${esc(txt)}</span>`;
   const datos = [b?.check_in ? chip('fa-clock', 'Check-in ' + b.check_in) : '', b?.check_out ? chip('fa-clock-rotate-left', 'Check-out ' + b.check_out) : '',
@@ -30386,8 +30387,8 @@ function tarBloqueHtml(b) {
   if (ninos) filas.push(['Niños', ninos]);
   // En divisas se cobra el número tal cual (sin IVA ni IGTF); el 16% solo
   // aplica pagando en Bs y solo donde BT dice que no está incluido.
-  const imp = b.iva_en_bs ? 'Pago en Bs: tasa BCV euro + 16% IVA'
-    : b.impuestos?.iva_incluido === true ? 'Pago en Bs: tasa BCV euro (IVA incluido)' : '';
+  const imp = b.iva_en_bs ? 'Pago en Bs: tasa BCV de la moneda de la tarifa + 16% IVA'
+    : b.impuestos?.iva_incluido === true ? 'Pago en Bs: tasa BCV de la moneda de la tarifa (IVA incluido)' : '';
   if (imp) filas.push(['Impuestos', imp]);
   const sups = Array.isArray(b.suplementos) ? b.suplementos : [];
   return `<details class="cond-bloque">
@@ -36109,24 +36110,30 @@ function cbOpciones(items) {
   });
 }
 const cbTotalCot = items => cbConOpciones(items) ? Math.min(...cbOpciones(items).map(o => o.total)) : cbTotalItems(items);
-// Divisas / Bs (2026-11-17): en Bs cada servicio va a tasa BCV euro y el hospedaje
-// suma 16% si su bloque de BT dice que no incluye IVA (it.iva_en_bs). Misma regla
-// que cotizacion_total_bs en la BD, que fija la tasa y el total guardado.
-let cbMonedaPago = 'USD', cbTasaEur = null;
-const cbBsBase = items => items.reduce((s, it) => s + cbTarCent(cbImporte(it) * (it.iva_en_bs ? 1.16 : 1)), 0) / 100;
-const cbTotalBsBase = (items, conOps = cbConOpciones(items)) => {
-  if (!conOps) return cbBsBase(items);
+// Divisas / Bs: cada servicio va a la tasa BCV de la moneda de su tarifa (it.tasa:
+// USD dólar, EUR euro; sin tarifa = dólar; dueño 2026-11-18, el «todo a euro» del
+// 11-17 fue un malentendido) y el hospedaje suma 16% si su bloque de BT dice que no
+// incluye IVA (it.iva_en_bs). Misma regla que cotizacion_total_bs en la BD, que fija
+// las tasas (tasas_usadas) y el total guardado.
+let cbMonedaPago = 'USD', cbTasas = null;
+const cbItemTasa = it => it?.tasa === 'EUR' ? 'EUR' : 'USD';
+const cbBsBase = (items, tasas) => Math.round(items.reduce((s, it) => s + cbTarCent(cbImporte(it) * (it.iva_en_bs ? 1.16 : 1)) * (Number(tasas?.[cbItemTasa(it)]) || 0), 0)) / 100;
+const cbTotalBsBase = (items, tasas, conOps = cbConOpciones(items)) => {
+  if (!conOps) return cbBsBase(items, tasas);
   const ops = cbOpciones(items);
-  return ops.length ? Math.min(...ops.map(o => cbBsBase(o.items))) : cbBsBase(items);
+  return ops.length ? Math.min(...ops.map(o => cbBsBase(o.items, tasas))) : cbBsBase(items, tasas);
 };
-const cbBs = (usd, tasa) => Math.round(usd * tasa * 100) / 100;
+// Solo las tasas que usan los ítems, como tasas_usadas en la BD.
+const cbTasasDe = (items, tasas) => { const usadas = new Set((items.length ? items : [{}]).map(cbItemTasa)); return Object.fromEntries(['USD', 'EUR'].filter(m => usadas.has(m)).map(m => [m, Number(tasas?.[m]) || null])); };
+const cbTasasCompletas = (items, tasas) => Object.values(cbTasasDe(items, tasas)).every(Boolean);
+const cbTextoTasas = t => [t?.USD ? `dólar Bs ${cbMontoBs(t.USD).slice(3)} por $1` : '', t?.EUR ? `euro Bs ${cbMontoBs(t.EUR).slice(3)} por €1` : ''].filter(Boolean).join(' y ');
 const cbTotalDoc = c => c?.moneda_pago === 'VES' && c.total_bs != null ? cbMontoBs(c.total_bs) : '$' + cbMonto(c?.total);
 const cbMontoBs = n => 'Bs ' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 async function cbCambiarMoneda(m) {
   if (m === 'VES') {
     const { data } = await sb.rpc('tasas_del_dia', { p_fecha: null });
-    cbTasaEur = Number(data?.EUR?.tasa) || null;
-    if (!cbTasaEur) { cbAviso('No hay tasa BCV del euro: no se puede cotizar en bolívares.'); m = 'USD'; }
+    cbTasas = { USD: Number(data?.USD?.tasa) || null, EUR: Number(data?.EUR?.tasa) || null };
+    if (!cbTasas.USD || !cbTasas.EUR) { cbAviso('Falta la tasa BCV del dólar o del euro: no se puede cotizar en bolívares.'); m = 'USD'; }
   }
   cbMonedaPago = m;
   document.querySelectorAll('[data-cb-moneda]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cbMoneda === m)));
@@ -36580,12 +36587,12 @@ function cbTarSugerir(it, filas, hoy, ocupaciones) {
     usadas.push(...r.precisas.map(x => x.t));
     const ultimo = tramos.at(-1), siguiente = cbTarIso(cbTarFecha(noche) + 864e5);
     if (ultimo?.tarifa_id === r.t.id) { ultimo.hasta = siguiente; ultimo.noches++; }
-    else tramos.push({ desde: noche, hasta: siguiente, noches: 1, ...r.precio, tarifa_id: r.t.id, fuente_archivo: r.t.fuente_archivo || null, iva_en_bs: !!cbTarBloque(r.t).iva_en_bs });
+    else tramos.push({ desde: noche, hasta: siguiente, noches: 1, ...r.precio, tarifa_id: r.t.id, fuente_archivo: r.t.fuente_archivo || null, iva_en_bs: !!cbTarBloque(r.t).iva_en_bs, moneda: String(r.t.moneda || 'USD').toUpperCase() });
   }
   // Late check-out (2026-11-11, dueño): 50% de la tarifa vigente el día de salida. Si ninguna la cubre,
   // queda null y se cobra sobre la última noche (cbHotelExtras lo dice en el texto).
   const rs = precioNoche(it.vuelta, new Set());
-  const salida = rs.precio ? { desde: it.vuelta, hasta: cbTarIso(cbTarFecha(it.vuelta) + 864e5), noches: 1, ...rs.precio, tarifa_id: rs.t.id, fuente_archivo: rs.t.fuente_archivo || null, iva_en_bs: !!cbTarBloque(rs.t).iva_en_bs } : null;
+  const salida = rs.precio ? { desde: it.vuelta, hasta: cbTarIso(cbTarFecha(it.vuelta) + 864e5), noches: 1, ...rs.precio, tarifa_id: rs.t.id, fuente_archivo: rs.t.fuente_archivo || null, iva_en_bs: !!cbTarBloque(rs.t).iva_en_bs, moneda: String(rs.t.moneda || 'USD').toUpperCase() } : null;
   const hc = it._habCambio;
   if (hc) avisos.add(`Cambió a ${hc.hasta}: aloja ${it.adultos} adulto${Number(it.adultos) === 1 ? '' : 's'} en ${cbHabitacionesTexto(it)} por $${cbMonto(hc.total)}${hc.total_desde !== null ? `, en vez de ${hc.habs_desde} ${hc.desde} por $${cbMonto(hc.total_desde)}` : `; ${hc.desde} no alcanza`}.`);
   if (it.habitaciones_auto && it._maxHab) avisos.add(`${it.hab} admite hasta ${it._maxHab} adultos por habitación: «Habitaciones» subió sola a ${habitaciones}.`);
@@ -36617,7 +36624,7 @@ function cbTarPaquete(it, candidatas, noches, ocupaciones) {
   let tarifaNino = null;
   if (Number(it.ninos) > 0) { tarifaNino = cbTarPrecioNino(t, Number(it.ninos)).precio; if (tarifaNino === null) avisos.add('Niños sin precio en el paquete: confirma su tarifa en la ficha.'); }
   for (const c of t.condiciones || []) if (typeof c === 'string') avisos.add(c);
-  return { ok: true, tramos: [{ desde: noches[0], hasta: cbTarIso(cbTarFecha(noches.at(-1)) + 864e5), noches: n, tarifa, tarifa_nino: tarifaNino, paquete: true, incluye: t.incluye_tags || [], tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null, iva_en_bs: !!cbTarBloque(t).iva_en_bs }], avisos: [...avisos] };
+  return { ok: true, tramos: [{ desde: noches[0], hasta: cbTarIso(cbTarFecha(noches.at(-1)) + 864e5), noches: n, tarifa, tarifa_nino: tarifaNino, paquete: true, incluye: t.incluye_tags || [], tarifa_id: t.id, fuente_archivo: t.fuente_archivo || null, iva_en_bs: !!cbTarBloque(t).iva_en_bs, moneda: String(t.moneda || 'USD').toUpperCase() }], avisos: [...avisos] };
 }
 // Una noche de un tramo para toda la ocupación, en centavos. Con `grupos` (reparto desigual con
 // precios distintos) cada grupo de habitaciones paga su ocupación.
@@ -36998,6 +37005,7 @@ function cbLimpiarItem(it) {
     if (o.infantes_gratis) o.tarifa_infante = 0;
     if (it.producto_id) o.producto_id = Number(it.producto_id);
     if (it.iva_en_bs) o.iva_en_bs = true;
+    if (it.tasa === 'USD' || it.tasa === 'EUR') o.tasa = it.tasa;
     if (it.tarifas_contexto) o.tarifas_contexto = it.tarifas_contexto;
     o.tarifa_manual = !!it.tarifa_manual; o.habitacion_manual = !!it.habitacion_manual;
     o.tarifa_nino_auto = it.tarifa_nino_auto === true; if (it.tarifa_nino_tramos) o.tarifa_nino_tramos = true;
@@ -37085,19 +37093,19 @@ function cbDatosPdf(c) {
   const items = c.items || [], fechas = items.flatMap(it => [it.ida, it.vuelta]).filter(Boolean).sort();
   const principal = items.find(it => it.tipo === 'hotel' || it.tipo === 'paquete') || items[0];
   const conPersonas = items.filter(it => ['boleto', 'hotel', 'paquete'].includes(it.tipo || 'boleto')).sort((x, y) => cbTotalPax(y) - cbTotalPax(x))[0];
-  const tasa = c.moneda_pago === 'VES' ? Number(c.tasa_usada || cbTasaEur) || 0 : 0;
-  const din = (usd, bsBase) => tasa ? cbMontoBs(cbBs(bsBase, tasa)) : '$' + cbMonto(usd);
-  const fila = it => [`${cbTipo(it).nombre}: ${cbTitulo(it)}`, cbDetalleCliente(it), din(cbImporte(it), cbBsBase([it]))];
+  const tasas = c.moneda_pago === 'VES' ? (c.tasas_usadas || cbTasasDe(items, cbTasas)) : null;
+  const din = (usd, bs) => tasas ? cbMontoBs(bs) : '$' + cbMonto(usd);
+  const fila = it => [`${cbTipo(it).nombre}: ${cbTitulo(it)}`, cbDetalleCliente(it), din(cbImporte(it), cbBsBase([it], tasas))];
   const ops = cbConOpciones(items) ? cbOpciones(items) : [];
-  const totalTxt = tasa ? cbMontoBs(c.total_bs ?? cbBs(cbTotalBsBase(items), tasa)) : '$' + cbMonto(c.total);
-  const notaBs = tasa ? `Montos en bolívares a tasa BCV del euro (Bs ${cbMontoBs(tasa).slice(3)} por €1)${items.some(it => it.iva_en_bs) ? '; el hospedaje incluye 16% de IVA donde la tarifa no lo trae' : ''}. Pagando en divisas aplica el precio en $.` : '';
+  const totalTxt = tasas ? cbMontoBs(c.total_bs ?? cbTotalBsBase(items, tasas)) : '$' + cbMonto(c.total);
+  const notaBs = tasas ? `Montos en bolívares a tasa BCV del ${cbTextoTasas(tasas)}, cada servicio a la de su tarifa${items.some(it => it.iva_en_bs) ? '; el hospedaje incluye 16% de IVA donde la tarifa no lo trae' : ''}. Pagando en divisas aplica el precio en $.` : '';
   return {
     cliente: c.cliente, numero: cbNumero(c.numero), fecha: c.fecha, revision: c.revision || 1,
     titulo: ops.length > 1 ? `${ops.length} opciones para elegir` : principal ? cbTitulo(principal) : '',
     fechas: fechas.length ? (fechas[0] === fechas.at(-1) ? cbFechaLarga(fechas[0]) : `${cbFechaLarga(fechas[0])} al ${cbFechaLarga(fechas.at(-1))}`) : '',
     personas: conPersonas ? cbPaxTexto(conPersonas) : '',
     opciones: ops.length > 1
-      ? ops.map((o, k) => ({ titulo: o.titulo || `Opción ${k + 1}`, precio_texto: `Total de esta opción: ${din(o.total, cbBsBase(o.items))}`, lineas: [], tabla: { filas: o.items.map(fila), totales: [[`Total opción ${k + 1}`, din(o.total, cbBsBase(o.items))]] } }))
+      ? ops.map((o, k) => ({ titulo: o.titulo || `Opción ${k + 1}`, precio_texto: `Total de esta opción: ${din(o.total, cbBsBase(o.items, tasas))}`, lineas: [], tabla: { filas: o.items.map(fila), totales: [[`Total opción ${k + 1}`, din(o.total, cbBsBase(o.items, tasas))]] } }))
       : [{ titulo: 'Servicios cotizados', lineas: [], tabla: { filas: items.map(fila), totales: [['Total', totalTxt]] } }],
     notas: [ops.length > 1 ? 'Cada opción tiene su propio precio; los totales no se suman. Elija la que prefiera.' : '', notaBs, c.notas, c.terminos].filter(Boolean).flatMap(t => String(t).split('\n')).map(l => l.trim()).filter(Boolean),
     // Sin fecha de vigencia: las tarifas (sobre todo aéreas) no se pueden garantizar (pedido del dueño 2026-11-18).
@@ -37106,9 +37114,9 @@ function cbDatosPdf(c) {
 }
 // El traslado de tarifa fija es solo de Margarita (Coche comparte aeropuerto pero lleva ferry).
 const cbEsMargarita = () => cbItems.some(it => /margarita|la asuncion|porlamar|pampatar/.test(cbTarNorm(cbProductoDe(it)?.destino)));
-function cbActualizarTotal() { const bt = document.getElementById('cb-traslado-apto'); if (bt) bt.hidden = !cbEsMargarita(); const tot = document.getElementById('cb-total'), ops = cbComparar && cbOpciones(cbItems).length > 1; const bs = cbMonedaPago === 'VES' && cbTasaEur, nota = document.getElementById('cb-tasa-nota');
-  tot.textContent = bs ? cbMontoBs(cbBs(cbTotalBsBase(cbItems, ops), cbTasaEur)) : '$' + cbMonto(ops ? cbTotalCot(cbItems) : cbTotalItems(cbItems)); if (tot.previousElementSibling) tot.previousElementSibling.textContent = (ops ? 'Desde ' : 'Total ') + (bs ? 'Bs' : 'USD');
-  if (nota) { nota.hidden = !bs; nota.textContent = bs ? `Tasa BCV euro ${cbMontoBs(cbTasaEur).slice(3)}${cbItems.some(it => it.iva_en_bs) ? ' · hospedaje con 16% IVA donde BT no lo incluye' : ''}. Al generar se usa la tasa del momento.` : ''; } cbPintarResumen(); cbPintarModoOpciones(); document.querySelectorAll('#cb-items .cb-item').forEach(card => { card.querySelector('.cb-item-resumen').textContent = cbResumenServicio(cbItems[+card.dataset.i]); }); }
+function cbActualizarTotal() { const bt = document.getElementById('cb-traslado-apto'); if (bt) bt.hidden = !cbEsMargarita(); const tot = document.getElementById('cb-total'), ops = cbComparar && cbOpciones(cbItems).length > 1; const bs = cbMonedaPago === 'VES' && cbTasasCompletas(cbItems, cbTasas), nota = document.getElementById('cb-tasa-nota');
+  tot.textContent = bs ? cbMontoBs(cbTotalBsBase(cbItems, cbTasas, ops)) : '$' + cbMonto(ops ? cbTotalCot(cbItems) : cbTotalItems(cbItems)); if (tot.previousElementSibling) tot.previousElementSibling.textContent = (ops ? 'Desde ' : 'Total ') + (bs ? 'Bs' : 'USD');
+  if (nota) { nota.hidden = !bs; nota.textContent = bs ? `Tasa BCV ${cbTextoTasas(cbTasasDe(cbItems, cbTasas))}, cada servicio a la de su tarifa${cbItems.some(it => it.iva_en_bs) ? ' · hospedaje con 16% IVA donde BT no lo incluye' : ''}. Al generar se usa la tasa del momento.` : ''; } cbPintarResumen(); cbPintarModoOpciones(); document.querySelectorAll('#cb-items .cb-item').forEach(card => { card.querySelector('.cb-item-resumen').textContent = cbResumenServicio(cbItems[+card.dataset.i]); }); }
 let cbRenderizando = false;
 function cbRenderItems() {
   if (cbRenderizando) return;
@@ -37558,7 +37566,7 @@ function cbMiniCot() {
   const items = cbItems.map(cbLimpiarItem).filter(d => cbTitulo(d) || d.tarifa);
   return { cliente: val('cb-cliente').trim() || 'Cliente', fecha: val('cb-fecha') || cbHoy(), vence: val('cb-vence') || null, items, total: cbTotalCot(items),
     notas: val('cb-notas').trim() || null, terminos: val('cb-terminos').trim() || null, origen: cbModo, numero: 'BORRADOR',
-    ...(cbMonedaPago === 'VES' && cbTasaEur ? { moneda_pago: 'VES', tasa_usada: cbTasaEur, total_bs: cbBs(cbTotalBsBase(items), cbTasaEur) } : {}) };
+    ...(cbMonedaPago === 'VES' && cbTasasCompletas(items, cbTasas) ? { moneda_pago: 'VES', tasas_usadas: cbTasasDe(items, cbTasas), tasa_usada: cbTasasDe(items, cbTasas).USD || cbTasas.EUR, total_bs: cbTotalBsBase(items, cbTasas) } : {}) };
 }
 function cbMiniProgramar() {
   clearTimeout(cbMini.timer);
@@ -37743,9 +37751,11 @@ function cbHotelRecalcular(it, aplicar = false) {
   if (s.ok) {
     it.tramos = s.tramos.map(t => ({ ...t })); it.tarifa = s.tramos[0].tarifa; it.tramo_salida = s.salida ? { ...s.salida } : null;
     it.iva_en_bs = s.tramos.some(t => t.iva_en_bs);
+    // Bs a la tasa BCV de la moneda de la tarifa (USD dólar, EUR euro; dueño 2026-11-18).
+    it.tasa = s.tramos.every(t => t.moneda === 'EUR') ? 'EUR' : 'USD';
     it.tarifas_contexto = cbTarContexto(it); it.tarifa_manual = false; it._aviso = '';
     it.tarifa_avisos = s.avisos;
-  } else { it.tramos = []; it.tarifa = ''; it.tramo_salida = null; it._aviso = s.texto; it.tarifa_avisos = []; it.iva_en_bs = false; }
+  } else { it.tramos = []; it.tarifa = ''; it.tramo_salida = null; it._aviso = s.texto; it.tarifa_avisos = []; it.iva_en_bs = false; delete it.tasa; }
 }
 async function cbTraerHabitaciones(id) {
   id = Number(id);
@@ -38711,7 +38721,7 @@ async function cbPdfBlob(c) {
     lineas.forEach(l => { if (y > 740) { doc.addPage(); y = 50; } if (l) doc.text(l, M, y); y += l ? 11 : 5; });
     y += 14;
   };
-  if (c.moneda_pago === 'VES' && c.total_bs != null) bloque('Pago en bolívares', `${cbConOpciones(c.items || []) ? 'Desde' : 'Total'}: ${cbMontoBs(c.total_bs)}, a tasa BCV del euro (Bs ${cbMontoBs(c.tasa_usada).slice(3)} por €1)${(c.items || []).some(it => it.iva_en_bs) ? ', con 16% de IVA en el hospedaje donde la tarifa no lo incluye' : ''}. Pagando en divisas aplica el monto en $.`);
+  if (c.moneda_pago === 'VES' && c.total_bs != null) bloque('Pago en bolívares', `${cbConOpciones(c.items || []) ? 'Desde' : 'Total'}: ${cbMontoBs(c.total_bs)}, a tasa BCV del ${cbTextoTasas(c.tasas_usadas || { EUR: c.tasa_usada })}, cada servicio a la de su tarifa${(c.items || []).some(it => it.iva_en_bs) ? ', con 16% de IVA en el hospedaje donde la tarifa no lo incluye' : ''}. Pagando en divisas aplica el monto en $.`);
   bloque('Notas', c.notas);
   bloque('Términos y condiciones', c.terminos);
 
