@@ -36853,7 +36853,7 @@ function cbItemHtml(it, i) {
       + pax.precios + cbHotelPrecioHtml(it, i) + cbDesgloseHtml(it)
       + (porHab ? '<small class="cb-full cb-condicion">Precio por habitación: niños y adultos adicionales se suman aparte según el tarifario.</small>' : '')
     : (boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : '')
-      + campos.map((c, j) => j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ` list="cb-productos-${i}" autocomplete="off"`) + `<datalist id="cb-productos-${i}">${cbOpcionesProducto(it)}</datalist>` : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
+      + campos.map((c, j) => j === 0 && cbEsExc({ tipo }) ? cbExcPickerHtml(it, i) : j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ` list="cb-productos-${i}" autocomplete="off"`) + `<datalist id="cb-productos-${i}">${cbOpcionesProducto(it)}</datalist>` : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
       + (pax ? pax.cuentas + CB_SEP + cbExcHtml(it, i) + pax.precios + cbDesgloseHtml(it) : '')
       + (boleto ? `<div class="cb-ref cb-full">${cbRefHtml(it)}</div>` : '');
   return `<div class="cb-item${hotel ? ' cb-servicio-hotel' : ''}${it._plegado ? ' cb-plegado' : ''}${boleto && it.viaje === 'ow' ? ' cb-ow' : ''}" data-i="${i}">
@@ -37174,6 +37174,55 @@ async function cbExcRefrescar(it) {
   cbRenderItems(); cbProgramarBorrador();
   const el = id && document.getElementById(id);
   if (el && foco !== el && el.matches('input:not([type=date]):not([type=number])')) { el.focus({ preventScroll: true }); if (pos != null) el.setSelectionRange(pos, pos); }
+}
+// Buscador de excursiones (2026-11-18, dueño: el datalist confundía a los asesores): foto, destino y precio a la vista,
+// agrupado por destino con el del viaje primero. Las tarifas de todas se traen en una sola consulta.
+let cbExcCarga = null;
+function cbExcPrecargar() {
+  return cbExcCarga ||= (async () => {
+    const ids = [...cbHoteles.values()].filter(p => p.tipo === 'excursion').map(p => p.id);
+    if (!ids.length) return;
+    const { data, error } = await sb.from('tarifas').select('id,producto_id,titulo,moneda,precios,vigente').in('producto_id', ids).order('id').limit(2000);
+    if (error) { cbExcCarga = null; throw error; }
+    const por = new Map(ids.map(id => [id, []]));
+    (data || []).filter(t => t.vigente !== false && t.precios && t.precios.modalidad !== 'suplemento' && t.precios.adulto != null).forEach(t => por.get(t.producto_id)?.push(t));
+    por.forEach((ts, id) => { if (!cbExcTarifas.has(id)) cbExcTarifas.set(id, Promise.resolve(ts)); });
+    cbExcListas = por;
+  })();
+}
+let cbExcListas = null;
+function cbExcPrecioTexto(ts) {
+  const t = ts?.[0]; if (!t) return '';
+  const p = t.precios, mf = n => tarMontoFmt(n, t.moneda), desde = ts.length > 1 ? 'desde ' : '';
+  if (p.base === 'grupo' || p.modalidad === 'privado') return [`Grupo privado · ${desde}${mf(Math.min(...ts.map(x => x.precios.adulto)))} p/p`, p.min_pax && `mín. ${p.min_pax}`].filter(Boolean).join(' · ');
+  return [`Adulto ${desde}${mf(Math.min(...ts.map(x => x.precios.adulto)))}`, p.nino != null && `Niño ${mf(p.nino)}${p.edad_nino?.length === 2 ? ` (${p.edad_nino[0]}-${p.edad_nino[1]})` : ''}`, p.incluye_traslado && '🚐 traslado incluido'].filter(Boolean).join(' · ');
+}
+function cbExcPickerHtml(it, i) {
+  const p = it.producto_id && cbHoteles.get(Number(it.producto_id)), foto = ordenarFotos(p?.producto_fotos || [])[0];
+  return `<div class="field cb-dos cb-picker"><label class="fl" for="cb-nombre-${i}">${cbEmo(CB_TIPO_EMOJI[it.tipo])}${it.tipo === 'tour' ? 'Tour' : 'Full day o excursión'}</label>${foto ? `<img class="cb-hotel-foto" src="${esc(fotoMini(foto.storage_path, 256))}" width="64" height="64" alt="Foto de ${esc(p.nombre)}" decoding="async">` : ''}<input id="cb-nombre-${i}" class="ei" data-busca="exc" data-k="nombre" value="${esc(it.nombre || '')}" placeholder="🔎 Busca la excursión o el destino…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="cb-excs-${i}"><div id="cb-excs-${i}" class="cb-picker-lista" role="listbox" aria-label="Excursiones" hidden></div></div>`;
+}
+function cbExcBuscar(inp) {
+  const box = inp.parentElement.querySelector('.cb-picker-lista'), q = cbTarNorm(inp.value);
+  if (!cbExcListas) cbExcPrecargar().then(() => { if (document.activeElement === inp) cbExcBuscar(inp); }).catch(e => console.error('cbExcPrecargar', e));
+  const d = cbDestinoViaje(), iata = d?.iata || cbItems.find(x => x.tipo === 'boleto' && x.destino)?.destino;
+  const cerca = p => (iata && cbDestinoIata(p.destino) === iata) || (d && cbTarNorm(p.destino) === cbTarNorm(d.p.destino)) ? 0 : 1;
+  const exacto = [...cbHoteles.values()].some(p => p.tipo === 'excursion' && cbTarNorm(p.nombre) === q);
+  const lista = [...cbHoteles.values()].filter(p => p.tipo === 'excursion' && (exacto || cbTarNorm(p.nombre + ' ' + (p.destino || '')).includes(q)))
+    .sort((a, b) => cerca(a) - cerca(b) || cbHotelDestinoOrden(a) - cbHotelDestinoOrden(b) || String(a.destino || '').localeCompare(String(b.destino || ''), 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+  let grupo = null;
+  box.innerHTML = lista.length ? lista.map(p => {
+    const f = ordenarFotos(p.producto_fotos || [])[0], g = p.destino || 'Otros destinos', precio = cbExcPrecioTexto(cbExcListas?.get(p.id));
+    const cab = g !== grupo ? `<div class="cb-picker-grupo" role="presentation">${esc(g)}</div>` : ''; grupo = g;
+    return `${cab}<button type="button" role="option" data-cb-exc="${p.id}">${f ? `<img src="${esc(fotoMini(f.storage_path, 256))}" width="44" height="44" alt="" loading="lazy" onerror="this.hidden=true">` : '<i class="fas fa-umbrella-beach" aria-hidden="true"></i>'}<span><b>${esc(p.nombre)}</b><small>${precio ? `<span class="cb-exc-precio">${esc(precio)}</span>` : cbExcListas ? 'Sin tarifa vigente' : 'Cargando precio…'}</small></span></button>`;
+  }).join('') : '<div class="cb-picker-vacio">Sin coincidencias. Puedes escribir la excursión a mano y poner el precio.</div>';
+  box.hidden = false; inp.setAttribute('aria-expanded', 'true');
+}
+function cbExcElegir(card, id) {
+  const it = cbItems[+card.dataset.i], p = cbHoteles.get(Number(id)); if (!it || !p) return;
+  it.nombre = p.nombre; if (it.auto) delete it.auto.nombre;
+  const box = card.querySelector('.cb-picker-lista'); if (box) box.hidden = true;
+  document.activeElement?.blur?.();
+  cbExcRefrescar(it);
 }
 function cbExcHtml(it, i) {
   if (!cbEsExc(it) || !it.producto_id) return '';
@@ -37971,13 +38020,15 @@ async function cbCargarSeccion() {
     const cbLista = document.getElementById('cb-items');
     cbLista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.remove(); }, true);
     cbLista.addEventListener('focusin', e => { if (e.target.matches('.cb-ap-in')) { e.target.select(); cbApAbrir(e.target); } });
-    cbLista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
-    cbLista.addEventListener('focusout', e => { if (e.target.dataset.busca === 'hotel') { e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false'); } });
+    cbLista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); else if (e.target.dataset.busca === 'exc') cbExcBuscar(e.target); });
+    cbLista.addEventListener('focusout', e => { if (e.target.dataset.busca === 'hotel' || e.target.dataset.busca === 'exc') { e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false'); } });
     cbLista.addEventListener('pointerdown', e => {
       const hab = e.target.closest('[data-cb-hab]');
       if (hab) { e.preventDefault(); return; }
       const op = e.target.closest('[data-cb-hotel]');
       if (op) { e.preventDefault(); cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel); cbTragarClickFantasma(); }
+      const exc = e.target.closest('[data-cb-exc]');
+      if (exc) { e.preventDefault(); cbExcElegir(exc.closest('.cb-item'), exc.dataset.cbExc); cbTragarClickFantasma(); }
     });
     cbLista.addEventListener('keydown', e => {
       if (e.target.matches('[data-cb-hab-abrir]')) {
@@ -37988,6 +38039,7 @@ async function cbCargarSeccion() {
         cbPickerTeclas(e, lista, cbHabElegir); return;
       }
       if (e.target.dataset.busca === 'hotel') cbPickerTeclas(e, e.target.parentElement.querySelector('.cb-picker-lista'), op => cbHotelElegir(op.closest('.cb-item'), op.dataset.cbHotel));
+      if (e.target.dataset.busca === 'exc') cbPickerTeclas(e, e.target.parentElement.querySelector('.cb-picker-lista'), op => cbExcElegir(op.closest('.cb-item'), op.dataset.cbExc));
     });
     cbLista.addEventListener('focusout', e => { if (e.target.matches('.cb-ap-in')) cbApConfirmar(e.target); });
     // mousedown y no click: así la opción se elige antes del blur del input.
@@ -38087,6 +38139,7 @@ async function cbCargarSeccion() {
       if (cbEsExc(it)) {
         if (['tarifa', 'tarifa_nino', 'tarifa_infante'].includes(k)) Object.assign(it, { _excManual: true, _excAuto: false });
         if (k === 'nombre' || (k === 'ida' && it.producto_id)) cbExcRefrescar(it);
+        if (e.target.dataset.busca === 'exc') cbExcBuscar(e.target);
       }
       if (it.tipo === 'hotel' && k === 'unidad') {
         it.unidad_manual = true; it._unidadPendiente = false; it.tarifa_manual = false;
@@ -42358,7 +42411,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-11-18', emoji: '🏝️', titulo: 'Precio de excursiones automático', texto: 'En Cotizaciones, al elegir un full day, excursión o tour del tarifario se ponen solas las tarifas de adulto, niño e infante (la vigente para la fecha). Si tiene varias tarifas, eliges cuál en «Tarifa del tarifario». Si escribes un precio a mano, se respeta.', roles: ['admin', 'administrativo', 'asesor'] },
+  { fecha: '2026-11-18', emoji: '🏝️', titulo: 'Precio de excursiones automático', texto: 'En Cotizaciones, al elegir un full day, excursión o tour del tarifario se ponen solas las tarifas de adulto, niño e infante (la vigente para la fecha). Si tiene varias tarifas, eliges cuál en «Tarifa del tarifario». Si escribes un precio a mano, se respeta. El buscador ahora muestra foto, destino y precio de cada excursión, agrupadas por destino y con las del destino del viaje primero.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-16', emoji: '🩺', titulo: 'Salud de finanzas', texto: 'En Facturación › Cuentas por pagar hay una tarjeta nueva con los pendientes de finanzas: salidas del banco por clasificar, servicios sin proveedor, abonos sin comprobante y más. Lo que está en cero sale en verde; lo que tiene pendientes, en ámbar, y con un clic vas a la lista donde se resuelve.', roles: ['admin'] },
   { fecha: '2026-11-16', emoji: '💸', titulo: 'Pagos a proveedores', texto: 'En Facturación › Cuentas por pagar ahora se registra cada pago real a un proveedor: de qué cuenta salió, la fecha, el comprobante y a qué cuentas por pagar se reparte (lo que sobra queda a favor). Los Zelle enviados de Wells Fargo aparecen para clasificar, y los servicios sin proveedor tienen su lista para asignarlo. El botón «Abonar» abre este formulario nuevo.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-15', emoji: '📁', titulo: 'Documentos de la empresa en Corporativo', texto: 'Nueva pestaña Corporativo › Documentos con el RIF, el registro, contratos, pólizas y demás papeles de la agencia. Al subir uno, Lyra lo clasifica sola y saca la fecha de vencimiento; los que vencen en 30 días se marcan y avisan por Telegram. Puede verlos y descargarlos desde acá, o pedírselos a Lyra por Telegram o WhatsApp, que también los manda por correo o WhatsApp a quien usted le diga, siempre pidiendo confirmación antes.', roles: ['admin'] },
