@@ -415,6 +415,8 @@ let leadsView = 'lista';
 let INBOX_LEADS = [], INBOX_TEL_LEAD_ID = null, timerRelojInbox = null;
 let POSTVENTA = [], PV_ACTUAL = null, PV_ETAPA = '', PV_GRUPO = '', PV_ASESOR = '', PV_SEARCH_TIMER = null;
 let RV_DET = null, RV_RESERVA_ID = null, RV_FORM = null, RV_DESTINOS = null, RV_PROVEEDORES = null, RV_APTOS = {}, RV_APTO_UNI = [], RV_APTO_REQ = 0;
+// Borrador de «Crear reserva» (efBorradorAbrir): el editor de servicios trabaja sobre una lista en memoria, sin reserva en la base.
+let RV_BORRADOR = null;
 
 /* ---------- Periodos ---------- */
 function periodo(kind) {
@@ -5437,7 +5439,7 @@ const rvMargenPct = (tipo, provId) => {
   const ms = (RV_MARGENES || []).filter(m => m.activo && m.tipo === tipo && (m.proveedor_id == null || m.proveedor_id === provId));
   return (ms.find(m => m.proveedor_id === provId) || ms.find(m => m.proveedor_id == null))?.porcentaje ?? null;
 };
-const rvPanel = k => document.querySelector(`#drawerContent [data-rv-panel="${k}"]`);
+const rvPanel = k => RV_BORRADOR ? (k === 'servicios' ? document.getElementById('ef-rv') : null) : document.querySelector(`#drawerContent [data-rv-panel="${k}"]`);
 const rvOpts = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
 const rvMonedaOpts = sel => RV_MONEDAS.map(m => `<option ${m === sel ? 'selected' : ''}>${m}</option>`).join('');
 const rvServicioNombre = s => (RV_TIPOS[s.tipo] || [s.tipo])[0] + (s.descripcion ? ' · ' + s.descripcion : s.detalle?.ruta ? ' · ' + s.detalle.ruta : '') + (s.fecha_inicio ? ' · ' + pvFecha(s.fecha_inicio) : '');
@@ -5654,9 +5656,11 @@ async function rvEnviar(btn, llamada) {
 /* Servicios */
 function rvRenderServicios(suave) {
   const p = rvPanel('servicios'); if (!p || !RV_DET) return;
+  if (RV_BORRADOR) efBotones();
   const forms = { servicio: rvFormServicio, costo: rvFormCosto, tramos: rvFormTramos, tickets: rvFormTickets, evento: rvFormEvento };
   if (forms[RV_FORM?.tipo] && rvFormAbierto(p, suave)) return;
   if (forms[RV_FORM?.tipo]) return forms[RV_FORM.tipo](p);
+  if (RV_BORRADOR) return efBorradorLista(p);
   if (suave && rvMenuAbierto()) { RV_MENU_PEND = true; return; }
   RV_MENU_PEND = false;
   const vista = rvVista(), ss = RV_DET.servicios || [], r = RV_DET.reserva || {};
@@ -6223,8 +6227,8 @@ function rvFormServicio(p) {
     : s?.detalle?.ida_vuelta === true ? 'rt'
     : s && tramosPrevios.length ? (tramosPrevios.length > 1 ? 'rt' : 'ow')
     : 'rt';
-  const horaIda = t0?.sale_en ? String(t0.sale_en).slice(11, 16) : (s?.hora ? String(s.hora).slice(0, 5) : '');
-  const horaVuelta = tramosPrevios.length > 1 && tN?.sale_en ? String(tN.sale_en).slice(11, 16) : '';
+  const horaIda = t0?.sale_en ? String(t0.sale_en).slice(11, 16) : (s?.hora_ida || (s?.hora ? String(s.hora).slice(0, 5) : ''));
+  const horaVuelta = tramosPrevios.length > 1 && tN?.sale_en ? String(tN.sale_en).slice(11, 16) : (s?.hora_vuelta || '');
   // Formulario compacto (pedido del dueño 13-nov): campos cortos lado a lado en .rv-fila, secciones con título
   // y Guardar/Cancelar fijos abajo (.rv-pie) para no bajar hasta el final.
   p.innerHTML = `<div class="edit-box rv-form rv-sf" data-rv-form><div class="eb-title"><i class="fas fa-suitcase-rolling"></i> ${s ? 'Editar servicio' : 'Nuevo servicio'}</div>
@@ -6287,6 +6291,7 @@ function rvFormServicio(p) {
   if (viaje === 'ow') { const fin = document.getElementById('rv-s-fin'); if (fin) fin.disabled = true; }
   rvAptoCampo();
   rvHoraVisible();
+  if (RV_BORRADOR) efBorradorForm(s);
 }
 // Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
 // La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.
@@ -6506,7 +6511,7 @@ function rvVueloInfo() {
   el.innerHTML = '';
   if (val('rv-s-tipo') !== 'traslado_terrestre') return;
   const bols = new Set((RV_DET?.servicios || []).filter(x => x.tipo === 'boleto_aereo' && !x.anulado_en).map(x => x.id));
-  const tr = (RV_DET?.tramos || []).filter(t => bols.has(t.servicio_id)).sort((a, b) => String(a.sale_en).localeCompare(String(b.sale_en)));
+  const tr = (RV_BORRADOR ? efTramosBorrador() : RV_DET?.tramos || []).filter(t => bols.has(t.servicio_id)).sort((a, b) => String(a.sale_en).localeCompare(String(b.sale_en)));
   const apt = val('rv-s-det-origen').trim().toUpperCase(), ida = val('rv-s-inicio'), fin = val('rv-s-fin');
   const dia = t => String(t || '').slice(0, 10), hm = t => String(t || '').slice(11, 16), f = s => s.split('-').reverse().join('/');
   const lleg = tr.find(t => t.destino_iata === apt && (!ida || dia(t.llega_en || t.sale_en) === ida)) || tr.find(t => t.destino_iata === apt);
@@ -6542,6 +6547,15 @@ function rvTarInit(tipo) {
   const inp = document.getElementById('rv-s-tar-q'), top = document.getElementById('rv-s-top');
   if (!RV_FORM || !inp || !RV_TAR_TIPO[tipo]) return;
   RV_FORM.tar = { tipo, prod: null, tid: null, manual: false };
+  // Servicio ya ligado al tarifario (detalle.producto_id/tarifa_id): vuelve elegido, sin pisar el precio guardado.
+  const prev = RV_FORM.id ? (RV_DET?.servicios || []).find(x => x.id === RV_FORM.id) : null, pid = prev?.tipo === tipo ? Number(prev.detalle?.producto_id) : 0;
+  if (pid) rvTarProductos().then(todos => {
+    const p = todos.find(x => x.id === pid), st = RV_FORM?.tar;
+    if (!p || st?.tipo !== tipo || st.prod || !inp.isConnected) return;
+    const tid = Number(prev.detalle.tarifa_id);
+    Object.assign(st, { prod: p, tid: p.tarifas.some(t => t.id === tid) ? tid : null, manual: p.tarifas.some(t => t.id === tid) });
+    inp.value = p.nombre; rvTarSelPintar(p); rvTarSugerir();
+  }).catch(e => console.error('rvTarProductos', e));
   const aviso = t => { const el = document.getElementById('rv-s-tar-auto'); if (el) { el.classList.remove('ok'); el.textContent = t; } };
   rvCombo(inp, document.getElementById('rv-s-tar-lista'), async q => {
     let todos; try { todos = await rvTarProductos(); } catch (e) { console.error('rvTarProductos', e); aviso('No se pudo cargar el tarifario: escribe el precio a mano.'); return []; }
@@ -6575,12 +6589,13 @@ function rvTarElegir(p) {
   const inp = document.getElementById('rv-s-tar-q'); if (inp) inp.value = p.nombre;
   const d = rvDestinoPorNombre(p.destino), sel = document.getElementById('rv-s-destino');
   if (d && sel && !sel.value) sel.value = String(d.id);
-  const box = document.getElementById('rv-s-tar-sel-box');
-  if (box) {
-    box.hidden = p.tarifas.length < 2;
-    box.innerHTML = p.tarifas.length < 2 ? '' : `<label class="fl" for="rv-s-tar-sel">Tarifa</label><select class="ei" id="rv-s-tar-sel">${p.tarifas.map(t => `<option value="${t.id}">${esc(t.titulo || `Tarifa ${t.id}`)}</option>`).join('')}</select>`;
-  }
+  rvTarSelPintar(p);
   rvTarAplicar(); rvTarSugerir();
+}
+function rvTarSelPintar(p) {
+  const box = document.getElementById('rv-s-tar-sel-box'); if (!box) return;
+  box.hidden = p.tarifas.length < 2;
+  box.innerHTML = p.tarifas.length < 2 ? '' : `<label class="fl" for="rv-s-tar-sel">Tarifa</label><select class="ei" id="rv-s-tar-sel">${p.tarifas.map(t => `<option value="${t.id}">${esc(t.titulo || `Tarifa ${t.id}`)}</option>`).join('')}</select>`;
 }
 // Texto de «Incluye» de la ficha: la línea «Incluye: …» de la descripción y, si la tarifa lo marca, el traslado.
 function rvTarIncluye(p, t) {
@@ -6676,8 +6691,14 @@ const rvAptoNombre = () => { const u = RV_APTO_UNI.find(x => String(x.id) === va
 // El formulario reemplaza todo el detalle: lo que no tiene campo propio (las noches) se reenvía para no perderlo,
 // y el producto del tarifario sale del buscador de hotel (RV_FORM.hotel.producto_id: elegido, conservado del guardado o soltado al escribir a mano).
 function rvDetalleOculto(id) {
-  const previo = (RV_DET.servicios || []).find(x => x.id === id);
-  if (val('rv-s-tipo') !== 'hospedaje') return {};
+  const previo = (RV_DET.servicios || []).find(x => x.id === id), tipo = val('rv-s-tipo');
+  // Traslado y full day: el producto y la tarifa del buscador quedan ligados (neto, destino y proveedor salen de ahí).
+  if (RV_TAR_TIPO[tipo]) {
+    const st = RV_FORM?.tar, t = st?.tipo === tipo ? rvTarActual(st) : null, pd = previo?.tipo === tipo ? previo.detalle || {} : {};
+    if (t) return { producto_id: st.prod.id, tarifa_id: t.id };
+    return pd.producto_id != null ? { producto_id: pd.producto_id, ...(pd.tarifa_id != null ? { tarifa_id: pd.tarifa_id } : {}) } : {};
+  }
+  if (tipo !== 'hospedaje') return {};
   const o = {}, pd = previo?.detalle || {};
   // En «Apartamento propio» va el producto del complejo, si tiene: con él el servidor resuelve el destino.
   const prod = RV_FORM?.hosp === 'apto' ? rvAptoProv(RV_FORM.aptoComp)?.producto_id : RV_FORM?.hotel?.producto_id;
@@ -6721,7 +6742,7 @@ function rvCombo(inp, lista, buscar, pintar, elegir) {
   lista.addEventListener('click', e => { const o = e.target.closest('[data-i]'); if (o) elegirItem(items[Number(o.dataset.i)]); });
 }
 // Hospedaje (pedido del dueño 13-nov): «Hotel o posada» se elige del tarifario con los selectores de Cotizaciones
-// (buscador con foto, plan y habitación con foto, precio con cbHotelRecalcular), como ya hace Nueva venta (efHotelPintar);
+// (buscador con foto, plan y habitación con foto, precio con cbHotelRecalcular); «Crear reserva» usa este mismo editor en borrador;
 // «Apartamento propio» usa apto_disponibilidad. No se mezclan: el selector de apartamento ya no sale con un hotel.
 // En el tarifario no hay campo que separe hotel de posada (todo es tipo 'hotel'): por eso van juntos (OK del dueño).
 // RV_FORM.hotel hace de `it` de Cotizaciones; RV_FORM.hosp = 'tar' | 'apto'.
@@ -6845,7 +6866,7 @@ function rvHospModo(m) {
   if (m === 'tar') { rvDescAuto(RV_FORM.hotel?.nombre || ''); rvHotelSugerir(); } else rvAptoDesc();
 }
 const rvEsComplejo = p => !!rvAptoCompDeProducto(p.id);
-// Mismos manejadores que Nueva venta (#ef-servicios), sobre #rv-s-top; una sola vez por formulario pintado.
+// Manejadores del buscador de hotel sobre #rv-s-top; una sola vez por formulario pintado.
 function rvHotelEventos(top) {
   if (top._rvHosp) return;
   top._rvHosp = true;
@@ -7040,6 +7061,7 @@ async function rvGuardarServicio(btn) {
     const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(x => x.id === id);
     if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
   }
+  if (RV_BORRADOR) return efBorradorGuardar(id, datos);
   // Apartamento: solo si el selector está en pantalla (si no cargó, no se toca lo asignado).
   const hosp = rvVista() !== 'boleteria' && datos.tipo === 'hospedaje';
   const selApto = hosp ? document.getElementById('rv-s-apto-sel') : null;
@@ -13902,6 +13924,149 @@ async function efGuardarViajeros(reservaId, viajeros) {
   }
   return fallos;
 }
+// Asistente de 3 pasos (2026-11-19): Viaje → Servicios → Pago. Los servicios se cargan con el MISMO editor de la
+// Reserva (rvFormServicio: tarifario con precio, apartamentos, traslado con vuelo y hotel, excursiones, tramos) sobre
+// un borrador en memoria (RV_BORRADOR). Nada toca la base hasta «Crear reserva», que manda todo junto a
+// crear_reserva_con_servicios (cada servicio pasa por guardar_servicio, igual que desde la reserva).
+let EF_PASO = 1, EF_COTS = [], EF_COT = null, EF_OPCION = 0;
+function efBorradorAbrir() {
+  RV_BORRADOR ??= { servicios: [], seq: 0, previo: { RV_DET, RV_RESERVA_ID, RV_FORM, RV_APTOS } };
+  RV_BORRADOR.servicios.length = 0;
+  RV_RESERVA_ID = null; RV_FORM = null; RV_APTOS = {};
+  RV_DET = { ok: true, vista: ROL === 'admin' ? 'admin' : 'asesor', servicios: RV_BORRADOR.servicios, tramos: [], pasajeros: [], documentos: [], reserva: {} };
+  if (!RV_DESTINOS) sb.rpc('listar_destinos', { p_solo_activos: true }).then(d => { if (!d.error) RV_DESTINOS = d.data || []; });
+}
+// Al cerrar la hoja (por cualquier vía) vuelve el estado de la reserva que estuviera abierta debajo.
+function efBorradorCerrar() {
+  if (!RV_BORRADOR) return;
+  ({ RV_DET, RV_RESERVA_ID, RV_FORM, RV_APTOS } = RV_BORRADOR.previo);
+  RV_BORRADOR = null;
+  const p = document.getElementById('ef-rv'); if (p) p.innerHTML = '';
+}
+function efPaso(n) {
+  EF_PASO = n;
+  document.querySelectorAll('#enviar-facturacion-sheet [data-ef-panel]').forEach(x => { x.hidden = Number(x.dataset.efPanel) !== n; });
+  document.querySelectorAll('#ef-pasos [data-ef-paso]').forEach(b => { const on = Number(b.dataset.efPaso) === n; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  if (n === 2 && !RV_FORM) rvRenderServicios();
+  if (n === 3) efResumen();
+  efBotones();
+  document.getElementById('enviar-facturacion-sheet').scrollTop = 0;
+}
+// Con un servicio abierto en el paso 2 manda su propio pie (Guardar/Cancelar): el de la hoja se esconde.
+function efBotones() {
+  const acc = document.getElementById('ef-acciones'); if (!acc) return;
+  acc.hidden = EF_PASO === 2 && !!RV_FORM;
+  document.getElementById('ef-cancelar').innerHTML = EF_PASO === 1 ? 'Cancelar' : '<i class="fas fa-arrow-left"></i> Atrás';
+  document.getElementById('ef-siguiente').hidden = EF_PASO === 3;
+  document.getElementById('ef-enviar').hidden = EF_PASO !== 3;
+}
+function efBorradorPintar() {
+  const n = RV_BORRADOR?.servicios.length || 0, cuenta = document.getElementById('ef-n-serv');
+  if (cuenta) cuenta.textContent = n ? `(${n})` : '';
+  const t = efTotal(), tot = document.getElementById('ef-monto-total');
+  if (tot) tot.value = t.usd > 0 ? t.usd.toFixed(2) : '';
+  efPintarAbono();
+  if (EF_PASO === 2) rvRenderServicios();
+  if (EF_PASO === 3) efResumen();
+}
+// Total en USD: los montos en otra moneda sin tasa escrita los convierte el servidor con la tasa del día.
+function efTotal() {
+  let usd = 0, otras = false;
+  for (const s of RV_BORRADOR?.servicios || []) {
+    const p = Number(s.precio) || 0;
+    if (s.precio_moneda === 'USD') usd += p; else if (Number(s.precio_tasa) > 0) usd += p / Number(s.precio_tasa); else if (p) otras = true;
+  }
+  return { usd, otras, txt: money(usd) + (otras ? ' + montos en otra moneda' : '') };
+}
+// Lo que impide crear la reserva (lo mismo que rechazaría crear_reserva_con_servicios), o ''.
+function efFalta(s) {
+  const d = s.detalle || {};
+  if (s.tipo === 'hospedaje' && !String(d.hotel || '').trim()) return 'Falta el hotel o posada';
+  if (s.tipo === 'boleto_aereo' && !String(d.ruta || '').trim()) return 'Falta la ruta del vuelo';
+  if (!s.fecha_inicio) return 'Falta la fecha';
+  if (s.fecha_inicio < cbHoy()) return 'La fecha ya pasó';
+  if (s.fecha_fin && s.fecha_fin < s.fecha_inicio) return 'La fecha final es anterior a la inicial';
+  return '';
+}
+const efPrecioTxt = s => s.precio_moneda === 'USD' ? money(Number(s.precio) || 0) : rvMonto(s.precio_centavos, s.precio_moneda);
+const efTitulo = s => s.tipo === 'hospedaje' ? s.detalle?.hotel : s.tipo === 'boleto_aereo' ? [s.detalle?.ruta, s.detalle?.aerolinea].filter(Boolean).join(' · ') : s.descripcion || s.detalle?.excursion || '';
+function efBorradorCard(s) {
+  const falta = efFalta(s), [nombre, icono] = RV_TIPOS[s.tipo] || [s.tipo, 'fa-circle-dot'];
+  const titulo = efTitulo(s), sub = rvServicioSub(s).filter(Boolean).join(' · ');
+  return `<div class="ef-serv ef-b${falta ? ' ef-b-falta' : ''}">
+    <div class="ef-serv-top"><b><i class="fas ${icono}"></i>${esc(nombre)}</b><span class="ef-b-precio">${esc(efPrecioTxt(s))}</span></div>
+    ${titulo ? `<div class="ef-b-tit">${esc(titulo)}</div>` : ''}
+    ${sub ? `<div class="csub">${esc(sub)}</div>` : ''}
+    ${s.detalle?.producto_id ? '<div class="csub ef-b-tar"><i class="fas fa-link"></i> Ligado al tarifario</div>' : ''}
+    ${falta ? `<div class="ef-b-aviso"><i class="fas fa-triangle-exclamation"></i> ${esc(falta)}</div>` : ''}
+    <div class="ef-b-acc"><button type="button" class="btn-sm" data-rv-accion="editar-servicio" data-id="${s.id}"><i class="fas fa-pen"></i> ${falta ? 'Completar' : 'Editar'}</button>
+      <button type="button" class="btn-sm ef-b-quitar" data-ef-quitar="${s.id}" aria-label="Quitar ${esc(nombre)}"><i class="fas fa-xmark"></i> Quitar</button></div>
+  </div>`;
+}
+function efBorradorLista(p) {
+  const ss = RV_BORRADOR.servicios, tiene = t => ss.some(s => s.tipo === t);
+  const sugTraslado = tiene('hospedaje') && !tiene('traslado_terrestre');
+  p.innerHTML = `<div class="rv-add-barra"><button class="dbtn save rv-add rv-add-pri" type="button" data-rv-accion="nuevo-servicio"><i class="fas fa-plus"></i> Servicio</button>
+      <button class="dbtn gh rv-add" type="button" data-rv-accion="nuevo-traslado"><i class="fas fa-van-shuttle"></i> Traslado aeropuerto</button></div>
+    ${sugTraslado ? `<div class="rv-hotel-sug"><div class="rv-hotel-sug-fila"><span><i class="fas fa-van-shuttle"></i> ${tiene('boleto_aereo') ? 'Lleva hotel y vuelo' : 'Lleva hotel'} pero no traslado. ¿Lo incluye?</span><button type="button" class="btn-sm" data-rv-accion="nuevo-traslado">Agregar traslado</button></div></div>` : ''}
+    ${ss.length ? ss.map(efBorradorCard).join('') + `<div class="ef-b-total"><span>Total de la venta</span><b>${esc(efTotal().txt)}</b></div>`
+      : '<div class="pv-empty">Todavía no hay servicios. Agrega el hotel, el boleto, el traslado o la excursión: cada uno trae su precio del tarifario.</div>'}`;
+}
+function efResumen() {
+  const box = document.getElementById('ef-resumen'); if (!box) return;
+  const ss = RV_BORRADOR?.servicios || [];
+  box.innerHTML = ss.length ? `<div class="ef-res">${ss.map(s => `<div><span>${esc((RV_TIPOS[s.tipo] || [s.tipo])[0])}${efTitulo(s) ? ' · ' + esc(efTitulo(s)) : ''}</span><b>${esc(efPrecioTxt(s))}</b></div>`).join('')}
+    <div class="ef-res-t"><span>Total</span><b>${esc(efTotal().txt)}</b></div></div>` : '';
+}
+// Servicio nuevo en el borrador: personas del paso 1 y fechas del lead (si no pasaron); el estado lo pone el servidor (solicitado).
+function efBorradorForm(s) {
+  const est = document.getElementById('rv-s-estado'); if (est) est.closest('div').hidden = true;
+  document.getElementById('enviar-facturacion-sheet').scrollTop = 0;
+  if (s) return;
+  const poner = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '' && (!el.value || el.value === '0')) el.value = v; };
+  poner('rv-s-adultos', val('ef-adultos')); poner('rv-s-ninos', val('ef-ninos'));
+  const l = EF_LEAD_ACTUAL || {}, hoy = cbHoy();
+  if (['hospedaje', 'boleto_aereo', 'seguro'].includes(val('rv-s-tipo')) && l.fecha_viaje_desde >= hoy) {
+    poner('rv-s-inicio', l.fecha_viaje_desde);
+    if (l.fecha_viaje_hasta > l.fecha_viaje_desde) poner('rv-s-fin', l.fecha_viaje_hasta);
+  }
+  rvAptoCampo(); rvNochesCampo(); rvHotelSugerir(); rvTarSugerir(); rvFechasAviso();
+}
+// Guardar en el borrador = las mismas validaciones del formulario, sin llamar al servidor.
+function efBorradorGuardar(id, datos) {
+  const err = document.getElementById('rv-f-err');
+  if (datos.tipo === 'hospedaje' && !String(datos.detalle?.hotel || '').trim()) { err.textContent = 'Elige el hotel o posada.'; return; }
+  if (!datos.fecha_inicio) { err.textContent = 'Falta la fecha.'; return; }
+  if (datos.fecha_inicio < cbHoy()) { err.textContent = 'La fecha ya pasó.'; return; }
+  const previo = RV_BORRADOR.servicios.find(x => x.id === id);
+  const s = { ...datos, id: id || -(++RV_BORRADOR.seq), origen: previo?.origen || 'manual', anulado_en: null,
+    precio_centavos: Math.round(Number(datos.precio || 0) * 100),
+    apto: datos.tipo === 'hospedaje' && RV_FORM?.hosp === 'apto' ? val('rv-s-apto-sel') : '' };
+  if (s.tipo === 'boleto_aereo') s.hora = s.hora_ida || s.hora;
+  if (s.tipo === 'hospedaje' && s.fecha_inicio && s.fecha_fin > s.fecha_inicio) s.detalle.noches = Math.round((Date.parse(s.fecha_fin) - Date.parse(s.fecha_inicio)) / 864e5);
+  const i = RV_BORRADOR.servicios.findIndex(x => x.id === id);
+  if (i >= 0) RV_BORRADOR.servicios[i] = s; else RV_BORRADOR.servicios.push(s);
+  if (!val('ef-adultos') && s.pax_adultos) document.getElementById('ef-adultos').value = s.pax_adultos;
+  if (!val('ef-ninos') && s.pax_ninos) document.getElementById('ef-ninos').value = s.pax_ninos;
+  efPintarViajeros();
+  RV_FORM = null; efBorradorPintar();
+  okToast(id ? 'Servicio actualizado' : 'Servicio agregado');
+}
+// Tramos «de mentira» para el aviso de vuelo del traslado (rvVueloInfo): salen de la ruta, fechas y horas de los boletos del borrador.
+function efTramosBorrador() {
+  return (RV_BORRADOR?.servicios || []).filter(s => s.tipo === 'boleto_aereo' && s.detalle?.ruta).flatMap(s => {
+    const r = String(s.detalle.ruta).toUpperCase().split('-').map(x => x.trim()), t = [], base = { servicio_id: s.id, aerolinea: s.detalle.aerolinea || '' };
+    if (r[0] && r[1] && s.fecha_inicio) t.push({ ...base, origen_iata: r[0], destino_iata: r[1], sale_en: `${s.fecha_inicio}T${s.hora_ida || ''}` });
+    if (r[1] && r[2] && s.fecha_fin) t.push({ ...base, origen_iata: r[1], destino_iata: r[2], sale_en: `${s.fecha_fin}T${s.hora_vuelta || ''}` });
+    return t;
+  });
+}
+// Lo que viaja a guardar_servicio: sin los campos propios del borrador.
+function efServicioDatos(s) {
+  const { id, origen, apto, precio_centavos, anulado_en, hora_ida, hora_vuelta, ...d } = s;
+  return d;
+}
+
 async function abrirEnviarFacturacionSheet(l) {
   EF_LEAD_ACTUAL = l; EF_COMPROBANTE = null; EF_ARCHIVO = null; EF_FOTO = null; EF_OCR = null;
   document.getElementById('ef-comp-previa')?.remove();
@@ -13909,7 +14074,6 @@ async function abrirEnviarFacturacionSheet(l) {
   efCalCerrar();
   document.getElementById('ef-cliente').innerHTML =
     `<i class="fas fa-user"></i> Reserva para <b>${esc(l.nombre || 'Sin nombre')}</b>${l.telefono ? ' · ' + esc(l.telefono) : ''}`;
-
   ['ef-adultos', 'ef-ninos', 'ef-referencia', 'ef-monto-pagado',
    'ef-monto-total', 'ef-notas'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   document.getElementById('ef-metodo').value = '';
@@ -13917,207 +14081,137 @@ async function abrirEnviarFacturacionSheet(l) {
   document.getElementById('ef-abono').className = 'ef-abono';
   efComprobanteEstado('');
   EF_SOLICITUD = crypto.randomUUID();
-  document.getElementById('ef-servicios').innerHTML = '';
-  efAgregarServicio('hospedaje');
-  efAvisoPrecarga('');
+  EF_COTS = []; EF_COT = null; EF_OPCION = 0;
+  document.getElementById('ef-cot').innerHTML = '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Buscando cotizaciones del cliente…</div>';
   openSheet('enviar-facturacion-sheet');
-  efPrecargar(l, EF_SOLICITUD).catch(e => console.error('efPrecargar', e));
+  efBorradorAbrir();
+  efPaso(1);
+  efBorradorPintar();
+  efPrecargar(l, EF_SOLICITUD).catch(e => { console.error('efPrecargar', e); efCotPintar(); });
 }
 
-// Precarga desde la última cotización del lead (si no hay, desde sus fechas y personas): el asesor
-// confirma en vez de reescribir. Corre al abrir la hoja, con las tarjetas vacías; si se abre otro lead
-// mientras consulta, `solicitud` ya no coincide y no toca nada.
+// Cotización → reserva: trae los ítems de la última cotización (o la que se elija) sin retipear. En modo comparar,
+// los comunes (sin opción) más los de la opción que eligió el cliente. Una fecha ya pasada queda vacía para completarla.
 const EF_DE_COT = { hotel: 'hospedaje', boleto: 'boleto_aereo', traslado: 'traslado_terrestre', fullday: 'full_day', tour: 'full_day', paquete: 'otro', otro: 'otro' };
-function efPonerCampo(card, k, v) {
-  const e = card.querySelector(`[data-k="${k}"]`);
-  if (!e || v == null || v === '') return;
-  e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true }));
+const efCotOpciones = c => [...new Set((c?.items || []).filter(it => EF_DE_COT[it.tipo]).map(cbOpcionDe).filter(Boolean))].sort((a, b) => a - b);
+const efCotItems = (c, op) => (c?.items || []).filter(it => EF_DE_COT[it.tipo] && (!cbOpcionDe(it) || cbOpcionDe(it) === op));
+async function efPrecargar(l, solicitud) {
+  const { data, error } = await sb.from('cotizaciones_boleteria').select('id,numero,created_at,items')
+    .eq('lead_id', l.id).is('anulado_en', null).order('created_at', { ascending: false }).limit(5);
+  if (error) console.error('efPrecargar', error);
+  if (EF_SOLICITUD !== solicitud || !RV_BORRADOR) return;
+  EF_COTS = (data || []).filter(c => efCotItems(c, efCotOpciones(c)[0] || 0).length);
+  const personas = parseInt(l.personas, 10);
+  if (!EF_COTS.length || RV_BORRADOR.servicios.length) {
+    if (personas > 0 && !val('ef-adultos')) { document.getElementById('ef-adultos').value = personas; efPintarViajeros(); }
+    return efCotPintar();
+  }
+  await efCotUsar(EF_COTS[0], 0, solicitud);
 }
-function efAvisoPrecarga(texto) {
-  document.getElementById('ef-precarga')?.remove();
-  if (!texto) return;
-  const av = document.createElement('div');
-  av.id = 'ef-precarga';
-  av.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin:0 0 8px';
-  av.innerHTML = `<span style="flex:1"><i class="fas fa-clipboard-list"></i> ${esc(texto)}</span><button type="button" class="btn-sm" id="ef-precarga-limpiar">Limpiar</button>`;
-  document.getElementById('ef-servicios').before(av);
-  document.getElementById('ef-precarga-limpiar').addEventListener('click', () => {
-    av.remove();
-    ['ef-adultos', 'ef-ninos'].forEach(id => { document.getElementById(id).value = ''; });
-    efPintarViajeros();
-    document.getElementById('ef-servicios').innerHTML = ''; efAgregarServicio('hospedaje');
+async function efCotUsar(cot, op, solicitud = EF_SOLICITUD) {
+  const ops = efCotOpciones(cot);
+  if (!ops.includes(op)) op = ops[0] || 0;
+  const nuevos = await efServiciosDeCot(cot, op);
+  if (EF_SOLICITUD !== solicitud || !RV_BORRADOR) return;
+  EF_COT = cot; EF_OPCION = op;
+  const ss = RV_BORRADOR.servicios;
+  for (let i = ss.length - 1; i >= 0; i--) if (ss[i].origen === 'cot') ss.splice(i, 1);
+  ss.unshift(...nuevos);
+  if (RV_FORM && !ss.some(s => s.id === RV_FORM.id)) RV_FORM = null;
+  const maximo = k => Math.max(0, ...nuevos.map(s => Number(s[k]) || 0));
+  if (maximo('pax_adultos')) document.getElementById('ef-adultos').value = maximo('pax_adultos');
+  if (maximo('pax_ninos')) document.getElementById('ef-ninos').value = maximo('pax_ninos');
+  efPintarViajeros(); efCotPintar(); efBorradorPintar();
+}
+function efCotQuitar() {
+  const ss = RV_BORRADOR?.servicios; if (!ss) return;
+  for (let i = ss.length - 1; i >= 0; i--) if (ss[i].origen === 'cot') ss.splice(i, 1);
+  if (RV_FORM && !ss.some(s => s.id === RV_FORM.id)) RV_FORM = null;
+  EF_COT = null; EF_OPCION = 0; efCotPintar(); efBorradorPintar();
+}
+const efCotSel = () => EF_COTS.find(x => String(x.id) === (document.getElementById('ef-cot-sel')?.value || '')) || EF_COTS[0];
+function efCotPintar() {
+  const box = document.getElementById('ef-cot'); if (!box) return;
+  if (!EF_COTS.length) { box.innerHTML = '<div class="csub" style="margin:0 0 6px"><i class="fas fa-circle-info"></i> Este cliente no tiene cotización guardada: los servicios se cargan en el paso 2.</div>'; return; }
+  const c = EF_COT, ref = c || efCotSel(), ops = efCotOpciones(ref), dia = x => fechaCorta(String(x.created_at).slice(0, 10));
+  const suma = op => efCotItems(ref, op).reduce((t, it) => t + (Number(cbImporte(it)) || 0), 0);
+  const nombreOp = op => (ref.items || []).find(it => cbOpcionDe(it) === op && ['hotel', 'paquete'].includes(it.tipo))?.nombre || `Opción ${op}`;
+  box.innerHTML = `<div class="ef-cot">
+    <div class="ef-cot-h"><i class="fas fa-file-invoice-dollar"></i><b>${c ? `Servicios traídos de la cotización ${esc(c.numero || '')}` : 'El cliente tiene cotización'}</b> <span class="csub">del ${esc(dia(ref))}</span></div>
+    ${EF_COTS.length > 1 ? `<label class="fl-sub" for="ef-cot-sel">Cotización</label><select class="ei" id="ef-cot-sel">${EF_COTS.map(x => `<option value="${x.id}"${x === ref ? ' selected' : ''}>${esc(x.numero || 'Sin número')} · ${esc(dia(x))}</option>`).join('')}</select>` : ''}
+    ${ops.length > 1 ? `<label class="fl-sub">¿Qué opción eligió el cliente?</label><div class="ef-cot-ops" role="group">${ops.map(n => `<button type="button" class="ef-tipo${c && n === EF_OPCION ? ' on' : ''}" data-ef-op="${n}" aria-pressed="${!!c && n === EF_OPCION}">${n}. ${esc(nombreOp(n))} · ${esc(money(suma(n)))}</button>`).join('')}</div>` : ''}
+    ${c ? '<div class="csub">Revísalos en el paso 2. Cambiar de cotización u opción reemplaza solo lo que vino de la cotización.</div><button type="button" class="btn-sm" data-ef-cot-quitar>No usar la cotización</button>'
+      : '<button type="button" class="btn-sm" data-ef-cot-usar><i class="fas fa-download"></i> Traer sus servicios</button>'}
+  </div>`;
+}
+async function efServiciosDeCot(cot, op) {
+  const hoy = cbHoy(), fecha = f => { const d = String(f || '').slice(0, 10); return d && d >= hoy ? d : null; };
+  const hm = h => /^\d\d:\d\d/.test(String(h || '')) ? String(h).slice(0, 5) : '';
+  const items = efCotItems(cot, op);
+  if (items.some(it => it.tipo === 'hotel')) await cbCargarProductos().catch(e => console.error('cbCargarProductos', e));
+  const exc = items.some(it => it.tipo === 'fullday' || it.tipo === 'tour') ? await rvTarProductos().catch(() => []) : [];
+  return items.map(it => {
+    const tipo = EF_DE_COT[it.tipo], precio = Math.round((Number(cbImporte(it)) || 0) * 100) / 100, ida = fecha(it.ida), rt = it.viaje !== 'ow', vuelta = rt ? fecha(it.vuelta) : null;
+    const s = { id: -(++RV_BORRADOR.seq), origen: 'cot', tipo, estado: 'solicitado', descripcion: '', destino_id: null, fecha_inicio: ida, fecha_fin: null, hora: '',
+      pax_adultos: Math.floor(Number(it.adultos) || 0), pax_ninos: Math.floor(Number(it.ninos) || 0), localizador: '', detalle: {},
+      precio, precio_moneda: 'USD', precio_centavos: Math.round(precio * 100), anulado_en: null, apto: '' };
+    if (tipo === 'hospedaje') {
+      const p = it.producto_id ? cbHoteles.get(Number(it.producto_id)) : null;
+      s.detalle.hotel = it.nombre || p?.nombre || '';
+      if (it.plan) s.detalle.plan = it.plan;
+      if (it.hab) s.detalle.habitacion = it.hab;
+      if (p) { s.detalle.producto_id = p.id; s.destino_id = rvDestinoPorNombre(p.destino)?.id || null; }
+      s.fecha_fin = vuelta;
+      if (ida && vuelta > ida) s.detalle.noches = Math.round((Date.parse(vuelta) - Date.parse(ida)) / 864e5);
+      s.descripcion = [s.detalle.hotel, it.plan].filter(Boolean).join(' · ');
+    } else if (tipo === 'boleto_aereo') {
+      const iata = x => { const v = String(x || '').trim().toUpperCase(); return /^[A-Z]{3}$/.test(v) ? v : ''; }, or = iata(it.origen), de = iata(it.destino);
+      s.detalle.ruta = or && de ? [or, de, rt ? or : ''].filter(Boolean).join('-') : String(it.ruta || '').trim();
+      s.detalle.ida_vuelta = rt;
+      if (it.aerolinea) s.detalle.aerolinea = String(it.aerolinea);
+      s.fecha_fin = rt ? vuelta : ida;
+      s.hora = s.hora_ida = hm(it.ida_hora); s.hora_vuelta = rt ? hm(it.vuelta_hora) : '';
+      s.descripcion = s.detalle.ruta;
+    } else if (tipo === 'traslado_terrestre') {
+      const partes = String(it.ruta || '').split(/\s+[-–—>→]\s+|\s*[→>]\s*/).map(x => x.trim()).filter(Boolean);
+      if (partes.length >= 2) { s.detalle.origen = partes[0]; s.detalle.destino = partes[1]; }
+      s.fecha_fin = vuelta; s.hora = hm(it.ida_hora);
+      if (vuelta && hm(it.vuelta_hora)) s.detalle.hora_regreso = hm(it.vuelta_hora);
+      s.descripcion = it.ruta ? `Traslado ${it.ruta}` : 'Traslado';
+    } else if (tipo === 'full_day') {
+      s.detalle.excursion = it.nombre || '';
+      const p = exc.find(x => x.tipo === 'excursion' && bolNorm(x.nombre) === bolNorm(it.nombre || ''));
+      if (p) { s.detalle.producto_id = p.id; s.destino_id = rvDestinoPorNombre(p.destino)?.id || null; }
+      s.fecha_fin = ida; s.descripcion = it.nombre || '';
+    } else {
+      s.descripcion = [it.nombre, it.plan].filter(Boolean).join(' · ') || 'Servicio';
+      if (it.tipo === 'paquete') s.fecha_fin = vuelta;
+    }
+    return s;
   });
 }
-async function efPrecargar(l, solicitud) {
-  let cot = null;
-  try {
-    const { data } = await sb.from('cotizaciones_boleteria').select('numero,created_at,items')
-      .eq('lead_id', l.id).is('anulado_en', null).order('created_at', { ascending: false }).limit(1);
-    cot = data?.[0] || null;
-  } catch (e) { console.error('efPrecargar', e); }
-  if (EF_SOLICITUD !== solicitud) return;
-  const hoy = cbHoy(), fecha = f => (f && f >= hoy ? f : '');   // una fecha pasada la completa el asesor
-  const items = (cot?.items || []).filter(it => EF_DE_COT[it.tipo]);
-  const cont = document.getElementById('ef-servicios');
-  // Si el asesor ya empezó a escribir mientras se consultaba, no se le pisa nada.
-  const intacto = () => cont.querySelectorAll('.ef-serv').length <= 1 && ![...cont.querySelectorAll('[data-k]'), document.getElementById('ef-adultos'), document.getElementById('ef-ninos')].some(e => e?.value) && !cont.querySelector('.ef-serv')?._hotel?.producto_id;
-  if (!cont || !intacto()) return;
-  if (items.length) {
-    await cbCargarProductos();
-    if (EF_SOLICITUD !== solicitud || !intacto()) return;
-    cont.innerHTML = '';
-    for (const it of items) {
-      const tipo = EF_DE_COT[it.tipo], card = efAgregarServicio(tipo), st = card._hotel;
-      if (tipo === 'hospedaje') {
-        if (it.producto_id && cbHoteles.has(Number(it.producto_id))) await efHotelElegir(card, it.producto_id);
-        else Object.assign(st, { nombre: it.nombre || '' });
-        if (EF_SOLICITUD !== solicitud) return;
-        if (it.plan) st.plan = it.plan;
-        if (it.hab) st.hab = it.hab;
-        efHotelPintar(card, true);
-      } else efPonerCampo(card, 'p', it.tipo === 'boleto' || it.tipo === 'traslado' ? it.ruta : it.nombre);
-      if (it.tipo === 'boleto') efPonerCampo(card, 'aerolinea', it.aerolinea);
-      efPonerCampo(card, 'f1', fecha(it.ida));
-      if (it.tipo !== 'fullday' && it.tipo !== 'tour' && it.tipo !== 'otro' && it.viaje !== 'ow') efPonerCampo(card, 'f2', fecha(it.vuelta));
-      efPonerCampo(card, 'precio', (Math.round(cbImporte(it) * 100) / 100).toFixed(2));
+// Después de crear: lo que no entra en crear_reserva_con_servicios (apartamento propio, tramos del boleto) va por sus RPC,
+// emparejando los servicios creados por orden. Devuelve qué falló, para avisarlo sin perder la reserva.
+async function efPosCreacion(reservaId, ss, agente) {
+  if (!ss.some(s => s.apto || (agente && s.tipo === 'boleto_aereo'))) return [];
+  const { data } = await sb.rpc('reserva_detalle', { p_reserva_id: reservaId });
+  const creados = (data?.servicios || []).filter(x => !x.anulado_en).sort((a, b) => a.id - b.id), fallas = [];
+  if (creados.length !== ss.length) return ['el apartamento o los tramos: cárgalos en la reserva'];
+  for (const [i, s] of ss.entries()) {
+    const sid = creados[i].id;
+    if (creados[i].tipo !== s.tipo) { fallas.push('el apartamento o los tramos: cárgalos en la reserva'); break; }
+    if (s.apto) {
+      const a = await sb.rpc('asignar_apartamento', { p_servicio_id: sid, p_apartamento_id: Number(s.apto) });
+      if (a.error || !a.data?.ok) fallas.push('el apartamento (' + (RV_APTO_ERR[a.data?.error] || a.error?.message || 'error') + ')');
     }
-    const maximo = k => Math.max(0, ...items.map(it => Math.floor(Number(it[k]) || 0)));
-    if (maximo('adultos')) document.getElementById('ef-adultos').value = maximo('adultos');
-    if (maximo('ninos')) document.getElementById('ef-ninos').value = maximo('ninos');
-    efAvisoPrecarga(`Precargado desde la cotización${cot.numero ? ' ' + cot.numero : ''} del ${fechaCorta(String(cot.created_at).slice(0, 10))}`);
-    efPintarViajeros();
-    efRecalcular();
-    return;
+    if (agente && s.tipo === 'boleto_aereo') {
+      const r = await rvCrearTramosBoleto(sid, s).catch(e => ({ falla: e.message }));
+      if (r.falla) fallas.push('los tramos del boleto');
+    }
   }
-  const card = cont.querySelector('.ef-serv'), personas = parseInt(l.personas, 10);
-  if (!card || !(fecha(l.fecha_viaje_desde) || personas > 0)) return;
-  efPonerCampo(card, 'f1', fecha(l.fecha_viaje_desde));
-  if (fecha(l.fecha_viaje_desde)) efPonerCampo(card, 'f2', fecha(l.fecha_viaje_hasta));
-  if (personas > 0) { document.getElementById('ef-adultos').value = personas; efPintarViajeros(); }
-  efAvisoPrecarga('Precargado con las fechas y personas del lead (no hay cotización)');
+  return fallas;
 }
 
-// Un servicio por tarjeta. Las claves del detalle son las que acepta detalle_servicio_valido
-// (migración 20260924130000): hotel/habitacion/plan, ruta/aerolinea, origen/destino, etc.
-// `p` = campo principal (obligatorio), `x` = campos extra, `f` = etiquetas de fecha inicial/final.
-const EF_SERV = {
-  hospedaje:          { p: ['hotel', 'Hotel o posada'], x: [['habitacion', 'Habitación'], ['plan', 'Plan (ej. desayuno)']], f: ['Entrada', 'Salida'] },
-  boleto_aereo:       { p: ['ruta', 'Ruta (ej. CCS - PMV)'], x: [['aerolinea', 'Aerolínea']], f: ['Ida', 'Regreso'] },
-  traslado_terrestre: { p: ['origen', 'Desde'], x: [['destino', 'Hasta']], f: ['Fecha', null], hora: true },
-  traslado_maritimo:  { p: ['embarcadero', 'Embarcadero o ruta'], x: [['embarcacion', 'Embarcación']], f: ['Fecha', null], hora: true },
-  full_day:           { p: ['excursion', 'Excursión'], x: [['punto_encuentro', 'Punto de encuentro']], f: ['Fecha', null], hora: true },
-  seguro:             { p: ['aseguradora', 'Aseguradora'], x: [['cobertura', 'Cobertura']], f: ['Desde', 'Hasta'] },
-  otro:               { p: [null, 'Descripción del servicio'], x: [], f: ['Fecha', null] },
-};
-let EF_HOTEL_SEQ = 0;
-// Hospedaje reutiliza los selectores de Cotizaciones (buscador con foto, plan y habitación con foto,
-// cbTraerTarifas/cbTraerHabitaciones). `card._hotel` hace de `it`; sin producto_id queda todo a mano.
-function efHotelPintar(card, conHotel) {
-  const st = card._hotel;
-  if (conHotel) card.querySelector('.ef-hotel-campo').innerHTML = cbHotelHtml(st, st.i);
-  card.querySelector('.ef-hotel-ph').innerHTML = st.producto_id
-    ? cbHotelSelectorHtml(st, st.i, 'plan', 'Plan') + cbHotelSelectorHtml(st, st.i, 'hab', 'Habitación')
-      + (st._tarifaError ? '<button type="button" class="btn-sm" data-ef-reintentar>Reintentar tarifas</button>' : '')
-    : `<div class="field"><label class="fl">Habitación</label><input class="ei" data-k="hab" value="${esc(st.hab)}" autocomplete="off"></div><div class="field"><label class="fl">Plan (ej. desayuno)</label><input class="ei" data-k="plan" value="${esc(st.plan)}" autocomplete="off"></div>`;
-}
-async function efHotelElegir(card, id) {
-  const st = card._hotel, p = cbHoteles.get(Number(id)); if (!st || !p) return;
-  const carga = ++st.carga;
-  Object.assign(st, { nombre: p.nombre, producto_id: p.id, plan: '', hab: '', plan_libre: false, hab_libre: false, _cargando: true, _tarifaError: false });
-  efHotelPintar(card, true);
-  try {
-    await Promise.all([cbTraerTarifas(p.id), cbTraerHabitaciones(p.id)]);
-    if (st.carga !== carga) return;
-    st.plan = cbTarOpciones(cbHotelFilas(st), 'plan')[0] || '';
-    st.hab = cbTarOpciones(cbTarDelPlan(cbHotelFilas(st), st.plan), 'habitacion')[0] || '';
-  } catch (error) {
-    console.error('efHotelElegir', error);
-    if (st.carga === carga) st._tarifaError = true;
-  } finally {
-    if (st.carga === carga) { st._cargando = false; efHotelPintar(card); }
-  }
-}
-function efHabElegir(op) {
-  const card = op.closest('.ef-serv'), st = card._hotel;
-  cbHotelCambiarOpcion(st, 'hab', op.dataset.cbHab); efHotelPintar(card);
-  document.getElementById(st.hab_libre ? `cb-hab-${st.i}-manual` : `cb-hab-${st.i}`)?.focus();
-}
-function efAgregarServicio(tipo) {
-  const sp = EF_SERV[tipo], [nombre, icono] = RV_TIPOS[tipo], hospedaje = tipo === 'hospedaje';
-  const card = document.createElement('div');
-  card.className = 'ef-serv'; card.dataset.tipo = tipo;
-  const campo = (k, lbl, attrs = '') => `<div style="flex:1"><label class="fl-sub">${esc(lbl)}</label><input class="ei" data-k="${k}" ${attrs} autocomplete="off"></div>`;
-  card.innerHTML = `
-    <div class="ef-serv-top"><b><i class="fas ${icono}"></i>${esc(nombre)}</b>
-      <button type="button" class="ef-serv-x" aria-label="Quitar servicio"><i class="fas fa-xmark"></i></button></div>
-    ${hospedaje ? '<div class="ef-fila ef-hotel-campo"></div><div class="ef-fila ef-hotel-ph"></div>' : `<div class="ef-fila">${campo('p', sp.p[1])}</div>
-    ${sp.x.length ? `<div class="ef-fila">${sp.x.map(([k, l]) => campo(k, l)).join('')}</div>` : ''}`}
-    <div class="ef-fila">
-      ${campo('f1', sp.f[0], `type="date" min="${cbHoy()}"`)}
-      ${sp.f[1] ? campo('f2', sp.f[1] + ' (opcional)', `type="date" min="${cbHoy()}"`) : ''}
-      ${sp.hora ? campo('hora', 'Hora (opcional)', 'type="time"') : ''}
-    </div>
-    <div class="ef-fila">${campo('precio', 'Precio total de este servicio (USD)', 'type="number" min="0" step="0.01" placeholder="0.00"')}</div>`;
-  card.querySelector('.ef-serv-x').addEventListener('click', () => { card.remove(); efRecalcular(); });
-  card.querySelector('[data-k="precio"]').addEventListener('input', efRecalcular);
-  const f1 = card.querySelector('[data-k="f1"]'), f2 = card.querySelector('[data-k="f2"]');
-  if (f2) f1.addEventListener('change', () => {
-    f2.min = f1.value && f1.value > cbHoy() ? f1.value : cbHoy();
-    if (f2.value && f2.value < f1.value) f2.value = '';
-  });
-  if (hospedaje) {
-    card._hotel = { i: 'ef' + (++EF_HOTEL_SEQ), nombre: '', producto_id: null, plan: '', hab: '', plan_libre: false, hab_libre: false, _cargando: false, _tarifaError: false, carga: 0 };
-    efHotelPintar(card, true); cbCargarProductos();
-  }
-  document.getElementById('ef-servicios').appendChild(card);
-  efRecalcular();
-  return card;
-}
-// Lee las tarjetas. Devuelve { servicios } o { error } con el primer problema, antes de molestar al servidor.
-function efLeerServicios() {
-  const cards = [...document.querySelectorAll('#ef-servicios .ef-serv')];
-  if (!cards.length) return { error: 'Agrega al menos un servicio' };
-  const adultos = parseInt(val('ef-adultos'), 10), ninos = parseInt(val('ef-ninos'), 10);
-  const servicios = [];
-  for (const card of cards) {
-    const tipo = card.dataset.tipo, sp = EF_SERV[tipo], nombre = RV_TIPOS[tipo][0];
-    const st = card._hotel, delHotel = { p: 'nombre', habitacion: 'hab', plan: 'plan' };
-    const v = k => (st && delHotel[k] ? st[delHotel[k]] : card.querySelector(`[data-k="${k}"]`)?.value || '').trim();
-    if (!v('p')) return { error: `${nombre}: falta ${sp.p[1].toLowerCase()}` };
-    if (!v('f1')) return { error: `${nombre}: falta la fecha (${sp.f[0].toLowerCase()})` };
-    if (v('f1') < cbHoy()) return { error: `${nombre}: la fecha (${sp.f[0].toLowerCase()}) ya pasó` };
-    if (v('f2') && v('f2') < v('f1')) return { error: `${nombre}: la fecha final es anterior a la inicial` };
-    const precio = parseFloat(v('precio'));
-    if (!Number.isFinite(precio) || precio < 0) return { error: `${nombre}: falta el precio` };
-    const detalle = {};
-    if (sp.p[0]) detalle[sp.p[0]] = v('p');
-    sp.x.forEach(([k]) => { if (v(k)) detalle[k] = v(k); });
-    if (tipo === 'hospedaje' && v('f2')) {
-      const noches = Math.round((Date.parse(v('f2')) - Date.parse(v('f1'))) / 86400000);
-      if (noches > 0) detalle.noches = noches;
-    }
-    if (tipo === 'boleto_aereo') detalle.ida_vuelta = !!v('f2');
-    const s = {
-      tipo, precio, precio_moneda: 'USD', detalle,
-      descripcion: [v('p'), ...sp.x.map(([k]) => v(k))].filter(Boolean).join(' · ').slice(0, 300),
-      fecha_inicio: v('f1'),
-      pax_adultos: Number.isFinite(adultos) ? adultos : 0,
-      pax_ninos: Number.isFinite(ninos) ? ninos : 0,
-    };
-    if (v('f2')) s.fecha_fin = v('f2');
-    if (v('hora')) s.hora = v('hora');
-    servicios.push(s);
-  }
-  return { servicios };
-}
-// Total = suma de las tarjetas: es lo que va a quedar en la reserva.
-function efRecalcular() {
-  const total = [...document.querySelectorAll('#ef-servicios [data-k="precio"]')]
-    .reduce((a, i) => a + (parseFloat(i.value) || 0), 0);
-  const t = document.getElementById('ef-monto-total');
-  if (t) t.value = total > 0 ? total.toFixed(2) : '';
-  efPintarAbono();
-}
 // Calendario propio para TODOS los <input type="date"> del CRM (puntero fino: en celular queda el selector
 // del sistema). El popup nativo de Chromium no se puede estilar. El input sigue siendo el dueño del valor
 // (tecleable, min/max, eventos input/change); se abre con el icono a la derecha del campo o con Alt+Flecha abajo.
@@ -14336,73 +14430,35 @@ window.addEventListener('resize', () => { if (SEL_LOTUS && !SEL_LOTUS.velo) selL
 window.addEventListener('popstate', selLotusCerrar);
 
 (function () {
-  const caja = document.getElementById('ef-agregar');
-  if (!caja) return;
-  caja.innerHTML = Object.entries(RV_TIPOS).map(([k, [n, i]]) =>
-    `<button type="button" class="ef-tipo" data-ef-add="${k}"><i class="fas ${i}"></i> ${esc(n)}</button>`).join('');
-  caja.addEventListener('click', e => {
-    const b = e.target.closest('[data-ef-add]');
-    if (b) efAgregarServicio(b.dataset.efAdd).querySelector('input')?.focus();
+  if (!document.getElementById('ef-pasos') || !document.getElementById('ef-rv') || !document.getElementById('ef-cot')) return;
+  const err = () => document.getElementById('ef-err');
+  document.getElementById('ef-pasos').addEventListener('click', e => {
+    const b = e.target.closest('[data-ef-paso]'); if (b && RV_BORRADOR) { err().textContent = ''; efPaso(Number(b.dataset.efPaso)); }
   });
-  const lista = document.getElementById('ef-servicios');
-  lista.addEventListener('error', e => { if (e.target.matches('.cb-hotel-foto')) e.target.remove(); }, true);
-  lista.addEventListener('focusin', e => { if (e.target.dataset.busca === 'hotel') cbHotelBuscar(e.target); });
-  lista.addEventListener('focusout', e => {
-    if (e.target.dataset.busca !== 'hotel') return;
-    e.target.parentElement.querySelector('.cb-picker-lista').hidden = true; e.target.setAttribute('aria-expanded', 'false');
+  document.getElementById('ef-siguiente').addEventListener('click', () => {
+    err().textContent = '';
+    if (EF_PASO === 2 && !RV_BORRADOR?.servicios.length) { err().textContent = 'Agrega al menos un servicio'; return; }
+    efPaso(Math.min(3, EF_PASO + 1));
   });
-  lista.addEventListener('pointerdown', e => {
-    if (e.target.closest('[data-cb-hab]')) { e.preventDefault(); return; }
-    const op = e.target.closest('[data-cb-hotel]');
-    if (op) { e.preventDefault(); efHotelElegir(op.closest('.ef-serv'), op.dataset.cbHotel); cbTragarClickFantasma(); }
-  });
-  lista.addEventListener('keydown', e => {
-    const t = e.target;
-    if (t.matches('[data-cb-hab-abrir]')) {
-      const box = t.closest('.cb-picker'), op = box.querySelector('.cb-picker-lista');
-      if (e.key === 'Tab' || e.key === 'Escape') { cbHabCerrar(box); return; }
-      if ((e.key === 'Enter' || e.key === ' ') && op.hidden) { e.preventDefault(); op.hidden = false; t.setAttribute('aria-expanded', 'true'); return; }
-      cbPickerTeclas(e, op, efHabElegir); return;
+  document.getElementById('ef-rv').addEventListener('click', e => {
+    if (!RV_BORRADOR) return;
+    const q = e.target.closest('[data-ef-quitar]');
+    if (q) {
+      const i = RV_BORRADOR.servicios.findIndex(s => s.id === Number(q.dataset.efQuitar));
+      if (i >= 0) RV_BORRADOR.servicios.splice(i, 1);
+      efBorradorPintar(); return;
     }
-    if (t.dataset.busca === 'hotel') cbPickerTeclas(e, t.parentElement.querySelector('.cb-picker-lista'), op => efHotelElegir(op.closest('.ef-serv'), op.dataset.cbHotel));
+    const b = e.target.closest('[data-rv-accion]');
+    if (b && !b.disabled) { err().textContent = ''; rvAccion(b.dataset.rvAccion, b.dataset.id, b); }
   });
-  lista.addEventListener('click', e => {
-    const t = e.target, card = t.closest('.ef-serv'), st = card?._hotel; if (!st) return;
-    const hab = t.closest('[data-cb-hab]'); if (hab) { efHabElegir(hab); return; }
-    const abrir = t.closest('[data-cb-hab-abrir]');
-    if (abrir) { const op = abrir.parentElement.querySelector('.cb-picker-lista'); op.hidden = !op.hidden; abrir.setAttribute('aria-expanded', String(!op.hidden)); return; }
-    // Chips de plan (≤4 planes): lo mismo que el <select> de plan en 'change'.
-    const plan = t.closest('[data-cb-plan]');
-    if (plan) {
-      cbHotelCambiarOpcion(st, 'plan', plan.dataset.cbPlan);
-      if (!st.plan_libre) st.hab = cbTarOpciones(cbTarDelPlan(cbHotelFilas(st), st.plan), 'habitacion')[0] || '';
-      efHotelPintar(card);
-      if (st.plan_libre) document.getElementById(`cb-plan-${st.i}-manual`)?.focus();
-      return;
-    }
-    const hotel = t.closest('[data-cb-hotel]'); if (hotel) { efHotelElegir(card, hotel.dataset.cbHotel); return; }
-    if (t.closest('[data-cb-hab-fotos]')) { const fotos = cbHabitacionFotos(st, st.hab); if (fotos.length) openLightbox(fotos.map(f => fotoGrande(f.storage_path)), 0); return; }
-    if (t.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(st.producto_id).then(() => efHotelPintar(card)); return; }
-    if (t.closest('[data-ef-reintentar]')) efHotelElegir(card, st.producto_id);
+  const cot = document.getElementById('ef-cot');
+  cot.addEventListener('click', e => {
+    const op = e.target.closest('[data-ef-op]');
+    if (op) return efCotUsar(EF_COT || efCotSel(), Number(op.dataset.efOp));
+    if (e.target.closest('[data-ef-cot-quitar]')) return efCotQuitar();
+    if (e.target.closest('[data-ef-cot-usar]')) return efCotUsar(efCotSel(), 0);
   });
-  lista.addEventListener('change', e => {
-    const sel = e.target.closest('select[data-cb-campo]'), card = sel?.closest('.ef-serv'), st = card?._hotel; if (!st) return;
-    cbHotelCambiarOpcion(st, sel.dataset.cbCampo, sel.value);
-    if (sel.dataset.cbCampo === 'plan' && sel.value !== '__manual__') st.hab = cbTarOpciones(cbTarDelPlan(cbHotelFilas(st), st.plan), 'habitacion')[0] || '';
-    efHotelPintar(card);
-  });
-  lista.addEventListener('input', e => {
-    const t = e.target, card = t.closest('.ef-serv'), st = card?._hotel, k = t.dataset.k;
-    if (!st || !['nombre', 'hab', 'plan'].includes(k)) return;
-    st[k] = t.value;
-    if (k !== 'nombre') return;
-    if (st.producto_id) {
-      card.querySelector('.cb-hotel-foto')?.remove();
-      Object.assign(st, { producto_id: null, carga: st.carga + 1, _cargando: false, _tarifaError: false, plan: '', hab: '', plan_libre: false, hab_libre: false });
-      efHotelPintar(card);
-    }
-    cbHotelBuscar(t);
-  });
+  cot.addEventListener('change', e => { if (e.target.id === 'ef-cot-sel') { if (EF_COT) efCotUsar(efCotSel(), 0); else efCotPintar(); } });
 })();
 
 // "personas" (filas viejas) no dice si viajan con niños/infantes -- el desglose
@@ -14532,20 +14588,27 @@ async function efSubirComprobante() {
   return path;
 }
 
-document.getElementById('ef-cancelar')?.addEventListener('click', () => closeSheet('enviar-facturacion-sheet'));
+document.getElementById('ef-cancelar')?.addEventListener('click', () => {
+  document.getElementById('ef-err').textContent = '';
+  if (EF_PASO > 1) efPaso(EF_PASO - 1); else closeSheet('enviar-facturacion-sheet');
+});
 document.getElementById('ef-enviar')?.addEventListener('click', async () => {
-  if (!EF_LEAD_ACTUAL) return;
+  if (!EF_LEAD_ACTUAL || !RV_BORRADOR) return;
   const btn = document.getElementById('ef-enviar'), err = document.getElementById('ef-err');
   const num = id => { const v = parseFloat(val(id)); return Number.isFinite(v) ? v : null; };
   const ent = id => { const v = parseInt(val(id), 10); return Number.isFinite(v) ? v : null; };
   err.textContent = '';
-  const { servicios, error: errServ } = efLeerServicios();
-  if (errServ) { err.textContent = errServ; return; }
-  const { viajeros, error: errViaj } = efLeerViajeros();
-  if (errViaj) { err.textContent = errViaj; return; }
+  const ss = [...RV_BORRADOR.servicios];
+  if (RV_FORM) { efPaso(2); err.textContent = 'Guarda o cancela el servicio que estás editando'; return; }
+  if (!ss.length) { efPaso(2); err.textContent = 'Agrega al menos un servicio'; return; }
+  const mal = ss.find(efFalta);
+  if (mal) { efPaso(2); err.textContent = `${(RV_TIPOS[mal.tipo] || [mal.tipo])[0]}: ${efFalta(mal).toLowerCase()}. Toca «Completar».`; return; }
+  if (efLeerViajeros().error) { efPaso(1); err.textContent = efLeerViajeros().error; return; }
+  const { viajeros } = efLeerViajeros();
   const pagado = num('ef-monto-pagado') ?? 0; // vacío = todavía no pagó
   if (pagado > 0 && !val('ef-metodo')) { err.textContent = EF_ERRORES.falta_metodo_pago; return; }
   if (pagado > 0 && !val('ef-referencia')) { err.textContent = EF_ERRORES.referencia_requerida; return; }
+  const agente = rvAgente();
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
   // Sin captura el abono entra igual (con referencia); oficina lo verifica contra el banco.
   const comp = pagado > 0 ? await efSubirComprobante().catch(e => { console.error('efSubirComprobante', e); return null; }) : null;
@@ -14555,7 +14618,7 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   // queda nada a medias (crear_reserva_con_servicios). El abono del asesor queda por verificar.
   const { data, error } = await sb.rpc('crear_reserva_con_servicios', {
     p_lead_id: EF_LEAD_ACTUAL.id,
-    p_servicios: servicios,
+    p_servicios: ss.map(efServicioDatos),
     p_adultos: ent('ef-adultos'),
     p_ninos: ent('ef-ninos'),
     p_metodo_pago: val('ef-metodo') || null,
@@ -14569,18 +14632,20 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   if (error || !data?.ok) {
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
     const clave = data?.error;
-    err.textContent = 'No se pudo crear la reserva: ' + (EF_ERRORES[clave] || error?.message || clave || '');
+    err.textContent = 'No se pudo crear la reserva: ' + (EF_ERRORES[clave] || RV_ERR?.[clave] || error?.message || clave || '');
     return;
   }
-  // Los pasajeros van aparte: si alguno falla la reserva ya existe y se completa desde su pestaña Pasajeros.
+  // Apartamento, tramos y pasajeros van aparte: si alguno falla la reserva ya existe y se completa desde ella.
+  const fallas = await efPosCreacion(data.reserva_id, ss, agente).catch(e => { console.error('efPosCreacion', e); return ['el apartamento o los tramos']; });
   const fallosPax = await efGuardarViajeros(data.reserva_id, viajeros).catch(e => { console.error('efGuardarViajeros', e); return viajeros.length; });
+  if (fallosPax) fallas.push(fallosPax === 1 ? 'un pasajero' : fallosPax + ' pasajeros');
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
-  if (fallosPax) errToast?.(`Reserva ${data.codigo} creada, pero ${fallosPax === 1 ? 'un pasajero no se guardó' : fallosPax + ' pasajeros no se guardaron'}: cárgalos en la reserva`);
   closeSheet('enviar-facturacion-sheet');
   if (EF_COMPROBANTE && pagado > 0) WB?.marcarComprobante(EF_COMPROBANTE, 'registrado');
   if (currentSec === 'postventa') loadPostventa();
   if (currentSec === 'historicos') loadHistoricos();
-  okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
+  if (fallas.length) errToast(`Reserva ${data.codigo} creada, pero no se guardó ${fallas.join(', ')}: complétalo en la reserva`);
+  else okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
 });
 
 /* ---------- Bandeja de Entrada de Facturación (admin) ---------- */
@@ -42205,6 +42270,7 @@ function closeSheet(id, fromNav) {
   document.getElementById(id)?.classList.remove('open');
   document.getElementById('sheet-bg')?.classList.remove('open');
   if (sheetAbierta === id) sheetAbierta = null;
+  if (id === 'enviar-facturacion-sheet') efBorradorCerrar();
   // Si confirmar-sheet se cierra por cualquier via que NO sea sus propios
   // botones (fondo, atras de Android, otra hoja que la reemplaza), la
   // promesa de confirmarSheet() tiene que resolver igual -- si no, el
@@ -42693,6 +42759,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-19', emoji: '🧳', titulo: '«Crear reserva» desde el lead, en 3 pasos', texto: 'Al crear la reserva desde el lead ahora vas en 3 pasos: 1 Viaje (eliges la cotización y la opción, personas y viajeros), 2 Servicios (hotel, boleto, traslado, full day, igual que en la Reserva) y 3 Pago (resumen, comprobante y abono). Si el lead tiene cotización, los servicios pasan solos; lo que tenga fecha vencida queda marcado «Completar». Traslados y full days quedan ligados al producto del tarifario.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-19', emoji: '↩️', titulo: 'Saldo a favor: se puede registrar un reembolso', texto: 'Si al cliente se le devolvió el dinero que pagó de más, en Abonos aparece «Reembolsar» junto a «Aplicar a otra reserva». Pones el monto devuelto, la referencia y el motivo: queda una fila «Reembolso» y el saldo a favor baja. No toca cuentas ni banco, y se puede deshacer desde la misma lista. Lo hace administración.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-19', emoji: '🔁', titulo: 'Saldo a favor: se aplica a otra reserva del cliente', texto: 'Si una reserva quedó con saldo a favor (el cliente pagó de más), en Abonos aparece «Aplicar a otra reserva». Eliges la otra reserva del mismo cliente y el monto: pasa allá como abono «Saldo a favor» y aquí queda como «Saldo trasladado». No es un cobro nuevo, no toca cuentas ni banco, y se puede deshacer desde la misma lista. Lo hace administración.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-18', emoji: '✨', titulo: 'La nota del lead se aplica sola', texto: 'Escribe la nota como siempre («hablé con ella, Colonia Tovar 24/12, 2 adultos, le envié cotización, llamarla el jueves 4pm»). Al salir del campo la IA actualiza estado, destino, fecha, personas, presupuesto y el seguimiento, y te deja una línea abajo con lo que cambió y un botón Deshacer. Hay botones rápidos (Llamé, no contestó / Envié cotización / Lo va a pensar) y micrófono para dictar. Pago realizado nunca se marca solo: aparece un botón para hacerlo con un clic.', roles: ['admin', 'asesor', 'asesor_prueba'] },

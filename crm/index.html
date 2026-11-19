@@ -1726,6 +1726,33 @@ html input[type=date]::-webkit-calendar-picker-indicator{display:none}
 }
 .ef-agregar{margin-bottom:4px}
 .ef-agregar .ef-tipo{min-width:0;flex:0 1 auto;padding:7px 11px}
+/* Crear reserva: asistente de 3 pasos; el paso 2 es el editor de servicios de la Reserva (.rv-sf) en borrador */
+#enviar-facturacion-sheet{max-height:94dvh}
+#enviar-facturacion-sheet [hidden]{display:none!important}
+@media(min-width:900px){#enviar-facturacion-sheet{width:min(760px,94vw);max-height:92vh}}
+.ef-pasos{display:flex;gap:6px;margin:0 0 10px;position:sticky;top:-10px;z-index:4;background:var(--bg2);padding:6px 0}
+.ef-paso{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;min-height:40px;border-radius:10px;border:1.5px solid var(--line2);background:transparent;color:var(--muted);font:600 13px/1.1 inherit;font-family:inherit;cursor:pointer}
+.ef-paso b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:rgba(var(--ink-rgb),.08);font-size:11px}
+.ef-paso em{font-style:normal;font-size:11px;color:var(--accent-ink)}
+.ef-paso.on{border-color:var(--accent);color:var(--txt);background:var(--accent-soft)}
+.ef-paso.on b{background:var(--accent);color:#fff}
+.ef-cot{border:1px solid var(--line2);border-radius:12px;padding:10px 12px;margin:0 0 6px}
+.ef-cot-h{font-size:13px;margin-bottom:4px}.ef-cot-h i{color:var(--accent);margin-right:4px}
+.ef-cot-ops{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}.ef-cot-ops .ef-tipo{flex:0 1 auto;min-width:0;padding:7px 11px;text-align:left}
+.ef-cot .btn-sm{margin-top:6px}
+.ef-b-tit{font-size:13.5px;font-weight:600;margin:2px 0}
+.ef-b-precio{font-weight:700;font-size:13.5px}
+.ef-b-tar{color:var(--accent-ink)}
+.ef-b-aviso{margin-top:6px;font-size:12px;color:#ff9b9b}
+.ef-b-falta{border-color:rgba(255,120,120,.55)}
+.ef-b-acc{display:flex;gap:8px;margin-top:8px}.ef-b-acc .btn-sm{min-height:36px}
+.ef-b-quitar{margin-left:auto}
+.ef-b-total{display:flex;justify-content:space-between;align-items:center;padding:10px 4px 2px;font-size:14px;border-top:1px solid var(--line2);margin-top:4px}
+.ef-res{display:grid;gap:4px;font-size:13px;margin:0 0 6px}.ef-res div{display:flex;justify-content:space-between;gap:10px}.ef-res span{color:var(--muted)}
+.ef-res .ef-res-t{border-top:1px solid var(--line2);padding-top:6px;font-weight:700}
+#ef-rv .rv-pie{margin-inline:-12px}
+@media(max-width:760px){.ef-paso{min-height:44px}.ef-b-acc .btn-sm{min-height:44px}}
+:root[data-theme="light"] .ef-b-aviso{color:#b42318}
 /* Sub-pestaña "En facturación" de Leads */
 .lf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px}
 .lf-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
@@ -13194,24 +13221,34 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <button class="dbtn" id="pv-nueva-cancelar" type="button" style="flex:1">Cancelar</button>
   </div>
 </div>
+<!-- Crear reserva (asistente de 3 pasos): los servicios usan el mismo editor de la Reserva en modo borrador -->
 <div class="sheet" id="enviar-facturacion-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title"><i class="fas fa-plus"></i> Crear reserva</div>
   <div class="ef-cliente" id="ef-cliente"></div>
-  <div class="edit-box" style="margin-top:4px">
-    <label class="fl">Servicios que compró</label>
-    <div id="ef-servicios"></div>
-    <div class="ef-tipos ef-agregar" id="ef-agregar"></div>
+  <div class="ef-pasos" id="ef-pasos" role="tablist" aria-label="Pasos de la reserva">
+    <button type="button" class="ef-paso on" role="tab" aria-selected="true" data-ef-paso="1"><b>1</b><span>Viaje</span></button>
+    <button type="button" class="ef-paso" role="tab" aria-selected="false" data-ef-paso="2"><b>2</b><span>Servicios</span><em id="ef-n-serv"></em></button>
+    <button type="button" class="ef-paso" role="tab" aria-selected="false" data-ef-paso="3"><b>3</b><span>Pago</span></button>
+  </div>
 
+  <div class="edit-box ef-panel" data-ef-panel="1">
+    <div id="ef-cot"></div>
     <label class="fl">¿Cuántas personas viajan?</label>
     <div class="ef-fila">
-      <div style="flex:1"><label class="fl-sub">Adultos</label><input id="ef-adultos" class="ei" type="number" min="0" step="1" placeholder="2"></div>
-      <div style="flex:1"><label class="fl-sub">Niños</label><input id="ef-ninos" class="ei" type="number" min="0" step="1" placeholder="0"></div>
+      <div style="flex:1"><label class="fl-sub" for="ef-adultos">Adultos</label><input id="ef-adultos" class="ei" type="number" inputmode="numeric" min="0" step="1" placeholder="2"></div>
+      <div style="flex:1"><label class="fl-sub" for="ef-ninos">Niños</label><input id="ef-ninos" class="ei" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></div>
     </div>
-
     <label class="fl">¿Quiénes viajan? <span class="ef-opc">(nombre completo y cédula de cada uno)</span></label>
     <div id="ef-viajeros"></div>
+  </div>
 
+  <div class="edit-box ef-panel" data-ef-panel="2" hidden>
+    <div id="ef-rv"></div>
+  </div>
+
+  <div class="edit-box ef-panel" data-ef-panel="3" hidden>
+    <div id="ef-resumen"></div>
     <label class="fl">Método de pago <span class="ef-opc">(si ya pagó algo)</span></label>
     <div class="ef-comprob">
       <label class="btn-sm" for="ef-comprobante"><i class="fas fa-camera"></i> Leer captura del comprobante</label>
@@ -13235,24 +13272,25 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 
     <div class="ef-fila">
       <div style="flex:1">
-        <label class="fl">Monto que pagó (USD) <span class="ef-opc">(0 si aún no)</span></label>
-        <input id="ef-monto-pagado" class="ei" type="number" min="0" step="0.01" placeholder="0.00">
+        <label class="fl" for="ef-monto-pagado">Monto que pagó (USD) <span class="ef-opc">(0 si aún no)</span></label>
+        <input id="ef-monto-pagado" class="ei" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
       </div>
       <div style="flex:1">
-        <label class="fl">Total de la venta (USD) <span class="ef-opc">(suma de los servicios)</span></label>
+        <label class="fl" for="ef-monto-total">Total de la venta (USD) <span class="ef-opc">(suma de los servicios)</span></label>
         <input id="ef-monto-total" class="ei" type="number" placeholder="0.00" readonly>
       </div>
     </div>
     <div class="ef-abono" id="ef-abono"></div>
 
-    <label class="fl">Notas de la reserva <span class="ef-opc">(opcional)</span></label>
+    <label class="fl" for="ef-notas">Notas de la reserva <span class="ef-opc">(opcional)</span></label>
     <textarea id="ef-notas" class="ei" rows="2" placeholder="Algo a tener en cuenta de esta reserva"></textarea>
-
-    <div class="edit-err" id="ef-err"></div>
   </div>
-  <div class="sheet-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
+
+  <div class="edit-err" id="ef-err" aria-live="polite"></div>
+  <div class="sheet-acciones" id="ef-acciones" style="display:flex;gap:10px;padding:14px 16px 4px">
     <button class="dbtn" id="ef-cancelar" type="button" style="flex:1">Cancelar</button>
-    <button class="dbtn save" id="ef-enviar" type="button" style="flex:1"><i class="fas fa-check"></i> Crear reserva</button>
+    <button class="dbtn save" id="ef-siguiente" type="button" style="flex:1">Siguiente <i class="fas fa-arrow-right"></i></button>
+    <button class="dbtn save" id="ef-enviar" type="button" style="flex:1" hidden><i class="fas fa-check"></i> Crear reserva</button>
   </div>
 </div>
 
