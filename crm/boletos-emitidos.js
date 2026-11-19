@@ -109,7 +109,7 @@ export const AEROLINEAS = [
   { id: 'venezolana', nombre: 'Venezolana', iata: 'WW', color: '#0f2f6b', grupo: 'nacional', logo: false },
   { id: 'aeropostal', nombre: 'Aeropostal', iata: 'CW', color: '#0b4a9e', grupo: 'nacional', logo: true },
   // El consolidador la emite como «BLUE STAR» con código BS (no es su IATA oficial; su OACI es BSV).
-  { id: 'bluestar', nombre: 'Bluestar', iata: 'BS', color: '#0d47a1', grupo: 'nacional', logo: false },
+  { id: 'bluestar', nombre: 'Bluestar', iata: 'BS', color: '#283171', grupo: 'nacional', logo: true },
   { id: 'copa', nombre: 'Copa Airlines', iata: 'CM', color: '#0b4ea2', grupo: 'internacional', logo: true },
   { id: 'wingo', nombre: 'Wingo', iata: 'P5', color: '#5c2d91', grupo: 'internacional', logo: true },
   { id: 'avianca', nombre: 'Avianca', iata: 'AV', color: '#da291c', grupo: 'internacional', logo: true },
