@@ -44,6 +44,8 @@ const CSS = `
 .dp-punto.consultando{background:var(--blue)}.dp-punto.disponible{background:var(--green)}.dp-punto.no_disponible{background:var(--danger)}.dp-punto.alternativa{background:var(--amber)}
 .dp-pie{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
 .dp-pie .btn-sm{margin-left:auto}
+.dp-cargando{opacity:.75;pointer-events:none}.dp-cargando::after{content:'';display:inline-block;width:.8em;height:.8em;margin-left:.45em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-.12em;animation:dp-gira .6s linear infinite}
+@keyframes dp-gira{to{transform:rotate(360deg)}}
 .dp-vacio{padding:14px 4px;text-align:center;font-size:11.5px;color:var(--muted2)}
 .dp-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:9px}
 .dp-barra{position:sticky;bottom:calc(11px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:14px;padding:9px 11px;border:1px solid var(--accent-ink);border-radius:12px;background:var(--panel-solid);box-shadow:0 8px 24px rgba(0,0,0,.25)}
@@ -157,7 +159,16 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     if (d) lista = Array.isArray(d) ? d : [];
     badge();
   }
-  function programar() { clearTimeout(recarga); recarga = setTimeout(async () => { await traer(); if (raiz?.offsetParent) pintar(); if (abierta) abrir(abierta, true); }, 400); }
+  function ocupado(b) { if (!b) return () => {}; b.disabled = true; b.classList.add('dp-cargando'); return () => { b.disabled = false; b.classList.remove('dp-cargando'); }; }
+  // Tras una acción propia refrescamos al toque (lista y detalle en paralelo) y callamos el eco de realtime de esa misma acción.
+  let silencio = 0, abrirTk = 0;
+  async function refrescar(id, eco) {
+    clearTimeout(recarga); if (!eco) silencio = Date.now() + 2000;
+    const tk = abrirTk, [, d] = await Promise.all([traer(), id ? rpc('disp_detalle', { p_id: id }, true) : null]);
+    if (raiz?.offsetParent) pintar();
+    if (id && d && tk === abrirTk) abrir(id, true, d);
+  }
+  function programar() { if (Date.now() < silencio) return; clearTimeout(recarga); recarga = setTimeout(() => refrescar(abierta, true), 400); }
   function vigilar() {
     if (vigilando || !puedeCrear) return; vigilando = true;
     canal = sb.channel('disp-' + Math.random().toString(36).slice(2));
@@ -239,7 +250,7 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     if (t.dataset.sel) { const id = +t.dataset.sel; t.checked ? sel.add(id) : sel.delete(id); const b = document.getElementById('dp-barra'); if (b) { b.hidden = !sel.size; b.querySelector('span').textContent = `${sel.size} alojamiento${sel.size === 1 ? '' : 's'} elegido${sel.size === 1 ? '' : 's'}`; } return; }
     if (t.dataset.limpiar !== undefined) { sel.clear(); return pintar(); }
     if (t.dataset.juntas !== undefined) return consultar([...sel]);
-    if (t.dataset.tomar) { t.disabled = true; if (await rpc('disp_tomar', { p_id: +t.dataset.tomar })) { ok('Tomada'); await traer(); pintar(); } else t.disabled = false; return; }
+    if (t.dataset.tomar) { const listo = ocupado(t); if (await rpc('disp_tomar', { p_id: +t.dataset.tomar })) { ok('Tomada'); await refrescar(); } listo(); return; }
     if (e.target.closest('[data-no-abrir]')) return;
     if (t.dataset.abrir) abrir(+t.dataset.abrir);
   });
@@ -251,11 +262,13 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
   raiz.addEventListener('drop', async e => {
     const col = e.target.closest?.('.dp-col'); if (!col) return; e.preventDefault(); col.classList.remove('sobre');
     const id = +e.dataTransfer.getData('text/plain'), s = lista.find(x => x.id === id); if (!s) return;
-    const a = col.dataset.columna;
-    if (s.estado === 'en_cola' && a !== 'en_cola') { if (await rpc('disp_tomar', { p_id: id })) ok('Tomada'); }
-    else if (s.estado === 'tomada' && a === 'en_cola') { if (await rpc('disp_soltar', { p_id: id })) ok('Devuelta a la cola'); }
-    else if (a !== s.estado) { abrir(id); return; }
-    await traer(); pintar();
+    const a = col.dataset.columna, card = raiz.querySelector(`[data-abrir="${id}"]`);
+    if (a !== s.estado && !(s.estado === 'en_cola' || (s.estado === 'tomada' && a === 'en_cola'))) { abrir(id); return; }
+    if (a === s.estado) return;
+    if (card) { card.classList.add('dp-cargando'); col.querySelector('h3').after(card); }
+    if (s.estado === 'en_cola') { if (await rpc('disp_tomar', { p_id: id })) ok('Tomada'); }
+    else if (await rpc('disp_soltar', { p_id: id })) ok('Devuelta a la cola');
+    await refrescar();
   });
 
   // ---------- Panel lateral / modal ----------
@@ -270,14 +283,17 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     v.querySelector('.dp-x').focus();
     return v;
   }
-  function cerrarPanel() { document.getElementById('dp-velo')?.remove(); abierta = null; }
+  function cerrarPanel() { document.getElementById('dp-velo')?.remove(); abierta = null; abrirTk++; }
 
   // ---------- Detalle ----------
-  async function abrir(id, refresco) {
-    const d = await rpc('disp_detalle', { p_id: id }, refresco); if (!d) return;
-    const s = d.solicitud, mia = s.creado_por_id === uid(), cerrada = ['respondida', 'cancelada'].includes(s.estado);
-    if (refresco && document.querySelector('#dp-velo textarea:focus, #dp-velo input:focus')) { pintarChat(d); return; }
-    const scroll = document.querySelector('#dp-velo .dp-cuerpo')?.scrollTop;
+  async function abrir(id, refresco, pre) {
+    if (!refresco && !pre) panel(`#${id}`, '<div class="dp-vacio">Cargando…</div>');
+    const tk = abrirTk, d = pre || await rpc('disp_detalle', { p_id: id }, refresco);
+    if (tk !== abrirTk) return;
+    if (!d) { if (!refresco) cerrarPanel(); return; }
+    const s = d.solicitud, mia = s.creado_por_id === uid(), cerrada = ['respondida', 'cancelada'].includes(s.estado), mismo = abierta === id;
+    if (refresco && mismo && document.querySelector('#dp-velo textarea:focus, #dp-velo input:focus')) { pintarChat(d); return; }
+    const scroll = mismo ? document.querySelector('#dp-velo .dp-cuerpo')?.scrollTop : 0;
     const accs = [
       admin && s.estado === 'en_cola' && `<button class="btn-acc" data-a="tomar">Tomar</button>`,
       admin && s.tomada_por_id && !cerrada && `<button class="btn-sm" data-a="soltar">Soltar</button>`,
@@ -317,28 +333,29 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     if (d.mensajes?.length) rpc('disp_marcar_leido', { p_id: id }, true);
     v.querySelector('#dp-chat-f')?.addEventListener('submit', async e => {
       e.preventDefault(); const ta = e.target.querySelector('textarea'), txt = ta.value.trim(); if (!txt) return;
-      ta.disabled = true;
-      if (await rpc('disp_mensaje', { p_id: id, p_texto: txt, p_canal: 'crm' })) ta.value = '';
-      ta.disabled = false; ta.focus();
+      const listo = ocupado(e.target.querySelector('[type=submit]')); ta.disabled = true;
+      const r = await rpc('disp_mensaje', { p_id: id, p_texto: txt, p_canal: 'crm' });
+      listo(); ta.disabled = false; ta.focus();
+      if (r) { ta.value = ''; refrescar(id); }
     });
     v.querySelector('#dp-chat-f textarea')?.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.form.requestSubmit(); } });
     v.addEventListener('click', async e => {
       const b = e.target.closest('button'); if (!b) return;
-      const a = b.dataset.a;
-      if (a === 'tomar' && await rpc('disp_tomar', { p_id: id })) ok('Tomada');
-      else if (a === 'soltar' && await rpc('disp_soltar', { p_id: id })) ok('Devuelta a la cola');
-      else if (a === 'pasar') return pasar(s);
-      else if (a === 'consultar') return consultar(s.items.filter(i => ['pendiente', 'consultando'].includes(i.estado)).map(i => i.id), s);
-      else if (a === 'editar') return pedir({ editar: s });
-      else if (a === 'cancelar') { if (!(await confirmar({ titulo: '¿Cancelar esta solicitud?', detalle: 'El admin deja de atenderla.', textoOk: 'Cancelar solicitud', destructivo: true }))) return; if (await rpc('disp_cancelar', { p_id: id })) ok('Cancelada'); }
-      else if (a === 'reconfirmar' && await rpc('disp_reconfirmar', { p_id: id })) ok('Pedida otra vez: vuelve a la cola');
-      else if (a === 'lead') { cerrarPanel(); return abrirLead(s.lead_id); }
-      else if (b.dataset.ir) return abrir(+b.dataset.ir);
-      else if (b.dataset.aceptar) { const [iid, k] = b.dataset.aceptar.split(':'); const r = await rpc('disp_aceptar_alternativa', { p_item_id: +iid, p_idx: +k }); if (r) { ok(r.ya_aceptada ? 'Ya estaba aceptada' : `Nueva solicitud #${r.solicitud_id}`); return abrir(r.solicitud_id); } return; }
-      else if (b.dataset.responder) return formRespuesta(b.closest('.dp-item').querySelector('[data-resp-form]'), s, s.items[+b.dataset.responder]);
-      else if (b.dataset.aplicar) { const it = s.items[+b.dataset.aplicar]; cerrarPanel(); if (await aplicarCotizacion(s, it)) { await rpc('disp_marcar_aplicado', { p_item_id: it.id }, true); } return; }
-      else return;
-      await traer(); if (raiz?.offsetParent) pintar(); abrir(id, true);
+      const a = b.dataset.a, simple = { tomar: ['disp_tomar', 'Tomada'], soltar: ['disp_soltar', 'Devuelta a la cola'], cancelar: ['disp_cancelar', 'Cancelada'], reconfirmar: ['disp_reconfirmar', 'Pedida otra vez: vuelve a la cola'] }[a];
+      if (simple) {
+        if (a === 'cancelar' && !(await confirmar({ titulo: '¿Cancelar esta solicitud?', detalle: 'El admin deja de atenderla.', textoOk: 'Cancelar solicitud', destructivo: true }))) return;
+        const listo = ocupado(b);
+        if (await rpc(simple[0], { p_id: id })) { ok(simple[1]); await refrescar(id); }
+        return listo();
+      }
+      if (a === 'pasar') return pasar(s);
+      if (a === 'consultar') return consultar(s.items.filter(i => ['pendiente', 'consultando'].includes(i.estado)).map(i => i.id), s);
+      if (a === 'editar') return pedir({ editar: s });
+      if (a === 'lead') { cerrarPanel(); return abrirLead(s.lead_id); }
+      if (b.dataset.ir) return abrir(+b.dataset.ir);
+      if (b.dataset.aceptar) { const [iid, k] = b.dataset.aceptar.split(':'), listo = ocupado(b); const r = await rpc('disp_aceptar_alternativa', { p_item_id: +iid, p_idx: +k }); listo(); if (r) { ok(r.ya_aceptada ? 'Ya estaba aceptada' : `Nueva solicitud #${r.solicitud_id}`); return refrescar(r.solicitud_id); } return; }
+      if (b.dataset.responder) return formRespuesta(b.closest('.dp-item').querySelector('[data-resp-form]'), s, s.items[+b.dataset.responder]);
+      if (b.dataset.aplicar) { const it = s.items[+b.dataset.aplicar]; cerrarPanel(); if (await aplicarCotizacion(s, it)) { await rpc('disp_marcar_aplicado', { p_item_id: it.id }, true); } return; }
     });
   }
   function accionTxt(ev, s) {
@@ -391,16 +408,16 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       e.preventDefault();
       const nuevas = [...cont.querySelectorAll('.dp-fila')].map(r => Object.fromEntries([...r.querySelectorAll('[data-k]')].map(i => [i.dataset.k, i.type === 'number' ? (i.value === '' ? null : Number(i.value)) : i.value.trim()]).filter(([, v]) => v !== '' && v != null))).filter(a => Object.keys(a).length);
       const p = { estado: f.estado.value, precio: f.precio.value, moneda: f.moneda.value, precio_unidad: f.unidad.value, texto: f.texto.value, alternativas: [...(it.alternativas || []).filter(a => a.solicitud_id), ...nuevas] };
-      f.querySelector('[type=submit]').disabled = true;
-      if (await rpc('disp_responder_item', { p_item_id: it.id, p })) { ok('Respuesta guardada'); await traer(); if (raiz?.offsetParent) pintar(); abrir(s.id, true); }
-      else f.querySelector('[type=submit]').disabled = false;
+      const listo = ocupado(f.querySelector('[type=submit]'));
+      if (await rpc('disp_responder_item', { p_item_id: it.id, p })) { ok('Respuesta guardada'); await refrescar(s.id); }
+      listo();
     });
   }
 
   async function pasar(s) {
     admins ||= ((await sb.from('usuarios').select('id,nombre').eq('rol', 'admin').is('desactivado_at', null).order('nombre')).data || []).filter(a => !a.nombre.startsWith('__gate'));
     const v = panel('Pasar a otro admin', `<div class="dp-acc">${admins.filter(a => a.id !== s.tomada_por_id).map(a => `<button class="btn-sm" data-a="${a.id}">${esc(a.nombre)}</button>`).join('')}</div>`, '', true);
-    v.addEventListener('click', async e => { const b = e.target.closest('[data-a]'); if (!b) return; if (await rpc('disp_pasar', { p_id: s.id, p_a: b.dataset.a })) { ok('Pasada a ' + b.textContent); await traer(); if (raiz?.offsetParent) pintar(); abrir(s.id); } });
+    v.addEventListener('click', async e => { const b = e.target.closest('[data-a]'); if (!b) return; const listo = ocupado(b); if (await rpc('disp_pasar', { p_id: s.id, p_a: b.dataset.a })) { ok('Pasada a ' + b.textContent); await refrescar(s.id); } listo(); });
   }
 
   // ---------- Consultar al proveedor (WhatsApp prellenado, agrupado por proveedor) ----------
@@ -422,14 +439,15 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       const tel = caja.querySelector('[data-tel]').value.trim(), msg = caja.querySelector('[data-msg]').value.trim(), wa = telWa(tel);
       if (b.dataset.enviar !== undefined && !wa) return error('Escribe el WhatsApp del proveedor');
       const w = b.dataset.enviar !== undefined ? window.open('', '_blank') : null;
-      b.disabled = true;
+      const listo = ocupado(b);
       const r = await rpc('disp_registrar_consulta', { p_item_ids: g.map(i => i.id), p_mensaje: msg, p_telefono: tel || null, p_proveedor_id: g[0].proveedor_id || null });
-      if (!r) { w?.close(); b.disabled = false; return; }
+      if (!r) { w?.close(); listo(); return; }
       if (w) w.location = `https://wa.me/${wa}?text=${encodeURIComponent(msg)}`;
       g.forEach(i => sel.delete(i.id));
       caja.innerHTML = `<div class="dp-linea"><b>${esc(g[0].proveedor_nombre || g[0].alojamiento)}</b>: consultando.</div>`;
-      await traer(); if (raiz?.offsetParent) pintar();
-      if (!v.querySelector('[data-enviar]')) { if (sol) abrir(sol.id); else cerrarPanel(); }
+      const fin = !v.querySelector('[data-enviar]');
+      if (fin && !sol) cerrarPanel();
+      await refrescar(fin && sol ? sol.id : null);
     });
   }
 
@@ -504,15 +522,14 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       if (!itemsN.length) return error(ERRORES.falta_alojamiento);
       const p = { cliente_nombre: f.cliente.value.trim(), destino: f.destino.value.trim(), check_in: f.check_in.value, check_out: f.check_out.value,
         habitaciones: habitacionesN, urgente: f.urgente.checked, notas: f.notas.value.trim(), items: itemsN };
-      b.disabled = true;
+      const listo = ocupado(b);
       let r;
       if (editar) r = await rpc('disp_editar', { p_id: s.id, p });
       else r = await rpc('disp_crear', { p: { ...p, canal: canalIn || (cotizacion ? 'cotizacion' : lead ? 'lead' : 'crm'), lead_id: leadSel?.id || null, cotizacion_id: cotizacion || null } });
-      b.disabled = false; if (!r) return;
+      if (!r) return listo();
       if (editar) { ok(r.reabiertos ? 'Guardado: el admin vuelve a consultar' : 'Guardado'); }
       else ok(r.fuera_horario && !p.urgente ? 'Enviada. Llegó fuera de horario: se atenderá desde las 7:00' : `Enviada · puesto ${r.puesto} en la cola`);
-      await traer(); if (raiz?.offsetParent) pintar();
-      abrir(editar ? s.id : r.solicitud_id);
+      await refrescar(editar ? s.id : r.solicitud_id); listo();
     });
     setTimeout(() => f.querySelector(alos[0]?.alojamiento ? '[name="check_in"]' : '[data-a="alojamiento"]')?.focus(), 50);
   }
