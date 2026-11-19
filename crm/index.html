@@ -2201,18 +2201,18 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-destino-block .tar-grid-sub,.tar-destino-block .tar-hotel-list,.tar-destino-block .tar-fichas-grid{margin-top:10px}
 .tar-grid-sub{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
 /* Excursiones (tabla) y Traslados (tarjetas por modalidad), rework 2026-10-15. */
-.exc-tabla{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
-.exc-fila{position:relative;display:grid;grid-template-columns:minmax(180px,2fr) 70px 100px 70px 44px 90px minmax(150px,1.6fr);gap:11px;align-items:center;padding:11px 14px;border-top:1px solid var(--line);font-size:12.5px;color:var(--txt)}
-.exc-fila:first-child{border-top:0}
-.exc-fila.tar-item{cursor:pointer;transition:background var(--dur-rapida)}
-.exc-fila.tar-item:hover{background:var(--accent-soft)}
-.exc-cab{padding-top:9px;padding-bottom:9px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
-.exc-nombre{font-weight:700}
-.exc-sub{display:block;margin-top:2px;font-size:11px;font-weight:500;color:var(--muted)}
-.exc-c small,.exc-tasas{color:var(--muted)}
-.exc-tasas{font-size:11px}
-.exc-tras i{color:var(--green)}
-.exc-sin{grid-column:2/-1;font-size:11px;color:var(--muted)}
+/* Ficha de excursión (2026-11-19): tarjeta del tarifario + variantes y tasas. */
+.exc-card .tc-desc{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.exc-nota{font-size:11px;line-height:1.4;color:var(--muted)}
+.exc-nota i{color:var(--accent-ink);font-size:10px}
+.exc-var{display:flex;flex-direction:column;margin-top:4px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.exc-var-fila{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 9px;padding:7px 9px;border-top:1px solid var(--line);font-size:12px}
+.exc-var-fila:first-child{border-top:0}
+.exc-var-fila span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.exc-var-fila small{grid-column:1/-1;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.exc-tasas{display:flex;gap:5px;align-items:flex-start;margin-top:auto;padding-top:7px;font-size:11px;line-height:1.4;color:var(--amber)}
+.exc-tasas i{font-size:10px;margin-top:2px}
+.exc-sin-tarifa{opacity:.6}
 .tras-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
 .tras-card{position:relative;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer;transition:border-color var(--dur-rapida)}
 .tras-card:hover{border-color:var(--accent)}
@@ -2246,10 +2246,6 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-borr-det{display:block;margin-top:2px;font-size:11.5px;color:var(--muted)}
 .tar-borr-acc{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
 @media (max-width:760px){
-  .exc-cab{display:none}
-  .exc-fila{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px 11px}
-  .exc-nombre,.exc-tasas,.exc-sin{grid-column:1/-1}
-  .exc-c[data-l]::before{content:attr(data-l);display:block;margin-bottom:2px;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
   .tras-fila-sup{grid-template-columns:1fr;gap:2px}
 }
 /* Postulaciones en tarjetas: la foto del candidato manda, por eso va arriba a

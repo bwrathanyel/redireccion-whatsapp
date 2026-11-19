@@ -26446,6 +26446,7 @@ let tarTab = 'hotsale', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 let tarEntradaContexto = null;
 const tarDestinosAbiertos = new Set();
 const tarHotelesAbiertos = new Set();
+const tarExcAbiertos = new Set();
 const TAR_TAB_LABEL = { excursion: 'Excursión', traslado: 'Traslado', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', ia: 'IA', boleteria: 'Boletería' };
 /* Un solo select de productos para las tres puertas de entrada al drawer
    (grilla del Tarifario, hidratación de la búsqueda IA y "abrir uno suelto"):
@@ -28013,25 +28014,54 @@ function tarGruposDestino(items, etiqueta = () => null) {
   items.forEach(x => { const d = x.destino || 'Otros', e = etiqueta(x); (grupos[e ? `${d} · ${e}` : d] ??= []).push(x); });
   return Object.entries(grupos).sort(([a], [b]) => tarRankDestino(a) - tarRankDestino(b) || a.localeCompare(b, 'es'));
 }
-const EXC_CAB = '<div class="exc-fila exc-cab"><div>Excursión</div><div>Adulto</div><div>Niño (edad)</div><div>Infante</div><div>Mín.</div><div>Traslado</div><div>No incluye</div></div>';
-function excFilaHtml(x) {
+// Ficha de excursión (2026-11-19, antes era una fila de tabla): una tarjeta por producto
+// con su foto, como Hoteles. Las variantes (Delfines, Tour de Compras, Glamping SGL/DBL)
+// van como mini-lista adentro; con una sola, niño/infante/notas salen como chips.
+const excNinoTxt = (p, mon) => p.nino == null ? '' : `Niño ${tarMontoFmt(p.nino, mon)}${Array.isArray(p.edad_nino) ? ` (${p.edad_nino.join('-')})` : ''}`;
+// La descripción sin la lista de viñetas; «Excursión (Mínimo 04 PAX)» y similares no explican nada.
+function excResumen(x) {
+  const txt = String(x.descripcion || '').split('\n').map(s => s.trim()).filter(s => s && !/^[•\-*]/.test(s)).join(' ');
+  return txt.length >= 40 ? txt : '';
+}
+function excCardHtml(x) {
   const ts = tarTarifasVivas(x);
-  if (!ts.length) return `<div class="exc-fila tar-item" data-id="${x.id}"><div class="exc-nombre">${esc(x.nombre)}</div><div class="exc-sin">Sin tarifa BT vigente</div></div>`;
-  return ts.map(t => {
-    const p = t.precios, mon = t.moneda;
-    const edad = Array.isArray(p.edad_nino) ? ` <small>(${p.edad_nino.join('-')})</small>` : '';
-    const inf = p.infante === 0 ? 'Gratis' : p.infante == null ? 'N/A' : tarMontoFmt(p.infante, mon);
-    const tasas = (p.no_incluye || []).map(n => `${esc(n.concepto)} ${tarMontoFmt(n.monto, mon)}${n.aplica ? ` <small>${esc(n.aplica)}</small>` : ''}`).join('<br>');
-    return `<div class="exc-fila tar-item" data-id="${x.id}">
-      <div class="exc-nombre">${esc(x.nombre)}${ts.length > 1 && t.titulo ? `<span class="exc-sub">${esc(t.titulo)}</span>` : ''}${p.notas ? `<span class="exc-sub">${esc(p.notas)}</span>` : ''}</div>
-      <div class="exc-c" data-l="Adulto"><b>${tarMontoFmt(p.adulto, mon)}</b></div>
-      <div class="exc-c" data-l="Niño">${p.nino == null ? 'N/A' : tarMontoFmt(p.nino, mon)}${edad}</div>
-      <div class="exc-c" data-l="Infante">${inf}</div>
-      <div class="exc-c" data-l="Mín.">${p.min_pax || '—'}</div>
-      <div class="exc-c exc-tras" data-l="Traslado">${p.incluye_traslado ? '<i class="fas fa-van-shuttle" aria-hidden="true"></i> Incluido' : '—'}</div>
-      <div class="exc-c exc-tasas" data-l="No incluye">${tasas || '—'}</div>
-    </div>`;
-  }).join('');
+  const adultos = ts.map(t => ({ v: Number(t.precios.adulto), mon: t.moneda })).filter(e => e.v > 0);
+  const menor = adultos.reduce((m, e) => (!m || e.v < m.v ? e : m), null);
+  const precio = menor ? { monto: tarMontoFmt(menor.v, menor.mon), desde: ts.length > 1, unidad: 'p/p', title: `${ts.length > 1 ? 'Desde ' : ''}${tarMontoFmt(menor.v, menor.mon)} por adulto` } : null;
+  const chips = [];
+  if (ts.some(t => t.precios.modalidad === 'privado')) chips.push(['user-group', 'Grupo privado']);
+  if (ts.some(t => t.precios.incluye_traslado)) chips.push(['van-shuttle', 'Traslado incluido']);
+  // Solo si TODAS las variantes piden mínimo: el «grupo de 5» del Nado VIP no es el mínimo de Delfines.
+  const mins = ts.map(t => Number(t.precios.min_pax));
+  if (mins.length && mins.every(n => n > 0)) chips.push(['users', `Mín. ${Math.min(...mins)} pax`]);
+  let variantes = '', nota = '';
+  if (ts.length === 1) {
+    const p = ts[0].precios, mon = ts[0].moneda;
+    if (p.nino != null) chips.push(['child', excNinoTxt(p, mon)]);
+    else chips.push(['child', 'Sin tarifa de niño', 'is-aviso']);
+    if (p.infante === 0) chips.push(['baby', 'Infante gratis']);
+    else if (p.infante != null) chips.push(['baby', `Infante ${tarMontoFmt(p.infante, mon)}`]);
+    nota = p.notas || '';
+  } else if (ts.length > 1) {
+    variantes = `<div class="exc-var">${ts.map(t => {
+      const p = t.precios, sub = [excNinoTxt(p, t.moneda), p.notas].filter(Boolean).join(' · ');
+      return `<div class="exc-var-fila"${p.notas ? ` title="${esc(p.notas)}"` : ''}><span>${esc(t.titulo || p.etiqueta || 'Tarifa')}</span><b>${tarMontoFmt(p.adulto, t.moneda)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+    }).join('')}</div>`;
+  }
+  const tasas = [...new Map(ts.flatMap(t => (t.precios.no_incluye || []).map(n => [n.concepto, `${n.concepto} ${tarMontoFmt(n.monto, t.moneda)}${n.aplica ? ` ${n.aplica}` : ''}`]))).values()];
+  const resumen = excResumen(x);
+  if (nota && resumen.toLowerCase().includes(nota.replace(/^.*?:\s*/, '').replace(/\.$/, '').toLowerCase())) nota = '';
+  return `<div class="tar-item tar-card exc-card${ts.length ? '' : ' exc-sin-tarifa'}" data-id="${x.id}">
+    ${tarCardThumbHtml(fotosDe(x, 384)[0], false, x.destino, precio, tcHideBtnHtml(x.id, 'productos', 'activo'))}
+    <div class="tc-body">
+      <div class="tc-nombre">${esc(x.nombre)}</div>
+      ${resumen ? `<div class="tc-desc">${esc(resumen)}</div>` : ''}
+      ${nota ? `<div class="exc-nota"><i class="fas fa-circle-info"></i> ${esc(nota)}</div>` : ''}
+      ${ts.length ? '' : '<div class="tc-chips"><span class="tc-chip is-aviso"><i class="fas fa-circle-exclamation"></i>Sin tarifa BT vigente</span></div>'}
+      ${chips.length ? `<div class="tc-chips">${chips.map(([ic, txt, cls]) => `<span class="tc-chip${cls ? ' ' + cls : ''}" title="${esc(txt)}"><i class="fas fa-${ic}"></i>${esc(txt)}</span>`).join('')}</div>` : ''}
+      ${variantes}
+      ${tasas.length ? `<div class="exc-tasas" title="No incluye"><i class="fas fa-ticket"></i><span>No incluye: ${tasas.map(esc).join(' · ')}</span></div>` : ''}
+    </div></div>`;
 }
 const trasEtiqueta = t => {
   const p = t.precios;
@@ -28283,11 +28313,23 @@ function renderTarifario() {
     paqPintar(q, fDestino);
   } else if (tarTab === 'excursion') {
     // Full days de grupo privado (tarifas.precios.modalidad='privado') arriba de todo.
+    // Bloques por destino contraídos, igual que Hoteles; con búsqueda se abren solos
+    // (sin tocar lo que el usuario dejó abierto). Las sin tarifa viva van al final.
     const excPrivado = x => tarTarifasVivas(x).some(t => t.precios.modalidad === 'privado');
-    grid.innerHTML = tarGruposDestino(filtered, x => tarTarifasVivas(x)[0]?.precios.etiqueta)
-      .map(([g, xs]) => [g, xs.slice().sort((a, b) => excPrivado(b) - excPrivado(a))])
-      .sort(([, a], [, b]) => b.some(excPrivado) - a.some(excPrivado))
-      .map(([g, xs]) => `<div class="tar-destino-header"><i class="fas fa-person-hiking"></i> ${esc(g)} <span>${xs.length}</span></div><div class="exc-tabla">${EXC_CAB}${xs.map(excFilaHtml).join('')}</div>`).join('');
+    const excSin = x => !tarTarifasVivas(x).length;
+    const grupos = tarGruposDestino(filtered, x => tarTarifasVivas(x)[0]?.precios.etiqueta)
+      .map(([g, xs]) => [g, xs.slice().sort((a, b) => excPrivado(b) - excPrivado(a) || excSin(a) - excSin(b))])
+      .sort(([, a], [, b]) => b.some(excPrivado) - a.some(excPrivado));
+    const abierto = g => !!q || tarExcAbiertos.has(g);
+    grid.innerHTML = grupos.map(([g, xs]) => `<details class="tar-destino-block" data-destino="${esc(g)}"${abierto(g) ? ' open' : ''}>
+      <summary class="tar-destino-header"><i class="fas fa-person-hiking"></i> ${esc(g)} <span>${xs.length}</span><i class="fas fa-chevron-down tar-destino-caret"></i></summary>
+      ${tarDiferir && !abierto(g) ? '' : tarItemsWrapHtml(xs)}
+    </details>`).join('');
+    if (tarDiferir) tarDiferirBloques(grid, grupos.map(([g, xs]) => abierto(g) ? null : xs));
+    grid.querySelectorAll('.tar-destino-block').forEach(det => det.addEventListener('toggle', () => {
+      if (val('tar-search').trim()) return;
+      if (det.open) tarExcAbiertos.add(det.dataset.destino); else tarExcAbiertos.delete(det.dataset.destino);
+    }));
   } else if (tarTab === 'traslado') {
     grid.innerHTML = trasGrillaHtml(filtered, fDestino, q);
   } else {
@@ -28299,7 +28341,7 @@ function renderTarifario() {
   // pintado tras cargar datos), no en cada tecla del buscador ni cambio de
   // filtro — si no, re-dispara N animaciones por pulsación.
   if (tarEntradaContexto !== tarTab) {
-    grid.querySelectorAll('.tar-grid-sub, .tar-fichas-grid, .tar-hotel-list, .exc-tabla, .tras-grid').forEach(entradaLista);
+    grid.querySelectorAll('.tar-grid-sub, .tar-fichas-grid, .tar-hotel-list, .tras-grid').forEach(entradaLista);
     tarEntradaContexto = tarTab;
   }
   const byId = new Map(filtered.map(x => [String(x.id), x]));
@@ -28536,6 +28578,7 @@ async function paqForm(p) {
 }
 
 function tarItemsWrapHtml(items) {
+  if (tarTab === 'excursion') return `<div class="tar-grid-sub">${items.map(excCardHtml).join('')}</div>`;
   const html = items.map(x => tarView === 'lista' ? tarRowHtml(x) : tarView === 'fichas' ? tarFichaHtml(x) : tarCardHtml(x)).join('');
   const cls = tarView === 'lista' ? 'tar-hotel-list' : tarView === 'fichas' ? 'tar-fichas-grid' : 'tar-grid-sub';
   return `<div class="${cls}">${html}</div>`;
