@@ -39629,6 +39629,7 @@ function setupMisNotas() {
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
+  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
@@ -39650,7 +39651,6 @@ const NAV_ITEMS = [
   { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'historicos', icon: 'fas fa-box-archive', label: 'Históricos', padre: 'grp-reservas', roles: '', sub: 'Reservas con viaje hasta el 30/09/2026' },
-  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-reservas', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'reservas-empresas', icon: 'fas fa-building', label: 'Empresas', padre: 'grp-reservas', roles: 'nav-admin-only', sub: 'Reservas y cotizaciones de clientes empresariales, por empresa' },
   { sec: 'campanas-wa', icon: 'fa-brands fa-whatsapp', label: 'Campañas WhatsApp', padre: 'grp-reservas', roles: 'nav-admin-only nav-administrativo-no', sub: 'Plantillas a clientes con venta: campañas, audiencia y envíos' },
   // En modo Boletería, Reservas solo abría el voucher de hospedaje: lo reemplaza Cotizaciones (2026-10-12).
