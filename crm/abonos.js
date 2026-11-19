@@ -50,6 +50,9 @@ const ERRORES = {
   supera_saldo_a_favor: 'El monto supera el saldo a favor de la reserva.',
   traslado_no_encontrado: 'Ese traslado no existe.',
   traslado_anulado: 'Ese traslado ya estaba deshecho.',
+  referencia_demasiado_larga: 'La referencia es demasiado larga (máximo 120 caracteres).',
+  reembolso_no_encontrado: 'Ese reembolso no existe.',
+  reembolso_anulado: 'Ese reembolso ya estaba deshecho.',
 };
 // Finanzas Fase 1: aprobar o rechazar un abono por verificar. También lo usa el tablero de Pagos (app.js).
 export async function verificarAbono(sb, id, aprobar, motivo = null) {
@@ -186,6 +189,9 @@ export function crearAbonos(c) {
       else if (a === 'cerrar-traslado') { est.traslado = null; pintar(); }
       else if (a === 'confirmar-traslado') confirmarTraslado(b);
       else if (a === 'deshacer-traslado') deshacerTraslado(b.dataset.tr, b);
+      else if (a === 'reembolsar') { est.traslado = { reembolso: true, solicitud: crypto.randomUUID(), monto: favorDe(est.datos).toFixed(2) }; est.formAbierto = false; est.editando = null; pintar(); }
+      else if (a === 'confirmar-reembolso') confirmarReembolso(b);
+      else if (a === 'deshacer-reembolso') deshacerReembolso(b.dataset.tr, b);
       else if (a === 'metodo') {
         // Sin repintar: pintar() recrea el formulario y borraría lo ya escrito.
         est.metodo = b.dataset.metodo;
@@ -226,7 +232,7 @@ export function crearAbonos(c) {
       <div class="ab-kpi"><span>Pagado</span><b>${usd(d.monto_pagado)}</b></div>
       ${Number(d.monto_por_verificar) > 0 ? `<div class="ab-kpi" title="Cargado por el asesor: suma al pagado cuando administración lo verifique"><span>Por verificar</span><b>${usd(d.monto_por_verificar)}</b></div>` : ''}
       <div class="ab-kpi ab-saldo"><span>${Number(d.monto_pagado) > Number(d.monto_total) ? 'Saldo a favor' : 'Saldo'}</span><b>${usd(Math.abs(Number(d.monto_total) - Number(d.monto_pagado)))}</b></div>
-      ${favorDe(d) > 0 && oficina() && !est.traslado ? '<button class="dbtn gh ab-nuevo" type="button" data-ab-accion="trasladar" title="Pasa el saldo a favor a otra reserva del mismo cliente"><i class="fas fa-right-left"></i> Aplicar a otra reserva</button>' : ''}
+      ${favorDe(d) > 0 && oficina() && !est.traslado ? '<button class="dbtn gh ab-nuevo" type="button" data-ab-accion="trasladar" title="Pasa el saldo a favor a otra reserva del mismo cliente"><i class="fas fa-right-left"></i> Aplicar a otra reserva</button><button class="dbtn gh ab-nuevo" type="button" data-ab-accion="reembolsar" title="El dinero se le devolvió al cliente: el saldo a favor deja de existir"><i class="fas fa-rotate-left"></i> Reembolsar</button>' : ''}
       <button class="dbtn save ab-nuevo" type="button" data-ab-accion="nuevo"><i class="fas fa-plus"></i> Abono</button>
     </div>`;
   }
@@ -235,6 +241,7 @@ export function crearAbonos(c) {
   const favorDe = d => Math.round((Number(d?.monto_pagado || 0) - Number(d?.monto_total || 0)) * 100) / 100;
   function trasladoHtml(d) {
     const t = est.traslado, favor = favorDe(d);
+    if (t.reembolso) return reembolsoHtml(t, favor);
     if (t.cargando) return '<div class="ab-form"><p class="ab-fila-sub">Buscando reservas del mismo cliente…</p></div>';
     const lista = t.destinos || [];
     const cuerpo = !lista.length
@@ -303,6 +310,63 @@ export function crearAbonos(c) {
       c.ok(`Traslado deshecho · ${data.origen?.codigo} vuelve a tener ${usd(data.origen?.saldo_a_favor)} a favor.`);
     } finally { est.guardando = false; if (btn?.isConnected) btn.disabled = false; }
   }
+  // ------------------------------------------------ reembolso de saldo a favor (2026-11-19)
+  // Una fila «Reembolso» (−) con traslado_id propio; sin cuenta ni banco (decisión del dueño). Viaja en est.traslado.
+  function reembolsoHtml(t, favor) {
+    return `<div class="ab-form">
+      <p class="ab-fila-sub">Saldo a favor de esta reserva: <b>${usd(favor)}</b>. Registra lo que se le devolvió al cliente: queda una fila «Reembolso» y el saldo a favor baja. No toca cuentas ni banco, y se puede deshacer.</p>
+      <div class="ab-grid">
+        <div><label class="fl" for="ab-rb-monto">Monto devuelto (máx. ${usd(favor)})</label>
+          <input class="ei" id="ab-rb-monto" type="number" min="0.01" step="0.01" inputmode="decimal" value="${esc(t.monto ?? '')}"></div>
+        <div><label class="fl" for="ab-rb-ref">Referencia del reembolso</label>
+          <input class="ei" id="ab-rb-ref" type="text" maxlength="120" placeholder="N.º de operación, Zelle, etc." value="${esc(t.ref ?? '')}"></div>
+      </div>
+      <label class="fl" for="ab-rb-motivo">Motivo</label>
+      <textarea class="ei" id="ab-rb-motivo" rows="2" maxlength="500" placeholder="Por qué se devolvió el dinero">${esc(t.motivo ?? '')}</textarea>
+      <p class="ab-err" id="ab-rb-err"></p>
+      <div class="ab-acciones">
+        <button class="dbtn save" type="button" data-ab-accion="confirmar-reembolso"><i class="fas fa-rotate-left"></i> Registrar reembolso</button>
+        <button class="dbtn gh" type="button" data-ab-accion="cerrar-traslado">Cancelar</button>
+      </div></div>`;
+  }
+  async function confirmarReembolso(btn) {
+    const t = est.traslado; if (!t?.reembolso || est.guardando) return;
+    const err = document.getElementById('ab-rb-err'), poner = m => { if (err) err.textContent = m || ''; };
+    const monto = Math.round(Number(document.getElementById('ab-rb-monto')?.value || 0) * 100) / 100;
+    const ref = (document.getElementById('ab-rb-ref')?.value || '').trim(), motivo = (document.getElementById('ab-rb-motivo')?.value || '').trim();
+    if (!(monto > 0)) return poner(ERRORES.monto_invalido);
+    if (monto > favorDe(est.datos)) return poner(ERRORES.supera_saldo_a_favor);
+    if (ref.length < 3) return poner('Escribe la referencia del reembolso.');
+    if (motivo.length < 4) return poner(ERRORES.motivo_requerido);
+    if (Number(t.monto) !== monto) { t.solicitud = crypto.randomUUID(); t.monto = monto.toFixed(2); }
+    t.ref = ref; t.motivo = motivo;
+    est.guardando = true; btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('registrar_reembolso_saldo', { p_reserva_id: est.reservaId, p_monto: monto, p_referencia: ref, p_motivo: motivo, p_solicitud_id: t.solicitud });
+      if (error) return poner(error.code === '42501' ? 'Solo administración registra reembolsos.' : error.message);
+      if (!data?.ok) return poner(mensaje(data?.error));
+      est.traslado = null; est.datos = null;
+      await cargar(est.reservaId);
+      c.pagosCambiaron?.();
+      c.ok(`Reembolso de ${usd(monto)} registrado${data.reserva ? ` · saldo a favor: ${usd(data.reserva.saldo_a_favor)}` : ''}. Si ya tenía voucher, actualízalo desde Voucher.`);
+    } finally { est.guardando = false; if (btn.isConnected) btn.disabled = false; }
+  }
+  async function deshacerReembolso(id, btn) {
+    const a = (est.datos?.abonos || []).find(x => x.traslado_id === id && !x.anulado_en);
+    if (!a || est.guardando) return;
+    const motivo = await c.pedir({ titulo: 'Deshacer reembolso', detalle: `${usd(Math.abs(Number(a.monto_usd)))} vuelven a quedar como saldo a favor de esta reserva.`,
+      label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Deshacer', destructivo: true });
+    if (!motivo) return;
+    est.guardando = true; if (btn) btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('deshacer_reembolso_saldo', { p_reembolso_id: id, p_motivo: motivo });
+      if (error) return c.error(error.code === '42501' ? 'Solo administración deshace reembolsos.' : error.message);
+      if (!data?.ok) return c.error(mensaje(data?.error));
+      est.datos = null; await cargar(est.reservaId);
+      c.pagosCambiaron?.();
+      c.ok(`Reembolso deshecho · la reserva vuelve a tener ${usd(data.reserva?.saldo_a_favor)} a favor.`);
+    } finally { est.guardando = false; if (btn?.isConnected) btn.disabled = false; }
+  }
   function avisoCuadre(d) {
     const dif = Number(d.monto_pagado || 0) - Number(d.pagado_con_detalle || 0);
     if (Math.abs(dif) < 0.005) return '';
@@ -349,8 +413,8 @@ export function crearAbonos(c) {
   // Vigentes con su puesto en el voucher (1°, 2°...) y lo que lleva abonado hasta ese abono.
   // `mover`: se puede arrastrar (más de uno y sin el formulario abierto, que pintar() borraría).
   function filaHtml(a, pos = 0, acum = 0, mover = false) {
-    const tras = !!a.traslado_id;
-    const ref = tras ? (a.nota ? ` · ${esc(a.nota)}` : '') : a.referencia ? ` · ${esc(a.referencia)}` : a.comprobante_path ? ' · captura adjunta' : '';
+    const tras = !!a.traslado_id, rb = tras && a.metodo === 'Reembolso';
+    const ref = rb ? ` · ref. ${esc(a.referencia || '')}${a.nota ? ` · ${esc(a.nota)}` : ''}` : tras ? (a.nota ? ` · ${esc(a.nota)}` : '') : a.referencia ? ` · ${esc(a.referencia)}` : a.comprobante_path ? ' · captura adjunta' : '';
     const servs = est.datos?.servicios || [];
     const serv = servs.length > 1 && a.servicio_id ? servs.find(s => Number(s.id) === Number(a.servicio_id)) : null;
     const total = Number(est.datos?.monto_total || 0);
@@ -360,7 +424,7 @@ export function crearAbonos(c) {
     return `<li class="ab-fila${a.anulado_en ? ' ab-anulada' : a.estado === 'rechazado' ? ' ab-rechazada' : ''}${pos ? ' ab-mov' : ''}" data-id="${a.id}">${puesto}${pos ? '<div class="ab-cuerpo">' : ''}
       <div class="ab-fila-top"><b>${usd(a.monto_usd)}</b>
         ${tras ? '' : `<span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${a.tasa_tipo ? nombreTasa(a.tasa_tipo) + ' ' : ''}${num(a.tasa_usd_ves, 4)}` : ''}</span>`}
-        <span class="ab-tag${tras ? ' ab-tras-tag' : ''}"${tras ? ' title="Saldo a favor movido entre reservas del mismo cliente: no es un cobro nuevo"' : ''}>${esc(a.metodo)}</span>
+        <span class="ab-tag${tras ? ' ab-tras-tag' : ''}"${rb ? ' title="Dinero devuelto al cliente: descuenta del saldo a favor"' : tras ? ' title="Saldo a favor movido entre reservas del mismo cliente: no es un cobro nuevo"' : ''}>${esc(a.metodo)}</span>
         ${serv ? `<span class="ab-tag" title="${esc(nombreServ(serv))}">${esc(TIPO_SERV[serv.tipo] || serv.tipo)}</span>` : ''}
         ${/^inicial/i.test(a.nota || '') ? '<span class="ab-tag">Inicial reserva</span>' : ''}
         ${a.respaldo ? '<span class="ab-tag ab-respaldo" title="Lo cobrado antes de que existiera el registro de abonos: no tiene recibo propio">Cobrado antes</span>' : ''}
@@ -368,8 +432,8 @@ export function crearAbonos(c) {
       </div>
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
       ${pos ? `<p class="ab-acum">Lleva abonado <b>${usd(acum)}</b> <span>de ${usd(total)} · resta ${usd(Math.max(0, total - acum))}</span></p>` : ''}
-      ${tras ? (a.anulado_en ? `<p class="ab-fila-sub">Traslado deshecho: ${esc(a.anulado_motivo || 'sin motivo')}</p>`
-          : oficina() ? `<div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="deshacer-traslado" data-tr="${esc(a.traslado_id)}">Deshacer traslado</button></div>` : '')
+      ${tras ? (a.anulado_en ? `<p class="ab-fila-sub">${rb ? 'Reembolso' : 'Traslado'} deshecho: ${esc(a.anulado_motivo || 'sin motivo')}</p>`
+          : oficina() ? `<div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="deshacer-${rb ? 'reembolso' : 'traslado'}" data-tr="${esc(a.traslado_id)}">Deshacer ${rb ? 'reembolso' : 'traslado'}</button></div>` : '')
         : a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
         <div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button></div>`
         : a.estado === 'por_verificar' || a.estado === 'rechazado' ? `${a.estado === 'rechazado' ? `<p class="ab-fila-sub">Rechazado: ${esc(a.rechazado_motivo || 'sin motivo')}${oficina() ? '' : '. Corrígelo con «Editar» y vuelve a verificación.'}</p>` : ''}
