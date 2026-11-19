@@ -10045,6 +10045,16 @@ async function pintarOrigenAnuncio(leadId) {
   if (o.anuncio && o.anuncio.length > 60) chip.title = o.anuncio;
 }
 
+async function pintarOrigenPublicacion(leadId) {
+  const { data: o, error } = await sb.rpc('lead_origen_publicacion', { p_lead: leadId });
+  const box = document.getElementById('d-origen-post');
+  if (error || !o?.url || !box || currentLead?.id !== leadId) return;
+  const red = o.canal === 'facebook' ? 'Facebook' : 'Instagram';
+  const texto = o.caption ? `«${o.caption.replace(/\s+/g, ' ').slice(0, 50)}${o.caption.length > 50 ? '…' : ''}»` : `una publicación de ${red}`;
+  box.innerHTML = `<a class="dm-chip" href="${esc(o.url)}" target="_blank" rel="noopener" title="Abrir la publicación en ${red}${o.caption ? ': ' + esc(o.caption.slice(0, 200)) : ''}"><i class="fab fa-${o.canal === 'facebook' ? 'facebook' : 'instagram'}"></i>Vino de ${esc(texto)} <i class="fas fa-arrow-up-right-from-square" style="margin-left:4px;font-size:.8em"></i></a>`;
+  box.style.display = '';
+}
+
 function openDrawer(l, opciones = {}) {
   currentLead = l;
   camposSuciosLead = new Set(); conflictoLeadPendiente = false; CONFLICTO_IDS_LEAD = new Set();
@@ -10068,11 +10078,13 @@ function openDrawer(l, opciones = {}) {
   const dis = soloLectura ? 'disabled' : '';
   const badges = `${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${badgeCampanaOrigen(l)}`;
   if (l.meta_ad_id || l.meta_ref) queueMicrotask(() => pintarOrigenAnuncio(l.id));
+  if (l.meta_post_id || /instagram|facebook/i.test(l.canal || '')) queueMicrotask(() => pintarOrigenPublicacion(l.id));
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead dhead-lead" style="--est:${estColor}"><div class="dava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div>
       <div class="dhead-info"><div class="dn"><span id="d-nombre">${esc(nombreLead(l))}</span>${badgePrioridadIA(l)}${badgeSeguidorIG(l)}</div>
       <div class="dm"><span class="dm-chip"><i class="fas fa-phone"></i>${textoTelefonoLead(l)}</span>${l.canal ? `<span class="dm-chip"><i class="${iconoCanalLead(l.canal)}"></i>${esc(l.canal)}</span>` : ''}${l.destino ? `<span class="dm-chip"><i class="fas fa-location-dot"></i>${esc(l.destino)}</span>` : ''}<span class="dm-chip"><i class="fas fa-clock"></i>${esc(tiempoRelativo(fechaLlegadaLead(l)))}</span></div>
       ${l.meta_ad_id || l.meta_ref ? '<div class="dm"><span class="dm-chip" id="d-origen-ad"><i class="fas fa-bullhorn"></i>Vino de un anuncio de Meta</span></div>' : ''}
+      <div class="dm" id="d-origen-post" style="display:none"></div>
       ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div>
       <span class="dh-est" id="dh-est" style="--est:${estColor}">${esc(niceEstado(l.estado))}</span>
       <div class="dtabs" role="tablist" aria-label="Secciones de la ficha">${FICHA_TABS.map(([k, t], i) => `<button type="button" role="tab" class="dtab" data-dtab-btn="${k}" aria-selected="${i === 0}">${t}</button>`).join('')}</div></div>
@@ -12222,9 +12234,49 @@ function riaPintarPanel(data) {
   document.getElementById('ria-versiones').innerHTML = versiones.length ? `<div class="ria-lista">${versiones.map(v => `<div class="ria-fila"><span><b>${esc(v.nombre_version || 'Cerebro sin versión')}</b><br>${esc(v.motor_version)} · ${esc(v.estado_version || 'sin estado')}</span><b>${fmt(riaNum(v.conversaciones))}<small style="display:block;color:var(--muted);font-weight:500">${fmt(riaNum(v.leads_calificados))} leads</small></b></div>`).join('')}</div>` : '<div class="ria-vacio">Sin versiones con actividad en este período.</div>';
 }
 
+function riaPeriodoIso() {
+  const dia = RIA_FECHA || (RIA_DIAS === 1 ? hoyCaracas() : null);
+  if (dia) { const d = new Date(`${dia}T00:00:00-04:00`); return [d.toISOString(), new Date(d.getTime() + 864e5).toISOString()]; }
+  return [new Date(Date.now() - RIA_DIAS * 864e5).toISOString(), new Date().toISOString()];
+}
+
+const riaTablaMod = (cols, filas, minW) => `<div style="overflow-x:auto"><div style="--n:${cols.length - 1};min-width:${minW}px">
+  <div class="ria-cal-head ria-mod">${cols.map(c => `<span>${esc(c)}</span>`).join('')}</div>
+  ${filas.map(f => `<div class="ria-cal-fila ria-mod">${f.map((c, i) => i ? `<b>${c}</b>` : `<span>${c}</span>`).join('')}</div>`).join('')}</div></div>`;
+
+async function loadEmbudoDetalle() {
+  const boxA = document.getElementById('ria-asesores'), boxP = document.getElementById('ria-publicaciones');
+  if (!boxA || !boxP) return;
+  const [desde, hasta] = riaPeriodoIso();
+  const { data: d, error } = await sb.rpc('embudo_leads_detalle', { p_desde: desde, p_hasta: hasta });
+  if (error || !d) { boxA.innerHTML = boxP.innerHTML = '<div class="ria-vacio">No se pudo cargar.</div>'; return; }
+  const pct = (a, b) => b ? ` <small style="color:var(--muted);font-weight:500">${Math.round(100 * a / b)}%</small>` : '';
+  const malo = (v, txt) => v ? txt : `<span class="ria-malo">${txt}</span>`;
+  const ase = d.asesores || [];
+  boxA.innerHTML = ase.length ? riaTablaMod(['Asesor', 'Leads', 'Atendidos', 'Min. a atender', 'Con seguimiento', 'Cotizados', 'Ventas'],
+    ase.map(a => [esc(a.asesor), fmt(riaNum(a.leads)), fmt(riaNum(a.atendidos)), a.min_atender != null ? fmt(riaNum(a.min_atender)) : '—',
+      malo(riaNum(a.con_seguimiento), fmt(riaNum(a.con_seguimiento))) + pct(riaNum(a.con_seguimiento), riaNum(a.leads)),
+      malo(riaNum(a.cotizados), fmt(riaNum(a.cotizados))) + pct(riaNum(a.cotizados), riaNum(a.leads)), fmt(riaNum(a.ventas))]), 720)
+    + '<div class="ce-ayuda">Solo cuenta lo registrado en el CRM. Una cotización o venta hecha por WhatsApp sin cambiar el estado del lead no aparece acá.</div>'
+    : '<div class="ria-vacio">Sin leads en este período.</div>';
+  const pubs = d.publicaciones || [];
+  const fecha = s => s ? new Date(s).toLocaleDateString('es-VE', { day: '2-digit', month: 'short' }) : '';
+  const celdaPub = p => {
+    const red = p.canal === 'facebook' ? 'facebook' : 'instagram';
+    const txt = p.caption ? p.caption.replace(/\s+/g, ' ').slice(0, 70) + (p.caption.length > 70 ? '…' : '') : (p.url ? `Publicación de ${red === 'facebook' ? 'Facebook' : 'Instagram'}` : 'Buscando el enlace…');
+    const btn = p.url ? `<a class="btn-sm" href="${esc(p.url)}" target="_blank" rel="noopener" title="Abrir la publicación" style="margin-left:6px;white-space:nowrap"><i class="fas fa-arrow-up-right-from-square"></i> Ver</a>` : '';
+    return `<span style="display:flex;align-items:center;gap:6px"><i class="fab fa-${red}"></i><span style="flex:1;min-width:0" title="${esc(p.caption || '')}">${esc(txt)}${p.publicado_en ? `<small style="display:block;color:var(--muted2)">${esc(fecha(p.publicado_en))}${p.tipo ? ' · ' + esc(String(p.tipo).toLowerCase()) : ''}</small>` : ''}</span>${btn}</span>`;
+  };
+  boxP.innerHTML = pubs.length ? riaTablaMod(['Publicación', 'Comentarios', 'Leads', 'Teléfono', 'Cotizados', 'Ventas'],
+    pubs.map(p => [celdaPub(p), fmt(riaNum(p.comentarios)), fmt(riaNum(p.leads)), fmt(riaNum(p.con_telefono)), fmt(riaNum(p.cotizados)), fmt(riaNum(p.ventas))]), 720)
+    + `<div class="ce-ayuda">${fmt(riaNum(d.leads_con_publicacion))} de ${fmt(riaNum(d.leads_total))} leads del período tienen publicación de origen; el resto escribió directo por DM o WhatsApp sin comentar antes.</div>`
+    : '<div class="ria-vacio">Sin comentarios ni leads con publicación en este período.</div>';
+}
+
 async function loadRendimientoIA(forzar = false) {
   if (!esOficina() || !document.getElementById('ria-kpis')) return;
   document.getElementById('ria-actualizado').textContent = 'Cargando…';
+  loadEmbudoDetalle().catch(e => console.error('embudo detalle', e));
   try {
     const data = await riaConsultar(RIA_FECHA ? 1 : RIA_DIAS, forzar, true, RIA_FECHA);
     riaPintarPanel(data);
