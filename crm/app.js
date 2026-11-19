@@ -5988,7 +5988,8 @@ async function rvGenerarVoucherReserva(btn) {
       if (error) throw error;
       // Orden elegido en Reservas › Abonos (reserva_abonos.orden); sin orden, por id. El «último» sigue siendo el más nuevo.
       abonos = (lista?.abonos || []).filter(a => !a.anulado_en).sort((a, b) => (a.orden ?? 1e9) - (b.orden ?? 1e9) || Number(a.id) - Number(b.id));
-      ultimo = abonos.reduce((u, a) => !u || Number(a.id) > Number(u.id) ? a : u, null);
+      // Un traslado de saldo no es un pago: no da forma de pago ni referencia.
+      ultimo = abonos.filter(a => !a.traslado_id).reduce((u, a) => !u || Number(a.id) > Number(u.id) ? a : u, null);
     } catch (e) {
       console.error('voucher: abonos', e);
     }
