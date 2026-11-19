@@ -11647,7 +11647,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
         </details>
         <div id="cb-items" class="cb-items"></div>
-        <div class="cb-add-barra"><button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button><button id="cb-traslado-apto" class="dbtn cb-add" type="button" hidden onclick="cbAgregarTrasladoAeropuerto()" title="Traslado común ida y vuelta: $20 por adulto, $12 por niño"><i class="fas fa-van-shuttle"></i> Traslado aeropuerto</button><label class="cb-opc-switch" title="Cada hotel o paquete es una opción con su propio total y no se suman. Lo marcado «En todas» (vuelo, traslado) entra en cada opción."><input type="checkbox" role="switch" id="cb-opciones" onchange="cbAlternarOpciones(this.checked)"> Opciones para elegir</label></div>
+        <div class="cb-add-barra"><button class="dbtn cb-add" type="button" onclick="cbAgregarItem()"><i class="fas fa-plus"></i> Agregar servicio</button><button id="cb-traslado-apto" class="dbtn cb-add" type="button" hidden onclick="cbAgregarTrasladoAeropuerto()" title="Traslado común ida y vuelta: $20 por adulto, $12 por niño"><i class="fas fa-van-shuttle"></i> Traslado aeropuerto</button><button id="cb-pedir-disp" class="dbtn cb-add" type="button" onclick="cbPedirDisponibilidad()" title="Manda los hoteles de esta cotización a un admin para que confirme disponibilidad y precio"><i class="fas fa-hotel"></i> Pedir disponibilidad</button><label class="cb-opc-switch" title="Cada hotel o paquete es una opción con su propio total y no se suman. Lo marcado «En todas» (vuelo, traslado) entra en cada opción."><input type="checkbox" role="switch" id="cb-opciones" onchange="cbAlternarOpciones(this.checked)"> Opciones para elegir</label></div>
         <div id="cb-opc-elegir" class="cb-opc-elegir" hidden></div>
         <details class="cb-textos">
           <summary>Notas y términos del PDF</summary>
@@ -12406,6 +12406,8 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-documentos-empresa"><div id="documentos-empresa-root"></div></section>
     <!-- Métodos de pago (metodos-pago.js, 2026-11-10): copiar dato, texto o foto para el cliente. -->
     <section class="section" id="sec-metodos-pago"><div id="metodos-pago-root"></div></section>
+    <!-- Disponibilidad (disponibilidad.js, 2026-11-18): solicitudes de hoteles/posadas a los admins. -->
+    <section class="section" id="sec-disponibilidad"><div id="disponibilidad-root"></div></section>
     <!-- LEADS › LLAMADAS (llamadas-panel.js + RPC llamadas_app_metricas) -->
     <section class="section" id="sec-llamadas"><div id="llamadas-root"></div></section>
     <!-- BOLETERÍA › BOLETOS EMITIDOS (boletos-emitidos.js + tabla boletos_emitidos) -->

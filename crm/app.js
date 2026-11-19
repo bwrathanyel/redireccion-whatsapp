@@ -14,6 +14,7 @@ import { crearMetodosPago } from './metodos-pago.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
+import { crearDisponibilidad } from './disponibilidad.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
 import { crearLlamadasApp } from './llamadas-app.js';
@@ -1968,7 +1969,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa', 'historicos',
   'web-reasignados', 'contactos-directos', 'repartir', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'metodos-pago', 'proveedores', 'empresas', 'bt-travel', 'documentos-empresa', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
+  'facturacion', 'pagos', 'metodos-pago', 'disponibilidad', 'proveedores', 'empresas', 'bt-travel', 'documentos-empresa', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
@@ -1991,6 +1992,13 @@ function manejarDeepLinkSeccion() {
     const sol = Number(params.get('sol'));
     history.replaceState(null, '', location.pathname);
     irASolicitudes(Number.isInteger(sol) && sol > 0 ? sol : null);
+    return;
+  }
+  // Telegram de disponibilidad: ?ir=disponibilidad&disp=<id> abre la solicitud.
+  const disp = Number(params.get('disp'));
+  if (seccion === 'disponibilidad' && disp > 0 && usuarioPuedeAbrirSeccion('disponibilidad')) {
+    history.replaceState(null, '', location.pathname);
+    activateSection('disponibilidad'); disponibilidad().abrir(disp);
     return;
   }
   const pedida = seccion === 'mis-comisiones' ? 'comisiones' : seccion;
@@ -3827,7 +3835,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupColaInbox, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
-    setupTareasV2, setupLlamadasWa, setupLlamadasApp, setupTecladoMovil, setupEstadoBody, setupBarraInf,
+    setupTareasV2, setupLlamadasWa, setupLlamadasApp, setupTecladoMovil, setupEstadoBody, setupBarraInf, setupSolicitudesDisp,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -4267,6 +4275,10 @@ const mpInsertarEn = idTexto => t => {
   ta.value = ta.value.trim() ? ta.value.replace(/\s+$/, '') + '\n\n' + t : t;
   ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus();
 };
+let DISPONIBILIDAD = null;
+const disponibilidad = () => DISPONIBILIDAD ||= crearDisponibilidad({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, uid: () => MI_USUARIO_ID,
+  raiz: document.getElementById('disponibilidad-root'), abrirLead: id => window.abrirLeadPorId(id), aplicarCotizacion: (s, d) => cbDesdeDisponibilidad(s, d) });
+function setupSolicitudesDisp() { if (['admin', 'asesor', 'administrativo'].includes(ROL)) disponibilidad().vigilar(); }
 let BOLETOS_EMITIDOS = null;
 const boletosEmitidos = () => BOLETOS_EMITIDOS ||= crearBoletosEmitidos({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('boletos-emitidos-root'),
   librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), paleta: VCP,
@@ -9209,6 +9221,7 @@ function abrirAccionesLeadSheet(l) {
     vende && !l.fecha_cotizacion_enviada && { k: 'reg-cot', t: 'Registrar cotización enviada', i: 'fa-file-circle-check', go: () => registrarCotizacionEnviada(l) },
     (ROL === 'asesor' || esOficina()) && !VENTA.includes(l.estado) && cta !== 'reserva' && { k: 'reserva', t: 'Crear reserva', i: 'fa-plus', go: () => abrirEnviarFacturacionSheet(l) },
     vende && { k: 'boleteria', t: 'Solicitud de boletería', i: 'fa-plane-departure', go: () => abrirSolicitudBoleteria(l) },
+    (vende || ROL === 'administrativo') && { k: 'disp', t: 'Pedir disponibilidad de hotel', i: 'fa-hotel', go: () => disponibilidad().pedir({ lead: l }) },
     wa && { k: 'avisar', t: 'Avisar número incorrecto', i: 'fa-flag', go: () => abrirAvisarTelefono(l) },
     // En el teléfono no hay bandeja: sin esto el asesor no puede soltar el lead. Mismas condiciones que reasignar_lead.
     esMovil() && ROL === 'asesor' && !l.no_reasignar && l.estado === 'POR ATENDER' && !l.fecha_primer_contacto && { k: 'no-puedo', t: 'No puedo: pasar a otro asesor', i: 'fa-xmark', go: async () => { if (await noPuedoInboxLead(l)) loadTable(); } },
@@ -37357,6 +37370,47 @@ function cbExcHtml(it, i) {
 async function cbDesdeLead(l) {
   if (cbLead && cbLead.id !== l.id) { await cbGuardarBorrador(); cbResetForm(); }
   cbLeadPendiente = { ...l, nombre: l.nombre || l.telefono || `Lead #${l.id}` }; currentSec === 'cotizacion-boletos' ? cbCargarSeccion() : activateSection('cotizacion-boletos'); }
+// Disponibilidad (disponibilidad.js, 2026-11-18): «Pedir disponibilidad» manda todos los hoteles de la cotización en
+// una solicitud; «Aplicar a la cotización» pone el precio confirmado como tarifa manual del ítem. Nada cambia solo.
+window.cbPedirDisponibilidad = () => {
+  const hoteles = cbItems.map((it, i) => ({ it, i })).filter(({ it }) => it.tipo === 'hotel' && cbTitulo(it));
+  if (!hoteles.length) return errToast('Agrega primero un hotel a la cotización');
+  const f = hoteles.find(({ it }) => it.ida && it.vuelta)?.it || {};
+  const ad = Math.max(1, Number(f.adultos) || 2), ni = Number(f.ninos) || 0, inf = Number(f.infantes) || 0;
+  disponibilidad().pedir({ lead: cbLead || null, cliente: document.getElementById('cb-cliente')?.value.trim() || cbLead?.nombre || '', check_in: f.ida || '', check_out: f.vuelta || '',
+    habitaciones: [{ adultos: ad, ninos: Array(ni).fill(0), infantes: inf }], canal: 'cotizacion',
+    items: hoteles.map(({ it, i }) => ({ producto_id: it.producto_id ? Number(it.producto_id) : undefined, alojamiento: cbTitulo(it), tipo: 'hotel', plan: it.plan || '', habitacion: it.hab || '', cotizacion_item_idx: i })) });
+};
+async function cbDesdeDisponibilidad(s, d) {
+  if (DR?.edicion('cotizacion')) { errToast('Hay una cotización en edición en Cotizaciones: guárdala o cancélala primero'); return false; }
+  const esperar = async cond => { for (let k = 0; k < 50 && !cond(); k++) await new Promise(r => setTimeout(r, 100)); return cond(); };
+  if (s.lead_id && cbLead?.id !== s.lead_id) {
+    const { data: l } = await sb.from('leads').select(CB_LEAD_CAMPOS).eq('id', s.lead_id).maybeSingle();
+    if (l) { await cbDesdeLead(l); await esperar(() => cbLead?.id === s.lead_id); }
+  }
+  if (currentSec !== 'cotizacion-boletos') activateSection('cotizacion-boletos');
+  if (!(await esperar(() => cbListo))) { errToast('Cotizaciones tardó demasiado en cargar'); return false; }
+  const pax = (s.habitaciones || []).reduce((a, h) => ({ ad: a.ad + (h.adultos || 0), ni: a.ni + (h.ninos || []).length, inf: a.inf + (h.infantes || 0) }), { ad: 0, ni: 0, inf: 0 });
+  const mismo = it => it.tipo === 'hotel' && (d.producto_id ? Number(it.producto_id) === Number(d.producto_id) : cbTarNorm(cbTitulo(it)) === cbTarNorm(d.alojamiento));
+  let it = d.cotizacion_item_idx != null && mismo(cbItems[d.cotizacion_item_idx] || {}) ? cbItems[d.cotizacion_item_idx] : cbItems.find(mismo);
+  if (!it && d.producto_id) it = await cbAplicarProducto(Number(d.producto_id), { ida: s.check_in, vuelta: s.check_out });
+  if (!it) { it = cbItems[cbItems.push(cbItemVacio('hotel')) - 1]; it.nombre = d.alojamiento; cbAutoIniciar(it); }
+  Object.assign(it, { ida: s.check_in, vuelta: s.check_out, adultos: pax.ad || it.adultos, ninos: pax.ni || '', infantes: pax.inf || '' });
+  if (it.auto) ['ida', 'vuelta', 'adultos', 'ninos', 'infantes'].forEach(k => delete it.auto[k]);
+  cbHotelRecalcular(it);
+  const noches = cbTarNoches(it.ida, it.vuelta).length || 1, habs = (s.habitaciones || []).length || 1;
+  let precio = Number(d.precio_confirmado), unidad = { noche: 'habitacion_noche', persona_noche: 'persona_noche', persona_total: 'persona' }[d.precio_unidad];
+  if (!unidad) { unidad = 'habitacion_noche'; precio = Math.round(precio / noches / habs * 100) / 100; }
+  if (it.unidad !== unidad) Object.assign(it, { unidad, unidad_manual: true, _unidadPendiente: false });
+  (it.tramos || []).forEach(t => { t.tarifa = precio; t.tarifa_habitacion = null; delete t.grupos; });
+  Object.assign(it, { tarifa: precio, tarifa_manual: true, _desactualizado: false, _aviso: `Precio confirmado en disponibilidad #${s.id}.` });
+  if (d.moneda === 'EUR') it.tasa = 'EUR';
+  it.tarifas_contexto = cbTarContexto(it);
+  cbAutoTodos(); cbRenderItems(); cbActualizarTotal(); cbProgramarBorrador();
+  document.querySelector(`#cb-items .cb-item[data-i="${cbItems.indexOf(it)}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  okToast(d.moneda === 'VES' ? 'Aplicado. Ojo: el precio vino en bolívares, revísalo' : 'Precio aplicado a la cotización');
+  return true;
+}
 // Lyra (2026-11-11): su herramienta generar_cotizacion se arma y se guarda acá, con el mismo motor de tarifas,
 // Stop Sales, validaciones, número QT, PDF y registro del lead que a mano. Lo que no pasa queda armado para revisar.
 let cbLyraPendiente = null;
@@ -39397,6 +39451,8 @@ const NAV_ITEMS = [
   // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
   // Ya no es pestaña de Leads (2026-10-17): entrada propia del menú en todos los modos (también la ficha del lead la abre con cbDesdeLead).
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
+  // Disponibilidad (2026-11-18, disponibilidad.js): asesor/administrativo piden, admins atienden. Boletería y marketing no.
+  { sec: 'disponibilidad', icon: 'fas fa-hotel', label: 'Disponibilidad', roles: '', sub: 'Pide disponibilidad de hoteles y posadas; un admin consulta al proveedor y responde', badge: 'nav-disp-count', badgeDefault: '0' },
   // Boletos emitidos (2026-11-04): solo admin y rol boletería (dueño); asesor+boletería y administrativo no.
   { sec: 'boletos-emitidos', icon: 'fas fa-ticket', label: 'Boletos emitidos', roles: 'nav-admin-only nav-administrativo-no nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Recibo de itinerario con el logo de la aerolínea; se llena solo con el PDF del consolidador' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Carga vouchers PDF como venta' },
@@ -39441,6 +39497,7 @@ const NAV_PADRES = [
   { sec: 'tareas', hoja: true },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
   { sec: 'cotizacion-boletos', hoja: true },
+  { sec: 'disponibilidad', hoja: true },
   { sec: 'boletos-emitidos', hoja: true },
   // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
   { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja', badge: 'nav-bandeja-count', badgeDefault: '0' },
@@ -39866,6 +39923,7 @@ function cargarSeccion(sec) {
   if (sec === 'costos-digitales') costosDigitales().cargar();
   if (sec === 'documentos-empresa') documentosEmpresa().cargar();
   if (sec === 'metodos-pago') metodosPago().cargar();
+  if (sec === 'disponibilidad') disponibilidad().cargar();
   if (sec === 'llamadas') llamadasPanel().cargar();
   if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
   if (sec === 'facturas-empresa') facturasEmpresa().cargar();
