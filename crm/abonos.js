@@ -44,6 +44,12 @@ const ERRORES = {
   abono_no_pendiente: 'Ese abono ya no está por verificar: otra persona lo resolvió. Recarga.',
   datos_invalidos: 'Faltan datos para verificar el abono.',
   abono_verificado: 'Ese abono ya fue verificado por administración: pídele a administración que corrija el monto, el método o la referencia.',
+  destino_invalido: 'Elige otra reserva para aplicar el saldo.',
+  otro_cliente: 'Esa reserva es de otro cliente (otro teléfono): el saldo a favor solo pasa entre reservas del mismo cliente.',
+  sin_saldo_a_favor: 'La reserva ya no tiene saldo a favor. Recarga.',
+  supera_saldo_a_favor: 'El monto supera el saldo a favor de la reserva.',
+  traslado_no_encontrado: 'Ese traslado no existe.',
+  traslado_anulado: 'Ese traslado ya estaba deshecho.',
 };
 // Finanzas Fase 1: aprobar o rechazar un abono por verificar. También lo usa el tablero de Pagos (app.js).
 export async function verificarAbono(sb, id, aprobar, motivo = null) {
@@ -83,6 +89,12 @@ const CSS = `
 .ab-origen{font-size:11px;color:var(--muted)}
 .ab-tag{padding:2px 9px;border-radius:999px;border:1px solid var(--line2);font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .ab-tag.ab-respaldo{color:var(--amber);border-color:var(--amber)}
+.ab-tag.ab-tras-tag{color:var(--accent,var(--amber));border-color:currentColor}
+.ab-tras-dest{display:grid;gap:6px;margin:0 0 10px}
+.ab-tras-dest label{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line2);border-radius:10px;cursor:pointer;font-size:12px}
+.ab-tras-dest label:has(input:checked){border-color:var(--amber);background:color-mix(in srgb,var(--amber) 8%,transparent)}
+.ab-tras-dest input{margin-top:2px}
+.ab-tras-dest small{display:block;color:var(--muted);font-size:11px}
 .ab-tag.ab-anulada-tag{color:var(--danger);border-color:var(--danger)}
 .ab-tag.ab-pend-tag{color:var(--amber);border-color:var(--amber)}
 .ab-fila.ab-rechazada{opacity:.75}
@@ -123,7 +135,7 @@ const CSS = `
 
 export function crearAbonos(c) {
   const { sb, esc } = c;
-  const usd = n => '$' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const usd = n => (Number(n) < 0 ? '−$' : '$') + Math.abs(Number(n || 0)).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const num = (n, d = 2) => Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: d, maximumFractionDigits: d });
   const mensaje = e => ERRORES[e?.message || e] || (e?.message || e) || 'No se pudo completar la operación';
   const panel = () => document.querySelector('[data-rv-panel="abonos"]');
@@ -170,6 +182,10 @@ export function crearAbonos(c) {
       else if (a === 'comprobante') verComprobante(b.dataset.path, b);
       else if (a === 'reintentar') reintentarDocumentos(Number(b.dataset.id), b);
       else if (a === 'verificar' || a === 'rechazar') verificar(Number(b.dataset.id), a === 'verificar', b);
+      else if (a === 'trasladar') abrirTraslado();
+      else if (a === 'cerrar-traslado') { est.traslado = null; pintar(); }
+      else if (a === 'confirmar-traslado') confirmarTraslado(b);
+      else if (a === 'deshacer-traslado') deshacerTraslado(b.dataset.tr, b);
       else if (a === 'metodo') {
         // Sin repintar: pintar() recrea el formulario y borraría lo ya escrito.
         est.metodo = b.dataset.metodo;
@@ -210,8 +226,82 @@ export function crearAbonos(c) {
       <div class="ab-kpi"><span>Pagado</span><b>${usd(d.monto_pagado)}</b></div>
       ${Number(d.monto_por_verificar) > 0 ? `<div class="ab-kpi" title="Cargado por el asesor: suma al pagado cuando administración lo verifique"><span>Por verificar</span><b>${usd(d.monto_por_verificar)}</b></div>` : ''}
       <div class="ab-kpi ab-saldo"><span>${Number(d.monto_pagado) > Number(d.monto_total) ? 'Saldo a favor' : 'Saldo'}</span><b>${usd(Math.abs(Number(d.monto_total) - Number(d.monto_pagado)))}</b></div>
+      ${favorDe(d) > 0 && oficina() && !est.traslado ? '<button class="dbtn gh ab-nuevo" type="button" data-ab-accion="trasladar" title="Pasa el saldo a favor a otra reserva del mismo cliente"><i class="fas fa-right-left"></i> Aplicar a otra reserva</button>' : ''}
       <button class="dbtn save ab-nuevo" type="button" data-ab-accion="nuevo"><i class="fas fa-plus"></i> Abono</button>
     </div>`;
+  }
+  // ------------------------------------------------ traslado de saldo a favor (2026-11-19)
+  // Dos filas con el mismo traslado_id: «Saldo trasladado» (−) aquí y «Saldo a favor» (+) en el destino.
+  const favorDe = d => Math.round((Number(d?.monto_pagado || 0) - Number(d?.monto_total || 0)) * 100) / 100;
+  function trasladoHtml(d) {
+    const t = est.traslado, favor = favorDe(d);
+    if (t.cargando) return '<div class="ab-form"><p class="ab-fila-sub">Buscando reservas del mismo cliente…</p></div>';
+    const lista = t.destinos || [];
+    const cuerpo = !lista.length
+      ? '<p class="ab-fila-sub">Este cliente no tiene otra reserva activa con saldo pendiente (se busca por el mismo lead o el mismo teléfono).</p>'
+      : `<div class="ab-tras-dest" role="radiogroup" aria-label="Reserva que recibe el saldo">${lista.map(r => `<label><input type="radio" name="ab-tras-dest" value="${r.id}"${Number(r.id) === Number(t.destino) ? ' checked' : ''}>
+          <span><b>${esc(r.codigo)}</b> · ${esc(r.destino || 'Sin destino')}${r.fecha_viaje_inicio ? ' · ' + esc(diaCorto(r.fecha_viaje_inicio)) : ''}
+          <small>${esc(r.cliente || '')} · debe ${usd(r.saldo_pendiente)} de ${usd(r.monto_total)}</small></span></label>`).join('')}</div>
+        <div class="ab-grid"><div><label class="fl" for="ab-tras-monto">Monto a aplicar (máx. ${usd(favor)})</label>
+          <input class="ei" id="ab-tras-monto" type="number" min="0.01" step="0.01" inputmode="decimal" value="${esc(t.monto ?? '')}"></div></div>`;
+    return `<div class="ab-form">
+      <p class="ab-fila-sub">Saldo a favor de esta reserva: <b>${usd(favor)}</b>. Pasa a la otra reserva como abono «Saldo a favor»; aquí queda como «Saldo trasladado». No toca cuentas ni banco, y se puede deshacer.</p>
+      ${cuerpo}
+      <p class="ab-err" id="ab-tras-err"></p>
+      <div class="ab-acciones">
+        ${lista.length ? '<button class="dbtn save" type="button" data-ab-accion="confirmar-traslado"><i class="fas fa-right-left"></i> Aplicar saldo</button>' : ''}
+        <button class="dbtn gh" type="button" data-ab-accion="cerrar-traslado">Cancelar</button>
+      </div></div>`;
+  }
+  async function abrirTraslado() {
+    const id = est.reservaId;
+    est.traslado = { cargando: true }; est.formAbierto = false; est.editando = null; pintar();
+    const { data, error } = await sb.rpc('traslado_saldo_destinos', { p_reserva_id: id });
+    if (est.reservaId !== id || !est.traslado) return;
+    if (error || !data?.ok) { est.traslado = null; pintar(); return c.error(error?.code === '42501' ? 'Solo administración aplica saldos a favor.' : rpcErr(error, data)); }
+    const favor = favorDe(est.datos), primero = data.destinos?.[0];
+    est.traslado = { destinos: data.destinos || [], destino: primero?.id ?? null, solicitud: crypto.randomUUID(),
+      monto: primero ? Math.min(favor, Number(primero.saldo_pendiente)).toFixed(2) : null };
+    pintar();
+  }
+  async function confirmarTraslado(btn) {
+    const t = est.traslado; if (!t || est.guardando) return;
+    const err = document.getElementById('ab-tras-err'), poner = m => { if (err) err.textContent = m || ''; };
+    const destino = Number(panel()?.querySelector('input[name="ab-tras-dest"]:checked')?.value || 0);
+    const monto = Math.round(Number(document.getElementById('ab-tras-monto')?.value || 0) * 100) / 100;
+    const r = (t.destinos || []).find(x => Number(x.id) === destino);
+    if (!r) return poner('Elige la reserva que recibe el saldo.');
+    if (!(monto > 0)) return poner(ERRORES.monto_invalido);
+    if (monto > favorDe(est.datos)) return poner(ERRORES.supera_saldo_a_favor);
+    if (monto > Number(r.saldo_pendiente)) return poner(`${r.codigo} solo debe ${usd(r.saldo_pendiente)}.`);
+    // Otro destino o monto = otra operación (el servidor rechaza reusar la solicitud con otros datos).
+    if (t.destino !== destino || Number(t.monto) !== monto) { t.solicitud = crypto.randomUUID(); t.destino = destino; t.monto = monto.toFixed(2); }
+    est.guardando = true; btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('trasladar_saldo_a_favor', { p_origen_id: est.reservaId, p_destino_id: destino, p_monto: monto, p_solicitud_id: t.solicitud });
+      if (error) return poner(error.code === '42501' ? 'Solo administración aplica saldos a favor.' : error.message);
+      if (!data?.ok) return poner(mensaje(data?.error) + (data?.saldo_pendiente != null ? ` (${r.codigo} debe ${usd(data.saldo_pendiente)})` : ''));
+      est.traslado = null; est.datos = null;
+      await cargar(est.reservaId);
+      c.pagosCambiaron?.();
+      c.ok(`${usd(monto)} aplicados a ${r.codigo}${data.destino ? ` · ahora debe ${usd(data.destino.saldo_pendiente)}` : ''}. Si ya tenían voucher, actualízalo desde Voucher en cada reserva.`);
+    } finally { est.guardando = false; if (btn.isConnected) btn.disabled = false; }
+  }
+  async function deshacerTraslado(trasladoId, btn) {
+    const a = (est.datos?.abonos || []).find(x => x.traslado_id === trasladoId && !x.anulado_en);
+    if (!a || est.guardando) return;
+    const motivo = await c.pedir({ titulo: 'Deshacer traslado de saldo', detalle: `${usd(Math.abs(Number(a.monto_usd)))} entre esta reserva y ${a.referencia || 'la otra'}. Las dos reservas vuelven a como estaban.`,
+      label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Deshacer', destructivo: true });
+    if (!motivo) return;
+    est.guardando = true; if (btn) btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('deshacer_traslado_saldo', { p_traslado_id: trasladoId, p_motivo: motivo });
+      if (error) return c.error(error.code === '42501' ? 'Solo administración deshace traslados.' : error.message);
+      if (!data?.ok) return c.error(mensaje(data?.error));
+      est.datos = null; await cargar(est.reservaId);
+      c.pagosCambiaron?.();
+      c.ok(`Traslado deshecho · ${data.origen?.codigo} vuelve a tener ${usd(data.origen?.saldo_a_favor)} a favor.`);
+    } finally { est.guardando = false; if (btn?.isConnected) btn.disabled = false; }
   }
   function avisoCuadre(d) {
     const dif = Number(d.monto_pagado || 0) - Number(d.pagado_con_detalle || 0);
@@ -259,7 +349,8 @@ export function crearAbonos(c) {
   // Vigentes con su puesto en el voucher (1°, 2°...) y lo que lleva abonado hasta ese abono.
   // `mover`: se puede arrastrar (más de uno y sin el formulario abierto, que pintar() borraría).
   function filaHtml(a, pos = 0, acum = 0, mover = false) {
-    const ref = a.referencia ? ` · ${esc(a.referencia)}` : a.comprobante_path ? ' · captura adjunta' : '';
+    const tras = !!a.traslado_id;
+    const ref = tras ? (a.nota ? ` · ${esc(a.nota)}` : '') : a.referencia ? ` · ${esc(a.referencia)}` : a.comprobante_path ? ' · captura adjunta' : '';
     const servs = est.datos?.servicios || [];
     const serv = servs.length > 1 && a.servicio_id ? servs.find(s => Number(s.id) === Number(a.servicio_id)) : null;
     const total = Number(est.datos?.monto_total || 0);
@@ -268,8 +359,8 @@ export function crearAbonos(c) {
       : `<span class="ab-pos" title="Puesto en el voucher">${pos}°</span>`;
     return `<li class="ab-fila${a.anulado_en ? ' ab-anulada' : a.estado === 'rechazado' ? ' ab-rechazada' : ''}${pos ? ' ab-mov' : ''}" data-id="${a.id}">${puesto}${pos ? '<div class="ab-cuerpo">' : ''}
       <div class="ab-fila-top"><b>${usd(a.monto_usd)}</b>
-        <span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${a.tasa_tipo ? nombreTasa(a.tasa_tipo) + ' ' : ''}${num(a.tasa_usd_ves, 4)}` : ''}</span>
-        <span class="ab-tag">${esc(a.metodo)}</span>
+        ${tras ? '' : `<span class="ab-origen">${esc(a.moneda)} ${num(a.monto_original)}${a.moneda === 'VES' && a.tasa_usd_ves ? ` · tasa ${a.tasa_tipo ? nombreTasa(a.tasa_tipo) + ' ' : ''}${num(a.tasa_usd_ves, 4)}` : ''}</span>`}
+        <span class="ab-tag${tras ? ' ab-tras-tag' : ''}"${tras ? ' title="Saldo a favor movido entre reservas del mismo cliente: no es un cobro nuevo"' : ''}>${esc(a.metodo)}</span>
         ${serv ? `<span class="ab-tag" title="${esc(nombreServ(serv))}">${esc(TIPO_SERV[serv.tipo] || serv.tipo)}</span>` : ''}
         ${/^inicial/i.test(a.nota || '') ? '<span class="ab-tag">Inicial reserva</span>' : ''}
         ${a.respaldo ? '<span class="ab-tag ab-respaldo" title="Lo cobrado antes de que existiera el registro de abonos: no tiene recibo propio">Cobrado antes</span>' : ''}
@@ -277,7 +368,9 @@ export function crearAbonos(c) {
       </div>
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
       ${pos ? `<p class="ab-acum">Lleva abonado <b>${usd(acum)}</b> <span>de ${usd(total)} · resta ${usd(Math.max(0, total - acum))}</span></p>` : ''}
-      ${a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
+      ${tras ? (a.anulado_en ? `<p class="ab-fila-sub">Traslado deshecho: ${esc(a.anulado_motivo || 'sin motivo')}</p>`
+          : oficina() ? `<div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="deshacer-traslado" data-tr="${esc(a.traslado_id)}">Deshacer traslado</button></div>` : '')
+        : a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
         <div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button></div>`
         : a.estado === 'por_verificar' || a.estado === 'rechazado' ? `${a.estado === 'rechazado' ? `<p class="ab-fila-sub">Rechazado: ${esc(a.rechazado_motivo || 'sin motivo')}${oficina() ? '' : '. Corrígelo con «Editar» y vuelve a verificación.'}</p>` : ''}
         <div class="ab-fila-acc">
@@ -302,10 +395,10 @@ export function crearAbonos(c) {
     const d = est.datos, ab = d.abonos || [];
     const vivos = ab.filter(cuenta), anulados = ab.filter(a => !cuenta(a));
     anulados.sort((x, y) => (x.estado === 'por_verificar' && !x.anulado_en ? 0 : 1) - (y.estado === 'por_verificar' && !y.anulado_en ? 0 : 1));
-    const mover = vivos.length > 1 && !est.formAbierto && !est.guardando;
+    const mover = vivos.length > 1 && !est.formAbierto && !est.traslado && !est.guardando;
     let acum = 0;
     const filas = vivos.map((a, i) => filaHtml(a, i + 1, acum += Number(a.monto_usd || 0), mover)).join('');
-    p.innerHTML = kpis(d) + avisoCuadre(d) + (est.formAbierto ? formHtml(d) : '') +
+    p.innerHTML = kpis(d) + avisoCuadre(d) + (est.traslado ? trasladoHtml(d) : est.formAbierto ? formHtml(d) : '') +
       (ab.length ? (vivos.length ? `<p class="ab-orden-tit"><b>Orden en el voucher</b>${mover ? '<span>Arrastra <i class="fas fa-grip-lines"></i> para cambiarlo</span>' : ''}</p>
         <ul class="ab-lista" data-ab-orden>${filas}</ul>${est.ordenPrevio ? `<div class="ab-acciones ab-orden-pie"><span>Orden sin guardar</span>
           <button class="dbtn save" type="button" data-ab-accion="guardar-orden"><i class="fas fa-floppy-disk"></i> Guardar cambios</button>
@@ -473,7 +566,7 @@ export function crearAbonos(c) {
   // `id`: editar ese abono (form precargado); sin id, abono nuevo.
   function abrirForm(id) {
     const ed = id ? (est.datos?.abonos || []).find(x => Number(x.id) === id) || null : null;
-    est.editando = ed;
+    est.editando = ed; est.traslado = null;
     if (ed) { est.metodo = METODOS.includes(ed.metodo) ? ed.metodo : ''; est.moneda = ed.moneda; }
     else { est.metodo = est.metodo || 'Zelle'; est.moneda = est.metodo === 'Pago móvil' ? 'VES' : 'USD'; }
     est.archivo = null; est.formAbierto = true; est.tasasFecha = null; est.tokenFecha++;
@@ -1006,7 +1099,7 @@ export function crearAbonos(c) {
   function montar(reservaId, conForm, captura = null) {
     if (!asentar()) return;
     est.reservaId = reservaId;
-    est.datos = null; est.archivo = null; est.editando = null; est.metodo = conForm ? 'Pago móvil' : ''; est.formAbierto = !!conForm;
+    est.datos = null; est.archivo = null; est.editando = null; est.traslado = null; est.metodo = conForm ? 'Pago móvil' : ''; est.formAbierto = !!conForm;
     est.moneda = conForm ? 'VES' : 'USD'; est.solicitud = conForm ? crypto.randomUUID() : null;
     cargar(reservaId).then(() => {
       if (!captura || !conForm || est.reservaId !== reservaId || !est.formAbierto) return;
