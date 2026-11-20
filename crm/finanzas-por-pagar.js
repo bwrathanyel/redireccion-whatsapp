@@ -43,16 +43,39 @@ const CSS = `
 .pp-ficha-cab small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
 .pp-acc{display:flex;gap:7px;flex-wrap:wrap}
 .pp-cifras{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:14px 0 4px}
-.pp-cifras div{padding:9px 11px;border:1px solid var(--line);border-radius:10px;min-width:0}
-.pp-cifras span{display:block;font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
-.pp-cifras b{display:block;margin-top:4px;font-size:17px;font-variant-numeric:tabular-nums}
+.pp-cifras div{--c:var(--muted);position:relative;padding:11px 14px;border:1px solid var(--line);border-radius:12px;min-width:0;overflow:hidden;background:var(--bg)}
+.pp-cifras div::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--c);opacity:.35}
+.pp-cifras div[data-c]{border-color:color-mix(in srgb,var(--c) 30%,transparent);background:color-mix(in srgb,var(--c) 8%,var(--bg))}
+.pp-cifras div[data-c]::before{opacity:1}
+.pp-cifras div[data-c="accent"]{--c:var(--accent)}.pp-cifras div[data-c="amber"]{--c:var(--amber)}
+.pp-cifras div[data-c="green"]{--c:var(--green)}.pp-cifras div[data-c="blue"]{--c:var(--blue)}
+.pp-cifras span{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.pp-cifras span i{color:var(--c);font-size:11px}
+.pp-cifras b{display:block;margin-top:7px;font-size:19px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pp-cuerpo .inbox-btn{flex:0 0 auto;min-height:32px;padding:0 11px;border-color:var(--line2);background:transparent;color:var(--txt);transition:border-color .16s,background .16s,color .16s}
+.pp-cuerpo .inbox-btn:hover:not(:disabled){filter:none;border-color:var(--accent);background:var(--accent-soft)}
+.pp-cuerpo .inbox-btn:disabled{border-style:dashed;color:var(--muted);opacity:.6;cursor:not-allowed}
+.pp-cuerpo .inbox-btn:focus-visible,.pp-cuerpo .btn-sm:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pp-cuerpo .inbox-btn.pp-pri{color:var(--accent-ink);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.pp-cuerpo .inbox-btn.pp-pri:hover{border-color:var(--accent)}
+.pp-acc .btn-sm{display:inline-flex;align-items:center;gap:5px;min-height:32px}
+.pp-barra .pp-lleno{display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:0 14px;border:0;border-radius:10px;background:var(--accent);color:var(--on-accent);font:inherit;font-size:12px;font-weight:800;cursor:pointer;box-shadow:0 10px 22px rgba(var(--accent-rgb),.22);transition:filter .16s}
+.pp-barra .pp-lleno:hover{filter:brightness(1.06)}
+.pp-barra .pp-lleno:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .pp-link{border:0;background:none;color:var(--accent);font:inherit;font-size:11px;font-weight:700;letter-spacing:0;text-transform:none;cursor:pointer;margin-left:7px;padding:4px}
 .pp-cxps{display:flex;flex-direction:column;gap:4px}
 .pp-cxp{display:grid;grid-template-columns:28px minmax(0,1fr) 84px 130px auto;gap:9px;align-items:center;padding:4px 9px;border:1px solid var(--line);border-radius:10px;transition:border-color .16s,background .16s}
 .pp-cxp.on{border-color:var(--accent);background:var(--accent-soft)}
 .pp-cxp.off{opacity:.6}
 .pp-chk{display:flex;align-items:center;justify-content:center;min-width:28px;min-height:44px;cursor:pointer}
-.pp-chk input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+.pp-chk input{-webkit-appearance:none;appearance:none;flex:none;display:inline-grid;place-content:center;width:20px;height:20px;margin:0;border:1.5px solid var(--line2);border-radius:6px;background:transparent;cursor:pointer;transition:background .16s,border-color .16s,box-shadow .16s}
+.pp-chk input::before{content:"";width:11px;height:11px;background:var(--on-accent);clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%);transform:scale(0);transition:transform .14s ease-out}
+.pp-chk:hover input:not(:disabled){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pp-chk input:checked{background:var(--accent);border-color:var(--accent)}
+.pp-chk input:checked::before{transform:scale(1)}
+.pp-chk input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pp-chk input:disabled{border-style:dashed;opacity:.5;cursor:not-allowed}
+.pp-chk:has(input:disabled){cursor:not-allowed}
 .pp-cxp-q{min-width:0;font-size:12px}
 .pp-cxp small{display:block;font-size:11px;color:var(--muted)}
 .pp-cxp-q small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -150,7 +173,7 @@ button.sal-fila:hover{background:var(--accent-soft)}
   .pp-cuerpo[data-vista="lista"] .pp-panel{display:none}
   .pp-volver{display:inline-flex;min-height:44px}
   .pp-panel{padding:11px}
-  .pp-acc .btn-sm,.pp-acc .inbox-btn,.pp-cxp-a .inbox-btn,.pp-barra .inbox-btn,.pp-barra .btn-sm{min-height:44px}
+  .pp-acc .btn-sm,.pp-cuerpo .inbox-btn,.pp-barra .pp-lleno{min-height:44px}
 }
 @media (max-width:560px){.pp-form{grid-template-columns:1fr}.pp-rep-fila{grid-template-columns:1fr 96px}}
 `;
@@ -392,10 +415,10 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
       <div class="pp-acc"><button class="btn-sm lt-primario" type="button" data-pp="pagar" data-id="${id}"><i class="fas fa-money-bill-transfer"></i> Registrar pago</button>
         <button class="inbox-btn" type="button" data-pp="reembolso" data-id="${id}"${fav > 0 ? '' : ' disabled title="Sin saldo a favor para reembolsar"'}><i class="fas fa-rotate-left"></i> Reembolso</button>
         ${admin ? `<button class="inbox-btn" type="button" data-pp="inicial" data-id="${id}" title="Saldo a favor que ya existía antes del sistema"><i class="fas fa-flag"></i> Saldo inicial</button>` : ''}</div></div>
-      <div class="pp-cifras"><div><span>Debo</span><b>${usd(x.pendiente)}</b></div>
-        <div><span>Vencido</span><b class="${x.vencido > 0 ? 'pp-alerta' : 'pp-muted'}">${x.vencido > 0 ? usd(x.vencido) : '—'}</b></div>
-        <div><span>A favor</span><b class="${fav > 0 ? 'pp-verde' : 'pp-muted'}">${usd(fav)}</b></div>
-        <div><span>Próximo viaje</span><b>${dia(x.proximo_viaje)}</b></div></div>`;
+      <div class="pp-cifras"><div${x.pendiente > 0 ? ' data-c="accent"' : ''}><span><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i>Debo</span><b>${usd(x.pendiente)}</b></div>
+        <div${x.vencido > 0 ? ' data-c="amber"' : ''}><span><i class="fas fa-clock" aria-hidden="true"></i>Vencido</span><b class="${x.vencido > 0 ? 'pp-alerta' : 'pp-muted'}">${x.vencido > 0 ? usd(x.vencido) : '—'}</b></div>
+        <div${fav > 0 ? ' data-c="green"' : ''}><span><i class="fas fa-piggy-bank" aria-hidden="true"></i>A favor</span><b class="${fav > 0 ? 'pp-verde' : 'pp-muted'}">${usd(fav)}</b></div>
+        <div${x.proximo_viaje ? ' data-c="blue"' : ''}><span><i class="fas fa-plane-departure" aria-hidden="true"></i>Próximo viaje</span><b${x.proximo_viaje ? '' : ' class="pp-muted"'}>${dia(x.proximo_viaje)}</b></div></div>`;
     if (!cx || !mv) return `${cab}<div class="pp-vacio">Cargando…</div>`;
     const pend = cx.filter(c => c.saldo > 0), cr = cx.filter(c => c.credito_por_conciliar > 0);
     const elegibles = pend.filter(c => !c.sin_migrar), todas = elegibles.length > 0 && elegibles.every(c => sel.has(c.cxp_id));
@@ -406,7 +429,7 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
         : `<div class="pp-vacio">Nada pendiente con ${esc(x.nombre)}.${fav > 0 ? ' El saldo a favor queda para la próxima cuenta.' : ''}</div>`}
       ${selL.length ? `<div class="pp-barra" role="region" aria-label="Cuentas elegidas"><span><b>${selL.length}</b> elegida${selL.length === 1 ? '' : 's'} · ${usd(selTot)}</span>
         <div class="pp-barra-acc">${fav > 0 ? `<button type="button" class="inbox-btn" data-pp="usar-sel"><i class="fas fa-piggy-bank"></i> Usar saldo ${usd(Math.min(fav, selTot))}</button>` : ''}
-          <button type="button" class="btn-sm lt-primario" data-pp="pagar-sel"><i class="fas fa-money-bill-transfer"></i> Pagar ${usd(selTot)}</button></div></div>` : ''}
+          <button type="button" class="pp-lleno" data-pp="pagar-sel"><i class="fas fa-money-bill-transfer"></i> Pagar ${usd(selTot)}</button></div></div>` : ''}
       ${cr.length ? `<div class="pp-sub">Pagado de más por conciliar</div><p class="pp-nota">Cuentas de reservas históricas o con abono viejo cuyo costo bajó. Al pasarlo a saldo a favor se puede usar en otra cuenta.</p>
         <div class="pp-cxps">${cr.map(c => `<div class="pp-cxp"><span></span><div class="pp-cxp-q"><b>${esc(c.codigo || '—')}</b> ${esc(c.cliente || '')}<small>${esc(c.servicio || '')}</small></div>
           <div class="pp-cxp-f"></div><div class="pp-cxp-m"><b class="pp-verde">${usd(c.credito_por_conciliar)}</b></div>
@@ -423,7 +446,7 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
       <div class="pp-cxp-f${c.vencida ? ' pp-alerta' : ''}"><small>${c.vencida ? 'Viajó' : 'Viaja'}</small>${dia(c.fecha_inicio)}</div>
       <div class="pp-cxp-m"><small>${Number(c.abonado) > 0 ? `pagado ${usd(c.abonado)} de ${usd(c.monto)}` : 'debo'}</small><b>${usd(c.saldo)}</b></div>
       <div class="pp-cxp-a">${c.sin_migrar ? '<span class="pp-estado alerta" title="Abono cargado con el botón viejo: falta pasarlo a pagos">Abono viejo</span>'
-        : `${fav > 0 ? `<button type="button" class="inbox-btn" data-pp="usar" data-id="${c.cxp_id}" title="Cubrir con el saldo a favor">Usar saldo</button>` : ''}<button type="button" class="inbox-btn" data-pp="pagar-cxp" data-id="${c.cxp_id}">Pagar</button>`}</div></div>`;
+        : `${fav > 0 ? `<button type="button" class="inbox-btn" data-pp="usar" data-id="${c.cxp_id}" title="Cubrir con el saldo a favor">Usar saldo</button>` : ''}<button type="button" class="inbox-btn pp-pri" data-pp="pagar-cxp" data-id="${c.cxp_id}">Pagar</button>`}</div></div>`;
   }
   function movFila(m, provId) {
     const reemb = m.clase === 'reembolso', ini = m.clase === 'saldo_inicial';
