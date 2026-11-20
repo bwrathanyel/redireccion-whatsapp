@@ -4267,7 +4267,8 @@ let FINANZAS_POR_PAGAR = null;
 const finanzasPorPagar = () => FINANZAS_POR_PAGAR ||= crearFinanzasPorPagar({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('finanzas-por-pagar-root'), hoja: document.getElementById('pp-sheet-root'),
   abrirSheet: openSheet, cerrarSheet: closeSheet, hoy: hoyCaracas, uid: () => MI_USUARIO_ID,
-  irTarifario: id => window.abrirProductoTarifario(id), alCambiar: () => loadCuentasPorPagar(true) });
+  irTarifario: id => window.abrirProductoTarifario(id), alCambiar: () => loadCuentasPorPagar(true),
+  leerComprobante: async file => { const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } }); return error || !data?.ok ? null : data.datos; } });
 let METODOS_PAGO = null;
 const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
@@ -23265,7 +23266,7 @@ const FACT_SORT = {
   ventas: { col: 'fecha_emision', dir: -1 }, comisiones: { col: null, dir: 1 },
   cxp: { col: 'saldo_pendiente', dir: -1 }, asesores: { col: 'nombre', dir: 1 }, proveedores: { col: 'nombre', dir: 1 },
 };
-const FACT_RENDERERS = { ventas: renderVentas, comisiones: renderComisiones, cxp: renderCuentasPorPagar, asesores: renderAsesoresComision, proveedores: renderProveedores };
+const FACT_RENDERERS = { ventas: renderVentas, comisiones: renderComisiones, asesores: renderAsesoresComision, proveedores: renderProveedores };
 // Único lugar que aplica un orden -- lo llaman tanto el click en <th
 // class="th-sort"> (thead, oculto en móvil) como la hoja "Ordenar" (Fase
 // 4.1, segunda puerta de entrada). Nunca duplicar esta lógica en el sheet.
@@ -23333,7 +23334,6 @@ function setupFacturacion() {
   document.querySelectorAll('.export-dd-menu').forEach(el => popoverASheet(el, { abierto: n => n.classList.contains('show'), cerrar: n => n.classList.remove('show') }));
   document.getElementById('fact-ventas-search').addEventListener('input', () => { factVentasMostrar = TECHO_LISTA; renderVentas(); });
   document.getElementById('fact-com-search').addEventListener('input', () => { factComMostrar = TECHO_LISTA; renderComisiones(); });
-  document.getElementById('cxp-search').addEventListener('input', () => { cxpMostrar = TECHO_LISTA; renderCuentasPorPagar(); });
   document.getElementById('fact-asesores-search').addEventListener('input', renderAsesoresComision);
   document.getElementById('monto-sheet-cancelar').addEventListener('click', () => closeSheet('monto-sheet'));
   document.getElementById('monto-sheet-confirmar').addEventListener('click', confirmarMontoSheet);
@@ -24145,147 +24145,14 @@ function cargarMasComisiones() { factComMostrar += TECHO_LISTA; renderComisiones
 window.cargarMasComisiones = cargarMasComisiones;
 async function loadCuentasPorPagar(soloLista = false) {
   if (!soloLista && document.getElementById('finanzas-por-pagar-root') && (ROL === 'admin' || ROL === 'administrativo')) finanzasPorPagar().cargar();
-  DR?.cargarCreditos();
-  document.getElementById('cxp-loading')?.classList.add('show');
+  // La pantalla es finanzas-por-pagar.js; CXP_CACHE sigue alimentando costo neto/proveedor/margen de Ventas.
   const { data, error } = await sb.rpc('listar_cuentas_por_pagar');
-  document.getElementById('cxp-loading')?.classList.remove('show');
   if (error) { errToast('No se pudieron cargar las cuentas por pagar'); return; }
   CXP_CACHE = data || [];
-  cxpMostrar = TECHO_LISTA;
-  renderCuentasPorPagar();
+  FACT_LAST.cxp = CXP_CACHE;
 }
-// Filtro por estado que ponen los KPIs ('' = todas). Los KPIs cuentan sobre
-// la búsqueda pero NO sobre este filtro: si no, al tocar "Pagadas" el KPI de
-// pendientes quedaría en 0 y no habría forma de volver a verlo.
-let cxpFiltroEstado = '';
-function filtrarCxpEstado(estado) {
-  cxpFiltroEstado = cxpFiltroEstado === estado ? '' : estado;
-  cxpMostrar = TECHO_LISTA;
-  renderCuentasPorPagar();
-}
-function renderCuentasPorPagar() {
-  const buscadas = ordenarYFiltrar(CXP_CACHE, ['proveedor', 'cliente'], val('cxp-search'), FACT_SORT.cxp);
-  const filas = cxpFiltroEstado ? buscadas.filter(c => c.estado === cxpFiltroEstado) : buscadas;
-  FACT_LAST.cxp = filas;
-  let sumaTransferir = 0, sumaAbonado = 0, sumaSaldo = 0, nPend = 0, nPag = 0;
-  const provsBuscados = new Set();
-  buscadas.forEach(c => {
-    sumaTransferir += c.monto_a_transferir; sumaAbonado += c.monto_abonado; sumaSaldo += c.saldo_pendiente;
-    if (c.estado === 'pendiente') nPend++; else if (c.estado === 'pagado') nPag++;
-    provsBuscados.add(cxpClave(c.proveedor));
-  });
-  const pctAbonado = sumaTransferir > 0 ? Math.round(sumaAbonado / sumaTransferir * 100) : 0;
-  pintarKPIs('cxp-kpis', [
-    { key: '', t: 'Monto', v: money(sumaTransferir), d: `${fmt(provsBuscados.size)} proveedores · ${fmt(buscadas.length)} cuentas · ver todas`, i: 'fa-file-invoice-dollar', c: 'var(--blue)', on: cxpFiltroEstado === '', go: () => filtrarCxpEstado('') },
-    { key: 'pendiente', t: 'Pendiente de pagar', v: money(sumaSaldo), d: `${fmt(nPend)} por pagar · ${pctAbonado}% ya abonado`, i: 'fa-hourglass-half', c: 'var(--amber)', on: cxpFiltroEstado === 'pendiente', go: () => filtrarCxpEstado('pendiente') },
-    { key: 'pagado', t: 'Pagadas', v: fmt(nPag), d: `${money(sumaAbonado)} abonado en total`, i: 'fa-circle-check', c: 'var(--green)', on: cxpFiltroEstado === 'pagado', go: () => filtrarCxpEstado('pagado') },
-  ]);
-  const grupos = new Map();
-  filas.forEach(c => {
-    const k = cxpClave(c.proveedor);
-    let g = grupos.get(k);
-    if (!g) grupos.set(k, g = { clave: k, nombre: String(c.proveedor || '').trim() || 'Sin proveedor', filas: [], transferir: 0, abonado: 0, saldo: 0, nPend: 0 });
-    g.filas.push(c); g.transferir += c.monto_a_transferir; g.abonado += c.monto_abonado; g.saldo += c.saldo_pendiente;
-    if (c.estado === 'pendiente') g.nPend++;
-  });
-  const { col, dir } = FACT_SORT.cxp, campoSuma = { saldo_pendiente: 'saldo', monto_a_transferir: 'transferir', monto_abonado: 'abonado' }[col];
-  const lista = [...grupos.values()].sort(campoSuma ? (a, b) => (a[campoSuma] - b[campoSuma]) * dir : col === 'proveedor' ? (a, b) => a.clave.localeCompare(b.clave) * dir : (a, b) => b.saldo - a.saldo);
-  const porCuenta = cxpVista === 'cuenta', unidades = porCuenta ? filas : lista;
-  const pager = document.getElementById('cxp-pager');
-  if (pager) pager.style.display = unidades.length > cxpMostrar ? '' : 'none';
-  document.querySelectorAll('[data-cxp-vista]').forEach(b => b.classList.toggle('on', b.dataset.cxpVista === cxpVista));
-  const btnTodo = document.getElementById('cxp-abrir-todo');
-  if (btnTodo) btnTodo.hidden = porCuenta;
-  const tbody = document.getElementById('cxp-tbody');
-  tbody.classList.toggle('cxp-por-proveedor', !porCuenta);
-  tbody.innerHTML = unidades.slice(0, cxpMostrar).map(porCuenta ? cxpTarjetaHtml : cxpFichaHtml).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${cxpFiltroEstado || val('cxp-search') ? 'Nada coincide con el filtro' : 'Sin cuentas por pagar'}</div>`;
-}
-// Vista elegida y fichas abiertas se recuerdan entre renders (abonar recarga la lista y no debe plegarlo todo).
-let cxpVista = 'proveedor';
-try { if (localStorage.getItem('cxp-vista') === 'cuenta') cxpVista = 'cuenta'; } catch {}
-const cxpAbiertas = new Set();
-function cxpCambiarVista(v) {
-  cxpVista = v === 'cuenta' ? 'cuenta' : 'proveedor';
-  try { localStorage.setItem('cxp-vista', cxpVista); } catch {}
-  cxpMostrar = TECHO_LISTA;
-  renderCuentasPorPagar();
-}
-window.cxpCambiarVista = cxpCambiarVista;
-function cxpToggle(el) {
-  if (val('cxp-search').trim()) return;
-  if (el.open) cxpAbiertas.add(el.dataset.clave); else cxpAbiertas.delete(el.dataset.clave);
-}
-window.cxpToggle = cxpToggle;
-function cxpAbrirTodo() {
-  const fichas = [...document.querySelectorAll('#cxp-tbody details.cxp-ficha')], abrir = fichas.some(d => !d.open);
-  fichas.forEach(d => { d.open = abrir; });
-}
-window.cxpAbrirTodo = cxpAbrirTodo;
-// Vista «Por cuenta»: una tarjeta por cuenta, como antes de agrupar por proveedor.
-function cxpTarjetaHtml(c, i) {
-  const pagado = c.estado === 'pagado';
-  const pct = c.monto_a_transferir > 0 ? Math.min(100, Math.round(c.monto_abonado / c.monto_a_transferir * 100)) : (pagado ? 100 : 0);
-  return `<article class="lt-card${pagado ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}${c.lead_id ? ';cursor:pointer' : ''}"${c.lead_id ? ` onclick="if(!event.target.closest('button,a'))abrirClienteDesdeFacturacion(${c.lead_id})"` : ''}>
-    <div class="lt-card-cab">
-      <div class="lt-card-tit" title="${esc(c.proveedor)}">${esc(c.proveedor)}</div>
-      <span class="bt-tag" style="--c:${pagado ? 'var(--green)' : 'var(--amber)'}">${pagado ? 'Pagado' : esc(c.estado === 'pendiente' ? 'Pendiente' : c.estado)}</span>
-    </div>
-    <div class="lt-card-meta"><i class="fas fa-user"></i> ${esc(c.cliente || 'Sin cliente')}</div>
-    <div class="lt-cifras">
-      <div><span>Monto</span><b>${money(c.monto_a_transferir)}</b></div>
-      <div><span>Abonado</span><b>${money(c.monto_abonado)}</b></div>
-      <div><span>Pendiente de pagar</span><b class="${c.saldo_pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(c.saldo_pendiente)}</b></div>
-    </div>
-    <div class="lt-barra" role="progressbar" aria-label="Abonado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
-    <div class="lt-card-pie">
-      ${c.lead_id ? `<button class="btn-sm" type="button" onclick="abrirClienteDesdeFacturacion(${c.lead_id})"><i class="fas fa-user-pen"></i> Editar cliente</button>` : ''}
-      ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})"><i class="fas fa-hand-holding-dollar"></i> Registrar abono</button>` : ''}
-    </div>
-  </article>`;
-}
-// Mismo proveedor con y sin proveedor_id (o con distinto acento/espacios) cae en una sola ficha.
+// Mismo nombre con distinto acento/espacios cae en una sola ficha (Comisiones agrupa por asesor con esto).
 function cxpClave(p) { return String(p || '').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' '); }
-function cxpFichaHtml(g, i) {
-  const hecha = g.nPend === 0;
-  const pct = g.transferir > 0 ? Math.min(100, Math.round(g.abonado / g.transferir * 100)) : (hecha ? 100 : 0);
-  const pagadas = g.filas.filter(c => c.estado === 'pagado');
-  // Buscando se muestran todas: si no, el cliente buscado podría quedar tras el «Ver pagadas».
-  const plegar = !hecha && pagadas.length > 0 && !val('cxp-search').trim();
-  const cuerpo = plegar ? g.filas.filter(c => c.estado !== 'pagado') : g.filas;
-  const abierta = cxpAbiertas.has(g.clave) || !!val('cxp-search').trim();
-  return `<details class="lt-card cxp-ficha${hecha ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)}" data-clave="${esc(g.clave)}"${abierta ? ' open' : ''} ontoggle="cxpToggle(this)">
-    <summary class="cxp-cab">
-      <div class="lt-card-cab">
-        <i class="fas fa-chevron-right cxp-chev" aria-hidden="true"></i>
-        <div class="lt-card-tit" title="${esc(g.nombre)}">${esc(g.nombre)}</div>
-        <span class="cxp-n">${fmt(g.filas.length)} cuenta${g.filas.length === 1 ? '' : 's'}</span>
-        <span class="bt-tag" style="--c:${hecha ? 'var(--green)' : 'var(--amber)'}">${hecha ? 'Pagado' : `${fmt(g.nPend)} pendiente${g.nPend === 1 ? '' : 's'}`}</span>
-      </div>
-      <div class="lt-cifras">
-        <div><span>Monto</span><b>${money(g.transferir)}</b></div>
-        <div><span>Abonado</span><b>${money(g.abonado)}</b></div>
-        <div><span>Pendiente de pagar</span><b class="${g.saldo > 0 ? 'lt-debe' : 'lt-ok'}">${money(g.saldo)}</b></div>
-      </div>
-      <div class="lt-barra" role="progressbar" aria-label="Abonado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
-    </summary>
-    <div class="cxp-filas">${cuerpo.map(cxpFilaHtml).join('')}${plegar ? `<button class="cxp-ver-pagadas" type="button" aria-expanded="false" data-n="${pagadas.length}" onclick="cxpVerPagadas(this)">Ver ${fmt(pagadas.length)} pagada${pagadas.length === 1 ? '' : 's'}</button><div class="cxp-pagadas" hidden>${pagadas.map(cxpFilaHtml).join('')}</div>` : ''}</div>
-  </details>`;
-}
-function cxpFilaHtml(c) {
-  const detalle = [c.reserva_codigo, c.servicio].filter(Boolean).join(' · ');
-  const abrir = c.lead_id ? `abrirClienteDesdeFacturacion(${c.lead_id})` : '';
-  const hecha = c.estado === 'pagado';
-  const pct = c.monto_a_transferir > 0 ? Math.min(100, Math.round(c.monto_abonado / c.monto_a_transferir * 100)) : (hecha ? 100 : 0);
-  return `<div class="cxp-fila${hecha ? ' cxp-fila-hecha' : ''}${abrir ? ' cxp-fila-link' : ''}"${abrir ? ` onclick="if(!event.target.closest('button,a'))${abrir}"` : ''}>
-    <div class="cxp-quien"><b title="${esc(c.cliente || 'Sin cliente')}">${esc(c.cliente || 'Sin cliente')}</b>${detalle ? `<span title="${esc(detalle)}">${esc(detalle)}</span>` : ''}</div>
-    <div class="cxp-montos"><span>Monto ${money(c.monto_a_transferir)} · Abonado ${money(c.monto_abonado)}</span><small>Pendiente de pagar</small><b class="${c.saldo_pendiente > 0 ? 'lt-debe' : 'lt-ok'}">${money(c.saldo_pendiente)}</b></div>
-    <div class="lt-barra" role="progressbar" aria-label="Abonado" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
-    <div class="cxp-acc">
-      ${c.estado === 'pendiente' ? `<button class="btn-sm lt-primario" type="button" onclick="abrirRegistrarAbonoUI(${c.id}, ${c.saldo_pendiente})"><i class="fas fa-hand-holding-dollar"></i> Abonar</button>` : ''}
-      ${abrir ? `<button class="btn-sm" type="button" onclick="${abrir}" title="Editar cliente" aria-label="Editar cliente"><i class="fas fa-user-pen"></i></button>` : ''}
-    </div>
-  </div>`;
-}
 function cxpVerPagadas(btn) {
   const caja = btn.nextElementSibling, abre = caja.hidden;
   caja.hidden = !abre;
@@ -24293,8 +24160,6 @@ function cxpVerPagadas(btn) {
   btn.textContent = abre ? 'Ocultar pagadas' : `Ver ${fmt(+btn.dataset.n)} pagada${btn.dataset.n === '1' ? '' : 's'}`;
 }
 window.cxpVerPagadas = cxpVerPagadas;
-function cargarMasCxp() { cxpMostrar += TECHO_LISTA; renderCuentasPorPagar(); }
-window.cargarMasCxp = cargarMasCxp;
 
 /* ---------- Hoja genérica de un solo monto (reusada por Editar % de
    comisión y Registrar abono de cuentas por pagar) ---------- */
@@ -25073,8 +24938,7 @@ function btAbrirFicha(tab) {
 function btIrACxp() {
   activateSection('facturacion');
   document.querySelector('#fact-tabs .seg[data-fact-tab="cxp"]')?.click();
-  const inp = document.getElementById('cxp-search');
-  if (inp) { inp.value = 'BT'; inp.dispatchEvent(new Event('input', { bubbles: true })); }
+  if (ROL === 'admin' || ROL === 'administrativo') finanzasPorPagar().abrirProveedor(1); // BT Travel = proveedores.id 1
 }
 function btAbrirHotel(id) {
   const x = BT_DATA?.hoteles.find(h => h.id === id);

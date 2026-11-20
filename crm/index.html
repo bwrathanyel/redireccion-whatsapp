@@ -7081,8 +7081,6 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .mv-celebra{animation:mv-celebrar .6s var(--ease-salida)}
 @media(prefers-reduced-motion:reduce){.lt-card{animation:none}.mv-celebra{animation:none}}
 /* Cuentas por pagar: una ficha por proveedor a todo el ancho, una mini-tarjeta por cliente en grilla (2026-10-23). */
-#sec-facturacion #cxp-tbody.cxp-por-proveedor{grid-template-columns:minmax(0,1fr)}
-#cxp-abrir-todo[hidden]{display:none}
 /* Franja del proveedor (tintada, desplegable) vs. zona de clientes (fondo hundido, barra de color a la izquierda). */
 .cxp-ficha{padding:0;gap:0;overflow:hidden;border-color:var(--line2);border-left:4px solid var(--amber);box-shadow:0 1px 3px rgba(0,0,0,.18)}
 .cxp-ficha:hover{transform:none;border-left-color:var(--amber)}
@@ -7126,13 +7124,6 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .cxp-ver-pagadas:hover{background:var(--line)}
 .cxp-ver-pagadas:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 @media(max-width:760px){
-  #cxp-tbody .cxp-filas{padding:8px}
-  #cxp-tbody .cxp-cab{padding:12px}
-  #cxp-tbody .cxp-ficha .lt-cifras div{padding:0 8px}
-  #cxp-tbody .cxp-ficha .lt-cifras div:first-child{padding-left:0}
-  #cxp-tbody .cxp-ficha .lt-cifras div:last-child b{font-size:17px}
-  #cxp-tbody .cxp-acc .btn-sm{min-height:44px}
-  #cxp-tbody .cxp-ver-pagadas{min-height:44px}
   .cxp-n{display:none}
 }
 /* Comisiones: una ficha por asesor (mismo molde que CxP) y una mini-tarjeta por venta (2026-10-24). */
@@ -10701,7 +10692,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       <div class="seg-group chips-scroll" id="fact-tabs">
         <button class="seg on" data-fact-tab="ventas">Ventas</button>
         <button class="seg" data-fact-tab="comisiones" style="display:none">Comisiones</button>
-        <button class="seg" data-fact-tab="cxp">Cuentas por pagar</button>
+        <button class="seg" data-fact-tab="cxp">Pagos a proveedores</button>
         <button class="seg" data-fact-tab="asesores" style="display:none">Asesores <span class="lih-count fact-alerta" id="fact-asesores-alerta" hidden>0</span></button>
         <button class="seg" data-fact-tab="revisar">Por revisar <span class="lih-count" id="fact-revisar-count" hidden>0</span></button>
       </div>
@@ -10812,15 +10803,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="cxp" style="display:none">
-        <div class="card" id="finanzas-por-pagar-root" hidden></div>
-        <div class="fact-barra">
-          <input class="ei bt-buscar" id="cxp-search" type="search" placeholder="Buscar proveedor o cliente..." aria-label="Buscar proveedor o cliente">
-          <div class="seg-group seg-group-sm" role="group" aria-label="Tipo de vista">
-            <button class="seg on" type="button" data-cxp-vista="proveedor" onclick="cxpCambiarVista('proveedor')"><i class="fas fa-layer-group"></i> Por proveedor</button>
-            <button class="seg" type="button" data-cxp-vista="cuenta" onclick="cxpCambiarVista('cuenta')"><i class="fas fa-table-cells-large"></i> Por cuenta</button>
-          </div>
-          <button class="btn-sm" id="cxp-abrir-todo" type="button" onclick="cxpAbrirTodo()" title="Abrir o cerrar todas las fichas"><i class="fas fa-angles-down"></i> <span>Abrir / cerrar todo</span></button>
-          <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('cxp')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="cxp"></b></span></button>
+        <div class="fact-barra pp-barra-export">
           <div class="export-dd">
             <button class="btn-sm" type="button" onclick="toggleExportMenu(event,'cxp')" aria-label="Exportar" title="Exportar"><i class="fas fa-download"></i></button>
             <div class="export-dd-menu" id="export-menu-cxp">
@@ -10830,22 +10813,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
             </div>
           </div>
         </div>
-        <div class="card">
-          <div id="dr-creditos-proveedor" class="vc-hecho" hidden></div>
-          <div class="kpis bt-kpis lt-kpis" id="cxp-kpis"></div>
-          <div class="lt-orden" role="group" aria-label="Ordenar por">
-            <span class="lt-orden-lbl">Ordenar</span>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="saldo_pendiente">Pendiente de pagar</button>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="monto_a_transferir">Monto</button>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="monto_abonado">Abonado</button>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="proveedor">Proveedor</button>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="cliente">Cliente</button>
-            <button type="button" class="th-sort lt-orden-op" data-sort-tbl="cxp" data-sort-col="estado">Estado</button>
-          </div>
-          <div class="tbl-state skel" id="cxp-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
-          <div class="lt-grid" id="cxp-tbody"></div>
-          <div class="pager" id="cxp-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasCxp()">Cargar más</button></div>
-        </div>
+        <div class="card" id="finanzas-por-pagar-root" hidden></div>
       </div>
 
       <div class="fact-tab-panel" data-fact-panel="asesores" style="display:none">
