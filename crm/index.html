@@ -5010,6 +5010,48 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .rv-sugs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .rv-sugs button{min-height:36px;padding:0 12px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--txt);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
 .rv-sugs button.on{border-color:var(--accent);background:var(--accent-soft)}
+/* Calendario de rango, horas sugeridas y tarjetas del tarifario en el formulario de servicio (20-nov) */
+.rv-fecha{display:flex;align-items:center;gap:7px;width:100%;text-align:left;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;color:var(--txt)}
+.rv-fecha i{color:var(--accent)}
+.rv-fecha{min-height:46px}
+.rv-fecha.on,.rv-fecha:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.rv-fecha:disabled{opacity:.5;cursor:default}
+.rv-fecha-ph{color:var(--muted2);font-weight:500}
+.rv-cal{margin:2px 0 9px;padding:11px;border:1px solid var(--line2);border-radius:12px;background:var(--bg2)}
+.rv-cal[hidden]{display:none}
+.rv-cal-cab{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:9px;font-size:12.5px;color:var(--muted);text-align:center}
+.rv-cal-cab b{color:var(--txt)}
+.rv-cal-nav{flex:none;width:40px;height:40px;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--txt);cursor:pointer}
+.rv-cal-meses{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.rv-cal-tit{margin-bottom:4px;text-align:center;font-size:13px;font-weight:700;text-transform:capitalize}
+.rv-cal-sem,.rv-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0}
+.rv-cal-sem span{text-align:center;font-size:10.5px;color:var(--muted2);text-transform:uppercase}
+.rv-cal-grid button{position:relative;height:36px;border:0;border-radius:8px;background:transparent;color:var(--txt);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .16s}
+.rv-cal-grid button:hover{background:rgba(var(--ink-rgb),.07)}
+.rv-cal-grid button.pasado{color:var(--muted2)}
+.rv-cal-grid button.hoy{box-shadow:inset 0 0 0 1px var(--line2)}
+.rv-cal-grid button.en{border-radius:0;background:var(--accent-soft)}
+.rv-cal-grid button.ini,.rv-cal-grid button.fin{background:var(--accent);color:#fff}
+.rv-cal-grid button.hotel::after,.rv-cal-ley i{content:'';position:absolute;left:50%;bottom:4px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--green)}
+.rv-cal-pie{align-items:center;margin-top:11px}
+.rv-cal-ley{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--muted2)}
+.rv-cal-ley i{position:static;margin:0}
+.rv-cal-listo{margin-left:auto}
+.rv-horas{gap:4px;margin-top:7px}
+.rv-horas button{min-height:32px;padding:0 9px;font-size:11.5px}
+.rv-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px;margin-top:9px}
+.rv-cards-tit{grid-column:1/-1;font-size:11.5px;color:var(--muted)}
+.rv-card{display:flex;flex-direction:column;padding:0;overflow:hidden;border:1px solid var(--line2);border-radius:12px;background:var(--panel-solid);color:var(--txt);font-family:inherit;text-align:left;cursor:pointer;transition:border-color .16s}
+.rv-card:hover,.rv-card:focus-visible{border-color:var(--accent)}
+.rv-card-img{display:grid;place-items:center;aspect-ratio:4/3;background:rgba(var(--ink-rgb),.06) center/cover no-repeat;color:var(--muted2);font-size:20px}
+.rv-card-cuerpo{display:flex;flex-direction:column;gap:2px;padding:7px 9px 9px}
+.rv-card-n{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;font-weight:700;line-height:1.25}
+.rv-card small{font-size:11px;color:var(--muted2)}
+.rv-card-p{font-size:11.5px;font-weight:700;color:var(--green)}
+.rv-card-sel{display:flex;align-items:center;gap:11px;margin-top:7px;padding:7px;border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft)}
+.rv-card-sel .rv-card-img{width:72px;flex:none;border-radius:8px}
+.rv-card-sel .rv-card-cuerpo{flex:1;min-width:0;padding:0}
+@media(max-width:600px){.rv-cal-meses{grid-template-columns:1fr}.rv-cal-mes+.rv-cal-mes{display:none}.rv-cal-grid button{height:42px}.rv-horas button{min-height:40px}.rv-cards{grid-template-columns:repeat(2,1fr)}}
 /* Pasajeros y Documentos (Fase 3E): personas como filas, documentos primero y subir es un botón */
 .rv-per{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--line2);border-radius:12px;background:var(--panel-solid)}
 .rv-per-av{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-size:12px;font-weight:800}

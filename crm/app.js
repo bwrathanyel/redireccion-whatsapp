@@ -6250,7 +6250,8 @@ function rvFormServicio(p) {
     </div>
     <label class="fl" for="rv-s-desc">Descripción</label><input class="ei" id="rv-s-desc" maxlength="300" value="${esc(s?.descripcion || '')}" placeholder="Ej.: 3 noches en Los Roques, todo incluido">
     <div class="rv-sec"><i class="fas fa-calendar-days"></i> Fechas y pasajeros</div>
-    <div class="rv-fila" id="rv-s-fechas"><div><label class="fl" id="rv-s-lab-inicio" for="rv-s-inicio">Desde</label><input class="ei" id="rv-s-inicio" type="date" value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl" id="rv-s-lab-fin" for="rv-s-fin">Hasta</label><input class="ei" id="rv-s-fin" type="date" value="${esc(s?.fecha_fin || '')}"></div><div id="rv-s-calc"></div></div>
+    <div class="rv-fila" id="rv-s-fechas"><div><label class="fl" id="rv-s-lab-inicio" for="rv-s-inicio-btn">Desde</label><button type="button" class="ei rv-fecha" id="rv-s-inicio-btn" data-rv-cal="inicio" aria-controls="rv-s-cal" aria-expanded="false"></button><input id="rv-s-inicio" type="date" hidden value="${esc(s?.fecha_inicio || '')}"></div><div><label class="fl" id="rv-s-lab-fin" for="rv-s-fin-btn">Hasta</label><button type="button" class="ei rv-fecha" id="rv-s-fin-btn" data-rv-cal="fin" aria-controls="rv-s-cal" aria-expanded="false"></button><input id="rv-s-fin" type="date" hidden value="${esc(s?.fecha_fin || '')}"></div><div id="rv-s-calc"></div></div>
+    <div class="rv-cal" id="rv-s-cal" hidden></div>
     <div class="rv-hotel-sug" id="rv-s-fechas-aviso" aria-live="polite"></div>
     <div class="rv-hotel-sug" id="rv-s-vuelo-info"></div>
     <div class="rv-fila" id="rv-s-horas-boleto" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>
@@ -6275,8 +6276,22 @@ function rvFormServicio(p) {
   document.getElementById('rv-s-tipo').onchange = () => {
     if (desc.dataset.manual !== '1') desc.value = '';
     if (!s && !rvAgente() && est.dataset.manual !== '1') est.value = val('rv-s-tipo') === 'boleto_aereo' ? 'emitido' : 'cotizado';
-    rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible();
+    rvCalCerrar(); rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible(); rvRangoPintar();
   };
+  document.getElementById('rv-s-fechas').addEventListener('click', e => { const b = e.target.closest('[data-rv-cal]'); if (b && !b.disabled) rvCalAbrir(b.dataset.rvCal); });
+  const cal = document.getElementById('rv-s-cal');
+  cal.addEventListener('click', rvCalClick);
+  cal.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); rvCalCerrar(true); } });
+  document.getElementById('rv-s-destino').addEventListener('change', () => {
+    const t = val('rv-s-tipo');
+    if (RV_TAR_TIPO[t]) { rvPrefillReserva(t); rvTarCards(); rvFechasAviso(); } else if (t === 'hospedaje') rvHotelCards();
+  });
+  document.getElementById('rv-s-top').addEventListener('click', e => {
+    const c = e.target.closest('[data-rv-tar-card]'), h = e.target.closest('[data-rv-hotel-card]');
+    if (c) { const pr = (RV_TAR_PRODS || []).find(x => x.id === Number(c.dataset.rvTarCard)); if (pr) rvTarElegir(pr); }
+    else if (e.target.closest('[data-rv-tar-cambiar]')) rvTarCambiar();
+    else if (h) rvHotelElegir(h.dataset.rvHotelCard);
+  });
   ['rv-s-inicio', 'rv-s-fin'].forEach(k => { document.getElementById(k).onchange = () => { rvAptoCampo(); rvNochesCampo(); rvHotelSugerir(); rvTarSugerir(); rvFechasAviso(); }; });
   ['rv-s-adultos', 'rv-s-ninos'].forEach(k => { document.getElementById(k).oninput = () => { rvAptoAviso(); rvHotelSugerir(); rvTarSugerir(); }; });
   // El precio del tarifario se escribe solo mientras la persona no lo toque (data-auto, igual que la descripción).
@@ -6286,12 +6301,121 @@ function rvFormServicio(p) {
   p.querySelectorAll('#rv-s-viaje [data-rv-viaje]').forEach(b => b.onclick = () => {
     p.querySelectorAll('#rv-s-viaje [data-rv-viaje]').forEach(x => x.classList.toggle('on', x === b));
     const fin = document.getElementById('rv-s-fin'); if (fin) fin.disabled = b.dataset.rvViaje === 'ow';
-    rvHoraVisible(); rvBoletoSync();
+    rvHoraVisible(); rvBoletoSync(); rvRangoPintar();
   });
   if (viaje === 'ow') { const fin = document.getElementById('rv-s-fin'); if (fin) fin.disabled = true; }
   rvAptoCampo();
   rvHoraVisible();
   if (RV_BORRADOR) efBorradorForm(s);
+  rvRangoPintar(); rvHorasChips();
+}
+// Calendario de rango (pedido del dueño 20-nov): un solo calendario para llegada → salida, con las noches y los días del
+// hotel de la misma reserva marcados. Los <input type=date> ocultos siguen siendo lo que lee y escribe todo el formulario.
+const RV_CAL_MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const rvMesSum = (ym, n) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7); };
+const rvDiaSum = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const rvFechaTxt = (iso, corto) => new Date(iso + 'T12:00:00Z').toLocaleDateString('es-VE', { ...(corto ? {} : { weekday: 'short' }), day: 'numeric', month: 'short', ...(iso.slice(0, 4) !== cbHoy().slice(0, 4) ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+// Full day, boleto solo ida o «Hasta» oculto: se elige una sola fecha.
+const rvRangoUnico = () => { const fin = document.getElementById('rv-s-fin'); return !fin || fin.disabled || !!fin.parentElement.closest('[hidden]'); };
+const rvHospReserva = () => val('rv-s-tipo') === 'hospedaje' ? null : (RV_DET?.servicios || []).find(x => x.tipo === 'hospedaje' && !x.anulado_en && x.id !== RV_FORM?.id && x.fecha_inicio && x.fecha_fin);
+function rvRangoPintar() {
+  ['inicio', 'fin'].forEach(k => {
+    const inp = document.getElementById('rv-s-' + k), b = document.getElementById(`rv-s-${k}-btn`); if (!inp || !b) return;
+    const abierto = RV_FORM?.cal?.campo === k;
+    b.disabled = inp.disabled;
+    b.innerHTML = inp.value ? `<i class="fas fa-calendar-day"></i> ${esc(rvFechaTxt(inp.value))}` : `<span class="rv-fecha-ph">${inp.disabled ? '—' : 'Elegir fecha'}</span>`;
+    b.classList.toggle('on', abierto); b.setAttribute('aria-expanded', String(abierto));
+  });
+  if (RV_FORM?.cal) rvCalPintar();
+}
+function rvCalAbrir(campo) {
+  if (!RV_FORM) return;
+  if (RV_FORM.cal?.campo === campo) return rvCalCerrar();
+  const ini = val('rv-s-inicio'), fin = val('rv-s-fin'), base = (campo === 'fin' && fin) || ini || rvHospReserva()?.fecha_inicio || cbHoy();
+  RV_FORM.cal = { campo: rvRangoUnico() ? 'inicio' : campo, mes: base.slice(0, 7) };
+  document.getElementById('rv-s-cal').hidden = false;
+  rvRangoPintar();
+  document.querySelector(`#rv-s-cal [data-dia="${base}"]`)?.focus({ preventScroll: true });
+}
+function rvCalCerrar(foco) {
+  const campo = RV_FORM?.cal?.campo; if (RV_FORM) RV_FORM.cal = null;
+  const box = document.getElementById('rv-s-cal'); if (box) { box.hidden = true; box.innerHTML = ''; }
+  rvRangoPintar();
+  if (foco && campo) document.getElementById(`rv-s-${campo}-btn`)?.focus();
+}
+function rvCalPintar() {
+  const box = document.getElementById('rv-s-cal'), c = RV_FORM?.cal; if (!box || !c) return;
+  const ini = val('rv-s-inicio'), unico = rvRangoUnico(), fin = unico ? '' : val('rv-s-fin'), hoy = cbHoy(), hosp = rvHospReserva();
+  const noches = ini && fin > ini ? Math.round((Date.parse(fin) - Date.parse(ini)) / 864e5) : 0;
+  const mes = ym => {
+    const [y, m] = ym.split('-').map(Number), dias = new Date(Date.UTC(y, m, 0)).getUTCDate(), off = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+    let h = '';
+    for (let i = 1; i <= dias; i++) {
+      const iso = `${ym}-${String(i).padStart(2, '0')}`;
+      const cls = [iso === ini && 'ini', iso === fin && 'fin', ini && fin && iso > ini && iso < fin && 'en', iso === hoy && 'hoy', iso < hoy && 'pasado', hosp && iso >= hosp.fecha_inicio && iso <= hosp.fecha_fin && 'hotel'].filter(Boolean).join(' ');
+      h += `<button type="button" data-dia="${iso}" class="${cls}" aria-pressed="${iso === ini || iso === fin}" aria-label="${esc(rvFechaTxt(iso))}">${i}</button>`;
+    }
+    return `<div class="rv-cal-mes"><div class="rv-cal-tit">${RV_CAL_MESES[m - 1]} ${y}</div><div class="rv-cal-sem">${['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'].map(x => `<span>${x}</span>`).join('')}</div><div class="rv-cal-grid">${'<span></span>'.repeat(off)}${h}</div></div>`;
+  };
+  const lab = (document.getElementById('rv-s-lab-' + c.campo)?.textContent || '').trim();
+  const pie = [];
+  if (hosp && !unico) pie.push(`<button type="button" data-cal-hotel>Fechas del hotel · ${esc(rvFechaTxt(hosp.fecha_inicio, true))} – ${esc(rvFechaTxt(hosp.fecha_fin, true))}</button>`);
+  if (noches) pie.push('<button type="button" data-cal-noche="-1">− 1 noche</button><button type="button" data-cal-noche="1">+ 1 noche</button>');
+  box.innerHTML = `<div class="rv-cal-cab"><button type="button" class="rv-cal-nav" data-cal-mes="-1" aria-label="Mes anterior"><i class="fas fa-chevron-left"></i></button>
+      <span>Elige: <b>${esc(lab)}</b>${noches ? ` · ${noches} noche${noches > 1 ? 's' : ''}` : ''}</span>
+      <button type="button" class="rv-cal-nav" data-cal-mes="1" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button></div>
+    <div class="rv-cal-meses">${mes(c.mes)}${mes(rvMesSum(c.mes, 1))}</div>
+    <div class="rv-cal-pie rv-sugs">${pie.join('')}${hosp ? '<span class="rv-cal-ley"><i></i> Días en el hotel</span>' : ''}<button type="button" class="btn-sm rv-cal-listo" data-cal-listo>Listo</button></div>`;
+}
+function rvCalPoner(ini, fin) {
+  [['rv-s-inicio', ini], ['rv-s-fin', fin]].forEach(([id, v]) => {
+    const el = document.getElementById(id); if (!el || v == null || el.value === v) return;
+    el.value = v; el.dataset.auto = '';
+    el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  rvRangoPintar();
+}
+// Primer toque = desde, segundo = hasta. Un día anterior al «desde» lo reemplaza; el hotel necesita al menos una noche.
+function rvCalElegir(iso) {
+  const c = RV_FORM?.cal; if (!c) return;
+  const ini = val('rv-s-inicio'), fin = val('rv-s-fin');
+  if (rvRangoUnico()) { rvCalPoner(iso, null); return rvCalCerrar(true); }
+  if (c.campo === 'inicio' || !ini || iso < ini) { c.campo = 'fin'; rvCalPoner(iso, fin && fin > iso ? null : ''); document.querySelector(`#rv-s-cal [data-dia="${iso}"]`)?.focus({ preventScroll: true }); return; }
+  if (iso === ini && val('rv-s-tipo') === 'hospedaje') return;
+  rvCalPoner(null, iso); rvCalCerrar(true);
+}
+function rvCalClick(e) {
+  const c = RV_FORM?.cal; if (!c) return;
+  const d = e.target.closest('[data-dia]'), m = e.target.closest('[data-cal-mes]'), n = e.target.closest('[data-cal-noche]');
+  if (d) return rvCalElegir(d.dataset.dia);
+  if (m) { c.mes = rvMesSum(c.mes, Number(m.dataset.calMes)); return rvCalPintar(); }
+  if (n) { const fin = rvDiaSum(val('rv-s-fin'), Number(n.dataset.calNoche)); if (fin > val('rv-s-inicio')) rvCalPoner(null, fin); return; }
+  if (e.target.closest('[data-cal-hotel]')) { const h = rvHospReserva(); if (h) rvCalPoner(h.fecha_inicio, h.fecha_fin); return rvCalCerrar(true); }
+  if (e.target.closest('[data-cal-listo]')) rvCalCerrar(true);
+}
+// Horas sugeridas debajo del campo (pedido del dueño 20-nov): la del vuelo de la reserva primero; el campo sigue aceptando cualquier hora.
+const rvHoraMenos = (h, min) => { const [a, b] = h.split(':').map(Number), t = (a * 60 + b - min + 1440) % 1440; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+function rvHorasChips() {
+  const tipo = val('rv-s-tipo'), v = RV_FORM?._vuelo || {};
+  const sets = tipo === 'traslado_terrestre' ? {
+    'rv-s-hora': [v.llega && [v.llega, `✈ ${v.llega}`, 'Hora de llegada del vuelo'], '09:00', '12:00', '15:00'],
+    'rv-s-det-hora_regreso': [v.sale && [rvHoraMenos(v.sale, 180), `✈ ${rvHoraMenos(v.sale, 180)}`, `3 h antes del vuelo de las ${v.sale}`], '06:00', '09:00', '12:00'],
+  } : tipo === 'full_day' ? { 'rv-s-hora': ['06:00', '07:00', '08:00'] } : {};
+  ['rv-s-hora', 'rv-s-det-hora_regreso'].forEach(id => {
+    const inp = document.getElementById(id); if (!inp) return;
+    let box = document.getElementById(id + '-chips');
+    const vistos = new Set(), ops = (sets[id] || []).filter(Boolean).map(o => Array.isArray(o) ? o : [o, o, '']).filter(([h]) => !vistos.has(h) && vistos.add(h));
+    if (!ops.length) { box?.remove(); return; }
+    if (!box) {
+      box = document.createElement('div'); box.id = id + '-chips'; box.className = 'rv-sugs rv-horas'; inp.after(box);
+      box.addEventListener('click', e => {
+        const b = e.target.closest('[data-hora]'); if (!b) return;
+        inp.value = b.dataset.hora; inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); rvHorasChips();
+      });
+      inp.addEventListener('change', rvHorasChips);
+    }
+    box.innerHTML = ops.map(([h, t, tit]) => `<button type="button" data-hora="${h}" class="${inp.value === h ? 'on' : ''}" aria-pressed="${inp.value === h}"${tit ? ` title="${esc(tit)}"` : ''}>${esc(t)}</button>`).join('');
+  });
 }
 // Apartamento del hospedaje (Fase 3): unidades libres en esas fechas según apto_disponibilidad.
 // La unidad que ya tiene este servicio cuenta como libre para sí misma; las ocupadas salen deshabilitadas.
@@ -6472,7 +6596,12 @@ const RV_AEROPUERTO_DESTINO = [[/margarita|porlamar|coche/i, 'PMV'], [/m[eé]rid
 function rvPrefillReserva(tipo) {
   const svcs = (RV_DET?.servicios || []).filter(x => !x.anulado_en && x.id !== RV_FORM?.id);
   const hosp = svcs.find(x => x.tipo === 'hospedaje'), bol = svcs.find(x => x.tipo === 'boleto_aereo' && x.detalle?.ruta);
-  const poner = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '' && (!el.value || el.value === '0')) el.value = v; };
+  // Lo que llenó este mismo autollenado (data-auto) se puede volver a llenar, p. ej. el aeropuerto al cambiar el destino; lo escrito a mano no.
+  const poner = (id, v) => {
+    const el = document.getElementById(id); if (!el || v == null || v === '' || !(!el.value || el.value === '0' || el.dataset.auto === '1')) return;
+    el.value = v; el.dataset.auto = '1';
+    if (!el._autoOff) { el._autoOff = true; el.addEventListener('input', e => { if (e.isTrusted) el.dataset.auto = ''; }); }
+  };
   if (hosp) {
     if (tipo === 'full_day') { poner('rv-s-det-punto_encuentro', hosp.detalle?.hotel); poner('rv-s-adultos', hosp.pax_adultos || ''); poner('rv-s-ninos', hosp.pax_ninos || ''); poner('rv-s-destino', hosp.destino_id ? String(hosp.destino_id) : ''); return; }
     poner('rv-s-inicio', hosp.fecha_inicio); poner('rv-s-fin', hosp.fecha_fin);
@@ -6503,12 +6632,13 @@ function rvFechasAviso() {
     }
   }
   el.classList.remove('ok'); el.innerHTML = av.length ? `<ul>${av.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : '';
-  rvVueloInfo();
+  rvVueloInfo(); rvRangoPintar(); rvHorasChips();
 }
 // Traslado: el vuelo de llegada y el de regreso salen de los tramos del boleto de la misma reserva. La hora de llegada vacía se llena sola.
 function rvVueloInfo() {
   const el = document.getElementById('rv-s-vuelo-info'); if (!el) return;
   el.innerHTML = '';
+  if (RV_FORM) RV_FORM._vuelo = null;
   if (val('rv-s-tipo') !== 'traslado_terrestre') return;
   const bols = new Set((RV_DET?.servicios || []).filter(x => x.tipo === 'boleto_aereo' && !x.anulado_en).map(x => x.id));
   const tr = (RV_BORRADOR ? efTramosBorrador() : RV_DET?.tramos || []).filter(t => bols.has(t.servicio_id)).sort((a, b) => String(a.sale_en).localeCompare(String(b.sale_en)));
@@ -6521,6 +6651,8 @@ function rvVueloInfo() {
   if (lleg) filas.push(`Vuelo de llegada: <b>${esc(desc(lleg) || `${lleg.origen_iata} → ${lleg.destino_iata}`)}</b> · llega ${f(dia(lleg.llega_en || lleg.sale_en))}${lleg.llega_en ? ' ' + hm(lleg.llega_en) : ''}${ida && dia(lleg.llega_en || lleg.sale_en) !== ida ? ' <i>(no coincide con la fecha de llegada del traslado)</i>' : ''}`);
   if (sale) filas.push(`Vuelo de regreso: <b>${esc(desc(sale) || `${sale.origen_iata} → ${sale.destino_iata}`)}</b> · sale ${f(dia(sale.sale_en))} ${hm(sale.sale_en)}${fin && dia(sale.sale_en) !== fin ? ' <i>(no coincide con la fecha de regreso del traslado)</i>' : ''}`);
   el.innerHTML = filas.length ? `<ul>${filas.map(x => `<li>${x}</li>`).join('')}</ul>` : '';
+  const hmOk = t => /^\d\d:\d\d$/.test(hm(t)) ? hm(t) : '';
+  if (RV_FORM) RV_FORM._vuelo = { llega: lleg?.llega_en ? hmOk(lleg.llega_en) : '', sale: sale ? hmOk(sale.sale_en) : '' };
   const h = document.getElementById('rv-s-hora');
   if (h && !h.value && lleg?.llega_en && /^\d\d:\d\d$/.test(hm(lleg.llega_en)) && (!ida || dia(lleg.llega_en) === ida)) h.value = hm(lleg.llega_en);
 }
@@ -6531,7 +6663,7 @@ const RV_TAR_TIPO = { full_day: 'excursion', traslado_terrestre: 'traslado' };
 let RV_TAR_PRODS = null;
 async function rvTarProductos() {
   if (RV_TAR_PRODS) return RV_TAR_PRODS;
-  const { data, error } = await sb.from('productos').select('id,nombre,tipo,destino,descripcion,tarifas(id,titulo,moneda,precios,vigente)').in('tipo', ['excursion', 'traslado']).eq('activo', true).order('nombre').limit(300);
+  const { data, error } = await sb.from('productos').select('id,nombre,tipo,destino,descripcion,tarifas(id,titulo,moneda,precios,vigente),producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['excursion', 'traslado']).eq('activo', true).order('nombre').limit(300);
   if (error) throw error;
   return RV_TAR_PRODS = (data || []).map(p => ({ ...p, tarifas: (p.tarifas || []).filter(t => t.vigente !== false && t.precios && t.precios.modalidad !== 'suplemento').sort((a, b) => a.id - b.id) })).filter(p => p.tarifas.length);
 }
@@ -6540,6 +6672,7 @@ function rvTarHtml(tipo) {
   return `<div class="rv-tar"><label class="fl" for="rv-s-tar-q">${fd ? 'Excursión del tarifario' : 'Traslado del tarifario'} <span>(opcional)</span></label>
     <input class="ei" id="rv-s-tar-q" maxlength="80" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="rv-s-tar-lista" aria-autocomplete="list" placeholder="${fd ? '🔎 Busca la excursión…' : '🔎 Busca el traslado o la unidad…'}">
     <div class="rv-lista" id="rv-s-tar-lista" role="listbox" hidden></div>
+    <div id="rv-s-tar-cards"></div>
     <div id="rv-s-tar-sel-box" hidden></div>
     <div class="rv-hotel-sug" id="rv-s-tar-auto" aria-live="polite"></div></div>`;
 }
@@ -6554,8 +6687,10 @@ function rvTarInit(tipo) {
     if (!p || st?.tipo !== tipo || st.prod || !inp.isConnected) return;
     const tid = Number(prev.detalle.tarifa_id);
     Object.assign(st, { prod: p, tid: p.tarifas.some(t => t.id === tid) ? tid : null, manual: p.tarifas.some(t => t.id === tid) });
-    inp.value = p.nombre; rvTarSelPintar(p); rvTarSugerir();
+    inp.value = p.nombre; rvTarSelPintar(p); rvTarSugerir(); rvTarCards();
   }).catch(e => console.error('rvTarProductos', e));
+  else rvTarProductos().then(rvTarCards).catch(() => {});
+  inp.addEventListener('input', rvTarCards);
   const aviso = t => { const el = document.getElementById('rv-s-tar-auto'); if (el) { el.classList.remove('ok'); el.textContent = t; } };
   rvCombo(inp, document.getElementById('rv-s-tar-lista'), async q => {
     let todos; try { todos = await rvTarProductos(); } catch (e) { console.error('rvTarProductos', e); aviso('No se pudo cargar el tarifario: escribe el precio a mano.'); return []; }
@@ -6590,7 +6725,50 @@ function rvTarElegir(p) {
   const d = rvDestinoPorNombre(p.destino), sel = document.getElementById('rv-s-destino');
   if (d && sel && !sel.value) sel.value = String(d.id);
   rvTarSelPintar(p);
-  rvTarAplicar(); rvTarSugerir();
+  rvTarAplicar(); rvTarSugerir(); rvTarCards();
+  rvPrefillReserva(st.tipo); rvFechasAviso();
+}
+function rvTarCambiar() {
+  const st = RV_FORM?.tar; if (!st) return;
+  Object.assign(st, { prod: null, tid: null, manual: false, total: null });
+  const inp = document.getElementById('rv-s-tar-q'); if (inp) inp.value = '';
+  rvTarSelPintar({ tarifas: [] }); rvTarCards(); rvTarSugerir(); inp?.focus();
+}
+// «Desde» de la tarjeta: el menor precio entre sus tarifas, con la unidad en que cobra.
+function rvTarDesde(p) {
+  const ts = p.tarifas || [], mon = ts[0]?.moneda, pr = ts[0]?.precios || {}, min = xs => { const v = xs.map(Number).filter(Number.isFinite); return v.length ? Math.min(...v) : null; };
+  if (p.tipo === 'excursion') {
+    const per = min(ts.filter(t => t.precios.base !== 'grupo').map(t => t.precios.adulto));
+    if (per != null) return `desde ${tarMontoFmt(per, mon)} /persona`;
+    const g = min(ts.map(t => t.precios.adulto)); return g != null ? `${tarMontoFmt(g, mon)} por grupo` : '';
+  }
+  const m = min(ts.map(t => t.precios.monto)); if (m == null) return '';
+  return `desde ${tarMontoFmt(m, mon)} ${pr.modalidad === 'disposicion' ? 'a disposición' : pr.base === 'persona' ? '/persona por tramo' : 'por tramo'}`;
+}
+const rvCardFoto = (p, icono) => { const f = ordenarFotos(p.producto_fotos)[0]; return f ? `<span class="rv-card-img" style="background-image:url('${esc(fotoMini(f.storage_path, 256))}')"></span>` : `<span class="rv-card-img"><i class="fas fa-${icono}"></i></span>`; };
+const rvCardCuerpo = (p, precio) => `<span class="rv-card-cuerpo"><span class="rv-card-n">${esc(p.nombre)}</span>${p.destino ? `<small>${esc(p.destino)}</small>` : ''}${precio ? `<span class="rv-card-p">${esc(precio)}</span>` : ''}</span>`;
+const rvDestinoTxt = () => { const s = document.getElementById('rv-s-destino'); return s?.value ? s.selectedOptions[0]?.text || '' : ''; };
+// Tarjetas del tarifario (pedido del dueño 20-nov): sin producto elegido, las del destino del servicio con foto y precio; elegido, una sola con «Cambiar».
+function rvTarCards() {
+  const box = document.getElementById('rv-s-tar-cards'), st = RV_FORM?.tar, inp = document.getElementById('rv-s-tar-q'), tipo = val('rv-s-tipo');
+  if (!box || !st || st.tipo !== tipo || !RV_TAR_PRODS) return;
+  const icono = tipo === 'full_day' ? 'umbrella-beach' : 'van-shuttle';
+  if (inp) inp.hidden = !!st.prod;
+  if (st.prod) { box.innerHTML = `<div class="rv-card-sel">${rvCardFoto(st.prod, icono)}${rvCardCuerpo(st.prod, rvTarDesde(st.prod))}<button type="button" class="btn-sm" data-rv-tar-cambiar>Cambiar</button></div>`; return; }
+  if (inp?.value.trim()) { box.innerHTML = ''; return; }
+  const dTxt = rvDestinoTxt(), dest = bolNorm(dTxt), todos = RV_TAR_PRODS.filter(p => p.tipo === RV_TAR_TIPO[tipo]);
+  const enDest = dest ? todos.filter(p => bolNorm(p.destino || '') === dest) : [], lista = enDest.length ? enDest : todos;
+  box.innerHTML = lista.length ? `<div class="rv-cards"><div class="rv-cards-tit">${enDest.length ? `En ${esc(dTxt)}` : 'Del tarifario'} · toca uno para elegirlo${lista.length > 8 ? ` (${lista.length - 8} más en el buscador)` : ''}</div>
+    ${lista.slice(0, 8).map(p => `<button type="button" class="rv-card" data-rv-tar-card="${p.id}">${rvCardFoto(p, icono)}${rvCardCuerpo(p, rvTarDesde(p))}</button>`).join('')}</div>` : '';
+}
+// Hoteles del destino como tarjetas mientras no hay hotel elegido ni escrito; elegir uno es lo mismo que elegirlo en el buscador.
+function rvHotelCards() {
+  const box = document.getElementById('rv-s-hotel-cards'), st = RV_FORM?.hotel; if (!box) return;
+  const dTxt = rvDestinoTxt(), dest = bolNorm(dTxt);
+  if (!st || st.producto_id || RV_FORM.hosp === 'apto' || !dest || String(st.nombre || '').trim()) { box.innerHTML = ''; return; }
+  const lista = [...cbHoteles.values()].filter(p => p.tipo === 'hotel' && bolNorm(p.destino || '') === dest).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  box.innerHTML = lista.length ? `<div class="rv-cards"><div class="rv-cards-tit">Hoteles en ${esc(dTxt)} · toca uno para elegirlo${lista.length > 8 ? ` (${lista.length - 8} más en el buscador)` : ''}</div>
+    ${lista.slice(0, 8).map(p => `<button type="button" class="rv-card" data-rv-hotel-card="${p.id}">${rvCardFoto(p, 'hotel')}${rvCardCuerpo(p)}</button>`).join('')}</div>` : '';
 }
 function rvTarSelPintar(p) {
   const box = document.getElementById('rv-s-tar-sel-box'); if (!box) return;
@@ -6749,7 +6927,7 @@ function rvCombo(inp, lista, buscar, pintar, elegir) {
 function rvHotelHtml() {
   const apto = RV_FORM?.hosp === 'apto';
   return `<div class="seg-group seg-group-sm rv-hosp-modo" id="rv-s-hosp-modo" role="group" aria-label="Tipo de hospedaje">${[['tar', 'Hotel o posada'], ['apto', 'Apartamento propio']].map(([k, t]) => `<button class="seg${(k === 'apto') === apto ? ' on' : ''}" type="button" data-rv-hosp="${k}" aria-pressed="${(k === 'apto') === apto}">${t}</button>`).join('')}</div>
-    <div id="rv-s-hosp-tar" ${apto ? 'hidden' : ''}><div class="rv-hotel-campo"></div><div class="rv-hotel-ph"></div><div class="rv-hotel-sug" id="rv-s-hotel-auto" aria-live="polite"></div></div>
+    <div id="rv-s-hosp-tar" ${apto ? 'hidden' : ''}><div class="rv-hotel-campo"></div><div id="rv-s-hotel-cards"></div><div class="rv-hotel-ph"></div><div class="rv-hotel-sug" id="rv-s-hotel-auto" aria-live="polite"></div></div>
     <div id="rv-s-apto"></div>`;
 }
 // Solo coincidencia exacta de nombre: si no hay, el destino lo resuelve el servidor al guardar.
@@ -6772,6 +6950,7 @@ function rvHotelInit(det) {
   cbCargarProductos().then(() => {
     const campo = document.querySelector('#rv-s-top .rv-hotel-campo');
     if (campo && RV_FORM?.hotel === st && st.producto_id && document.activeElement?.id !== 'cb-hotel-rv') campo.innerHTML = cbHotelHtml(st, st.i);
+    rvHotelCards();
     if (RV_FORM?.hotel === st && RV_FORM.hosp === 'apto' && RV_APTO_UNI.length && !document.querySelector('#rv-s-apto .cb-picker-lista:not([hidden])')) rvAptoPintar();
   });
   // Servicio guardado con un complejo de apartamentos como hotel: abre en «Apartamento propio» (si el vínculo aún no cargó, al llegar).
@@ -6788,6 +6967,7 @@ function rvHotelPintar(conHotel) {
       + (st._tarifaError ? '<button type="button" class="btn-sm" data-rv-hotel-reintentar>Reintentar tarifas</button>' : '')
     : `<div class="field"><label class="fl" for="cb-hab-rv">Habitación</label><input class="ei" id="cb-hab-rv" data-k="hab" maxlength="200" autocomplete="off" value="${esc(st.hab)}"></div>
       <div class="field"><label class="fl" for="cb-plan-rv">Plan</label><input class="ei" id="cb-plan-rv" data-k="plan" maxlength="200" autocomplete="off" placeholder="Ej.: desayuno" value="${esc(st.plan)}"></div>`;
+  rvHotelCards();
 }
 async function rvHotelCargar(st, elegir) {
   const carga = ++st.carga;
@@ -6929,6 +7109,7 @@ function rvHotelEventos(top) {
     if (!st || !['nombre', 'hab', 'plan'].includes(k)) return;
     st[k] = t.value;
     if (k === 'nombre') {
+      rvHotelCards();
       if (st.producto_id) {
         top.querySelector('.cb-hotel-foto')?.remove();
         Object.assign(st, { producto_id: null, carga: st.carga + 1, _cargando: false, _tarifaError: false, plan: '', hab: '', plan_libre: false, hab_libre: false, habitacion_manual: false, tramos: [], _sugerencia: null });
@@ -42802,6 +42983,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-20', emoji: '📅', titulo: 'Servicios: calendario, horas sugeridas y tarjetas del tarifario', texto: 'Al cargar un servicio (en la Reserva o en «Crear reserva»): las fechas se eligen en un solo calendario (primer toque llegada, segundo regreso) con las noches y los días del hotel marcados, más botones «Fechas del hotel» y ±1 noche. Debajo de las horas salen sugerencias, incluida la del vuelo (y la recogida 3 h antes del vuelo de regreso). Traslados, excursiones y hoteles del destino aparecen como tarjetas con foto y precio: tocas una y queda elegida. Al elegir el traslado se llenan solos el aeropuerto y el hotel.', roles: ['admin', 'asesor', 'asesor_prueba', 'administrativo'] },
   { fecha: '2026-11-19', emoji: '🧳', titulo: '«Crear reserva» desde el lead, en 3 pasos', texto: 'Al crear la reserva desde el lead ahora vas en 3 pasos: 1 Viaje (eliges la cotización y la opción, personas y viajeros), 2 Servicios (hotel, boleto, traslado, full day, igual que en la Reserva) y 3 Pago (resumen, comprobante y abono). Si el lead tiene cotización, los servicios pasan solos; lo que tenga fecha vencida queda marcado «Completar». Traslados y full days quedan ligados al producto del tarifario.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-19', emoji: '↩️', titulo: 'Saldo a favor: se puede registrar un reembolso', texto: 'Si al cliente se le devolvió el dinero que pagó de más, en Abonos aparece «Reembolsar» junto a «Aplicar a otra reserva». Pones el monto devuelto, la referencia y el motivo: queda una fila «Reembolso» y el saldo a favor baja. No toca cuentas ni banco, y se puede deshacer desde la misma lista. Lo hace administración.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-19', emoji: '🔁', titulo: 'Saldo a favor: se aplica a otra reserva del cliente', texto: 'Si una reserva quedó con saldo a favor (el cliente pagó de más), en Abonos aparece «Aplicar a otra reserva». Eliges la otra reserva del mismo cliente y el monto: pasa allá como abono «Saldo a favor» y aquí queda como «Saldo trasladado». No es un cobro nuevo, no toca cuentas ni banco, y se puede deshacer desde la misma lista. Lo hace administración.', roles: ['admin', 'administrativo'] },
