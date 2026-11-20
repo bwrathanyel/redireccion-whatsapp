@@ -8492,7 +8492,9 @@ function estPintarFichas() {
   if (!box || !EST_FICHAS.length) return;
   const elegido = document.getElementById('est-asesor')?.value || '';
   const vendio = a => Number(EST_FICHAS_MES[a.nombre]?.ventas) > 0;
-  const visibles = EST_FICHAS.filter(a => a.activo || vendio(a) || EST_FICHAS_INACTIVOS || a.asesor_id === elegido);
+  const monto = a => Number(EST_FICHAS_MES[a.nombre]?.monto) || 0;
+  const visibles = EST_FICHAS.filter(a => a.activo || vendio(a) || EST_FICHAS_INACTIVOS || a.asesor_id === elegido)
+    .sort((x, y) => monto(y) - monto(x) || (Number(EST_FICHAS_MES[y.nombre]?.ventas) || 0) - (Number(EST_FICHAS_MES[x.nombre]?.ventas) || 0) || y.activo - x.activo);
   const ocultos = EST_FICHAS.length - visibles.length;
   const ini = n => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
   box.innerHTML = visibles.map(a => {
@@ -16073,7 +16075,7 @@ async function loadRanking() {
   const [d, h] = periodo(rankPeriodo);
   const { data, error } = await sb.rpc('ranking_asesores', { p_desde: iso(d), p_hasta: iso(h) });
   if (error) { console.error(error); errToast('No se pudo cargar el ranking'); return; }
-  const rows = (data || []).slice().sort((a, b) => (b[rankSort] || 0) - (a[rankSort] || 0));
+  const rows = (data || []).map(r => ({ ...r, ticket: +r.ventas ? Math.round((+r.monto || 0) / +r.ventas) : null })).sort((a, b) => (b[rankSort] || 0) - (a[rankSort] || 0));
   RANK_LAST = rows;
   const medal = ['🥇', '🥈', '🥉'];
   const maxVentas = Math.max(1, ...rows.map(r => +r.ventas || 0));
@@ -16088,12 +16090,13 @@ async function loadRanking() {
       <div class="lt-cifras">
         <div><span>Ventas</span><b class="lt-ok">${fmt(r.ventas)}</b></div>
         <div><span>Ingresos</span><b>${money(r.monto)}</b></div>
+        <div><span title="Ingresos ÷ ventas">Ticket prom.</span><b>${r.ticket == null ? '—' : money(r.ticket)}</b></div>
         <div><span>Atendidos</span><b>${fmt(r.atendidos)}</b></div>
       </div>
       <div class="lt-barra" title="${fmt(r.ventas)} de ${fmt(maxVentas)} ventas del líder"><i style="width:${Math.round((+r.ventas || 0) / maxVentas * 100)}%"></i></div>
     </article>`).join('') || '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin datos en el período</div>';
   const tot = rows.reduce((a, r) => ({ ventas: a.ventas + (+r.ventas || 0), monto: a.monto + (+r.monto || 0), atendidos: a.atendidos + (+r.atendidos || 0) }), { ventas: 0, monto: 0, atendidos: 0 });
-  document.getElementById('rank-tot').innerHTML = `<span>${fmt(tot.atendidos)} atendidos</span><span>${fmt(tot.ventas)} ventas</span><span>${money(tot.monto)} en ingresos</span>`;
+  document.getElementById('rank-tot').innerHTML = `<span>${fmt(tot.atendidos)} atendidos</span><span>${fmt(tot.ventas)} ventas</span><span>${money(tot.monto)} en ingresos</span>${tot.ventas ? `<span>${money(Math.round(tot.monto / tot.ventas))} ticket promedio</span>` : ''}`;
 }
 
 async function loadLeadsColaboraciones() {
@@ -23115,7 +23118,7 @@ EXPORTABLES.leads = {
 };
 let RANK_LAST = [], INFORME_LAST = [], CEV_LAST = [];
 EXPORTABLES.ranking = {
-  cols: [['asesor', 'Asesor'], ['nuevos', 'Nuevos'], ['atendidos', 'Atendidos'], ['ventas', 'Ventas'], ['monto', 'Ingresos'], ['atendidos_lote', 'Atendidos de lote'], ['horas_respuesta', 'Resp. mediana (h)']],
+  cols: [['asesor', 'Asesor'], ['nuevos', 'Nuevos'], ['atendidos', 'Atendidos'], ['ventas', 'Ventas'], ['monto', 'Ingresos'], ['ticket', 'Ticket promedio'], ['atendidos_lote', 'Atendidos de lote'], ['horas_respuesta', 'Resp. mediana (h)']],
   filas: () => RANK_LAST,
   celda: (c, r) => r[c] == null ? '' : c === 'monto' ? money(r[c]) : String(r[c]),
 };
