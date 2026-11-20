@@ -4638,6 +4638,7 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
   }
 }
 .seg.tab-oculta{opacity:.45}
+#tar-ver-ocultos-btn[aria-pressed="true"]{background:var(--accent);color:#fff}
 /* Tarifario móvil compacto (2026-10-29): eran ~430px de menús antes de la primera
    tarjeta. Pestañas de grupo más bajas, categorías en un renglón con scroll, y
    BT Travel + admin + vista dentro del menú ⋯ del buscador (setupTarMas en app.js). */
@@ -9828,6 +9829,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <button class="tar-admin-btn admin-only" id="tar-actualizador-btn" type="button" title="Actualizador de Tarifario"><i class="fas fa-arrows-rotate"></i></button>
           <button class="tar-admin-btn admin-only" id="tar-revision-btn" type="button" title="Revisión del tarifario"><i class="fas fa-clipboard-check"></i></button>
           <button class="tar-admin-btn admin-only" id="tar-ranking-btn" type="button" title="Ranking de Hot Sales"><i class="fas fa-fire"></i></button>
+          <button class="tar-admin-btn admin-only" id="tar-ver-ocultos-btn" type="button" title="Mostrar lo oculto" aria-pressed="false"><i class="fas fa-eye-slash"></i></button>
           <button class="tar-admin-btn admin-only" id="tar-admin-btn" type="button" title="Configurar visibilidad (admin)"><i class="fas fa-gear"></i></button>
         </div>
       </div>
@@ -9878,8 +9880,6 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         <input class="flt tar-f" id="tar-f-grupo" data-tabs="hotel" type="number" min="1" step="1" placeholder="Somos... (adultos)">
         <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
         <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo,hotsale"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
-        <label class="tar-f-check" id="tar-f-ocultar-ocultos-wrap" data-tabs="hotel"><input type="checkbox" class="tar-f" id="tar-f-ocultar-ocultos" checked> Ocultar ocultos</label>
-        <label class="tar-f-check" id="tar-f-ocultas-wrap" data-tabs="promo" data-hidden><input type="checkbox" class="tar-f" id="tar-f-ocultas"> Ver ocultas</label>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>
       <div id="tar-borrador"></div>

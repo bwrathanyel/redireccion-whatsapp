@@ -8508,7 +8508,7 @@ function renderEstadisticas(d) {
     { t: 'Ventas', v: fmt(e.ventas || 0), d: `${fmt(e.atendidos || 0)} atendidos`, i: 'fa-cart-shopping', c: 'var(--accent)' },
     { t: 'Monto', v: money(e.monto), d: `${fmt(e.ventas || 0)} ventas cerradas`, i: 'fa-sack-dollar', c: 'var(--green)' },
     { t: 'Conversión', v: (e.conv_pct || 0) + '%', d: 'Atendidos que cerraron', i: 'fa-percent', c: 'var(--blue)' },
-    { t: 'Respuesta', v: fmtHorasResp(q.horas_respuesta), d: 'Promedio al primer contacto', i: 'fa-stopwatch', c: 'var(--purple)' },
+    { t: 'Respuesta', v: fmtHorasResp(q.horas_respuesta), d: 'Típica al primer contacto (leads nuevos)', i: 'fa-stopwatch', c: 'var(--purple)' },
   ]);
   renderEstSerie();
   renderEstEmbudo(e);
@@ -16009,7 +16009,35 @@ async function loadMetricas() {
 
 /* ---------- Ranking ---------- */
 let rankPeriodo = 'mes', rankSort = 'ventas';
+// Ficha del ranking -> Mis Ventas › Estadísticas de ese asesor, con el mismo período.
+async function rankAbrirEstadisticas(nombre) {
+  const sel = document.getElementById('est-asesor');
+  if (!sel) return;
+  let op = [...sel.options].find(o => o.value && o.textContent.replace(/ \(inactivo\)$/, '') === nombre);
+  if (!op) {
+    const { data } = await sb.rpc('estadisticas_asesores_lista');
+    const a = (data || []).find(x => x.nombre === nombre);
+    if (!a) { errToast(`${nombre} no tiene usuario de asesor: no hay estadísticas`); return; }
+    op = new Option(a.nombre, a.asesor_id); sel.add(op);
+  }
+  sel.value = op.value;
+  const [d, h] = periodo(rankPeriodo), ymdL = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  const hasta = new Date(Math.min(addD(h, -1), new Date()));
+  document.getElementById('est-desde').value = ymdL(d);
+  document.getElementById('est-hasta').value = ymdL(hasta);
+  const corta = s => s.slice(8) + '/' + s.slice(5, 7) + '/' + s.slice(2, 4), lbl = document.getElementById('drp-est-label');
+  if (lbl) lbl.textContent = `${corta(ymdL(d))} – ${corta(ymdL(hasta))}`;
+  document.querySelectorAll('[data-drp="est"][data-preset]').forEach(r => r.classList.remove('on'));
+  misVentasTab = 'estadisticas';
+  document.querySelectorAll('#mv-tabs .seg').forEach(b => b.classList.toggle('on', b.dataset.mvTab === 'estadisticas'));
+  document.querySelectorAll('.mv-tab-panel').forEach(p => p.style.display = p.dataset.mvPanel === 'estadisticas' ? '' : 'none');
+  if (currentSec === 'mis-ventas') loadMisVentasSeccion(); else activateSection('mis-ventas');
+}
 function setupRanking() {
+  const body = document.getElementById('rank-body');
+  const abrir = e => { const c = e.target.closest('[data-rank-asesor]'); if (c) rankAbrirEstadisticas(c.dataset.rankAsesor); };
+  body?.addEventListener('click', abrir);
+  body?.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(e); } });
   document.querySelectorAll('#rank-periodo .seg').forEach(b => b.onclick = () => { document.querySelectorAll('#rank-periodo .seg').forEach(x => x.classList.remove('on')); b.classList.add('on'); rankPeriodo = b.dataset.p; loadRanking(); });
 }
 async function loadRanking() {
@@ -16021,13 +16049,13 @@ async function loadRanking() {
   const medal = ['🥇', '🥈', '🥉'];
   const maxVentas = Math.max(1, ...rows.map(r => +r.ventas || 0));
   document.getElementById('rank-body').innerHTML = rows.map((r, i) => `
-    <article class="lt-card" style="--i:${Math.min(i, 20)}">
+    <article class="lt-card" style="--i:${Math.min(i, 20)};cursor:pointer" role="button" tabindex="0" title="Ver estadísticas de ${esc(r.asesor)}" data-rank-asesor="${esc(r.asesor)}">
       <div class="lt-card-cab">
         <div class="ln-ava" style="background:${ADV_COLORS[i % ADV_COLORS.length]};color:#0a0a0a">${initials(r.asesor)}</div>
         <div class="lt-card-tit" title="${esc(r.asesor)}">${esc(r.asesor)}</div>
         <span class="bt-tag" style="--c:${i < 3 ? 'var(--amber)' : 'var(--muted)'}">${i < 3 ? medal[i] + ' ' : ''}#${i + 1}</span>
       </div>
-      <div class="lt-card-meta"><i class="fas fa-user-plus"></i>${fmt(r.nuevos)} nuevos · <i class="fas fa-stopwatch"></i>resp. prom. ${r.horas_respuesta != null ? r.horas_respuesta + 'h' : '—'}</div>
+      <div class="lt-card-meta"><i class="fas fa-user-plus"></i>${fmt(r.nuevos)} nuevos${r.atendidos_lote ? ` · ${fmt(r.atendidos_lote)} de lote` : ''} · <i class="fas fa-stopwatch"></i><span title="Mediana entre que entra el lead y el primer contacto (leads nuevos del período)">resp. típica ${fmtHorasResp(r.horas_respuesta)}</span></div>
       <div class="lt-cifras">
         <div><span>Ventas</span><b class="lt-ok">${fmt(r.ventas)}</b></div>
         <div><span>Ingresos</span><b>${money(r.monto)}</b></div>
@@ -23058,7 +23086,7 @@ EXPORTABLES.leads = {
 };
 let RANK_LAST = [], INFORME_LAST = [], CEV_LAST = [];
 EXPORTABLES.ranking = {
-  cols: [['asesor', 'Asesor'], ['nuevos', 'Nuevos'], ['atendidos', 'Atendidos'], ['ventas', 'Ventas'], ['monto', 'Ingresos'], ['horas_respuesta', 'Resp. prom. (h)']],
+  cols: [['asesor', 'Asesor'], ['nuevos', 'Nuevos'], ['atendidos', 'Atendidos'], ['ventas', 'Ventas'], ['monto', 'Ingresos'], ['atendidos_lote', 'Atendidos de lote'], ['horas_respuesta', 'Resp. mediana (h)']],
   filas: () => RANK_LAST,
   celda: (c, r) => r[c] == null ? '' : c === 'monto' ? money(r[c]) : String(r[c]),
 };
@@ -26693,10 +26721,9 @@ function setupTarifarioTabs() {
     // escritura libre (tar-f-precio, type=number) pasa por el mismo debounce que
     // el buscador: tipear "1500" ya no reconstruye la grilla 4 veces.
     const inmediato = el.type === 'checkbox' || el.tagName === 'SELECT';
-    // "Ver ocultas" necesita las promos apagadas, que la carga normal no trae.
-    const alCambiar = el.id === 'tar-f-ocultas' ? () => loadTarifario() : () => renderTarifario();
-    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? alCambiar : debRender);
+    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? () => renderTarifario() : debRender);
   });
+  setupTarVerOcultos();
   tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
   tabsOcultasListo = cargarTabsOcultas();
   // Delegado sobre el contenedor: las tarjetas se repintan en cada filtro, así
@@ -27218,6 +27245,22 @@ const TAR_TAB_META = [
   { key: 'traslado', label: 'Traslados' },
   { key: 'hotel', label: 'Hoteles' },
 ];
+// Lo oculto (pestañas, productos apagados, hoteles sin foto, promos retiradas) no se ve
+// ni para la oficina hasta que toca el ojo; arranca apagado en cada carga (dueño 2026-11-20).
+let TAR_VER_OCULTOS = false;
+const tarVerOcultos = () => esOficina() && TAR_VER_OCULTOS;
+function setupTarVerOcultos() {
+  const b = document.getElementById('tar-ver-ocultos-btn');
+  if (!b) return;
+  b.onclick = () => {
+    TAR_VER_OCULTOS = !TAR_VER_OCULTOS;
+    b.setAttribute('aria-pressed', TAR_VER_OCULTOS);
+    b.title = TAR_VER_OCULTOS ? 'Esconder lo oculto' : 'Mostrar lo oculto';
+    b.querySelector('i').className = 'fas ' + (TAR_VER_OCULTOS ? 'fa-eye' : 'fa-eye-slash');
+    aplicarTabsOcultas();
+    loadTarifario();
+  };
+}
 let tabsOcultas = [], tabsOcultasListo = null;
 async function cargarTabsOcultas() {
   const { data, error } = await sb.from('tarifario_config').select('value').eq('key', 'tabs_ocultas').single();
@@ -27227,10 +27270,10 @@ async function cargarTabsOcultas() {
 function aplicarTabsOcultas() {
   document.querySelectorAll('#tar-tabs .seg').forEach(b => {
     const oculto = tabsOcultas.includes(b.dataset.tab);
-    if (esOficina()) b.classList.toggle('tab-oculta', oculto);
-    else b.style.display = oculto ? 'none' : '';
+    b.classList.toggle('tab-oculta', oculto && tarVerOcultos());
+    b.style.display = oculto && !tarVerOcultos() ? 'none' : '';
   });
-  if (!esOficina()) {
+  if (!tarVerOcultos()) {
     const activo = document.querySelector('#tar-tabs .seg.on');
     if (activo && tabsOcultas.includes(activo.dataset.tab)) {
       const primera = [...document.querySelectorAll('#tar-tabs .seg')].find(b => !tabsOcultas.includes(b.dataset.tab));
@@ -27419,10 +27462,6 @@ function actualizarVisibilidadFiltrosTarifario() {
   if (vs) vs.style.display = (tarTab === 'excursion' || tarTab === 'traslado') ? 'none' : '';
   const np = document.getElementById('tar-nueva-promo-btn');
   if (np) np.hidden = !(esOficina() && tarTab === 'promo');
-  // "Ver ocultas" es solo para admin: es el único rol que las ve en la base
-  // (policy permisiva) y el único que puede volver a mostrarlas.
-  const oc = document.getElementById('tar-f-ocultas-wrap');
-  if (oc && !esOficina()) { oc.setAttribute('data-hidden', ''); document.getElementById('tar-f-ocultas').checked = false; }
 }
 
 /* Chips de filtros activos (2026-08-19). En móvil el botón de filtros pasó a ser
@@ -27448,8 +27487,7 @@ function tarChips() {
   // "Solo vigentes" viene marcado por defecto: lo que hay que avisar es cuando
   // se DESmarcó, porque ahí la lista trae cosas vencidas sin que se note.
   if (visible('tar-f-vigente') && g('tar-f-vigente') && !g('tar-f-vigente').checked) push('Incluye vencidas', () => reset('tar-f-vigente', true));
-  if (visible('tar-f-ocultas') && g('tar-f-ocultas')?.checked) push('Con ocultas', () => reset('tar-f-ocultas', false));
-  if (visible('tar-f-ocultar-ocultos') && g('tar-f-ocultar-ocultos') && !g('tar-f-ocultar-ocultos').checked) push('Incluye ocultos', () => reset('tar-f-ocultar-ocultos', true));
+  if (tarVerOcultos()) push('Con ocultos', () => g('tar-ver-ocultos-btn')?.click());
   g('tar-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
   if (!chips.length) { box.innerHTML = ''; return; }
   box.innerHTML = chips.map((c, i) => `<span class="fchip">${esc(c[0])} <b data-ci="${i}">✕</b></span>`).join('')
@@ -27458,9 +27496,8 @@ function tarChips() {
   g('tar-chips-clear').onclick = () => {
     ['tar-f-destino', 'tar-f-tipo', 'tar-f-mes', 'tar-f-precio', 'tar-f-grupo'].forEach(id => { const el = g(id); if (el) el.value = ''; });
     const n = g('tar-f-ninos'); if (n) n.checked = false;
-    const o = g('tar-f-ocultas'); if (o) o.checked = false;
     const v = g('tar-f-vigente'); if (v) v.checked = true;
-    const oo = g('tar-f-ocultar-ocultos'); if (oo) oo.checked = true;
+    if (tarVerOcultos()) { g('tar-ver-ocultos-btn')?.click(); return; }
     renderTarifario();
   };
 }
@@ -27528,10 +27565,10 @@ async function loadTarifario() {
     const { data: top } = await sb.from('ia_top_productos').select('producto_id').eq('activo', true);
     iaTopIds = new Set((top || []).map(r => Number(r.producto_id)));
   }
-  // Promociones y Hot Sales solo muestran vigentes salvo "Ver ocultas" (admin):
+  // Promociones y Hot Sales solo muestran vigentes salvo con el ojo de ocultos (oficina):
   // traer las ~22k apagadas era el 96% de la carga (25-70 s, medido 2026-10-09)
   // para ~900 visibles. IA sí lista apagadas, así que siempre va completa.
-  const completo = tarTab === 'ia' || (tarTab === 'promo' && esOficina() && !!document.getElementById('tar-f-ocultas')?.checked);
+  const completo = tarTab === 'ia' || (tarTab === 'promo' && tarVerOcultos());
   if (tarCache[tarTab] && (tarCache[tarTab]._completo || !completo)) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
   empty.classList.remove('show'); grid.style.display = 'none';
@@ -28356,11 +28393,11 @@ function renderTarifario() {
   const fGrupo = tarGrupoFiltro();
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
-  const fOcultas = esOficina() && !!document.getElementById('tar-f-ocultas')?.checked;
-  const fOcultarOcultos = !!document.getElementById('tar-f-ocultar-ocultos')?.checked;
+  const fOcultas = tarVerOcultos();
 
   let filtered = data.filter(x => {
-    if (q && !(x.nombre || x.titulo || '').toLowerCase().includes(q) && !(x.destino || '').toLowerCase().includes(q)) return false;
+    if (!fOcultas && tarTab !== 'promo' && tarTab !== 'hotsale' && x.activo === false) return false;
+    if (q &&!(x.nombre || x.titulo || '').toLowerCase().includes(q) && !(x.destino || '').toLowerCase().includes(q)) return false;
     if (tarTab === 'hotel') {
       if (fDestino && x.destino !== fDestino) return false;
       const ag = agregarHotel(x);
@@ -28368,19 +28405,17 @@ function renderTarifario() {
       if (fPrecio != null && ag.precioMin != null && ag.precioMinMoneda === 'USD' && ag.precioMin > fPrecio) return false;
       if (fNinos && ag.ninosMax < 1) return false;
       if (fVigente && !ag.algunaVigente) return false;
-      if (fOcultarOcultos && x.activo === false) return false;
-      // Hotel sin foto real (productos.oculto_sin_foto): la web ya lo oculta; acá solo la oficina
-      // lo ve, y con "Ocultar ocultos" desmarcado.
-      if (x.oculto_sin_foto && (!esOficina() || fOcultarOcultos)) return false;
+      // Hotel sin foto real (productos.oculto_sin_foto): la web ya lo oculta; acá solo con el ojo.
+      if (x.oculto_sin_foto && !fOcultas) return false;
       if (fGrupo && !ag.capacidadDesconocida && ag.capacidadMax < fGrupo) return false;
     } else if (tarTab === 'promo') {
-      // Las retiradas (revisado=false) salen SOLO con el chip "Ver ocultas".
+      // Las retiradas (revisado=false) salen SOLO con el ojo de ocultos.
       // Desmarcar "Solo vigentes" era la puerta trasera por la que volvían a
       // aparecer las promos de julio: ese filtro ahora habla de fechas, no de
       // lo que el barrido ya apagó.
       if (x.revisado === false) { if (!fOcultas) return false; }
       else if (fVigente && !promoVigente(x)) return false;
-      // Promo de un hotel sin foto real: igual que la web, solo sale con "Ver ocultas" (oficina).
+      // Promo de un hotel sin foto real: igual que la web, solo sale con el ojo (oficina).
       if (x.productos?.oculto_sin_foto && !fOcultas) return false;
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fTipo && !(x.incluye_tags || []).includes(fTipo)) return false;
@@ -28388,7 +28423,7 @@ function renderTarifario() {
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
       if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
     } else if (tarTab === 'hotsale') {
-      if (x.productos?.oculto_sin_foto) return false;
+      if (x.productos?.oculto_sin_foto || x.revisado === false) return false;
       if (fDestino && destinoDe(x) !== fDestino) return false;
       if (fVigente && !promoVigente(x)) return false;
     } else if (tarTab === 'paquete') {
@@ -28674,7 +28709,7 @@ async function paqPintar(q, fDestino) {
   let d;
   try { d = await paqCargar(); } catch (e) { console.error(e); host.innerHTML = '<div class="paq-vacio">No se pudieron cargar los paquetes.</div>'; return; }
   if (!host.isConnected) return;
-  const lista = d.paquetes.filter(p => (!fDestino || p.hotel?.destino === fDestino)
+  const lista = d.paquetes.filter(p => (p.activo || tarVerOcultos()) && (!fDestino || p.hotel?.destino === fDestino)
     && (!q || `${p.titulo} ${p.hotel?.nombre || ''} ${p.hotel?.destino || ''} ${p.etiqueta || ''}`.toLowerCase().includes(q)));
   host.innerHTML = `<div class="tar-destino-header paq-cabecera"><i class="fas fa-suitcase-rolling"></i> Paquetes Lotus · boleto + hotel <span>${lista.length}</span>`
     + `${esOficina() ? '<button class="btn-sm paq-nuevo" type="button" data-paq-accion="nuevo"><i class="fas fa-plus"></i> Nuevo paquete</button>' : ''}</div>`
@@ -39811,7 +39846,6 @@ function setupMisNotas() {
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
   { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
-  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-inicio', roles: 'nav-admin-only' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-no' },
@@ -39868,6 +39902,8 @@ const NAV_ITEMS = [
   { sec: 'contenido', icon: 'fas fa-layer-group', label: 'Contenido', padre: 'grp-marketing', roles: 'nav-admin-only nav-marketing-ok', sub: 'Calendario de publicaciones y marcas de clientes' },
   { sec: 'clientes-eventos', icon: 'fas fa-gift', label: 'Clientes Eventos', padre: 'grp-marketing', roles: 'nav-admin-only', sub: 'Registrados del QR del stand y sus premios' },
   { sec: 'gestion-personal', icon: 'fas fa-people-group', label: 'Gestión de Personal', padre: 'grp-equipo', roles: 'nav-admin-only' },
+  // Ranking pasa de Inicio a Equipo (2026-11-20, pedido del dueño).
+  { sec: 'ranking', icon: 'fas fa-ranking-star', label: 'Ranking', padre: 'grp-equipo', roles: 'nav-admin-only' },
   { sec: 'induccion', icon: 'fas fa-graduation-cap', label: 'Inducción', padre: 'grp-equipo', roles: 'nav-admin-only', sub: 'Cómo le fue a cada persona en el modo de prueba' },
   // Tareas v2 (2026-10-23): entrada propia para todos los roles; antes solo freelancers o quien tuviera una abierta.
   { sec: 'tareas', icon: 'fas fa-list-check', label: 'Tareas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Tu día: lo que te asignaron y tus recordatorios', badge: 'nav-tareas-v2-count', badgeDefault: '0' },
@@ -42983,6 +43019,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-20', emoji: '🙈', titulo: 'Tarifario: lo oculto ya no se ve', texto: 'Las pestañas, hoteles, promociones, paquetes y productos ocultos ya no aparecen en el tarifario, tampoco para administración. Para verlos, toca el ojo de la barra del tarifario; al recargar vuelven a quedar escondidos.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-20', emoji: '📅', titulo: 'Servicios: calendario, horas sugeridas y tarjetas del tarifario', texto: 'Al cargar un servicio (en la Reserva o en «Crear reserva»): las fechas se eligen en un solo calendario (primer toque llegada, segundo regreso) con las noches y los días del hotel marcados, más botones «Fechas del hotel» y ±1 noche. Debajo de las horas salen sugerencias, incluida la del vuelo (y la recogida 3 h antes del vuelo de regreso). Traslados, excursiones y hoteles del destino aparecen como tarjetas con foto y precio: tocas una y queda elegida. Al elegir el traslado se llenan solos el aeropuerto y el hotel.', roles: ['admin', 'asesor', 'asesor_prueba', 'administrativo'] },
   { fecha: '2026-11-19', emoji: '🧳', titulo: '«Crear reserva» desde el lead, en 3 pasos', texto: 'Al crear la reserva desde el lead ahora vas en 3 pasos: 1 Viaje (eliges la cotización y la opción, personas y viajeros), 2 Servicios (hotel, boleto, traslado, full day, igual que en la Reserva) y 3 Pago (resumen, comprobante y abono). Si el lead tiene cotización, los servicios pasan solos; lo que tenga fecha vencida queda marcado «Completar». Traslados y full days quedan ligados al producto del tarifario.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-19', emoji: '↩️', titulo: 'Saldo a favor: se puede registrar un reembolso', texto: 'Si al cliente se le devolvió el dinero que pagó de más, en Abonos aparece «Reembolsar» junto a «Aplicar a otra reserva». Pones el monto devuelto, la referencia y el motivo: queda una fila «Reembolso» y el saldo a favor baja. No toca cuentas ni banco, y se puede deshacer desde la misma lista. Lo hace administración.', roles: ['admin', 'administrativo'] },
