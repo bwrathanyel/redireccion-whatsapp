@@ -20,6 +20,7 @@ import { crearLlamadasWa } from './llamadas-wa.js';
 import { crearLlamadasApp } from './llamadas-app.js';
 import { crearLlamadasPanel } from './llamadas-panel.js';
 import * as copiaOffline from './offline-cache.js';
+import { crearComisionesCortes } from './comisiones-cortes.js';
 
 const SUPABASE_URL = 'https://begbjhrdbsqftbbleecb.supabase.co';
 const FOTOS_BASE = SUPABASE_URL + '/storage/v1/object/public/tarifario-fotos/';
@@ -3837,7 +3838,7 @@ async function startApp() {
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
     setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupColaInbox, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
-    setupTareasV2, setupLlamadasWa, setupLlamadasApp, setupTecladoMovil, setupEstadoBody, setupBarraInf, setupSolicitudesDisp,
+    setupTareasV2, setupLlamadasWa, setupLlamadasApp, setupTecladoMovil, setupCapasMoviles, setupEstadoBody, setupBarraInf, setupSolicitudesDisp,
   );
   if (ROL === 'marketing') {
     // Voz IA se abrió a marketing (2026-08-13) -- el nav-item ya se ve
@@ -10625,6 +10626,7 @@ function prepararFichaMovil() {
   const c = document.getElementById('drawerContent');
   c.dataset.dtab = 'resumen';
   alturaFichaLead(false);
+  prepararCierreLeadMovil();
   const atajos = ids => ids.map(id => document.getElementById(id)).filter(Boolean)
     .map(b => `<button type="button" class="dq-mas" data-clic="${b.id}">${b.querySelector('i')?.outerHTML || ''}${esc(b.textContent.trim() || b.getAttribute('aria-label') || '')}</button>`).join('');
   document.getElementById('d-conv-atajos').insertAdjacentHTML('beforeend', atajos(['e-a-pegar-chat', 'e-a-texto-ia', 'e-a-wa-msg']));
@@ -10634,20 +10636,26 @@ function prepararFichaMovil() {
   if (fichaArrastreListo) return;
   fichaArrastreListo = true;
   const d = document.getElementById('drawer');
-  const esFicha = () => esMovil() && !!d.querySelector('.dhead-lead');
-  let y0 = null, dy = 0, t0 = 0;
+  const esFicha = () => esMovil() && d.classList.contains('open') && !!d.querySelector('.dhead-lead') && !document.querySelector('.sheet.open');
+  let y0 = null, x0 = 0, dy = 0, t0 = 0;
   const soltar = () => { y0 = null; d.style.transition = ''; d.style.transform = ''; };
+  d._limpiarArrastre = soltar;
   d.addEventListener('touchstart', e => {
-    if (!esFicha() || d.scrollTop > 2 || !e.target.closest('.dhead-lead') || e.target.closest('.dtabs,button,a,select,input')) return;
-    y0 = e.touches[0].clientY; dy = 0; t0 = Date.now(); d.style.transition = 'none';
+    if (e.touches.length !== 1) { soltar(); return; }
+    if (!esFicha() || d.scrollTop > 2 || !e.target.closest('.dhead-lead') || e.target.closest('.dtabs,button,a,select,input,textarea')) return;
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; t0 = Date.now(); d.style.transition = 'none';
   }, { passive: true });
   d.addEventListener('touchmove', e => {
     if (y0 == null) return;
+    if (e.touches.length !== 1 || !esFicha()) { soltar(); return; }
     dy = e.touches[0].clientY - y0;
-    d.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+    const dx = Math.abs(e.touches[0].clientX - x0);
+    if (dx > 10 && dx > Math.abs(dy)) { soltar(); return; }
+    d.style.transform = dy > 0 ? `translateY(${dy / zoomFactor()}px)` : '';
   }, { passive: true });
   d.addEventListener('touchend', () => {
     if (y0 == null) return;
+    if (!esFicha()) { soltar(); return; }
     const rapido = dy / Math.max(1, Date.now() - t0) > .5;
     soltar();
     if (dy < -40) alturaFichaLead(true);
@@ -11408,8 +11416,8 @@ document.getElementById('confirm-delete-lead-ok')?.addEventListener('click', asy
   // empujó su propia entrada de historial) — se descarta esa entrada a
   // mano en vez de sumar un history.back() extra, así el cierre de
   // ambos overlays consume un solo history.back() (el del drawer).
-  if (NAV_STACK[NAV_STACK.length - 1]?.type === 'sheet') NAV_STACK.pop();
-  closeSheet('confirm-delete-lead-sheet', true);
+  if (!esMovil() && NAV_STACK[NAV_STACK.length - 1]?.type === 'sheet') NAV_STACK.pop();
+  closeSheet('confirm-delete-lead-sheet', !esMovil());
   if (deleteMode === 'single') { window.closeDrawer(); if (!fallidos.length) okToast('Lead eliminado'); }
   else { clearSelection(); if (!fallidos.length) okToast(`${ids.length} lead(s) eliminados`); }
   await loadStats(); renderAll(); loadTable(); loadDestPeriodo();
@@ -16083,11 +16091,31 @@ document.getElementById('nl-crear')?.addEventListener('click', async () => {
   if (pvc.id && !cubierta) await abrirReservaDeLead(pvc.id, pvc.codigo || '', null, 'abonos');
 });
 window.closeDrawer = (fromNav) => {
+  const movil = typeof esMovil === 'function' && esMovil(), drawer = document.getElementById('drawer');
+  if (movil && !drawer.classList.contains('open')) return;
+  const contenido = document.getElementById('drawerContent')?.firstElementChild;
+  let entrada = movil ? navEntradaMovil('drawer') : null;
+  if (movil && CAPAS_MOVILES.cierreDrawer && CAPAS_MOVILES.cierreDrawer.entrada === entrada && CAPAS_MOVILES.cierreDrawer.contenido === contenido) return;
   guardarPendientesLead(); // ficha del lead: lo escrito sin "salir" del campo se guarda igual
   const notas = document.getElementById('tar-notas');
-  const cerrar = () => { tarDrawerSolicitud++; document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBg').classList.remove('open'); if (!fromNav) navConsume(); if (cbLead) setTimeout(cbRefrescarLeadFicha, 800); };
+  const cerrar = () => {
+    if (movil && (!drawer.classList.contains('open') || entrada !== navEntradaMovil('drawer') || contenido !== document.getElementById('drawerContent')?.firstElementChild)) return;
+    tarDrawerSolicitud++;
+    drawer.classList.remove('open'); document.getElementById('drawerBg').classList.remove('open');
+    if (movil) { drawer._limpiarArrastre?.(); if (entrada) navConsume(entrada); pintarEstadoBody(); }
+    else if (!fromNav) navConsume();
+    if (cbLead) setTimeout(cbRefrescarLeadFicha, 800);
+  };
   if (notas && notas.value.trim() !== (notas.dataset.original || '').trim()) {
-    confirmarSheet({ titulo: '¿Cerrar sin guardar?', detalle: 'Hay notas sin guardar.', textoOk: 'Cerrar', destructivo: true }).then(ok => { if (ok) cerrar(); });
+    // Atrás ya consumió la ficha: rearmarla antes del confirm permite cancelar
+    // sin perder el siguiente Atrás, y aceptar consume ambas entradas en orden.
+    if (movil && fromNav && !entrada) entrada = navPush({ type: 'drawer' });
+    const solicitud = { entrada, contenido };
+    if (movil) CAPAS_MOVILES.cierreDrawer = solicitud;
+    confirmarSheet({ titulo: '¿Cerrar sin guardar?', detalle: 'Hay notas sin guardar.', textoOk: 'Cerrar', destructivo: true }).then(ok => {
+      if (movil && CAPAS_MOVILES.cierreDrawer === solicitud) CAPAS_MOVILES.cierreDrawer = null;
+      if (ok) cerrar();
+    });
     return;
   }
   cerrar();
@@ -26099,7 +26127,17 @@ const cmFechaLarga = d => {
 };
 const cmFalta = n => n === 0 ? 'Es hoy' : n === 1 ? 'Es mañana' : n > 1 ? `Faltan ${n} días` : `Venció hace ${-n} día${n === -1 ? '' : 's'}`;
 
+let CM_CORTES_UI = null;
 function setupComisiones() {
+  CM_CORTES_UI ||= crearComisionesCortes({
+    rpc: (fn, args) => sb.rpc(fn, args), invoice: body => sb.functions.invoke('comision-invoice-enviar', { body }),
+    office: esOficina, role: () => ROL, esc, money: ivMoney, error: errToast, success: okToast,
+    reservation: (id, codigo, el) => abrirReservaDeLead(id, codigo, el), confirm: confirmarSheet,
+    config: cmLoadConfig, configChange: cmGuardarPct, configClick: cmClickConfig, tabChanged: t => { CM_TAB = t; }, adjustments: () => DR?.cargarComisiones(),
+  });
+  CM_CORTES_UI.setup();
+}
+function setupComisionesLegacy() {
   const tabs = document.getElementById('cm-tabs');
   if (!tabs || tabs._wired) return;
   tabs._wired = true;
@@ -26122,11 +26160,12 @@ function setupComisiones() {
 }
 function cmTab(tab) {
   CM_TAB = tab;
+  if (CM_CORTES_UI) return CM_CORTES_UI.tab(tab);
   document.querySelectorAll('#cm-tabs [data-cm-tab]').forEach(b => b.classList.toggle('on', b.dataset.cmTab === tab));
   document.querySelectorAll('#sec-comisiones [data-cm-panel]').forEach(p => { p.style.display = p.dataset.cmPanel === tab ? '' : 'none'; });
   ({ resumen: cmLoadResumen, ventas: cmLoadVentas, invoices: cmLoadInvoices, config: cmLoadConfig })[tab]?.();
 }
-function loadComisiones() { DR?.cargarComisiones(); cmTab(CM_TAB || 'resumen'); }
+function loadComisiones() { cmTab(CM_TAB || 'resumen'); }
 
 async function cmLoadContexto() {
   const { data, error } = await sb.rpc('comision_contexto');
@@ -39803,15 +39842,47 @@ function linkToast(html) { const t = document.createElement('div'); t.className 
    haya algo en NAV_STACK — al vaciarse (pantalla raíz), el siguiente atrás
    sí sale de la PWA (comportamiento estándar, no se intercepta más allá). */
 let NAV_STACK = [];
-function navPush(entry) { NAV_STACK.push(entry); history.pushState({ navDepth: NAV_STACK.length }, ''); }
-// Usado por los cierres propios de la UI (botón X, backdrop, "Listo") para
-// consumir la entrada de historial que ese overlay había empujado — sin
-// esto, cada cierre manual deja una entrada fantasma y el próximo gesto de
-// atrás del sistema queda desfasado (hay que tocarlo dos veces sin efecto).
-function navConsume() { if (NAV_STACK.length) history.back(); }
-// Saca la entrada sin tocar el historial: para cerrar algo justo antes de navegar a otra pantalla.
+let navPendienteMovil = null, navSecuenciaMovil = 0;
+function navEntradaMovil(type, id) { return [...NAV_STACK].reverse().find(e => e.type === type && (id === undefined || e.id === id) && !e.cerradaMovil); }
+function navProcesarMovil() {
+  if (navPendienteMovil) return;
+  for (const e of NAV_STACK) if (e.registradaMovil === undefined) e.registradaMovil = true;
+  const registrada = [...NAV_STACK].reverse().find(e => e.registradaMovil);
+  if (registrada?.cerradaMovil) { navPendienteMovil = registrada; history.back(); return; }
+  for (const entry of [...NAV_STACK]) {
+    if (entry.registradaMovil) continue;
+    if (entry.cerradaMovil) { navQuitar(entry); continue; }
+    entry.registradaMovil = true;
+    history.pushState({ navDepth: NAV_STACK.indexOf(entry) + 1, navCapa: entry.claveMovil }, '');
+  }
+}
+function navPush(entry) {
+  if (!esMovil() && !navPendienteMovil) { NAV_STACK.push(entry); history.pushState({ navDepth: NAV_STACK.length }, ''); return entry; }
+  if (entry.type === 'drawer' || entry.type === 'sheet') {
+    sincronizarCapasMoviles();
+    const actual = navEntradaMovil(entry.type, entry.id);
+    if (actual) return actual;
+  }
+  entry.claveMovil = ++navSecuenciaMovil;
+  entry.registradaMovil = false;
+  NAV_STACK.push(entry);
+  navProcesarMovil();
+  return entry;
+}
+// history.back es asíncrono: el acuse consume SU entrada, nunca el panel que
+// se haya abierto mientras tanto. Los nuevos push esperan ese acuse.
+function navConsume(entry) {
+  if (!esMovil() && !navPendienteMovil) { if (NAV_STACK.length) history.back(); return; }
+  entry ||= [...NAV_STACK].reverse().find(e => !e.cerradaMovil);
+  if (!entry || !NAV_STACK.includes(entry) || entry.cerradaMovil) return;
+  // Una entrada abierta en escritorio también puede cerrarse tras rotar.
+  if (entry.registradaMovil === undefined) entry.registradaMovil = true;
+  entry.cerradaMovil = true;
+  navProcesarMovil();
+}
 function navQuitar(entry) { const i = NAV_STACK.indexOf(entry); if (i >= 0) NAV_STACK.splice(i, 1); }
 window.addEventListener('popstate', () => {
+  if (navPendienteMovil) { navQuitar(navPendienteMovil); navPendienteMovil = null; navProcesarMovil(); return; }
   if (!NAV_STACK.length) return; // pantalla raíz: se deja que el SO cierre la PWA
   const top = NAV_STACK.pop();
   if (top.type === 'drawer') window.closeDrawer(true);
@@ -39830,6 +39901,7 @@ window.addEventListener('popstate', () => {
   else if (top.type === 'seleccion') top.limpiar?.();
   else if (top.type === 'tk-panel') top.cerrar?.();
   else if (top.type === 'lyra') lyraCerrar(true);
+  if (esMovil()) navProcesarMovil();
 });
 
 /* ---------- Nav ---------- */
@@ -40646,7 +40718,7 @@ function cerrarMenuMovil(modo) {
   document.body.classList.remove('menu-abierto');
   document.getElementById('menu-btn')?.setAttribute('aria-expanded', 'false');
   if (modo === 'fromNav') return;
-  if (modo === 'silencioso') { if (NAV_STACK[NAV_STACK.length - 1]?.type === 'menu') NAV_STACK.pop(); return; }
+  if (modo === 'silencioso') { if (NAV_STACK.at(-1)?.type === 'menu') { if (esMovil()) navConsume(); else NAV_STACK.pop(); } return; }
   navConsume();
 }
 
@@ -41614,8 +41686,8 @@ function abrirDetalleBoleteria(id) {
 // dos history.back() cuando abre otra hoja arriba (mismo patrón que el borrado
 // de leads, ver confirm-delete-lead-ok).
 function cerrarDetalleBoleteria() {
-  if (NAV_STACK[NAV_STACK.length - 1]?.type === 'sheet') NAV_STACK.pop();
-  closeSheet('bol-detalle-sheet', true);
+  if (!esMovil() && NAV_STACK[NAV_STACK.length - 1]?.type === 'sheet') NAV_STACK.pop();
+  closeSheet('bol-detalle-sheet', !esMovil());
 }
 
 async function bolEliminar(id) {
@@ -42732,18 +42804,28 @@ async function abrirDesdeBusquedaIA(tipo, id) {
 /* ---------- Hoja inferior genérica (más opciones del nav, filtros en móvil) — un solo backdrop compartido, una hoja abierta a la vez ---------- */
 let sheetAbierta = null;
 function openSheet(id) {
-  if (sheetAbierta && sheetAbierta !== id) closeSheet(sheetAbierta, true);
-  document.getElementById(id)?.classList.add('open');
+  const movil = esMovil(), el = document.getElementById(id);
+  if (movil && (!el || (sheetAbierta === id && el.classList.contains('open')))) return;
+  const anterior = movil && sheetAbierta ? navEntradaMovil('sheet', sheetAbierta) : null;
+  const reutilizar = anterior && NAV_STACK.at(-1) === anterior && !navPendienteMovil;
+  if (sheetAbierta && sheetAbierta !== id) closeSheet(sheetAbierta, reutilizar || !movil);
+  if (movil) montarCapaMovil(el);
+  el?.classList.add('open');
   document.getElementById('sheet-bg')?.classList.add('open');
   sheetAbierta = id;
-  navPush({ type: 'sheet', id });
+  if (reutilizar) { anterior.id = id; sincronizarCapasMoviles(); }
+  else navPush({ type: 'sheet', id });
+  if (movil) pintarEstadoBody();
 }
 function closeSheet(id, fromNav) {
+  const movil = esMovil(), el = document.getElementById(id);
+  if (movil && !el?.classList.contains('open')) return;
+  const entrada = movil ? navEntradaMovil('sheet', id) : null;
   if (id === 'pv-abono-sheet') PV_ABONO?.origen?.isConnected && PV_ABONO.origen.focus();
   // Cerrar el menú de capítulos por cualquier vía (X, tocar afuera, elegir
   // un capítulo) cuenta como "ya vio el tutorial" -- no solo completarlo.
   document.getElementById(id)?.classList.remove('open');
-  document.getElementById('sheet-bg')?.classList.remove('open');
+  if (!movil || sheetAbierta === id) document.getElementById('sheet-bg')?.classList.remove('open');
   if (sheetAbierta === id) sheetAbierta = null;
   if (id === 'enviar-facturacion-sheet') efBorradorCerrar();
   // Si confirmar-sheet se cierra por cualquier via que NO sea sus propios
@@ -42759,7 +42841,8 @@ function closeSheet(id, fromNav) {
   // original queda creyendo que sigue abierto y el próximo click no hace nada.
   const pop = document.getElementById(id);
   if (pop && POPOVER_SHEETS.has(pop)) cerrarPopoverSheet(pop);
-  if (!fromNav) navConsume();
+  if (!fromNav && (!movil || entrada)) navConsume(entrada);
+  if (movil) pintarEstadoBody();
 }
 document.getElementById('sheet-bg')?.addEventListener('click', () => { if (sheetAbierta) closeSheet(sheetAbierta); });
 
@@ -42802,6 +42885,127 @@ function sincronizarFAB(sec) {
 }
 MENU_MQ.addEventListener('change', () => { sincronizarFAB(currentSec); sincronizarPopoverSheets(); });
 
+/* ---------- Capas móviles estables: los portales no clonan ni pierden handlers ---------- */
+const CAPAS_MOVILES = { listo: false, lugares: new Map(), focos: new Map(), superior: null, scroll: null, raf: 0, sincronizando: false, cierreDrawer: null };
+function montarCapaMovil(el) {
+  if (!el || !esMovil()) return;
+  const popover = POPOVER_SHEETS.has(el);
+  if (!CAPAS_MOVILES.lugares.has(el)) {
+    const atributos = Object.fromEntries(['inert', 'role', 'aria-modal', 'aria-hidden', 'tabindex'].map(k => [k, el.getAttribute(k)]));
+    const marca = !popover && el.parentNode !== document.body ? document.createComment('capa-movil') : null;
+    if (marca) el.before(marca);
+    CAPAS_MOVILES.lugares.set(el, { marca, atributos });
+  }
+  if (!popover && el.parentNode !== document.body) document.body.appendChild(el);
+}
+function prepararCierreLeadMovil() {
+  if (!esMovil()) return;
+  const head = document.querySelector('#drawerContent .dhead-lead');
+  if (!head || head.querySelector('.dclose-lead')) return;
+  const boton = document.createElement('button');
+  boton.type = 'button'; boton.className = 'dclose dclose-lead';
+  boton.title = 'Cerrar'; boton.setAttribute('aria-label', 'Cerrar');
+  boton.innerHTML = document.getElementById('dClose').innerHTML;
+  boton.onclick = () => window.closeDrawer();
+  head.appendChild(boton);
+}
+function geometriaCapasMoviles() {
+  CAPAS_MOVILES.raf = 0;
+  if (!esMovil()) return;
+  const vv = window.visualViewport, zoom = zoomFactor();
+  const visible = vv && Math.abs(vv.scale - 1) < .01;
+  const alto = visible ? vv.height : window.innerHeight;
+  const fondo = visible ? Math.max(0, window.innerHeight - alto - vv.offsetTop) : 0;
+  const s = document.body.style;
+  s.setProperty('--capa-zoom', zoom);
+  s.setProperty('--capa-alto', (alto / zoom) + 'px');
+  s.setProperty('--capa-fondo', (fondo / zoom) + 'px');
+}
+function pedirGeometriaCapasMoviles() {
+  if (!CAPAS_MOVILES.raf) CAPAS_MOVILES.raf = requestAnimationFrame(geometriaCapasMoviles);
+}
+function scrollCapasMoviles(abiertas) {
+  const estado = CAPAS_MOVILES;
+  if (abiertas && !estado.scroll) estado.scroll = { x: window.scrollX, y: window.scrollY, body: document.body.scrollTop, seccion: document.querySelector('.section.active')?.id };
+  document.body.classList.toggle('capas-moviles-abiertas', abiertas);
+  if (!abiertas && estado.scroll) {
+    const antes = estado.scroll; estado.scroll = null;
+    if (antes.seccion === document.querySelector('.section.active')?.id) { window.scrollTo(antes.x, antes.y); document.body.scrollTop = antes.body; }
+  }
+}
+function sincronizarCapasMoviles() {
+  const estado = CAPAS_MOVILES;
+  if (!estado.listo || estado.sincronizando) return;
+  estado.sincronizando = true;
+  try {
+    if (!esMovil()) {
+      document.getElementById('drawer')?._limpiarArrastre?.();
+      document.querySelectorAll('.dclose-lead').forEach(n => n.remove());
+      for (const [el, sitio] of [...estado.lugares].reverse()) {
+        if (sitio.marca?.parentNode) { sitio.marca.replaceWith(el); }
+        for (const [k, v] of Object.entries(sitio.atributos)) { if (v === null) el.removeAttribute(k); else el.setAttribute(k, v); }
+      }
+      estado.lugares.clear(); estado.focos.clear(); estado.superior = null;
+      scrollCapasMoviles(false);
+      for (const k of ['--capa-zoom', '--capa-alto', '--capa-fondo']) document.body.style.removeProperty(k);
+      return;
+    }
+    const hojas = [...document.querySelectorAll('.sheet.open')], drawers = [...document.querySelectorAll('.drawer.open')];
+    for (const el of [...drawers, ...hojas]) montarCapaMovil(el);
+    const superior = hojas.at(-1) || drawers.at(-1) || null;
+    const anterior = estado.superior;
+    if (superior !== anterior) {
+      if (superior && !estado.focos.has(superior)) estado.focos.set(superior, document.activeElement);
+      estado.superior = superior;
+    }
+    for (const [el] of estado.lugares) {
+      if (!el.matches('.sheet,.drawer')) continue;
+      const arriba = el === superior;
+      el.inert = !arriba;
+      el.setAttribute('aria-hidden', String(!arriba));
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', String(arriba));
+      if (!el.hasAttribute('tabindex')) el.tabIndex = -1;
+      if (!el.classList.contains('open')) el._limpiarArrastre?.();
+    }
+    // Los popovers legacy conservan su propio portal, pero no el foco debajo de otra hoja.
+    for (const [el, pop] of POPOVER_SHEETS) if (pop.montado) el.inert = el !== superior;
+    prepararCierreLeadMovil();
+    scrollCapasMoviles(!!superior);
+    if (superior !== anterior) {
+      const volver = anterior && !anterior.classList.contains('open') ? estado.focos.get(anterior) : null;
+      if (anterior && !anterior.classList.contains('open')) estado.focos.delete(anterior);
+      if (volver?.isConnected && (!superior || superior.contains(volver))) volver.focus({ preventScroll: true });
+      else if (superior && !superior.contains(document.activeElement)) superior.focus({ preventScroll: true });
+    }
+    pedirGeometriaCapasMoviles();
+  } finally { estado.sincronizando = false; }
+}
+function setupCapasMoviles() {
+  if (CAPAS_MOVILES.listo) return;
+  CAPAS_MOVILES.listo = true;
+  const montar = () => {
+    if (esMovil()) document.querySelectorAll('.sheet,.drawer,#sheet-bg,#drawerBg').forEach(montarCapaMovil);
+    sincronizarCapasMoviles();
+  };
+  montar();
+  MENU_MQ.addEventListener('change', montar);
+  window.addEventListener('resize', pedirGeometriaCapasMoviles);
+  window.visualViewport?.addEventListener('resize', pedirGeometriaCapasMoviles);
+  window.visualViewport?.addEventListener('scroll', pedirGeometriaCapasMoviles);
+  new MutationObserver(pedirGeometriaCapasMoviles).observe(document.documentElement, { attributes: true, attributeFilter: ['data-fuente'] });
+  document.addEventListener('keydown', e => {
+    const top = CAPAS_MOVILES.superior;
+    if (!esMovil() || !top || e.key !== 'Tab') return;
+    if (document.activeElement.closest('.lightbox.open,.tk-overlay,#lyra-panel.open')) return;
+    const campos = [...top.querySelectorAll('button,input,textarea,select,a[href],[tabindex]')].filter(n => !n.disabled && n.tabIndex >= 0 && !n.closest('[inert]') && n.getClientRects().length);
+    const primero = campos[0], ultimo = campos.at(-1), foco = document.activeElement;
+    if (!primero || (e.shiftKey ? foco === primero || !top.contains(foco) || foco === top : foco === ultimo || !top.contains(foco) || foco === top)) {
+      e.preventDefault(); (e.shiftKey ? ultimo : primero)?.focus({ preventScroll: true });
+    }
+  });
+}
+
 /* body.teclado: lo consumen CSS y modo prueba para apartar FABs/paneles con el
    teclado abierto. Solo ≤760; visualViewport cubre el teclado cerrado sin blur. */
 const TECLADO_TIPOS_NO = new Set(['checkbox', 'radio', 'file', 'button', 'submit', 'reset', 'image', 'range', 'color', 'hidden', 'date', 'time', 'datetime-local', 'month', 'week']);
@@ -42809,7 +43013,8 @@ function setupTecladoMovil() {
   const escribible = el => !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !TECLADO_TIPOS_NO.has((el.type || 'text').toLowerCase())));
   const esMovil = () => matchMedia('(max-width:760px)').matches;
   document.addEventListener('focusin', e => { if (esMovil() && escribible(e.target)) document.body.classList.add('teclado'); });
-  document.addEventListener('focusout', () => document.body.classList.remove('teclado'));
+  document.addEventListener('focusout', () => requestAnimationFrame(() => { if (!esMovil() || !escribible(document.activeElement)) document.body.classList.remove('teclado'); }));
+  MENU_MQ.addEventListener('change', () => { if (!esMovil()) document.body.classList.remove('teclado'); });
   const vv = window.visualViewport;
   if (!vv) return;
   // Con el foco puesto, el teclado cierra y reabre sin focusin (Atrás de Android). Por scale: el pellizco de zoom achica vv.height sin teclado.
@@ -42838,6 +43043,7 @@ function pintarEstadoBody() {
   b.toggle('en-cotiz-boletos', sec?.id === 'sec-cotizacion-boletos');
   // WhatsApp tiene su propio pie de envío: la burbuja de Mensajes lo tapaba.
   b.toggle('en-whatsapp', sec?.id === 'sec-whatsapp');
+  sincronizarCapasMoviles();
 }
 function setupEstadoBody() {
   pintarEstadoBody();
@@ -42940,6 +43146,7 @@ function sincronizarPopoverSheets() { POPOVER_SHEETS.forEach((_, el) => sincroni
 let confirmarSheetResolve = null;
 let confirmarSheetCampos = null;
 function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Confirmar', textoCancelar = 'Cancelar', destructivo = false, campos = null } = {}) {
+  if (esMovil() && confirmarSheetResolve) { const anterior = confirmarSheetResolve; confirmarSheetResolve = null; anterior(false); }
   return new Promise(resolve => {
     confirmarSheetResolve = resolve;
     confirmarSheetCampos = campos && campos.length ? campos : null;
@@ -42970,7 +43177,7 @@ function confirmarSheet({ titulo = '¿Confirmar?', detalle = '', textoOk = 'Conf
     err.textContent = ''; err.style.display = 'none';
     document.getElementById('confirmar-sheet-acciones').classList.toggle('sheet-acciones', !!confirmarSheetCampos);
     openSheet('confirmar-sheet');
-    if (confirmarSheetCampos) setTimeout(() => cont.querySelector('input:not([type=checkbox]):not([type=radio]),textarea,select')?.focus(), 60);
+    if (confirmarSheetCampos) setTimeout(() => { if (!esMovil() || (confirmarSheetResolve === resolve && sheetAbierta === 'confirmar-sheet')) cont.querySelector('input:not([type=checkbox]):not([type=radio]),textarea,select')?.focus(); }, 60);
   });
 }
 function resolverConfirmarSheet(valor) {
@@ -43234,6 +43441,8 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-20', emoji: '💰', titulo: 'Comisiones por corte y cambios de fecha acordados', texto: 'Ahora ves cada corte con sus ventas, ajustes, factura e historial. Administración puede pasar comisiones verificadas o liquidadas a otro corte impago, abierto o cerrado, indicando el motivo y revisando el impacto antes de confirmar. Los pagos se marcan automáticamente desde las 12 del mediodía del día correspondiente, hora de Venezuela; oficina también puede registrarlos antes. Ese estado no confirma una transferencia bancaria. Cambiar el corte no envía mensajes: el reenvío de la factura se hace aparte.', roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba'] },
+  { fecha: '2026-11-20', emoji: '📱', titulo: 'Fichas y ventanas más estables en el celular', texto: 'Las fichas, tareas y confirmaciones conservan mejor su orden al abrir unas sobre otras. Se ajustaron el botón Atrás, el foco, el bloqueo del fondo y el espacio al abrir el teclado, girar la pantalla o usar letra grande.', roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'] },
   { fecha: '2026-11-20', emoji: '🧳', titulo: 'Reservas: acciones a la vista', texto: 'Consulta vouchers, cambia el estado y registra abonos desde la tarjeta. En el detalle, los vouchers y los accesos directos quedan arriba.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-11-20', emoji: '🙈', titulo: 'Tarifario: lo oculto ya no se ve', texto: 'Las pestañas, hoteles, promociones, paquetes y productos ocultos ya no aparecen en el tarifario, tampoco para administración. Para verlos, toca el ojo de la barra del tarifario; al recargar vuelven a quedar escondidos.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-20', emoji: '📅', titulo: 'Servicios: calendario, horas sugeridas y tarjetas del tarifario', texto: 'Al cargar un servicio (en la Reserva o en «Crear reserva»): las fechas se eligen en un solo calendario (primer toque llegada, segundo regreso) con las noches y los días del hotel marcados, más botones «Fechas del hotel» y ±1 noche. Debajo de las horas salen sugerencias, incluida la del vuelo (y la recogida 3 h antes del vuelo de regreso). Traslados, excursiones y hoteles del destino aparecen como tarjetas con foto y precio: tocas una y queda elegida. Al elegir el traslado se llenan solos el aeropuerto y el hotel.', roles: ['admin', 'asesor', 'asesor_prueba', 'administrativo'] },

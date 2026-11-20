@@ -3905,6 +3905,88 @@ body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
   #sec-comisiones .cm-pct-acc{justify-content:flex-start}
   #sec-comisiones .cm-pct-servicios{grid-template-columns:minmax(0,1fr)}
 }
+/* Cortes: fecha de pago a la izquierda, libro de comisiones y liquidaciones a la derecha. */
+#sec-comisiones,#cm-mover-dialog{font-variant-numeric:tabular-nums}
+#sec-comisiones :is(button,input,select,summary),#cm-mover-dialog :is(button,input,select,textarea){min-height:44px}
+#sec-comisiones :is(button,input,select,summary):focus-visible,#cm-mover-dialog :is(button,input,select,textarea):focus-visible{outline:2px solid var(--accent-ink);outline-offset:3px}
+#sec-comisiones ::selection,#cm-mover-dialog ::selection{background:var(--accent);color:var(--on-accent)}
+#sec-comisiones input,#cm-mover-dialog :is(input,textarea){caret-color:var(--accent-ink)}
+.cm-cabecera,.cm-detalle-cab,.cm-tabla-barra{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.cm-cabecera h2{margin:0;font-size:22px;letter-spacing:-.025em}
+.cm-cabecera p,.cm-detalle-cab p{margin:7px 0 0;color:var(--muted);font-size:13px;line-height:1.6;max-width:65ch}
+.cm-cabecera>.btn-sm{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.cm-calendario-nota{display:flex;gap:11px;align-items:baseline;margin:20px 0 24px;padding:12px 0;border-block:1px solid var(--line2);font-size:12px;line-height:1.7;color:var(--muted)}
+.cm-calendario-nota i{color:var(--accent-ink)}
+#cm-carga-estado:not(:empty){padding:0 0 18px;color:var(--muted);font-size:13px}
+.cm-espacio{display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;align-items:start}
+.cm-cortes-nav{position:sticky;top:16px;max-height:70vh;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.cm-corte-op{display:grid;width:100%;grid-template-columns:1fr auto;gap:9px 5px;border:1px solid transparent;border-radius:12px;padding:15px 12px;margin-bottom:6px;background:transparent;text-align:left;font-family:inherit;color:var(--txt);cursor:pointer}
+.cm-corte-op>span{font-size:13px}.cm-corte-op>strong{font-size:13px}.cm-corte-op>small{grid-column:1/-1;color:var(--muted);font-size:12px}
+.cm-corte-op:hover{background:rgba(var(--ink-rgb),.04)}
+.cm-corte-op.on{background:var(--accent-soft);border-color:var(--accent-ink)}
+.cm-corte-op.on>span,.cm-corte-op.on>strong{color:var(--accent-ink)}
+.cm-selector-movil{display:none}
+.cm-corte-detalle{min-width:0}
+.cm-detalle-cab{align-items:flex-start}.cm-detalle-cab h3{margin:0;font-size:22px;letter-spacing:-.025em}
+.cm-detalle-cab>.cm-estado{margin-top:5px}
+.cm-cuenta{display:flex;justify-content:space-between;gap:14px;padding:20px 0;margin:4px 0 18px;border-bottom:1px solid var(--line2)}
+.cm-cuenta>span{font-size:12px;color:var(--muted)}.cm-cuenta b,.cm-cuenta strong{display:block;margin-top:6px;font-size:18px;font-weight:650;color:var(--txt)}
+.cm-cuenta strong{color:var(--accent-ink)}
+.cm-tabla-barra h4,.cm-liquidaciones h4{margin:0;font-size:14px;font-weight:650}.cm-tabla-barra{margin-bottom:12px}
+.cm-filas,.cm-todas-filas{border-top:1px solid var(--line2)}
+#cm-ventas-lista.cm-todas-filas{display:block}
+.cm-fila{display:grid;grid-template-columns:auto minmax(120px,1fr) auto;align-items:center;gap:12px 14px;padding:17px 0;border-bottom:1px solid var(--line2)}
+.cm-fila:has(.cm-elegir){grid-template-columns:24px minmax(120px,1fr) auto}
+.cm-fila.seleccionada{background:var(--accent-soft)}
+.cm-fila-identidad{min-width:0}.cm-fila-identidad>b{display:block;font-size:14px;overflow-wrap:anywhere}
+.cm-fila-identidad>span,.cm-fila-identidad>small{display:block;margin-top:5px;font-size:12px;line-height:1.5;color:var(--muted)}
+.cm-fila-importe{display:flex;flex-direction:column;gap:7px;align-items:flex-end}.cm-fila-importe>b{font-size:17px;white-space:nowrap}
+.cm-fila-acciones{grid-column:2/-1;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.cm-fila-acciones:empty{display:none}.cm-fila-acciones .btn-sm{display:inline-flex;align-items:center;gap:8px}
+.cm-elegir{display:flex;align-items:center;justify-content:center;min-height:44px;cursor:pointer}
+.cm-elegir input{min-height:20px!important;width:18px;height:18px;accent-color:var(--accent-ink);cursor:pointer}.cm-elegir:has(input:disabled){opacity:.4;cursor:default}
+.cm-reserva-link{border:0;background:transparent;padding:0 3px;color:var(--accent-ink);font:inherit;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.cm-icono{width:44px;padding:0;justify-content:center}
+.cm-fila-bloqueo{grid-column:2/-1;color:var(--muted);font-size:12px;line-height:1.5}
+.cm-movimientos{grid-column:2/-1;font-size:12px;color:var(--muted)}.cm-movimientos summary{display:flex;align-items:center;cursor:pointer;color:var(--accent-ink)}
+.cm-movimientos>div{padding:12px 0;border-top:1px solid var(--line)}.cm-movimientos p{margin:5px 0;color:var(--txt);line-height:1.6;overflow-wrap:anywhere}
+.cm-liquidaciones{margin-top:32px}.cm-liquidaciones>h4{margin-bottom:8px}
+.cm-liquidacion{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:14px;padding:18px 0;border-bottom:1px solid var(--line2)}
+.cm-liquidacion>div>b{font-size:14px;margin-right:8px}.cm-liquidacion small{display:block;color:var(--muted);font-size:12px;line-height:1.6;margin-top:8px}.cm-liquidacion>strong{font-size:16px;white-space:nowrap}
+.cm-liq-acciones{display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1}.cm-liq-acciones .btn-sm{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.cm-liq-desglose{grid-column:1/-1;font-size:13px}.cm-liq-desglose>div{display:flex;justify-content:space-between;gap:15px;padding:9px 0}.cm-liq-desglose>div>span{overflow-wrap:anywhere}
+.cm-seleccion-barra{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px;background:var(--panel-solid);border:1px solid var(--accent-ink);border-radius:12px;margin-top:16px;position:sticky;bottom:calc(16px + var(--safe-b));z-index:2}
+.cm-seleccion-barra>span{flex:1;font-size:13px;line-height:1.6}.cm-seleccion-barra .btn-sm{white-space:nowrap}
+.cm-primario{background:var(--accent)!important;color:var(--on-accent)!important;border-color:transparent!important}
+.cm-primario:disabled{opacity:.5;cursor:not-allowed}
+.cm-vacio{padding:30px 16px;color:var(--muted);font-size:14px;line-height:1.7;text-align:center}.cm-vacio b{color:var(--txt)}
+.cm-excluidas{font-size:12px;color:var(--muted);margin:14px 0 24px}.cm-excluidas summary{display:flex;align-items:center;cursor:pointer}
+.cm-dialog{position:fixed;inset:0;margin:auto;width:min(640px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:26px;background:var(--bg2);color:var(--txt);border:0;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.cm-dialog::backdrop{background:rgba(0,0,0,.65)}
+.cm-dialog form{display:flex;flex-direction:column}.cm-dialog header{margin-bottom:20px}.cm-dialog h2{font-size:22px;margin:0;letter-spacing:-.025em}.cm-dialog header p{font-size:13px;line-height:1.6;color:var(--muted);margin:10px 0 0}
+.cm-dialog label{font-size:13px;font-weight:600;margin-bottom:8px}.cm-dialog select{margin-bottom:18px;width:100%}.cm-dialog textarea{height:90px;resize:vertical;font-size:14px;line-height:1.5;margin-bottom:8px}
+#cm-mover-fecha-wrap{margin-bottom:18px}#cm-mover-fecha-wrap label{display:block}.cm-dialog .ei{width:100%}
+#cm-mover-impacto{margin-top:22px}#cm-mover-impacto h3{font-size:15px;margin:0 0 15px}
+.cm-impacto-cab,.cm-impacto-fila{display:grid;grid-template-columns:minmax(0,1fr) 100px 100px;gap:12px;align-items:center;font-size:13px;padding:12px 0;border-bottom:1px solid var(--line2)}
+.cm-impacto-cab{color:var(--muted);font-size:12px;padding-top:0}.cm-impacto-fila small{display:block;margin-top:5px;color:var(--muted)}
+.cm-impacto-fila>:not(:first-child),.cm-impacto-cab>:not(:first-child){text-align:right}.cm-impacto-fila>strong{color:var(--accent-ink)}
+.cm-dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.cm-dialog footer button{font-size:13px;padding-inline:15px}
+.cm-form-error{color:var(--danger);font-size:13px;line-height:1.6;margin:12px 0 0}.cm-form-error:empty{display:none}
+@media(min-width:1200px){.cm-fila,.cm-fila:has(.cm-elegir){grid-template-columns:24px minmax(140px,1fr) auto auto}.cm-fila-acciones{grid-column:auto}.cm-fila:not(:has(.cm-elegir)){grid-template-columns:minmax(140px,1fr) auto auto}}
+@media(max-width:1000px){.cm-espacio{grid-template-columns:190px minmax(0,1fr);gap:20px}.cm-corte-op{grid-template-columns:1fr}.cm-seleccion-barra{flex-wrap:wrap}.cm-seleccion-barra>span{flex-basis:100%}}
+@media(max-width:760px){
+  .cm-cabecera{align-items:flex-start;gap:12px}.cm-cabecera h2{font-size:21px}.cm-cabecera .btn-sm{font-size:0;padding:0;width:44px;justify-content:center}.cm-cabecera .btn-sm i,.cm-cabecera .cm-recargar-icono{font-size:20px}
+  .cm-calendario-nota{margin:16px 0 20px;font-size:12px}.cm-espacio{grid-template-columns:1fr;gap:24px}.cm-cortes-nav{position:static;overflow:visible;max-height:none}
+  #cm-cortes-lista{display:none}.cm-selector-movil{display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--muted)}.cm-selector-movil select{width:100%}
+  .cm-detalle-cab{flex-wrap:wrap;gap:10px}.cm-detalle-cab h3{font-size:21px}.cm-detalle-cab .cm-estado{margin:0}
+  .cm-cuenta{gap:10px;padding-top:16px}.cm-cuenta b,.cm-cuenta strong{font-size:17px}.cm-tabla-barra{gap:10px}.cm-tabla-barra .btn-sm{font-size:11px;max-width:135px}
+  .cm-fila,.cm-fila:has(.cm-elegir){gap:10px;grid-template-columns:24px minmax(80px,1fr) auto}.cm-fila:not(:has(.cm-elegir)){grid-template-columns:minmax(80px,1fr) auto}
+  .cm-fila-identidad>b{font-size:14px}.cm-fila-importe>b{font-size:16px}.cm-fila-importe .cm-estado{font-size:10px;padding-inline:6px}
+  .cm-fila-acciones{justify-content:flex-start}.cm-fila-acciones .btn-sm{font-size:12px}.cm-seleccion-barra{bottom:calc(80px + var(--safe-b));gap:8px;padding:12px}
+  .cm-seleccion-barra>button{flex:1;font-size:12px}.cm-liquidacion{gap:10px}.cm-liq-acciones .btn-sm{flex:1;font-size:12px}
+  .cm-dialog{padding:20px;width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}.cm-dialog h2{font-size:21px}.cm-dialog footer{position:sticky;bottom:-20px;background:var(--bg2);padding:14px 0 20px;margin-bottom:-20px;flex-wrap:wrap}.cm-dialog footer button{flex:1;font-size:12px;padding-inline:10px}
+  .cm-impacto-cab,.cm-impacto-fila{grid-template-columns:minmax(0,1fr) 75px 75px;gap:8px;font-size:12px}
+}
 /* solo-informe-diario / solo-voucher: a diferencia de los de arriba, no dependen
    del rol sino de un flag por usuario (ve_informe_diario) o de una combinación
    rol+modo (voucher). Se ocultan/muestran por clase en <body> (ve-informe-diario /
@@ -8904,7 +8986,7 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
    los elementos nuevos. */
 .dtabs,.dtab-atajos,.dh-est,.dtab-vacio,.dacc-ic.dacc-tel{display:none}
 @media(max-width:760px){
-  .drawer:has(.dhead-lead){height:calc(64dvh / var(--zoom,1));max-height:none;padding-top:0;padding-bottom:0;overscroll-behavior:contain;transition:transform .3s cubic-bezier(.3,1,.4,1),height .3s cubic-bezier(.3,1,.4,1)}
+  .drawer:has(.dhead-lead){height:calc(64dvh / var(--zoom,1));max-height:none;padding-top:0;padding-bottom:0;overscroll-behavior:contain;transition:transform .3s cubic-bezier(.3,1,.4,1)}
   .drawer.d-completa:has(.dhead-lead){height:calc((100dvh - env(safe-area-inset-top,0px) - 12px) / var(--zoom,1))}
   .drawer:has(.dhead-lead)::before{display:none}
   .drawer:has(.dhead-lead) .dclose{position:fixed;top:14px;right:11px;z-index:4;background:var(--bg2)}
@@ -8944,6 +9026,25 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 }
 @media(max-width:760px) and (prefers-reduced-motion:reduce){
   .drawer:has(.dhead-lead){transition:none}
+}
+
+/* El portal móvil pone fondo y panel en el mismo stacking context, sin tocar .app en escritorio. */
+@media(max-width:760px){
+  body.capas-moviles-abiertas{overflow:hidden;overscroll-behavior:none}
+  body > #drawerBg{z-index:60}
+  body > .drawer{z-index:61}
+  body > #sheet-bg{z-index:70}
+  body > .sheet{z-index:71}
+  body > :is(.sheet,.drawer,#sheet-bg,#drawerBg):not(.open){visibility:hidden;pointer-events:none}
+  body > :is(.sheet,.drawer,#sheet-bg,#drawerBg).open{visibility:visible;pointer-events:auto}
+  body > :is(.sheet,.drawer).open{transform:none}
+  body > :is(.sheet,.drawer){bottom:var(--capa-fondo,0px);overscroll-behavior:contain}
+  body > .sheet{max-height:calc(var(--capa-alto,100dvh) * .8)}
+  body > .drawer{height:var(--capa-alto,100dvh);max-height:calc(var(--capa-alto,100dvh) * .9)}
+  body > .drawer:has(.dhead-lead){height:calc(var(--capa-alto,100dvh) * .64)}
+  body > .drawer.d-completa:has(.dhead-lead),body.teclado > .drawer:has(.dhead-lead){height:calc(var(--capa-alto,100dvh) - (env(safe-area-inset-top,0px) + 12px) / var(--capa-zoom,1))}
+  .drawer:has(.dhead-lead) > #dClose{display:none}
+  .drawer .dhead-lead > .dclose-lead{position:absolute;top:14px;right:11px;z-index:4;background:var(--bg2)}
 }
 
 /* ============ MODO LIVIANO (html[data-lite]) ============
@@ -11453,20 +11554,14 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
     <section class="section" id="sec-comisiones">
       <div id="dr-comision-ajustes" class="vc-hecho" hidden></div>
       <div class="seg-group chips-scroll" id="cm-tabs">
-        <button class="seg" data-cm-tab="resumen" type="button">Resumen</button>
-        <button class="seg" data-cm-tab="ventas" type="button" id="cm-tab-ventas">Ventas</button>
-        <button class="seg" data-cm-tab="invoices" data-cm-rol="admin administrativo" type="button">Pagos</button>
+        <button class="seg" data-cm-tab="resumen" type="button">Cortes</button>
+        <button class="seg" data-cm-tab="ventas" type="button" id="cm-tab-ventas">Todas las comisiones</button>
         <button class="seg" data-cm-tab="config" data-cm-rol="admin" type="button">Configuración</button>
       </div>
 
       <div class="cm-panel" data-cm-panel="resumen" style="display:none">
         <div id="cm-aviso-sin-venta"></div>
-        <div id="cm-proximo"></div>
-        <div id="cm-secundarias"></div>
-        <div id="cm-historial-wrap" hidden>
-          <h3 class="cm-subtit">Historial de pagos</h3>
-          <div class="cm-historial" id="cm-historial"></div>
-        </div>
+        <div id="cm-cortes-app"></div>
       </div>
 
       <div class="cm-panel" data-cm-panel="ventas" style="display:none">
@@ -11507,6 +11602,21 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
         </div>
       </div>
     </section>
+
+    <dialog id="cm-mover-dialog" class="cm-dialog" aria-labelledby="cm-mover-titulo" aria-describedby="cm-mover-resumen">
+      <form id="cm-mover-form">
+        <header><h2 id="cm-mover-titulo">Mover a otro corte</h2><p id="cm-mover-resumen"></p></header>
+        <label for="cm-mover-destino">Día de pago de destino</label>
+        <select class="ei" id="cm-mover-destino" required></select>
+        <div id="cm-mover-fecha-wrap" hidden><label for="cm-mover-fecha">Otra fecha de pago (5 o 20 del mes)</label><input class="ei" id="cm-mover-fecha" type="date"></div>
+        <label for="cm-mover-motivo">Motivo del cambio</label>
+        <textarea class="ei" id="cm-mover-motivo" required minlength="5" maxlength="1000" placeholder="Ej.: por acuerdo, esta venta entra en el pago del 20."></textarea>
+        <small class="cm-nota">Quedará registrado quién hizo el cambio, cuándo y por qué. El vendedor podrá verlo.</small>
+        <div id="cm-mover-impacto" aria-live="polite"></div>
+        <p id="cm-mover-error" class="cm-form-error" role="alert"></p>
+        <footer><button type="button" class="btn-sm" id="cm-mover-cancelar">Cancelar</button><button type="submit" class="btn-sm cm-primario" id="cm-mover-ok" disabled>Confirmar cambio de corte</button></footer>
+      </form>
+    </dialog>
 
     <!-- INFORME DIARIO (Bloque 14 — solo Luis Rueda, gate por MI_VE_INFORME_DIARIO) -->
     <section class="section" id="sec-informe-diario">
