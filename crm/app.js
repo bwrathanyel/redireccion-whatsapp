@@ -4527,12 +4527,12 @@ function renderPostventa() {
     grid.innerHTML = '<div class="pv-empty"><i class="fas fa-circle-check"></i><b>Todo al día</b><br>No hay casos con este filtro</div>';
     return;
   }
-  grid.innerHTML = pvOrdenar(casos).map(c => pvCardHtml(c)).join('');
+  grid.innerHTML = pvOrdenar(casos).map(c => pvCardHtml(c, '', true)).join('');
   pvWire(grid, POSTVENTA);
   entradaLista(grid);
 }
 function pvWire(grid, lista, antes = () => {}) {
-  grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen))); });
+  grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen)), b.dataset.pvInicio || null); });
   // Tocar la tarjeta equivale a «Gestionar», salvo en sus botones, en la franja de botones (hueco entre ellos)
   // y mientras el usuario selecciona texto.
   grid.querySelectorAll('.pv-card:has([data-pv-open])').forEach(card => {
@@ -4841,7 +4841,7 @@ function pvViajoPagado(lista) {
   });
   return lista;
 }
-function pvCardHtml(c, extra = '') {
+function pvCardHtml(c, extra = '', accesos = false) {
     const ahora = Date.now();
     const etapa = PV_ETAPAS[c.etapa] || [c.etapa, 'fa-circle'];
     const total = Number(c.monto_total || 0), pagado = Number(c.monto_pagado || 0);
@@ -4865,7 +4865,11 @@ function pvCardHtml(c, extra = '') {
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>${pagado > total ? 'Saldo a favor' : 'Saldo'} <b>${money(pagado > total ? pagado - total : Math.max(0, Number(c.saldo_pendiente) || 0))}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
       ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}
-      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>
+      ${accesos ? `<div class="pv-card-foot pv-card-accesos">
+        <button class="pv-btn pv-voucher" data-pv-open="${c.id}" data-pv-inicio="vouchers" type="button"><i class="fas fa-file-lines" aria-hidden="true"></i> Ver vouchers</button>
+        <button class="pv-btn" data-pv-open="${c.id}" data-pv-inicio="estado" type="button"><i class="fas fa-pen" aria-hidden="true"></i> Cambiar estado</button>
+        ${pvPuedeAbonar() ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente" aria-label="Registrar abono: sin saldo pendiente"'}><i class="fas fa-money-bill-wave" aria-hidden="true"></i> Registrar abono</button>` : ''}
+        <button class="pv-btn primary" data-pv-open="${c.id}" type="button">Abrir reserva</button></div>` : `<div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>`}
     </article>`;
 }
 // Abonos de la tarjeta: siempre por reserva, sin usar reserva_principal ni registrar_abono_venta.
@@ -5100,15 +5104,34 @@ async function pvPlanAccion(c, p, btn) {
   } finally { btn.disabled = false; }
 }
 
+const pvPuedeAbonar = () => ['admin', 'asesor', 'administrativo'].includes(ROL);
 function abrirPostventa(c, accionInicial = null) {
   if (!c) return; PV_ACTUAL = c;
   const clienteSoloLectura = ROL === 'asesor' && c.asesor_lead !== undefined && c.asesor_lead !== MI_NOMBRE;
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
   const docs = c.documentos || {};
+  const wa = String(c.telefono || '').replace(/\D/g, '');
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
     <div data-rv-panel="resumen"><div class="rs-wrap">
+      <section class="pv-reserva-accesos" aria-label="Acciones rápidas de la reserva">
+        <div class="pv-estado-linea"><div><span class="rs-lbl">Estado de la reserva</span><strong id="pv-e-etapa-txt">${esc((PV_ETAPAS[c.etapa] || [c.etapa])[0])}</strong></div>
+          <button class="pv-btn" id="pv-e-etapa-cambiar" type="button" aria-expanded="false" aria-controls="pv-e-etapa-editor">Cambiar estado</button></div>
+        <div id="pv-e-etapa-editor" hidden>
+          <label class="fl" for="pv-e-etapa">Nuevo estado</label><select class="ei" id="pv-e-etapa" aria-describedby="pv-e-etapa-ayuda">${opt(PV_ETAPAS, c.etapa)}</select>
+          <p class="csub" id="pv-e-etapa-ayuda">El estado se actualiza según pagos, servicios y fechas. Al guardar un estado distinto, se fija manualmente. También se guardan las demás ediciones del resumen.</p>
+          <div class="rs-quick"><button class="pv-btn primary" id="pv-e-etapa-guardar" type="button" disabled>Guardar cambio de estado</button><button class="pv-btn" id="pv-e-etapa-cancelar" type="button">Cancelar cambio</button></div>
+          <div class="edit-err" id="pv-e-etapa-error" role="status"></div>
+        </div>
+        <div class="pv-voucher-seccion" aria-labelledby="pv-voucher-titulo"><h3 id="pv-voucher-titulo" tabindex="-1">Vouchers de esta reserva</h3><div id="pv-voucher-lista" aria-live="polite"><p class="csub">Cargando vouchers…</p></div></div>
+        <div class="pv-reserva-atajos">
+          ${pvPuedeAbonar() ? `<button class="pv-btn" data-pv-atajo="abonos" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente" aria-label="Registrar abono: sin saldo pendiente"'}>Registrar abono</button>` : ''}
+          ${pvPuedeAbonar() ? '<button class="pv-btn" data-pv-atajo="nuevo-servicio" type="button" disabled>Agregar servicio</button>' : ''}
+          <button class="pv-btn" data-pv-atajo="pasajeros" type="button">Ver pasajeros</button>
+          ${wa ? '<button class="pv-btn wa" data-pv-atajo="whatsapp" type="button"><i class="fab fa-whatsapp" aria-hidden="true"></i> Abrir WhatsApp</button>' : ''}
+        </div>
+      </section>
       <div class="rs-sec">Asesor de esta reserva</div>
       <div class="rs-ro"><span id="pv-e-asesor-actual">${esc(c.asesor || 'Sin asignar')}</span>${['admin', 'administrativo'].includes(ROL) ? '<button class="rs-q" id="pv-e-asesor-cambiar" type="button"><i class="fas fa-user-pen" aria-hidden="true"></i> Cambiar asesor</button>' : ''}</div>
       <div data-rv-check></div><div id="pv-e-otras"></div>
@@ -5119,15 +5142,12 @@ function abrirPostventa(c, accionInicial = null) {
       <input id="pv-e-pagado" type="hidden" value="${Number(c.monto_pagado || 0)}">
       <div id="pv-e-comision"></div>
       <div id="pv-e-plan"></div>
-      <div class="rs-sec">Viaje <span>Fechas, destino y etapa</span></div>
+      <div class="rs-sec">Viaje <span>Fechas y destino</span></div>
       <div class="rs-grid2">
         <div><label class="rs-lbl" for="pv-e-inicio">Inicio</label><input class="ei" id="pv-e-inicio" type="date" value="${esc(c.fecha_viaje_inicio || '')}"></div>
         <div><label class="rs-lbl" for="pv-e-fin">Fin</label><input class="ei" id="pv-e-fin" type="date" value="${esc(c.fecha_viaje_fin || '')}"></div>
         <div><label class="rs-lbl" for="pv-e-destino">Destino</label><input class="ei" id="pv-e-destino" maxlength="200" value="${esc(c.destino || '')}" placeholder="${esc(c.servicio || 'Sin definir')}" ${clienteSoloLectura ? 'readonly' : ''}></div>
-        <div><span class="rs-lbl">Etapa</span><div class="rs-ro rs-ro-etapa"><span id="pv-e-etapa-txt">${esc((PV_ETAPAS[c.etapa] || [c.etapa])[0])}</span><button class="rs-q" id="pv-e-etapa-cambiar" type="button" aria-expanded="false">Cambiar</button></div></div>
       </div>
-      <select class="ei" id="pv-e-etapa" aria-label="Etapa" hidden>${opt(PV_ETAPAS, c.etapa)}</select>
-      <div class="csub">La etapa se actualiza sola según pagos, servicios y fechas; «Cambiar» la fija a mano.</div>
       <div id="pv-e-habs"></div>
       <div class="rs-sec">Cliente <span>Titular de la reserva (cambia también en su lead)</span></div>
       <div class="rs-grid2">
@@ -5164,14 +5184,37 @@ function abrirPostventa(c, accionInicial = null) {
   pvComisionPintar(c.id);
   document.getElementById('pv-e-asesor-cambiar')?.addEventListener('click', e => pvCambiarAsesor(c, e.currentTarget));
   document.getElementById('pv-e-total').addEventListener('input', pvDineroPintar);
-  document.getElementById('pv-e-etapa-cambiar').onclick = e => {
-    const sel = document.getElementById('pv-e-etapa'), abrir = sel.hidden;
-    sel.hidden = !abrir; e.currentTarget.setAttribute('aria-expanded', String(abrir));
-    if (abrir) sel.focus();
+  const etapa = document.getElementById('pv-e-etapa'), editor = document.getElementById('pv-e-etapa-editor');
+  const cambiar = document.getElementById('pv-e-etapa-cambiar'), aplicar = document.getElementById('pv-e-etapa-guardar');
+  const etapaInicial = etapa.value;
+  const editaEtapa = abrir => {
+    if (!abrir) { etapa.value = etapaInicial; aplicar.disabled = true; document.getElementById('pv-e-etapa-error').textContent = ''; }
+    editor.hidden = !abrir; cambiar.setAttribute('aria-expanded', String(abrir));
+    (abrir ? etapa : cambiar).focus();
   };
-  document.getElementById('pv-e-etapa').addEventListener('change', e => { document.getElementById('pv-e-etapa-txt').textContent = e.target.selectedOptions[0]?.textContent || ''; });
+  cambiar.onclick = () => { if (cambiar.closest('.pv-reserva-accesos').getAttribute('aria-busy') !== 'true') editaEtapa(editor.hidden); };
+  etapa.onchange = () => { aplicar.disabled = etapa.value === etapaInicial; };
+  aplicar.onclick = () => guardarPostventa(false, true);
+  document.getElementById('pv-e-etapa-cancelar').onclick = () => { if (aplicar.closest('.pv-reserva-accesos').getAttribute('aria-busy') !== 'true') editaEtapa(false); };
   const resumen = rvPanel('resumen');
   resumen.onclick = e => {
+    const voucher = e.target.closest('[data-pv-voucher-id]');
+    if (voucher && !voucher.disabled && RV_RESERVA_ID === c.id && RV_DET?.documentos?.some(d => d.tipo === 'voucher' && String(d.id) === voucher.dataset.pvVoucherId)) return rvDescargar(Number(voucher.dataset.pvVoucherId), voucher);
+    const atajo = e.target.closest('[data-pv-atajo]');
+    if (atajo && !atajo.disabled) {
+      switch (atajo.dataset.pvAtajo) {
+        case 'abonos': rvTab('abonos'); abonosModulo().montar(c.id, true); return;
+        case 'nuevo-servicio':
+          if (RV_RESERVA_ID !== c.id || !rvPuedeEditar()) return;
+          rvTab('servicios'); rvForm({ tipo: 'servicio', id: null }); rvPanel('servicios')?.querySelector('input,select,textarea')?.focus(); return;
+        case 'pasajeros': rvTab('pasajeros'); break;
+        case 'documentos': rvTab('documentos'); break;
+        case 'whatsapp': if (wa) window.open(`https://wa.me/${wa}`, '_blank', 'noopener'); return;
+        case 'reintentar-vouchers': pvVouchersPintar(null); rvCargar(); return;
+        default: return;
+      }
+      document.querySelector(`#drawerContent [data-rv-tab="${atajo.dataset.pvAtajo}"]`)?.focus(); return;
+    }
     const go = e.target.closest('[data-rv-go]'); if (go) return rvIr(go.dataset.rvGo, go.dataset.id);
     const sg = e.target.closest('[data-pv-seg]'); if (sg) pvSeguimientoRapido(sg.dataset.pvSeg);
     const mj = e.target.closest('[data-pv-msj]'); if (mj) pvMensajeCliente(c, mj.dataset.pvMsj, mj);
@@ -5192,6 +5235,8 @@ function abrirPostventa(c, accionInicial = null) {
   const yaAbierto = document.getElementById('drawer').classList.contains('open');
   document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!yaAbierto) navPush({ type: 'drawer' });
   rvIniciar(c.id, accionInicial === 'nuevo-servicio' ? 'servicios' : accionInicial === 'abonos' || accionInicial === 'ver-abonos' ? 'abonos' : 'resumen', accionInicial);
+  if (accionInicial === 'estado') editaEtapa(true);
+  if (accionInicial === 'vouchers') document.getElementById('pv-voucher-titulo').focus();
   if (esOficina()) pvCargarEmpresas(c);
 }
 async function pvCambiarAsesor(c, btn) {
@@ -5323,10 +5368,12 @@ async function pvGuardarHabitaciones() {
   return null;
 }
 const pvSaldo = c => Number(c.monto_total || 0) - Number(c.monto_pagado || 0);
-async function guardarPostventa(marcarPagado) {
+async function guardarPostventa(marcarPagado, soloAcceso = false) {
   if (!PV_ACTUAL) return;
-  const btn = document.getElementById(marcarPagado ? 'pv-e-pago' : 'pv-e-guardar');
-  const err = document.getElementById('pv-e-error');
+  const acciones = document.querySelector('#drawerContent .pv-reserva-accesos');
+  const btn = document.getElementById(soloAcceso ? 'pv-e-etapa-guardar' : marcarPagado ? 'pv-e-pago' : 'pv-e-guardar');
+  const err = document.getElementById(soloAcceso ? 'pv-e-etapa-error' : 'pv-e-error');
+  if (!btn || btn.disabled || acciones?.getAttribute('aria-busy') === 'true') return;
   const total = Number(val('pv-e-total') || 0), pagado = Number(val('pv-e-pagado') || 0);
   const inicio = val('pv-e-inicio') || null, fin = val('pv-e-fin') || null;
   const costoNetoRaw = val('pv-e-costo-neto');
@@ -5337,32 +5384,46 @@ async function guardarPostventa(marcarPagado) {
   if (inicio && fin && fin < inicio) { err.textContent = 'La fecha de fin no puede ser anterior al inicio.'; return; }
   const documentos = {}; document.querySelectorAll('[data-pv-doc]').forEach(x => documentos[x.dataset.pvDoc] = x.checked);
   const seguimiento = val('pv-e-seguimiento');
+  acciones?.setAttribute('aria-busy', 'true');
   err.textContent = ''; btn.disabled = true; const previo = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
-  const { data, error } = await sb.rpc('guardar_postventa', {
-    p_lead_id: PV_ACTUAL.lead_id, p_etapa: val('pv-e-etapa'), p_prioridad: val('pv-e-prioridad'),
-    p_monto_total: total, p_monto_pagado: pagado, p_fecha_viaje_inicio: inicio, p_fecha_viaje_fin: fin,
-    p_proveedor: val('pv-e-proveedor').trim() || null, p_localizador_reserva: val('pv-e-localizador').trim() || null,
-    p_documentos: documentos, p_proximo_seguimiento_at: seguimiento ? new Date(seguimiento).toISOString() : null,
-    p_notas: val('pv-e-notas').trim() || null, p_incidencia_abierta: document.getElementById('pv-e-incidencia').checked,
-    p_satisfaccion: val('pv-e-satisfaccion') ? Number(val('pv-e-satisfaccion')) : null, p_marcar_pagado: marcarPagado,
-    p_costo_neto: costoNeto, p_reserva_id: PV_ACTUAL.id,
-  });
-  if (error || !data?.ok) { btn.disabled = false; btn.innerHTML = previo; err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
-  const errEmpresa = await pvGuardarEmpresa();
-  const errCliente = await pvGuardarCliente();
-  const errHab = await pvGuardarHabitaciones();
-  btn.disabled = false; btn.innerHTML = previo;
-  if (errEmpresa) { err.textContent = 'La postventa se guardó, pero no la empresa: ' + errEmpresa; return; }
-  if (errCliente) { err.textContent = 'La postventa se guardó, pero no los datos del cliente: ' + errCliente; return; }
-  if (errHab) { err.textContent = 'La postventa se guardó, pero no la habitación: ' + errHab; return; }
-  window.closeDrawer();
-  // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
-  // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
-  // -- avisar con un toast distinto para que no piense que ya generó factura.
-  const pendienteVerificar = data.estado_lead === 'VENTA PENDIENTE DE VERIFICAR';
-  okToast(!marcarPagado ? 'Postventa actualizada' : pendienteVerificar ? 'Enviado a verificar -- un admin tiene que confirmarlo' : 'Pago registrado y postventa actualizada');
-  await Promise.all([loadPostventa(), loadStats()]); renderAll();
-  if (currentSec === 'reservas-empresas') loadReservasEmpresas();
+  const apertura = RV_APERTURA;
+  try {
+    const { data, error } = await sb.rpc('guardar_postventa', {
+      p_lead_id: PV_ACTUAL.lead_id, p_etapa: val('pv-e-etapa'), p_prioridad: val('pv-e-prioridad'),
+      p_monto_total: total, p_monto_pagado: pagado, p_fecha_viaje_inicio: inicio, p_fecha_viaje_fin: fin,
+      p_proveedor: val('pv-e-proveedor').trim() || null, p_localizador_reserva: val('pv-e-localizador').trim() || null,
+      p_documentos: documentos, p_proximo_seguimiento_at: seguimiento ? new Date(seguimiento).toISOString() : null,
+      p_notas: val('pv-e-notas').trim() || null, p_incidencia_abierta: document.getElementById('pv-e-incidencia').checked,
+      p_satisfaccion: val('pv-e-satisfaccion') ? Number(val('pv-e-satisfaccion')) : null, p_marcar_pagado: marcarPagado,
+      p_costo_neto: costoNeto, p_reserva_id: PV_ACTUAL.id,
+    });
+    if (apertura !== RV_APERTURA || !btn.isConnected) return;
+    if (error || !data?.ok) { err.textContent = 'No se pudo guardar: ' + (errReserva(error, data) || 'error desconocido'); return; }
+    const vigente = () => apertura === RV_APERTURA && btn.isConnected && document.getElementById('drawer').classList.contains('open');
+    if (!vigente()) return;
+    const errEmpresa = await pvGuardarEmpresa();
+    if (!vigente()) return;
+    const errCliente = await pvGuardarCliente();
+    if (!vigente()) return;
+    const errHab = await pvGuardarHabitaciones();
+    if (!vigente()) return;
+    if (errEmpresa) { err.textContent = 'La postventa se guardó, pero no la empresa: ' + errEmpresa; return; }
+    if (errCliente) { err.textContent = 'La postventa se guardó, pero no los datos del cliente: ' + errCliente; return; }
+    if (errHab) { err.textContent = 'La postventa se guardó, pero no la habitación: ' + errHab; return; }
+    window.closeDrawer();
+    // Si lo cerró un asesor, guardar_postventa lo manda a verificación en vez
+    // de a PAGO REALIZADO directo (ver 20260728000000_blindar_cierre_venta.sql)
+    // -- avisar con un toast distinto para que no piense que ya generó factura.
+    const pendienteVerificar = data.estado_lead === 'VENTA PENDIENTE DE VERIFICAR';
+    okToast(!marcarPagado ? 'Postventa actualizada' : pendienteVerificar ? 'Enviado a verificar -- un admin tiene que confirmarlo' : 'Pago registrado y postventa actualizada');
+    await Promise.all([loadPostventa(), loadStats()]); renderAll();
+    if (currentSec === 'reservas-empresas') loadReservasEmpresas();
+  } catch (e) {
+    console.error('guardarPostventa', e);
+    err.textContent = 'No se pudo completar el guardado. Revisa la reserva antes de reintentar.';
+  } finally {
+    acciones?.removeAttribute('aria-busy'); btn.disabled = false; btn.innerHTML = previo;
+  }
 }
 
 /* ---------- Reservas: servicios, pasajeros y documentos (migración 20260924130000) ----------
@@ -5517,10 +5578,11 @@ function destinosPorGrupo(lista) {
   return [...m].filter(([, ds]) => ds.length);
 }
 async function rvCargar() {
-  const id = RV_RESERVA_ID;
+  const id = RV_RESERVA_ID, apertura = RV_APERTURA;
   const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: id });
-  if (id !== RV_RESERVA_ID || !rvPanel('servicios')) return;
+  if (apertura !== RV_APERTURA || id !== RV_RESERVA_ID || !rvPanel('servicios')) return;
   if (error || !data?.ok) {
+    pvVouchersPintar(false);
     console.error('reserva_detalle', error || data);
     ['servicios', 'pasajeros', 'documentos'].forEach(k => { const p = rvPanel(k); if (p) p.innerHTML = `<div class="pv-empty">No se pudo cargar: ${esc(rvErr(error, data))}</div>`; });
     return;
@@ -5543,16 +5605,27 @@ async function rvCargar() {
     if (a.error || !a.data?.ok) console.error('apto_asignaciones_reserva', a.error || a.data);
     else (a.data.asignaciones || []).forEach(x => { aptos[x.servicio_id] = x; });
   }
-  if (id !== RV_RESERVA_ID || !rvPanel('servicios')) return;
+  if (apertura !== RV_APERTURA || id !== RV_RESERVA_ID || !rvPanel('servicios')) return;
   RV_APTOS = aptos;
   RV_DET = data;
   rvRender();
   rvTkCargarIa();
 }
+function pvVouchersPintar(detalle) {
+  const lista = document.getElementById('pv-voucher-lista'); if (!lista) return;
+  if (detalle === null) { lista.innerHTML = '<p class="csub">Cargando vouchers…</p>'; return; }
+  if (!detalle) { lista.innerHTML = '<p class="csub">No se pudieron cargar los vouchers.</p><button class="pv-btn" data-pv-atajo="reintentar-vouchers" type="button">Reintentar</button>'; return; }
+  const vouchers = (detalle.documentos || []).filter(d => d.tipo === 'voucher');
+  lista.innerHTML = vouchers.length ? vouchers.map(d => `<div class="pv-voucher-fila"><span>${esc(d.nombre || 'Voucher de la reserva')}</span><button class="pv-btn pv-voucher" data-pv-voucher-id="${Number(d.id)}" type="button" aria-label="${rvDocExt(d).toLowerCase() === 'pdf' ? 'Abrir PDF' : 'Abrir archivo'}: ${esc(d.nombre || 'Voucher de la reserva')}">${rvDocExt(d).toLowerCase() === 'pdf' ? 'Abrir PDF' : 'Abrir archivo'}</button></div>`).join('')
+    : '<p class="csub">Esta reserva todavía no tiene vouchers.</p><button class="pv-btn" data-pv-atajo="documentos" type="button">Ver documentos</button>';
+}
 function rvRender() {
   const { servicios = [], pasajeros = [], documentos = [], reserva = {} } = RV_DET;
   const n = { servicios: servicios.filter(s => !s.anulado_en).length, pasajeros: pasajeros.length, documentos: documentos.length };
   document.querySelectorAll('#drawerContent [data-rv-n]').forEach(x => x.textContent = n[x.dataset.rvN] || '');
+  pvVouchersPintar(RV_DET);
+  const agregarServicio = document.querySelector('#drawerContent [data-pv-atajo="nuevo-servicio"]');
+  if (agregarServicio) { agregarServicio.hidden = !rvPuedeEditar(); agregarServicio.disabled = !rvPuedeEditar(); }
   rvResumenTotal(reserva || {});
   rvChecklist(); pvHabPintar();
   rvRenderServicios(true); rvRenderPasajeros(true); rvRenderDocumentos(true);
@@ -43161,6 +43234,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-20', emoji: '🧳', titulo: 'Reservas: acciones a la vista', texto: 'Consulta vouchers, cambia el estado y registra abonos desde la tarjeta. En el detalle, los vouchers y los accesos directos quedan arriba.', roles: ['admin', 'asesor', 'administrativo'] },
   { fecha: '2026-11-20', emoji: '🙈', titulo: 'Tarifario: lo oculto ya no se ve', texto: 'Las pestañas, hoteles, promociones, paquetes y productos ocultos ya no aparecen en el tarifario, tampoco para administración. Para verlos, toca el ojo de la barra del tarifario; al recargar vuelven a quedar escondidos.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-20', emoji: '📅', titulo: 'Servicios: calendario, horas sugeridas y tarjetas del tarifario', texto: 'Al cargar un servicio (en la Reserva o en «Crear reserva»): las fechas se eligen en un solo calendario (primer toque llegada, segundo regreso) con las noches y los días del hotel marcados, más botones «Fechas del hotel» y ±1 noche. Debajo de las horas salen sugerencias, incluida la del vuelo (y la recogida 3 h antes del vuelo de regreso). Traslados, excursiones y hoteles del destino aparecen como tarjetas con foto y precio: tocas una y queda elegida. Al elegir el traslado se llenan solos el aeropuerto y el hotel.', roles: ['admin', 'asesor', 'asesor_prueba', 'administrativo'] },
   { fecha: '2026-11-19', emoji: '🧳', titulo: '«Crear reserva» desde el lead, en 3 pasos', texto: 'Al crear la reserva desde el lead ahora vas en 3 pasos: 1 Viaje (eliges la cotización y la opción, personas y viajeros), 2 Servicios (hotel, boleto, traslado, full day, igual que en la Reserva) y 3 Pago (resumen, comprobante y abono). Si el lead tiene cotización, los servicios pasan solos; lo que tenga fecha vencida queda marcado «Completar». Traslados y full days quedan ligados al producto del tarifario.', roles: ['admin', 'asesor', 'asesor_prueba'] },

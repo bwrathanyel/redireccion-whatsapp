@@ -5312,6 +5312,20 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .rs-foot .dbtn{margin-top:0}
 .pv-card-foot{margin-top:14px;padding-top:13px;border-top:1px solid var(--line);flex-wrap:wrap}
 .pv-card-foot .pv-btn{min-height:44px;flex:1 0 auto;padding:0 9px;white-space:nowrap}
+.pv-card-foot.pv-card-accesos,.pv-reserva-atajos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pv-card-foot.pv-card-accesos .pv-btn,.pv-reserva-accesos .pv-btn{min-height:44px;text-align:center;white-space:normal;line-height:1.25}
+.pv-card-accesos .pv-btn.primary:last-child:nth-child(3){grid-column:1/-1}
+.pv-reserva-accesos{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:12px;margin-bottom:8px}
+.pv-reserva-accesos [hidden]{display:none}
+.pv-estado-linea,.pv-voucher-fila{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pv-estado-linea strong{display:block}
+.pv-voucher-seccion{border-block:1px solid var(--line);padding:10px 0}
+.pv-voucher-seccion h3{font-size:13px;margin:0 0 5px}
+.pv-voucher-fila{padding:5px 0}
+.pv-voucher-fila span{flex:1 1 150px;min-width:0;overflow-wrap:anywhere}
+.pv-reserva-accesos :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pv-reserva-accesos .pv-btn:disabled{opacity:.45;cursor:default}
+.pv-btn.pv-voucher{background:var(--accent-soft);color:var(--accent-ink)}
 .pv-card-foot .pv-btn.wa{flex:0 0 44px;width:44px;height:44px;padding:0;font-size:17px}
 .pv-tools{display:inline-flex;gap:5px;margin-left:auto}
 .pv-viaje+.pv-tools{margin-left:0}
