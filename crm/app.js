@@ -23356,12 +23356,12 @@ function setupFacturacion() {
   Object.keys(FACT_SORT).forEach(pintarOrdenLbl);
 }
 async function loadFacturacion() {
-  loadAsesoresComision();
   loadBandejaFacturacion();
   loadVentasPendientesVerificar();
   await loadCuentasPorPagar(); // CXP_CACHE poblado antes: loadFacturas lo usa para costo neto/proveedor/margen
   loadFacturas();
-  loadComisionesAdmin();
+  // Pestañas Comisiones y Asesores (tabla vieja `comisiones` + asesores.porcentaje_comision) retiradas 2026-11-20:
+  // duplicaban Finanzas › Comisiones y «Pagar todas» marcaba pagos dobles.
 }
 async function loadAsesoresComision() {
   const { data, error } = await sb.rpc('listar_asesores_comision');
