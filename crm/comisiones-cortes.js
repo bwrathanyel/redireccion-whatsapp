@@ -23,10 +23,13 @@ export function crearComisionesCortes(c) {
     origen_neto_no_positivo: 'El origen quedaría con saldo cero o negativo. Revisa sus ajustes antes de mover.',
     destino_neto_no_positivo: 'El destino quedaría con saldo cero o negativo. Revisa sus ajustes antes de mover.',
     mismo_corte: 'Las comisiones ya están en ese corte. Elige otro.', motivo_invalido: 'Escribe un motivo de entre 5 y 1000 caracteres.',
-    idempotencia_conflicto: 'Esta operación ya se usó para otro cambio. Recarga antes de continuar.'
+    idempotencia_conflicto: 'Esta operación ya se usó para otro cambio. Recarga antes de continuar.',
+    venta_no_pagada: 'Esta comisión ya no está marcada pagada. Actualiza para ver su estado.',
+    liquidacion_inconsistente: 'La liquidación de esta comisión no está pagada o no coincide. Administración debe revisarla.',
+    importe_no_positivo: 'Esta comisión no tiene importe a pagar; no hace falta deshacer el pago.'
   };
   let ventas = [], invoices = [], cortes = [], revision = [], seleccion = new Set(), activo = 'resumen', elegido = '';
-  let carga = 0, reloj = null, relojLocal = 0, mover = null, wired = false, estado = 'pend';
+  let carga = 0, reloj = null, relojLocal = 0, mover = null, wired = false, estado = 'pend', deshacerPend = {};
   const chip = e => `<span class="cm-estado" data-e="${esc(e)}">${esc(etiquetas[e] || e)}</span>`;
   const errorTexto = (r, fallback) => r?.error?.code === '42501' ? 'No tienes permiso para esta acción.' : errores[r?.data?.error] || fallback;
   const ahora = () => reloj ? Date.parse(reloj) + (performance.now() - relojLocal) : null;
@@ -109,7 +112,7 @@ export function crearComisionesCortes(c) {
     $('cm-cortes-lista').innerHTML = [...fechas].reverse().map(d => { const r = resumen(d); return `<button class="cm-corte-op${d === elegido ? ' on' : ''}" type="button" data-cmc-corte="${esc(d)}" aria-pressed="${d === elegido}"><span>Pago del <b>${fecha(d)}</b></span><strong>${dinero(r.total)}</strong><small>${r.vs.length} comisiones · ${r.estado === 'pagada' ? 'Marcado pagado' : r.cerrado ? 'Corte cerrado' : 'En curso'}</small></button>`; }).join('') || vacio('Todavía no hay cortes con comisiones.');
     if (!elegido) { $('cm-corte-detalle').innerHTML = vacio('Las comisiones aparecerán aquí cuando las reservas estén completamente pagadas.'); return; }
     const r = resumen(elegido), pendientes = r.vs.filter(v => ['verificada', 'liquidada'].includes(v.estado));
-    $('cm-corte-detalle').innerHTML = `<div class="cm-detalle-cab"><div><h3>Pago del ${fecha(elegido)}</h3><p>${r.estado === 'pagada' ? 'Histórico protegido. Las comisiones pagadas no se pueden mover.' : r.cerrado ? 'Corte cerrado. Puedes ajustar comisiones hasta la hora de pago.' : 'Corte en curso. Las comisiones se liquidan al cerrar el período.'}</p></div>${chip(r.estado)}</div>
+    $('cm-corte-detalle').innerHTML = `<div class="cm-detalle-cab"><div><h3>Pago del ${fecha(elegido)}</h3><p>${r.estado === 'pagada' ? `Histórico protegido. Las comisiones pagadas no se pueden mover${c.office() ? '; si una no se pagó, usa «Deshacer pago»' : ''}.` : r.cerrado ? 'Corte cerrado. Puedes ajustar comisiones hasta la hora de pago.' : 'Corte en curso. Las comisiones se liquidan al cerrar el período.'}</p></div>${chip(r.estado)}</div>
       <div class="cm-cuenta"><span>Comisiones <b>${dinero(suma(r.vs))}</b></span><span>Ajustes <b>${dinero(r.ajustes)}</b></span><span>Total del corte <strong>${dinero(r.total)}</strong></span></div>
       <div class="cm-tabla-barra"><h4>${r.vs.length} comisiones${pendientes.length ? ` · ${pendientes.length} pendientes` : ''}</h4>${c.office() ? '<button type="button" class="btn-sm" data-cmc="seleccionar">Seleccionar disponibles</button>' : ''}</div>
       <div class="cm-filas">${r.vs.map(fila).join('') || vacio('No hay comisiones en este corte.')}</div><div id="cm-corte-seleccion"></div>
@@ -122,7 +125,7 @@ export function crearComisionesCortes(c) {
       ${c.office() ? `<label class="cm-elegir"><input type="checkbox" data-cmc-check="${v.id}" aria-label="Seleccionar comisión de ${esc(v.cliente_nombre || v.reserva_codigo || v.id)}"${seleccion.has(v.id) ? ' checked' : ''}${puede ? '' : ' disabled'}><span class="sr-only">Seleccionar</span></label>` : ''}
       <div class="cm-fila-identidad"><b>${esc(v.cliente_nombre || 'Sin nombre')}</b><span>${v.reserva_codigo ? `<button class="cm-reserva-link" type="button" data-cmc-reserva="${v.reserva_id}" data-cmc-codigo="${esc(v.reserva_codigo)}">${esc(v.reserva_codigo)}</button> · ` : ''}${esc(v.destino || v.modalidad || 'Servicio')}</span><small>${c.office() ? esc(v.vendedor || 'Sin vendedor') + ' · ' : ''}Pago ${fecha(v.pago_el)}${v.corte_manual ? ' · Fecha acordada' : ''}</small></div>
       <div class="cm-fila-importe"><b>${dinero(v.comision_total)}</b>${chip(v.estado)}</div>
-      <div class="cm-fila-acciones">${puede ? `<button type="button" class="btn-sm" data-cmc-mover="${v.id}"><i class="fas fa-arrow-right-arrow-left" aria-hidden="true"></i> Mover a otro corte</button>` : ''}${c.office() && v.estado === 'verificada' && !v.liquidacion_id ? `<button type="button" class="btn-sm cm-icono" data-cmc-rechazar="${v.id}" aria-label="Rechazar comisión de ${esc(v.cliente_nombre)}" title="Rechazar comisión"><i class="fas fa-ban" aria-hidden="true"></i></button>` : ''}</div>
+      <div class="cm-fila-acciones">${puede ? `<button type="button" class="btn-sm" data-cmc-mover="${v.id}"><i class="fas fa-arrow-right-arrow-left" aria-hidden="true"></i> Mover a otro corte</button>` : ''}${c.office() && v.estado === 'pagada' ? `<button type="button" class="btn-sm" data-cmc-deshacer="${v.id}"><i class="fas fa-rotate-left" aria-hidden="true"></i> Deshacer pago</button>` : ''}${c.office() && v.estado === 'verificada' && !v.liquidacion_id ? `<button type="button" class="btn-sm cm-icono" data-cmc-rechazar="${v.id}" aria-label="Rechazar comisión de ${esc(v.cliente_nombre)}" title="Rechazar comisión"><i class="fas fa-ban" aria-hidden="true"></i></button>` : ''}</div>
       ${movs.length ? `<details class="cm-movimientos"><summary>Historial de cambios (${movs.length})</summary>${movs.map(m => `<div><b>${fecha(m.pago_el_anterior)} → ${fecha(m.pago_el_nuevo)}</b><p>${esc(m.motivo)}</p><small>${esc(m.autor || 'Administración')} · ${esc(new Date(m.creado_en).toLocaleString('es-VE', { timeZone: 'America/Caracas' }))}</small></div>`).join('')}</details>` : ''}
       ${!puede && c.office() && ['verificada', 'liquidada'].includes(v.estado) ? '<small class="cm-fila-bloqueo">No disponible para mover: llegó la hora de pago o el corte está protegido.</small>' : ''}
     </article>`;
@@ -170,6 +173,7 @@ export function crearComisionesCortes(c) {
     if (b.dataset.cmcReserva) { c.reservation(Number(b.dataset.cmcReserva), b.dataset.cmcCodigo, b); return; }
     if (b.dataset.cmcMover) { abrirMovimiento([Number(b.dataset.cmcMover)]); return; }
     if (b.dataset.cmcRechazar) { rechazar(Number(b.dataset.cmcRechazar)); return; }
+    if (b.dataset.cmcDeshacer) { deshacerPago(Number(b.dataset.cmcDeshacer), b); return; }
     if (b.dataset.cmcPdf) { documento(Number(b.dataset.cmcPdf), 'ver', b); return; }
     if (b.dataset.cmcEnviar) { documento(Number(b.dataset.cmcEnviar), 'enviar', b); return; }
     if (b.dataset.cmcDesglose) { desglose(Number(b.dataset.cmcDesglose), b); return; }
@@ -185,6 +189,32 @@ export function crearComisionesCortes(c) {
     const res = await c.rpc('comision_venta_rechazar', { p_id: id, p_motivo: r.motivo });
     if (res.error || !res.data?.ok) { c.error(errorTexto(res, 'No se pudo rechazar la comisión. Actualiza e intenta de nuevo.')); return; }
     c.success('Comisión rechazada'); await load();
+  }
+  // La comisión sale de su liquidación pagada (el total baja; el PDF anterior se conserva) y pasa a un corte cuya hora de pago no llegó.
+  async function deshacerPago(id, boton) {
+    const v = ventas.find(x => x.id === id && x.estado === 'pagada');
+    if (!c.office() || !v || ahora() === null) { c.error('Esta comisión ya no está marcada pagada. Actualiza para revisar su estado.'); return; }
+    const futuros = opcionesDestino().opciones.filter(d => ahora() < plazo(d)).sort();
+    if (!futuros.length) { c.error('No hay un corte próximo disponible. Actualiza e intenta de nuevo.'); return; }
+    const liq = invoices.find(l => l.id === v.liquidacion_id), pend = deshacerPend[id];
+    const r = await c.confirm({ titulo: 'Deshacer pago de comisión', destructivo: true, textoOk: 'Deshacer pago',
+      detalle: `${v.cliente_nombre || 'Comisión'} · ${dinero(v.comision_total)} · Pago del ${fecha(v.pago_el)}. Volverá a quedar pendiente en el corte que elijas.${liq ? ` La liquidación ${liq.numero || ''} pasa de ${dinero(liq.total)} a ${dinero(numero(liq.total) - numero(v.comision_total))}; su PDF anterior se conserva.` : ''} No se envía ninguna notificación.`,
+      campos: [{ id: 'destino', label: 'Nuevo día de pago', tipo: 'select', requerido: true, valor: pend?.payload.p_pago_el || futuros[0], opciones: futuros.map(d => ({ v: d, t: `Pago del ${fecha(d)}` })) },
+        { id: 'motivo', tipo: 'textarea', label: 'Motivo', requerido: true, valor: pend?.payload.p_motivo || '' }] });
+    if (!r) return;
+    const motivo = String(r.motivo || '').trim();
+    if (motivo.length < 5) { c.error(errores.motivo_invalido); return; }
+    const payload = { p_id: id, p_pago_el: r.destino, p_motivo: motivo, p_version: v.version, p_operacion_id: crypto.randomUUID() };
+    if (pend && pend.payload.p_pago_el === payload.p_pago_el && pend.payload.p_motivo === motivo) payload.p_operacion_id = pend.payload.p_operacion_id;
+    deshacerPend[id] = { payload }; boton.disabled = true;
+    try {
+      const res = await c.rpc('comision_venta_deshacer_pago', payload);
+      if (res.error && !res.error.code?.startsWith('PGRST') && res.error.code !== '42501') throw new Error('conexión');
+      delete deshacerPend[id];
+      if (res.error || !res.data?.ok) { c.error(errorTexto(res, 'No se deshizo el pago. Actualiza y revisa la comisión.')); return; }
+      elegido = r.destino; c.success(`Pago deshecho. La comisión quedó en el pago del ${fecha(r.destino)}.`); await load();
+    } catch { c.error('No pudimos confirmar la respuesta. Vuelve a «Deshacer pago» con el mismo día y motivo: no se duplicará.'); }
+    finally { if (boton.isConnected) boton.disabled = false; }
   }
   // Destinos: los últimos 6 cortes (hoy incluido, aunque ya esté pagado) + los 6 próximos (más lejos: «otra fecha»). La BD aplica el mismo límite hacia atrás.
   function opcionesDestino() {
