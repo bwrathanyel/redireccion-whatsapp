@@ -17,7 +17,7 @@ export function crearComisionesCortes(c) {
     version_conflicto: 'Otra persona actualizó estas comisiones. Recarga y revisa el cambio antes de confirmar.',
     seleccion_invalida: 'Elige al menos una comisión disponible para mover.', venta_no_existe: 'Una comisión ya no existe. Actualiza antes de continuar.',
     venta_no_movible: 'Una comisión ya no está disponible para mover. Actualiza y revisa su estado.',
-    destino_invalido: 'El día de pago debe ser el 5 o el 20 de un mes.', destino_vencido: 'Llegó la hora de pago del destino. Elige otro corte.',
+    destino_invalido: 'El día de pago debe ser el 5 o el 20 de un mes.', destino_vencido: 'Llegó la hora de pago del destino. Elige otro corte.', destino_fuera_de_rango: 'Solo se puede mover hasta 6 cortes atrás (unos 3 meses). Elige otro corte.',
     origen_vencido: 'Llegó la hora de pago del corte de origen. Ya no se puede mover.', destino_pagado: 'Ese pago de destino ya está marcado pagado. Elige otro corte.',
     destino_duplicado: 'Hay más de una liquidación activa para ese destino. Administración debe revisarlo antes de mover.',
     origen_neto_no_positivo: 'El origen quedaría con saldo cero o negativo. Revisa sus ajustes antes de mover.',
@@ -186,18 +186,20 @@ export function crearComisionesCortes(c) {
     if (res.error || !res.data?.ok) { c.error(errorTexto(res, 'No se pudo rechazar la comisión. Actualiza e intenta de nuevo.')); return; }
     c.success('Comisión rechazada'); await load();
   }
+  // Destinos: los últimos 6 cortes (hoy incluido, aunque ya esté pagado) + los 6 próximos (más lejos: «otra fecha»). La BD aplica el mismo límite hacia atrás.
   function opcionesDestino() {
-    const base = new Date(reloj), dias = new Set(fechasDisponibles());
-    for (let i = -12; i <= 18; i++) for (const d of [5, 20]) { const x = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + i, d)); if (plazo(x.toISOString().slice(0, 10)) > ahora()) dias.add(x.toISOString().slice(0, 10)); }
-    return [...dias].filter(d => plazo(d) > ahora()).sort();
+    const base = new Date(reloj), hoy = new Date(ahora() - 4 * 3600e3).toISOString().slice(0, 10), dias = new Set(fechasDisponibles());
+    for (let i = -4; i <= 18; i++) for (const d of [5, 20]) dias.add(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + i, d)).toISOString().slice(0, 10));
+    const todos = [...dias].filter(d => /-(05|20)$/.test(d)).sort().reverse(), pasados = todos.filter(d => d <= hoy).slice(0, 6);
+    return { opciones: [...todos.filter(d => d > hoy).slice(-6), ...pasados], actual: pasados[0] };
   }
   function abrirMovimiento(ids) {
     if (!c.office() || !ids.length || ids.some(id => !ventas.some(v => v.id === id && movible(v)))) { c.error('Estas comisiones ya no se pueden mover. Actualiza para revisar el estado.'); return; }
     mover = { ids: [...ids].sort((a, b) => a - b), operacion: crypto.randomUUID(), preparado: null, secuencia: 0, enviando: false, intento: false };
     const vs = ventas.filter(v => ids.includes(v.id));
     $('cm-mover-resumen').textContent = `${vs.length} comisiones · ${dinero(suma(vs))}. Se conserva el importe y el vendedor.`;
-    const opciones = opcionesDestino();
-    $('cm-mover-destino').innerHTML = '<option value="">Elige el día de pago</option>' + opciones.map(d => `<option value="${esc(d)}">Pago del ${fecha(d)}${vs.every(v => v.pago_el === d) ? ' · corte actual' : ''}</option>`).join('') + '<option value="otra">Elegir otra fecha…</option>';
+    const { opciones, actual } = opcionesDestino();
+    $('cm-mover-destino').innerHTML = '<option value="">Elige el día de pago</option>' + opciones.map(d => `<option value="${esc(d)}">Pago del ${fecha(d)}${d === actual ? ' · corte actual' : ''}${vs.every(v => v.pago_el === d) ? ' · origen' : ''}</option>`).join('') + '<option value="otra">Elegir otra fecha…</option>';
     $('cm-mover-fecha-wrap').hidden = true; $('cm-mover-fecha').value = ''; $('cm-mover-motivo').value = '';
     $('cm-mover-impacto').innerHTML = '<p class="cm-nota">Elige un destino para comparar los totales antes de confirmar.</p>';
     $('cm-mover-error').textContent = ''; $('cm-mover-ok').disabled = true; $('cm-mover-ok').textContent = 'Confirmar cambio de corte';
@@ -218,7 +220,7 @@ export function crearComisionesCortes(c) {
       if (mover !== actual || orden !== actual.secuencia) return;
       if (res.error || !res.data?.ok) { $('cm-mover-impacto').innerHTML = ''; $('cm-mover-error').textContent = errorTexto(res, 'No se puede usar este destino. Puede estar pagado o bloqueado; actualiza y revisa el corte.'); return; }
       actual.preparado = { ...res.data, pago };
-      $('cm-mover-impacto').innerHTML = `<h3>Así quedarán los pagos</h3><div class="cm-impacto-cab"><span>Persona y corte</span><span>Antes</span><span>Después</span></div>${(res.data.impactos || []).map(x => `<div class="cm-impacto-fila"><span><b>${esc(x.vendedor || 'Vendedor')}</b><small>Pago del ${fecha(x.pago_el)}</small></span><span>${dinero(x.antes)}</span><strong>${dinero(x.despues)}</strong></div>`).join('')}<p class="cm-nota">Las liquidaciones afectadas se actualizan. Los PDF anteriores se conservan y no se enviará ninguna notificación.</p>`;
+      $('cm-mover-impacto').innerHTML = `<h3>Así quedarán los pagos</h3><div class="cm-impacto-cab"><span>Persona y corte</span><span>Antes</span><span>Después</span></div>${(res.data.impactos || []).map(x => `<div class="cm-impacto-fila"><span><b>${esc(x.vendedor || 'Vendedor')}</b><small>Pago del ${fecha(x.pago_el)}</small></span><span>${dinero(x.antes)}</span><strong>${dinero(x.despues)}</strong></div>`).join('')}${res.data.destino?.vencido ? `<p class="cm-nota"><b>Ese pago ya pasó: estas comisiones quedan como pagadas.</b>${(res.data.impactos || []).some(x => x.queda_pagada) ? ' La liquidación ya pagada no cambia; se registran como pagadas aparte.' : ''}</p>` : ''}<p class="cm-nota">Las liquidaciones afectadas se actualizan. Los PDF anteriores se conservan y no se enviará ninguna notificación.</p>`;
       habilitarConfirmar();
     } catch { if (mover === actual && orden === actual.secuencia) { $('cm-mover-error').textContent = 'No pudimos calcular el cambio. Revisa la conexión y elige de nuevo el destino.'; $('cm-mover-impacto').innerHTML = ''; } }
   }
@@ -239,7 +241,7 @@ export function crearComisionesCortes(c) {
         $('cm-mover-error').textContent = errorTexto(res, 'No se aplicó el cambio. Cierra esta ventana, actualiza y revisa las comisiones.');
         return;
       }
-      elegido = p.pago; seleccion.clear(); mover = null; $('cm-mover-dialog').close(); c.success('Comisiones movidas. Las liquidaciones se actualizaron sin enviar notificaciones.'); await load();
+      elegido = p.pago; seleccion.clear(); mover = null; $('cm-mover-dialog').close(); c.success(res.data.destino?.vencido ? 'Comisiones movidas y marcadas como pagadas en ese corte.' : 'Comisiones movidas. Las liquidaciones se actualizaron sin enviar notificaciones.'); await load();
     } catch {
       $('cm-mover-error').textContent = 'No pudimos confirmar la respuesta. Reintenta con este mismo botón: no se duplicará el cambio. No cambies el destino ni el motivo hasta verificar el resultado.';
     } finally {
