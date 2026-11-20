@@ -19,6 +19,19 @@ const CSS = `
 .be-drop small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
 .be-drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .be-drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.be-modo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.be-modo .be-tabs{padding:3px}
+.be-modo .be-tabs button{min-height:32px;padding:0 11px;font-size:12px}
+.be-lote{display:flex;flex-direction:column;gap:9px;padding:12px 14px}
+.be-lote-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px}
+.be-lote-cab .be-btn{margin-left:auto;min-height:38px}
+.be-lote-items{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.be-lote-items button{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-height:44px;max-width:220px;padding:6px 11px;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--txt);font:inherit;font-size:12px;font-weight:700;text-align:left;cursor:pointer}
+.be-lote-items button small{font-weight:500;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.be-lote-items button.on{border-color:var(--accent);background:var(--accent-soft)}
+.be-lote-items button.falta small{color:var(--amber)}
+.be-lote-items button.listo small{color:var(--green)}
+.be-lote-items button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .be-aviso{padding:11px 14px;border-radius:12px;border:1px solid var(--line2);background:var(--panel);font-size:12.5px;display:flex;gap:9px;align-items:flex-start}
 .be-aviso>i{margin-top:2px}
 .be-aviso.ok>i{color:var(--green)}
@@ -209,7 +222,36 @@ export function lineasDeItems(items) {
     .reduce((t, p, i, arr) => t + (i && p.x - arr[i - 1].fin > 1.5 ? ' ' : '') + p.s, '').replace(/\s+/g, ' ').trim());
 }
 
-const RE_TRAMO = /^(.+?) ([A-Z0-9]{2}) ?(\d{1,4}) ([A-Z]) (\d{1,2})([A-Z]{3}) (\d{4}) (\d{4})(?: ?\+(\d))?(?: ([A-Z0-9/]{2,15}))?(?: \d{1,2}[A-Z]{3}){0,2} (\d{1,2}(?:KG|PC|K|P)|NIL) ([A-Z]{2})$/;
+// Foto o captura (OCR de tesseract): palabras con su caja en píxeles. Se escalan a una letra de ~10 pt
+// y se pasan por el mismo armado de líneas que el PDF.
+export function lineasDeOcr(data) {
+  const pal = (data?.words || []).filter(w => w.text?.trim() && w.confidence > 20);
+  if (!pal.length) return [];
+  const altos = pal.map(w => w.bbox.y1 - w.bbox.y0).sort((a, b) => a - b), k = 10 / (altos[altos.length >> 1] || 10);
+  return lineasDeItems(pal.map(w => ({ str: w.text, width: (w.bbox.x1 - w.bbox.x0) * k, transform: [1, 0, 0, 1, w.bbox.x0 * k, -(w.bbox.y0 + w.bbox.y1) / 2 * k] })))
+    .map(l => l.replace(/\s+[©®«»|]\s+/g, ' : '));
+}
+
+const TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.esm.min.js';
+let ocrLib = null;
+export async function lectorOcr() {
+  ocrLib ||= import(TESSERACT).then(m => m.default);
+  return (await ocrLib).createWorker('eng');
+}
+
+// Varios recibos en un lote: todos juntos, uno por código de reserva o uno por pasajero.
+export function separarRecibos(recibos, modo) {
+  if (modo === 'juntos') return recibos.length ? [{ clave: 'todos', recibos }] : [];
+  const m = new Map();
+  for (const r of recibos) {
+    const k = modo === 'pasajero' ? `p:${clavePax(r.pasajero)}` : `r:${r.reserva || r.boleto || clavePax(r.pasajero)}`;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(r);
+  }
+  return [...m].map(([clave, rs]) => ({ clave, recibos: rs }));
+}
+
+const RE_TRAMO =/^(.+?) ([A-Z0-9]{2}) ?(\d{1,4}) ([A-Z]) (\d{1,2})([A-Z]{3}) (\d{4}) (\d{4})(?: ?\+(\d))?(?: ([A-Z0-9/]{2,15}))?(?: \d{1,2}[A-Z]{3}){0,2} (\d{1,2}(?:KG|PC|K|P)|NIL) ([A-Z]{2})$/;
 const sinCola = s => s.replace(/\s+(NAME\/NOMBRE|FOID\/D\.IDENTIDAD|ISSUE (DATE|AGENT)[^:]*):.*$/, '').trim();
 const hhmm = s => `${s.slice(0, 2)}:${s.slice(2)}`;
 
@@ -218,7 +260,7 @@ export function parsearBoleto(lineas) {
   const L = lineas.map(l => norm(l));
   const buscar = re => { for (const l of L) { const m = l.match(re); if (m) return m; } return null; };
   const idx = re => L.findIndex(l => re.test(l));
-  const boleto = buscar(/TICKET NUMBER[^:]*:\s*(\d{3})-?(\d{10})/) || buscar(/TICKET NBR:\s*(\d{3})-?(\d{10})/);
+  const boleto = buscar(/TICKET NUMBER[^:]*:\s*(\d{3})-?(\d{10})/) || buscar(/TICKET N(?:BR|RO)\.?:\s*(\d{3})-?(\d{10})/) || buscar(/TICKET'?S NUMBER'?S\s*:\s*(\d{3})-?(\d{10})/);
   const nombre = buscar(/NAME(?:\/NOMBRE)?:\s*([A-Z' -]+?)\s*\/\s*([A-Z' .-]+?)(?:\s+(?:MR|MRS|MS|MISS|MSTR|CHD|INF))?$/);
   const foid = buscar(/FOID(?:\/D\.IDENTIDAD)?:\s*(\S+)/);
   const reserva = buscar(/BOOKING REF[^:]*:\s*(?:[A-Z0-9]{1,3}\/)?\s*([A-Z0-9]{5,8})\b/);
@@ -255,12 +297,12 @@ export function parsearBoleto(lineas) {
   const iAg = idx(/ISSUE DATE/), iOf = idx(/^OFFICE ID/);
   const agencia = iAg >= 0 ? L[iAg].replace(/\s*ISSUE DATE.*$/, '').trim() : '';
   const dirAg = iAg >= 0 && iOf > iAg ? [...new Set(L.slice(iAg + 1, iOf).map(sinCola).join(', ').split(',').map(s => s.trim()).filter(Boolean))].join(', ') : '';
-  const iDir = idx(/^ADDRESS\/DIRECCION/), iFis = idx(/^(RIF|NIT)\s*:/);
-  const dirAe = iDir >= 0 ? [L[iDir].replace(/^ADDRESS\/DIRECCION\s*:\s*/, ''), ...L.slice(iDir + 1, iFis > iDir ? iFis : iDir + 1)].join(', ').replace(/,\s*,/g, ',') : '';
+  const iDir = idx(/^ADDRESS(\/DIRECCION)?\s*:/), iFis = idx(/^(RIF|NIT)\s*:/);
+  const dirAe = iDir >= 0 ? [L[iDir].replace(/^ADDRESS(\/DIRECCION)?\s*:\s*/, ''), ...L.slice(iDir + 1, iFis > iDir ? iFis : iDir + 1)].join(', ').replace(/,\s*,/g, ',') : '';
   const fiscal = iFis >= 0 ? L[iFis].replace(/\s*:\s*/, ' ') : '';
   const iCon = idx(/^CONTRATO DE BOLETO/);
   const contrato = iCon >= 0 ? L.slice(iCon + 1).join(' ').trim() : '';
-  const docm = foid?.[1]?.match(/^(?:ID|NI|PP)?([VEJ])(?:CI)?(\d{5,9})$/);
+  const docm = foid?.[1]?.match(/(?:^|ID|NI|PP)([VEJ])(?:CI)?(\d{5,9})$/);
   return {
     boleto: boleto ? `${boleto[1]}-${boleto[2]}` : '',
     pasajero: { apellido: nombre?.[1]?.trim() || '', nombre: nombre?.[2]?.trim() || '', documento: docm ? `${docm[1]}-${docm[2]}` : (foid?.[1] || ''), tipo: 'ADT' },
@@ -277,7 +319,7 @@ export function parsearBoleto(lineas) {
 
 export const datosVacios = () => ({ pasajeros: [], tramos: [], emision: {}, emisoras: {}, notas: '' });
 const clavePax = p => `${norm(p.apellido)}/${norm(p.nombre)}|${String(p.documento || '').replace(/\D/g, '')}`;
-const claveTramo = t => [t.iata || claveAerolinea(t), String(+t.vuelo || t.vuelo), t.fecha, norm(t.origen), norm(t.destino)].join('|');
+const claveTramo = t => [t.iata || claveAerolinea(t), String(+t.vuelo || t.vuelo), t.fecha, norm(t.origen), norm(t.destino), norm(t.reserva)].join('|');
 
 // Junta los recibos leídos (uno por boleto) en un solo documento, sobre lo que ya haya en `base`.
 export function unirBoletos(recibos, base = datosVacios()) {
@@ -545,6 +587,8 @@ export function nombreArchivo(d, slug = s => String(s).replace(/[^A-Za-z0-9]+/g,
 export function crearBoletosEmitidos(c) {
   const { sb, esc, raiz } = c;
   let montado = false, vista = 'editor', d = datosVacios(), editando = null, aviso = null, ocupado = false, pedido = 0, verAnulados = false, histQ = '';
+  let lote = [], iLote = 0, modo = 'reserva', crudos = [], porCompartir = null;
+  try { modo = localStorage.getItem('be_modo_lote') || 'reserva'; } catch (_e) { /* sin almacenamiento */ }
   const $ = sel => raiz.querySelector(sel);
   const permitido = () => ['admin', 'boleteria'].includes(typeof c.rol === 'function' ? c.rol() : c.rol);
 
@@ -558,7 +602,7 @@ export function crearBoletosEmitidos(c) {
   const nuevo = () => {
     d = datosVacios(); d.emision = { ...emisorGuardado(), fecha: ahoraIso() };
     d.tramos.push(tramoVacio()); d.pasajeros.push(paxVacio());
-    editando = null; aviso = null;
+    editando = null; aviso = null; lote = []; iLote = 0; crudos = [];
   };
   const tramoVacio = (prev) => ({ aerolinea: prev?.aerolinea || '', aerolinea_nombre: prev?.aerolinea_nombre || '', iata: prev?.iata || '', vuelo: '', reserva: prev?.reserva || '', origen: prev?.destino || '', origen_ciudad: prev?.destino_ciudad || '', destino: prev?.origen || '', destino_ciudad: prev?.origen_ciudad || '', fecha: '', sale: '', llega: '', llega_dia: 0, clase: '', cabina: prev?.cabina || 'Económica', equipaje: prev?.equipaje || '', tarifa: '', estado: 'OK' });
   const paxVacio = () => ({ apellido: '', nombre: '', documento: '', tipo: 'ADT', boletos: {} });
@@ -567,13 +611,15 @@ export function crearBoletosEmitidos(c) {
     raiz.innerHTML = `<div class="be-root">
       <div class="be-cab">
         <div><h2><i class="fas fa-ticket"></i> Boletos emitidos</h2>
-          <div class="csub">Recibo de itinerario con el logo de la aerolínea, claro para el cliente. Sube el PDF del consolidador y se llena solo.</div></div>
+          <div class="csub">Recibo de itinerario con el logo de la aerolínea, claro para el cliente. Sube el PDF del consolidador, o fotos y capturas del boleto, y se llena solo.</div></div>
         <div class="be-tabs" role="tablist"><button type="button" role="tab" data-vista="editor">Nuevo boleto</button><button type="button" role="tab" data-vista="historial">Historial</button></div>
       </div>
       <div data-panel="editor"><div class="be-layout">
         <div class="be-form">
-          <label class="be-drop" id="be-drop"><i class="fas fa-file-arrow-up"></i><span>${matchMedia('(pointer:coarse)').matches ? '<b>Toca para subir el PDF del boleto</b><small>Puedes subir varios (uno por pasajero o por aerolínea)</small>' : '<b>Suelta aquí el PDF del boleto</b><small>o tócalo para elegirlo · puedes subir varios (uno por pasajero o por aerolínea)</small>'}</span>
-            <input type="file" id="be-archivo" accept="application/pdf,.pdf" multiple></label>
+          <label class="be-drop" id="be-drop"><i class="fas fa-file-arrow-up"></i><span>${matchMedia('(pointer:coarse)').matches ? '<b>Toca para subir los boletos</b><small>PDF, fotos o capturas · varios a la vez</small>' : '<b>Suelta aquí los boletos</b><small>o tócalo para elegirlos · PDF, fotos o capturas, varios a la vez</small>'}</span>
+            <input type="file" id="be-archivo" accept="application/pdf,.pdf,image/*" multiple></label>
+          <div class="be-modo"><span>Si subes varios:</span><div class="be-tabs" role="radiogroup" aria-label="Cómo agrupar varios boletos">${[['reserva', 'Un PDF por reserva'], ['pasajero', 'Un PDF por pasajero'], ['juntos', 'Todos en un PDF']].map(([v, l]) => `<button type="button" role="radio" data-modo="${v}">${l}</button>`).join('')}</div></div>
+          <div id="be-lote"></div>
           <div id="be-aviso"></div>
           <div class="card be-bloque"><h3><i class="fas fa-plane"></i> Vuelos</h3><div id="be-tramos"></div>
             <button type="button" class="be-agregar" data-acc="tramo"><i class="fas fa-plus"></i> Agregar vuelo</button></div>
@@ -681,12 +727,28 @@ export function crearBoletosEmitidos(c) {
       ${duros.length || suaves.length ? `<ul class="be-faltan" style="margin-top:9px">${[...duros, ...suaves].slice(0, 6).map(x => `<li>${esc(x)}</li>`).join('')}${duros.length + suaves.length > 6 ? `<li>y ${duros.length + suaves.length - 6} más</li>` : ''}</ul>` : ''}`;
     raiz.querySelector('[data-acc="guardar"]').disabled = ocupado || duros.length > 0;
     raiz.querySelector('[data-acc="ver"]').disabled = ocupado || duros.length > 0;
+    pintarLote();
   }
+  function pintarLote() {
+    const box = $('#be-lote');
+    if (lote.length < 2) { box.innerHTML = ''; return; }
+    lote[iLote].editando = editando;
+    const faltan = lote.filter(x => revisar(x.d).duros.length).length;
+    box.innerHTML = `<div class="card be-lote"><div class="be-lote-cab"><span><b>${lote.length} boletos</b> · ${faltan ? `${faltan} con datos por completar` : 'toca uno para revisarlo'}</span>
+        <button type="button" class="be-btn prim" data-acc="lote-guardar" ${ocupado || faltan ? 'disabled' : ''}><i class="fas fa-file-pdf"></i> Guardar todos y generar ${lote.length} PDF</button></div>
+      <div class="be-lote-items">${lote.map((x, i) => {
+        const p = x.d.pasajeros, falta = revisar(x.d).duros.length, res = gruposDe(x.d).map(g => g.reserva).filter(Boolean).join(' · ');
+        const est = x.editando ? `Guardado ${numeroTxt(x.editando.numero)}` : falta ? 'Falta completar' : 'Listo';
+        return `<button type="button" data-acc="lote-ir" data-n="${i}" aria-pressed="${i === iLote}" class="${i === iLote ? 'on ' : ''}${x.editando ? 'listo' : falta ? 'falta' : ''}"><span>${esc(titulo(nombreTxt(p[0] || {}) || `Boleto ${i + 1}`))}${p.length > 1 ? ` +${p.length - 1}` : ''}</span><small>${esc([res, est].filter(Boolean).join(' · '))}</small></button>`;
+      }).join('')}</div></div>`;
+  }
+  function pintarModo() { raiz.querySelectorAll('[data-modo]').forEach(b => { b.classList.toggle('on', b.dataset.modo === modo); b.setAttribute('aria-checked', b.dataset.modo === modo); }); }
   function pintarAviso() {
     const box = $('#be-aviso');
-    box.innerHTML = aviso ? `<div class="be-aviso ${aviso.tipo}"><i class="fas ${aviso.tipo === 'ok' ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i><div>${aviso.html}</div>${aviso.abrir ? `<button type="button" class="be-btn" data-acc="abrir" data-id="${esc(aviso.abrir)}">Abrir</button>` : ''}</div>` : '';
+    const ico = { ok: 'fa-circle-check', leyendo: 'fa-spinner fa-spin' }[aviso?.tipo] || 'fa-triangle-exclamation';
+    box.innerHTML = aviso ? `<div class="be-aviso ${aviso.tipo}" role="status"><i class="fas ${ico}"></i><div>${aviso.html}</div>${aviso.abrir ? `<button type="button" class="be-btn" data-acc="abrir" data-id="${esc(aviso.abrir)}">Abrir</button>` : ''}${aviso.compartir ? '<button type="button" class="be-btn" data-acc="compartir-lote"><i class="fas fa-share-nodes"></i> Compartir</button>' : ''}</div>` : '';
   }
-  function pintarTodo() { pintarTramos(); pintarPasajeros(); pintarEmision(); pintarPrevia(); pintarAviso(); }
+  function pintarTodo() { pintarTramos(); pintarPasajeros(); pintarEmision(); pintarPrevia(); pintarAviso(); pintarModo(); }
   function mostrarVista(v) {
     vista = v;
     raiz.querySelectorAll('.be-tabs button').forEach(b => { const on = b.dataset.vista === v; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
@@ -730,18 +792,23 @@ export function crearBoletosEmitidos(c) {
   }
 
   async function alClic(e) {
-    const b = e.target.closest('[data-acc],[data-vista]');
+    const b = e.target.closest('[data-acc],[data-vista],[data-modo]');
     if (!b || !raiz.contains(b)) return;
     if (b.dataset.vista) { mostrarVista(b.dataset.vista); return; }
+    if (b.dataset.modo) { cambiarModo(b.dataset.modo); return; }
     const acc = b.dataset.acc, i = +b.closest('.be-item')?.dataset.i;
     if (acc === 'tramo') { d.tramos.push(tramoVacio(d.tramos[d.tramos.length - 1])); pintarTramos(); pintarPasajeros(); pintarPrevia(); }
     else if (acc === 'pax') { d.pasajeros.push(paxVacio()); pintarPasajeros(); pintarPrevia(); }
     else if (acc === 'quitar-tramo') { d.tramos.splice(i, 1); pintarTramos(); pintarPasajeros(); pintarPrevia(); }
     else if (acc === 'quitar-pax') { d.pasajeros.splice(i, 1); pintarPasajeros(); pintarPrevia(); }
     else if (acc === 'nuevo') {
-      if (!editando && revisar(d).duros.length < 3 && !(await c.confirmar({ titulo: '¿Empezar un boleto nuevo?', detalle: 'Se borra lo que está en el formulario (no está guardado).', textoOk: 'Empezar de cero', destructivo: true }))) return;
+      const sinGuardar = lote.filter(x => x !== lote[iLote] && !x.editando).length + (!editando && revisar(d).duros.length < 3 ? 1 : 0);
+      if (sinGuardar && !(await c.confirmar({ titulo: '¿Empezar un boleto nuevo?', detalle: lote.length > 1 ? `Se descartan ${sinGuardar} ${sinGuardar === 1 ? 'boleto' : 'boletos'} del lote que no están guardados.` : 'Se borra lo que está en el formulario (no está guardado).', textoOk: 'Empezar de cero', destructivo: true }))) return;
       nuevo(); pintarTodo();
     }
+    else if (acc === 'lote-ir') { lote[iLote].editando = editando; iLote = +b.dataset.n; d = lote[iLote].d; editando = lote[iLote].editando; aviso = null; pintarTodo(); buscarDuplicado(); }
+    else if (acc === 'lote-guardar') guardarLote();
+    else if (acc === 'compartir-lote') compartirLote();
     else if (acc === 'guardar') guardar();
     else if (acc === 'ver') entregar(d, editando?.numero, 'Vista previa');
     else if (acc === 'abrir') abrir(b.dataset.id);
@@ -758,12 +825,64 @@ export function crearBoletosEmitidos(c) {
     } catch (err) { console.error('boletos-emitidos pdf', err); c.error('No se pudo armar el PDF. Revisa la conexión e intenta de nuevo.'); }
   }
 
+  const limpiar = x => JSON.parse(JSON.stringify(x, (k, v) => (k.startsWith('_') ? undefined : v)));
+  const grabar = (datos, ed) => (ed ? sb.from('boletos_emitidos').update({ datos: limpiar(datos) }).eq('id', ed.id) : sb.from('boletos_emitidos').insert({ datos: limpiar(datos) })).select('id, numero, estado').single();
+
+  // Varios PDF: en el teléfono se comparten juntos; en la computadora se descargan uno tras otro.
+  async function entregarVarios(items) {
+    try {
+      const usados = new Set(), files = [];
+      for (const it of items) {
+        let nom = nombreArchivo(it.datos, c.slug);
+        for (let n = 2; usados.has(nom); n++) nom = nombreArchivo(it.datos, c.slug).replace(/\.pdf$/, `-${n}.pdf`);
+        usados.add(nom);
+        files.push(new File([await construirPdf(it.datos, it.numero, c)], nom, { type: 'application/pdf' }));
+      }
+      if (files.length === 1) { await c.entregar(files[0], files[0].name); return; }
+      porCompartir = files;
+      await compartirLote();
+    } catch (err) { console.error('boletos-emitidos pdf lote', err); c.error('No se pudieron armar los PDF. Revisa la conexión e intenta de nuevo.'); }
+  }
+  async function compartirLote() {
+    const files = porCompartir;
+    if (!files?.length) return;
+    if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files })) {
+      try { await navigator.share({ files, title: `${files.length} boletos` }); porCompartir = null; if (aviso?.compartir) { aviso.compartir = false; pintarAviso(); } return; } catch (e) {
+        if (e.name === 'AbortError') return;
+        if (e.name === 'NotAllowedError') { aviso = { ...(aviso || { tipo: 'ok', html: '' }), compartir: true, html: `${aviso?.html || ''} Toca «Compartir» para enviar los ${files.length} PDF.` }; pintarAviso(); return; }
+      }
+    }
+    for (const f of files) {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60e3);
+      await new Promise(r => setTimeout(r, 350));
+    }
+    porCompartir = null;
+    c.ok?.(`${files.length} PDF descargados`);
+  }
+
+  async function guardarLote() {
+    if (ocupado || lote.length < 2 || lote.some(x => revisar(x.d).duros.length)) return;
+    lote[iLote].editando = editando;
+    ocupado = true; pintarPrevia();
+    const hechos = [];
+    for (const x of lote) {
+      const { data, error } = await grabar(x.d, x.editando);
+      if (error || !data) { console.error('boletos_emitidos lote', error); c.error(`No se pudo guardar el boleto de ${titulo(nombreTxt(x.d.pasajeros[0] || {}))}. ${error?.message || ''}`); break; }
+      x.editando = data; hechos.push(x);
+    }
+    ocupado = false; editando = lote[iLote].editando;
+    if (hechos.length) recordarEmisor(hechos[0].d.emision);
+    aviso = { tipo: hechos.length === lote.length ? 'ok' : 'warn', html: `Guardé ${hechos.length} de ${lote.length} boletos: <b>${hechos.map(x => numeroTxt(x.editando.numero)).join(', ')}</b>. Quedan en el Historial.` };
+    pintarTodo();
+    if (hechos.length) entregarVarios(hechos.map(x => ({ datos: x.d, numero: x.editando.numero })));
+  }
+
   async function guardar() {
     if (ocupado || revisar(d).duros.length) return;
     ocupado = true; pintarPrevia();
-    const limpio = JSON.parse(JSON.stringify(d, (k, v) => (k.startsWith('_') ? undefined : v)));
-    const q = editando ? sb.from('boletos_emitidos').update({ datos: limpio }).eq('id', editando.id) : sb.from('boletos_emitidos').insert({ datos: limpio });
-    const { data, error } = await q.select('id, numero, estado').single();
+    const { data, error } = await grabar(d, editando);
     ocupado = false;
     if (error || !data) { console.error('boletos_emitidos', error); c.error('No se pudo guardar el boleto. ' + (error?.message || '')); pintarPrevia(); return; }
     editando = data; recordarEmisor(d.emision);
@@ -779,7 +898,7 @@ export function crearBoletosEmitidos(c) {
   }
   async function abrir(id) {
     const f = await fila(id); if (!f) return;
-    d = unirBoletos([], f.datos); editando = { id: f.id, numero: f.numero, estado: f.estado }; aviso = null;
+    d = unirBoletos([], f.datos); editando = { id: f.id, numero: f.numero, estado: f.estado }; aviso = null; lote = []; iLote = 0; crudos = [];
     pintarTodo(); mostrarVista('editor');
   }
   async function anular(id, estado) {
@@ -799,33 +918,89 @@ export function crearBoletosEmitidos(c) {
     if (data?.length) { aviso = { tipo: 'warn', html: `Uno de estos boletos ya está registrado como <b>${numeroTxt(data[0].numero)}</b>.`, abrir: data[0].id }; pintarAviso(); }
   }
 
-  async function lineasDelPdf(file) {
+  // Página sin texto (escaneo o PDF hecho de fotos): se dibuja y se lee con OCR.
+  async function lineasDelPdf(file, ocr) {
     const lib = await c.pdfjs();
     const pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
     const paginas = [];
-    for (let i = 1; i <= pdf.numPages; i++) paginas.push(lineasDeItems((await (await pdf.getPage(i)).getTextContent()).items));
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const pag = await pdf.getPage(i), items = (await pag.getTextContent()).items;
+      if (items.some(x => x.str?.trim())) { paginas.push(lineasDeItems(items)); continue; }
+      const vp = pag.getViewport({ scale: 2.5 }), cv = document.createElement('canvas');
+      cv.width = vp.width; cv.height = vp.height;
+      await pag.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      paginas.push(await ocr(cv));
+    }
     return paginas;
   }
+  const esPdf = f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+  const esFoto = f => /^image\//i.test(f.type) || /\.(jpe?g|png|webp|bmp|gif)$/i.test(f.name);
+  const formVacio = () => !lote.length && !editando && !d.tramos.some(t => t.aerolinea || t.origen || t.vuelo) && !d.pasajeros.some(p => p.apellido || p.nombre);
+  const armar = (rs, base = { ...datosVacios(), emision: {}, notas: d.notas }) => {
+    const x = unirBoletos(rs, base);
+    if (!x.emision.fecha) x.emision.fecha = ahoraIso();
+    for (const [k, v] of Object.entries(emisorGuardado())) if (!x.emision[k] && v) x.emision[k] = v;
+    return x;
+  };
+  // Arma el formulario (o el lote) desde cero con todo lo leído.
+  function desdeCrudos() {
+    const grupos = separarRecibos(crudos, modo);
+    editando = null; iLote = 0;
+    if (grupos.length < 2) { lote = []; d = armar(crudos); return; }
+    lote = grupos.map(g => ({ clave: g.clave, d: armar(g.recibos), editando: null }));
+    d = lote[0].d;
+  }
+  function cambiarModo(m) {
+    modo = m;
+    try { localStorage.setItem('be_modo_lote', m); } catch (_e) { /* sin almacenamiento */ }
+    if (crudos.length && !editando && !lote.some(x => x.editando)) { desdeCrudos(); aviso = resumenLectura(crudos.length, []); pintarTodo(); }
+    else pintarModo();
+  }
+  function resumenLectura(n, sinLeer) {
+    const docs = lote.length > 1 ? lote.map(x => x.d) : [d];
+    const malos = docs.filter(x => { const r = revisar(x); return r.duros.length || r.suaves.length; }).length;
+    const pax = docs.reduce((s, x) => s + x.pasajeros.length, 0);
+    const que = lote.length > 1
+      ? `separados en ${lote.length} PDF (${{ reserva: 'uno por reserva', pasajero: 'uno por pasajero' }[modo] || 'todos juntos'}), ${pax} pasajeros. Revisa cada uno en la lista y guarda todos juntos.`
+      : `${d.pasajeros.length} ${d.pasajeros.length === 1 ? 'pasajero' : 'pasajeros'} y ${d.tramos.length} ${d.tramos.length === 1 ? 'vuelo' : 'vuelos'}. ${malos ? 'Revisa lo marcado antes de guardar.' : 'Revisa y guarda.'}`;
+    return { tipo: malos || sinLeer.length ? 'warn' : 'ok', html: `Leí ${n} ${n === 1 ? 'boleto' : 'boletos'}: ${que}${lote.length > 1 && malos ? ` ${malos} con algo por revisar.` : ''}${sinLeer.length ? ` No pude leer: ${esc(sinLeer.join(', '))}.` : ''}` };
+  }
   async function importar(archivos) {
-    const pdfs = archivos.filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
-    if (!pdfs.length) { c.error('Sube el boleto en PDF.'); return; }
-    const recibos = [], sinTexto = [];
-    for (const f of pdfs) {
-      try {
-        const paginas = await lineasDelPdf(f);
-        const leidos = paginas.map(parsearBoleto).filter(Boolean);
-        if (!leidos.length) sinTexto.push(f.name);
-        recibos.push(...leidos);
-      } catch (err) { console.error('boletos-emitidos lectura', err); sinTexto.push(f.name); }
+    const validos = archivos.filter(f => esPdf(f) || esFoto(f));
+    if (!validos.length) { c.error('Sube el boleto en PDF, foto o captura.'); return; }
+    if (ocupado) return;
+    ocupado = true; pintarPrevia();
+    const recibos = [], sinLeer = [];
+    let lector = null;
+    const ocr = async fuente => { lector ||= await lectorOcr(); return lineasDeOcr((await lector.recognize(fuente)).data); };
+    try {
+      for (const [n, f] of validos.entries()) {
+        aviso = { tipo: 'leyendo', html: `Leyendo ${validos.length > 1 ? `${n + 1} de ${validos.length}` : ''} <b>${esc(f.name)}</b>…${esFoto(f) ? ' Las fotos tardan unos segundos.' : ''}` }; pintarAviso();
+        try {
+          const leidos = (esPdf(f) ? await lineasDelPdf(f, ocr) : [await ocr(f)]).map(parsearBoleto).filter(Boolean);
+          if (!leidos.length) sinLeer.push(f.name);
+          recibos.push(...leidos);
+        } catch (err) { console.error('boletos-emitidos lectura', err); sinLeer.push(f.name); }
+      }
+    } finally { ocupado = false; lector?.terminate(); }
+    if (!recibos.length) { aviso = { tipo: 'warn', html: `No pude leer datos de boleto en ${esc(sinLeer.join(', '))}. Si la foto está borrosa o torcida, prueba con una captura de pantalla o llénalo a mano.` }; pintarAviso(); pintarPrevia(); return; }
+    // `crudos` guarda lo leído solo mientras todo el formulario/lote salió de archivos: así cambiar el modo lo rearma.
+    if (formVacio()) { crudos = [...recibos]; desdeCrudos(); }
+    else if (lote.length) {
+      lote[iLote].editando = editando;
+      for (const g of separarRecibos(recibos, modo)) {
+        const x = lote.find(y => y.clave === g.clave);
+        if (x) x.d = armar(g.recibos, x.d); else lote.push({ clave: g.clave, d: armar(g.recibos), editando: null });
+      }
+      d = lote[iLote].d;
+      if (crudos.length) crudos.push(...recibos);
+    } else {
+      const grupos = separarRecibos(recibos, modo);
+      if (grupos.length < 2) d = armar(recibos, d);
+      else { lote = [{ clave: 'actual', d, editando }, ...grupos.map(g => ({ clave: g.clave, d: armar(g.recibos), editando: null }))]; iLote = 0; }
+      if (crudos.length) crudos.push(...recibos);
     }
-    if (!recibos.length) { aviso = { tipo: 'warn', html: `No pude leer datos de boleto en ${esc(sinTexto.join(', '))}. Si es una foto o un escaneo, llénalo a mano.` }; pintarAviso(); return; }
-    const vacio = !d.tramos.some(t => t.aerolinea || t.origen || t.vuelo) && !d.pasajeros.some(p => p.apellido || p.nombre);
-    const base = vacio ? { ...datosVacios(), emision: {}, notas: d.notas } : d;
-    d = unirBoletos(recibos, base);
-    if (!d.emision.fecha) d.emision.fecha = ahoraIso();
-    for (const [k, v] of Object.entries(emisorGuardado())) if (!d.emision[k] && v) d.emision[k] = v;
-    const { duros, suaves } = revisar(d);
-    aviso = { tipo: duros.length || suaves.length ? 'warn' : 'ok', html: `Leí ${recibos.length} ${recibos.length === 1 ? 'boleto' : 'boletos'}: ${d.pasajeros.length} ${d.pasajeros.length === 1 ? 'pasajero' : 'pasajeros'} y ${d.tramos.length} ${d.tramos.length === 1 ? 'vuelo' : 'vuelos'}. ${duros.length || suaves.length ? 'Revisa lo marcado antes de guardar.' : 'Revisa y guarda.'}${sinTexto.length ? ` No se pudo leer: ${esc(sinTexto.join(', '))}.` : ''}` };
+    aviso = resumenLectura(recibos.length, sinLeer);
     pintarTodo();
     buscarDuplicado();
   }
