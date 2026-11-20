@@ -6920,6 +6920,20 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .lt-card{display:flex;flex-direction:column;gap:10px;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:14px;animation:bt-sube .4s var(--ease-salida) both;animation-delay:calc(var(--i,0) * 25ms);transition:transform var(--dur-rapida),border-color var(--dur-rapida)}
 .lt-card:hover{transform:translateY(-2px);border-color:var(--line2)}
 .lt-card-hecha{opacity:.72}
+/* Mis Ventas (oficina): fichas para elegir asesor, en lugar del select. */
+.est-fichas{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:16px}
+.est-fichas:empty{display:none}
+.est-ficha{display:flex;align-items:center;gap:10px;min-width:0;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:9px 12px 9px 9px;cursor:pointer;text-align:left;color:inherit;font:inherit;transition:border-color var(--dur-rapida),background var(--dur-rapida)}
+.est-ficha:hover{border-color:var(--line2)}
+.est-ficha:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.est-ficha[aria-checked="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--bg2))}
+.est-ficha-av{flex:0 0 34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12.5px;color:var(--accent-ink);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.est-ficha-tx{min-width:0;display:flex;flex-direction:column;gap:2px}
+.est-ficha-nom{font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.est-ficha-sub{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.est-ficha-inactiva{opacity:.62}
+.est-ficha-mas{justify-content:center;color:var(--muted);font-size:12.5px;font-weight:600}
+@media(max-width:760px){.est-fichas{display:flex;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px}.est-ficha{flex:0 0 170px;scroll-snap-align:start}}
 .lt-card-cab{display:flex;align-items:center;gap:8px}
 .lt-card-tit{flex:1;min-width:0;font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lt-card-meta{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -9396,8 +9410,10 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
           <button class="seg on" type="button" data-mv-tab="ventas">Ventas</button>
           <button class="seg" type="button" data-mv-tab="estadisticas">Estadísticas</button>
         </div>
-        <select class="flt admin-only" id="est-asesor"><option value="">Elige un asesor…</option></select>
+        <!-- Oculto: sigue siendo la fuente del asesor elegido; la oficina elige con las fichas de abajo. -->
+        <select class="flt" id="est-asesor" style="display:none" aria-hidden="true" tabindex="-1"><option value="">Elige un asesor…</option></select>
       </div>
+      <div class="est-fichas admin-only" id="est-fichas" role="radiogroup" aria-label="Asesor"></div>
 
       <div class="mv-tab-panel" data-mv-panel="ventas">
         <div class="tbar" style="margin-bottom:12px">

@@ -8334,6 +8334,7 @@ function setupMisVentas() {
   setupEstadisticas();
 }
 function loadMisVentasSeccion() {
+  estPintarFichas();
   if (misVentasTab === 'estadisticas') loadEstadisticas(); else loadMisVentasVentas();
 }
 async function loadMisVentasVentas() {
@@ -8464,13 +8465,41 @@ function setupEstadisticas() {
   });
   if (esOficina()) {
     const sel = document.getElementById('est-asesor');
-    sb.rpc('estadisticas_asesores_lista').then(({ data, error }) => {
+    const [d, h] = periodo('mes');
+    Promise.all([sb.rpc('estadisticas_asesores_lista'), sb.rpc('ranking_asesores', { p_desde: iso(d), p_hasta: iso(h) })]).then(([{ data, error }, rk]) => {
       if (error || !Array.isArray(data) || !sel) return;
       sel.innerHTML = '<option value="">Elige un asesor…</option>' +
         data.map(a => `<option value="${a.asesor_id}">${esc(a.nombre)}${a.activo ? '' : ' (inactivo)'}</option>`).join('');
+      EST_FICHAS = data;
+      EST_FICHAS_MES = Object.fromEntries((rk.data || []).map(r => [r.asesor, r]));
+      estPintarFichas();
     });
     sel?.addEventListener('change', loadMisVentasSeccion);
+    document.getElementById('est-fichas')?.addEventListener('click', e => {
+      const b = e.target.closest('.est-ficha');
+      if (!b) return;
+      if (b.dataset.estMas != null) { EST_FICHAS_INACTIVOS = true; estPintarFichas(); return; }
+      sel.value = sel.value === b.dataset.estAsesor ? '' : b.dataset.estAsesor;
+      estPintarFichas();
+      loadMisVentasSeccion();
+    });
   }
+}
+// Fichas de asesor (oficina): activos siempre; inactivos solo si vendieron este mes o tras «Ver inactivos».
+let EST_FICHAS = [], EST_FICHAS_MES = {}, EST_FICHAS_INACTIVOS = false;
+function estPintarFichas() {
+  const box = document.getElementById('est-fichas');
+  if (!box || !EST_FICHAS.length) return;
+  const elegido = document.getElementById('est-asesor')?.value || '';
+  const vendio = a => Number(EST_FICHAS_MES[a.nombre]?.ventas) > 0;
+  const visibles = EST_FICHAS.filter(a => a.activo || vendio(a) || EST_FICHAS_INACTIVOS || a.asesor_id === elegido);
+  const ocultos = EST_FICHAS.length - visibles.length;
+  const ini = n => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
+  box.innerHTML = visibles.map(a => {
+    const m = EST_FICHAS_MES[a.nombre], v = Number(m?.ventas) || 0;
+    const sub = v ? `${fmt(v)} ${v === 1 ? 'venta' : 'ventas'} · ${money(m.monto)} este mes` : 'Sin ventas este mes';
+    return `<button type="button" class="est-ficha${a.activo ? '' : ' est-ficha-inactiva'}" role="radio" aria-checked="${a.asesor_id === elegido}" data-est-asesor="${a.asesor_id}"><span class="est-ficha-av">${esc(ini(a.nombre))}</span><span class="est-ficha-tx"><span class="est-ficha-nom">${esc(a.nombre)}${a.activo ? '' : ' (inactivo)'}</span><span class="est-ficha-sub">${sub}</span></span></button>`;
+  }).join('') + (ocultos ? `<button type="button" class="est-ficha est-ficha-mas" data-est-mas>Ver ${fmt(ocultos)} inactivos</button>` : '');
 }
 
 function estAsesorId() {
