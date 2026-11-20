@@ -14650,9 +14650,10 @@ function selLotusAbrir(sel) {
   el.innerHTML = (hoja ? `<div class="sel-lotus-cab"><b>${esc(selLotusTitulo(sel))}</b><button type="button" class="sel-lotus-cerrar" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></div>` : '')
     + (buscar ? '<input class="sel-lotus-buscar" type="search" placeholder="Buscar…" autocomplete="off" aria-label="Buscar opción">' : '')
     + `<div class="sel-lotus-ops" role="listbox" aria-label="${esc(selLotusTitulo(sel))}">${ops}</div><div class="sel-lotus-vacio" hidden>Sin coincidencias</div>`;
-  let velo = null;
-  if (hoja) { velo = document.createElement('div'); velo.className = 'sel-lotus-velo'; document.body.appendChild(velo); }
-  document.body.appendChild(el);
+  // Dentro de un <dialog> modal (top layer) la lista va en el dialog: en el body quedaría debajo.
+  let velo = null; const capa = sel.closest('dialog[open]') || document.body;
+  if (hoja) { velo = document.createElement('div'); velo.className = 'sel-lotus-velo'; capa.appendChild(velo); }
+  capa.appendChild(el);
   SEL_LOTUS = { el, sel, velo, campo: sel.closest('.pf-campo'), letras: '', letrasT: 0 };
   if (!hoja) {
     // body{zoom}: igual que efCalAbrir, rect en px visuales y left/top en px CSS.
