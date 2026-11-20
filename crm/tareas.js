@@ -98,8 +98,9 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     cargando = !datos; fallo = false; pintar();
     let igual = false;
     try {
-      const d = await rpc('listar_mis_tareas_v2');
+      const [d, pz] = await Promise.all([rpc('listar_mis_tareas_v2'), (window.prospeccionContarHoy?.() ?? Promise.resolve(null)).catch(() => null)]);
       if (g !== gen) return;
+      d.prospectos_hoy = pz;
       igual = !cargando && JSON.stringify({ ...d, ahora: 0 }) === JSON.stringify({ ...datos, ahora: 0 });
       datos = d; offset.ms = d.ahora ? new Date(d.ahora).getTime() - Date.now() : 0;
     } catch (e) { if (g === gen) fallo = e.message; }
@@ -229,14 +230,16 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     const g = agrupar(datos.tareas || []), porHacer = g.vencidas.length + g.hoy.length, hechasHoy = g.hechas.length;
     const top = [...g.vencidas, ...g.hoy, ...g.semana].slice(0, 3), lote = datos.lote || {};
     const totalLote = (lote.pendientes || 0) + (lote.hechas_hoy || 0), atn = gestor() ? (tablero?.atencion || []).length : 0;
-    if (!top.length && !porHacer && !hechasHoy && !g.esperando.length && !totalLote && !atn) return '';
+    const pz = datos.prospectos_hoy?.total ? datos.prospectos_hoy : null;
+    if (!top.length && !porHacer && !hechasHoy && !g.esperando.length && !totalLote && !atn && !pz) return '';
     const pct = porHacer + hechasHoy ? Math.round(100 * hechasHoy / (porHacer + hechasHoy)) : 0;
     return `<section class="tk-hoy"><button class="tk-hoy-h" data-tk-ir>${anillo(pct, 44)}<span class="tk-hoy-t"><b>Tus tareas</b><small>${porHacer} por hacer hoy${
         g.vencidas.length ? ` · <span class="is-bad">${g.vencidas.length} vencida${g.vencidas.length > 1 ? 's' : ''}</span>` : ''}${g.esperando.length ? ` · ${g.esperando.length} esperando` : ''}</small></span><i class="fas fa-chevron-right"></i></button>
       ${top.map(t => { const v = vence(t); return `<div class="tk-hoy-i" data-tk-open="${t.id}" role="button" tabindex="0">${t.visto_at ? '' : '<span class="tk-unread" title="Nueva"></span>'}<div><b>${esc(t.titulo)}</b><small>${
         v ? `<span${v.mal ? ' class="is-bad"' : ''}>${esc(v.txt)}</span>` : 'sin fecha'}${t.proximo ? ' · ' + esc(t.proximo.titulo) : ''}</small></div>${botonPaso(t)}</div>`; }).join('')}
       ${totalLote ? `<button class="tk-hoy-i" data-tk-cola><span class="tk-cola-ico"><i class="fas fa-user-clock"></i></span><div><b>Recontactos de hoy ${lote.hechas_hoy || 0}/${totalLote}</b><small>Clientes viejos para retomar</small></div><i class="fas fa-chevron-right"></i></button>` : ''}
-      ${atn ? `<button class="tk-hoy-i" data-tk-equipo><span class="tk-cola-ico" style="--c:var(--amber)"><i class="fas fa-users"></i></span><div><b>Equipo: ${atn} necesita${atn > 1 ? 'n' : ''} tu atención</b><small>Problemas, revisiones y vencidas</small></div><i class="fas fa-chevron-right"></i></button>` : ''}</section>`;
+      ${atn ? `<button class="tk-hoy-i" data-tk-equipo><span class="tk-cola-ico" style="--c:var(--amber)"><i class="fas fa-users"></i></span><div><b>Equipo: ${atn} necesita${atn > 1 ? 'n' : ''} tu atención</b><small>Problemas, revisiones y vencidas</small></div><i class="fas fa-chevron-right"></i></button>` : ''}
+      ${pz ? `<button class="tk-hoy-i" data-tk-prospectos><span class="tk-cola-ico" style="--c:var(--blue)"><i class="fas fa-binoculars"></i></span><div><b>Prospectos para hoy: ${pz.total}</b><small>${pz.vencidos ? `<span class="is-bad">${pz.vencidos} vencido${pz.vencidos > 1 ? 's' : ''}</span> · ` : ''}Búsqueda activa</small></div><i class="fas fa-chevron-right"></i></button>` : ''}</section>`;
   }
 
   // ── Admin: pestañas, equipo, lista y plantillas ────────────────────────────────
@@ -873,6 +876,7 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
     if ('tkTplNueva' in ds) return crearTarea({ modo: 'plantilla' });
     if ('tkIr' in ds) { cerrarPanelMovil('ir'); return irA('tareas'); }
     if ('tkEquipo' in ds) { vista = 'equipo'; guardarLocal('tk-vista', vista); return irA('tareas'); }
+    if ('tkProspectos' in ds) return irA('prospeccion');
     if ('tkReintentarTab' in ds) return cargarTablero();
     if (ds.tkHacer) { e.stopPropagation(); return hacerAhora(b, ds.tkHacer, ds.paso); }
     if (ds.tkListo) {

@@ -15,6 +15,7 @@ import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearDisponibilidad } from './disponibilidad.js';
+import { crearProspeccion } from './prospeccion.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
 import { crearLlamadasWa } from './llamadas-wa.js';
 import { crearLlamadasApp } from './llamadas-app.js';
@@ -336,6 +337,7 @@ const TITLES = { hoy: ['Hoy', 'Tu resumen del día'], dashboard: ['Dashboard', '
   'rendimiento-ia': ['Rendimiento IA', 'Ventas, calidad, velocidad y costos de la IA comercial'],
   'ia-atencion': ['Prospectos de IA', 'Posadas y apartamentos que pidieron el asistente desde la página'],
   propuestas: ['Alianzas y propuestas', 'Quienes escriben al bot para ofrecer algo, no para comprar'],
+  prospeccion: ['Búsqueda activa', 'Empresas, aliados y proveedores que salimos a buscar: la IA busca y redacta, usted envía'],
   'wa-bandeja': ['WhatsApp empresa', 'Chats del número de la empresa: contesta aquí a los clientes'],
   'clientes-eventos': ['Clientes Eventos', 'Quienes se registraron con el QR del stand y los premios que ganaron'],
   induccion: ['Inducción', 'Cómo le fue a cada persona en el modo de prueba: tiempos, saltos y dónde se trabó'],
@@ -1971,7 +1973,7 @@ function manejarDeepLinkAsistencia() {
 // Lotus. `ir` se conserva por compatibilidad con los shortcuts ya instalados.
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa', 'historicos',
-  'web-reasignados', 'contactos-directos', 'repartir', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
+  'web-reasignados', 'contactos-directos', 'repartir', 'prospeccion', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
   'facturacion', 'pagos', 'metodos-pago', 'disponibilidad', 'proveedores', 'empresas', 'bt-travel', 'documentos-empresa', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
@@ -4283,6 +4285,9 @@ let DISPONIBILIDAD = null;
 const disponibilidad = () => DISPONIBILIDAD ||= crearDisponibilidad({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, uid: () => MI_USUARIO_ID,
   raiz: document.getElementById('disponibilidad-root'), abrirLead: id => window.abrirLeadPorId(id), aplicarCotizacion: (s, d) => cbDesdeDisponibilidad(s, d) });
 function setupSolicitudesDisp() { if (['admin', 'asesor', 'administrativo'].includes(ROL)) disponibilidad().vigilar(); }
+let PROSPECCION = null;
+const prospeccion = () => PROSPECCION ||= crearProspeccion({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, raiz: document.getElementById('prospeccion-root') });
+window.prospeccionContarHoy = () => (ROL === 'admin' ? prospeccion().contarHoy() : Promise.resolve(null));
 let BOLETOS_EMITIDOS = null;
 const boletosEmitidos = () => BOLETOS_EMITIDOS ||= crearBoletosEmitidos({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('boletos-emitidos-root'),
   librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), paleta: VCP,
@@ -40004,6 +40009,7 @@ const NAV_ITEMS = [
   { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
   { sec: 'llamadas', icon: 'fas fa-phone', label: 'Llamadas', padre: 'grp-leads', roles: 'nav-administrativo-no', sub: 'Llamadas sin resultado y métricas por asesor' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Pega números o capturas y se reparten entre los asesores' },
+  { sec: 'prospeccion', icon: 'fas fa-binoculars', label: 'Búsqueda activa', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Salir a buscar empresas, aliados y proveedores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
   // Meta DM (2026-10-07): los chats del bot (Instagram, Facebook, WhatsApp) salieron
   // de Mensajes a su propia entrada. La vista vieja de WhatsApp por número salió
@@ -40501,6 +40507,7 @@ function cargarSeccion(sec) {
   if (sec === 'documentos-empresa') documentosEmpresa().cargar();
   if (sec === 'metodos-pago') metodosPago().cargar();
   if (sec === 'disponibilidad') disponibilidad().cargar();
+  if (sec === 'prospeccion') prospeccion().cargar();
   if (sec === 'llamadas') llamadasPanel().cargar();
   if (sec === 'boletos-emitidos') boletosEmitidos().cargar();
   if (sec === 'facturas-empresa') facturasEmpresa().cargar();
@@ -43306,6 +43313,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-20', emoji: '🔭', titulo: 'Búsqueda activa: salir a buscar empresas', texto: 'Nueva sección en Leads para buscar empresas, aliados y proveedores. La IA encuentra candidatos con su fuente, avisa si ya los tenemos, completa datos de contacto y redacta el primer mensaje y los seguimientos; tú lo envías. Los prospectos que tocan hoy aparecen en tu resumen del día.', roles: ['admin'] },
   { fecha: '2026-11-20', emoji: '💰', titulo: 'Comisiones por corte y cambios de fecha acordados', texto: 'Ahora ves cada corte con sus ventas, ajustes, factura e historial. Administración puede pasar comisiones verificadas o liquidadas a otro corte impago, abierto o cerrado, indicando el motivo y revisando el impacto antes de confirmar. Los pagos se marcan automáticamente desde las 12 del mediodía del día correspondiente, hora de Venezuela; oficina también puede registrarlos antes. Ese estado no confirma una transferencia bancaria. Cambiar el corte no envía mensajes: el reenvío de la factura se hace aparte.', roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-20', emoji: '📱', titulo: 'Fichas y ventanas más estables en el celular', texto: 'Las fichas, tareas y confirmaciones conservan mejor su orden al abrir unas sobre otras. Se ajustaron el botón Atrás, el foco, el bloqueo del fondo y el espacio al abrir el teclado, girar la pantalla o usar letra grande.', roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'] },
   { fecha: '2026-11-20', emoji: '🧳', titulo: 'Reservas: acciones a la vista', texto: 'Consulta vouchers, cambia el estado y registra abonos desde la tarjeta. En el detalle, los vouchers y los accesos directos quedan arriba.', roles: ['admin', 'asesor', 'administrativo'] },
