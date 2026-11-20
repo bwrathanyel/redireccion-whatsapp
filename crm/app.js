@@ -5439,6 +5439,16 @@ const rvMargenPct = (tipo, provId) => {
   const ms = (RV_MARGENES || []).filter(m => m.activo && m.tipo === tipo && (m.proveedor_id == null || m.proveedor_id === provId));
   return (ms.find(m => m.proveedor_id === provId) || ms.find(m => m.proveedor_id == null))?.porcentaje ?? null;
 };
+// Texto de dónde salió el neto automático (margen_modo/margen_fuente, migración 20261130110000).
+const RV_MARGEN_FUENTE = { producto: 'del producto', proveedor: 'del proveedor', general: 'general del tipo' };
+function rvMargenOrigen(m, prov, producto) {
+  if (m.fuente === 'tarifa_base') return `tarifa base${prov ? ' de ' + prov : ''}`;
+  if (m.porcentaje == null) return 'sin %';
+  const pct = Number(m.porcentaje).toLocaleString('es-VE') + '%';
+  const forma = m.modo === 'recargo' ? `neto + ${pct} de recargo` : `comisión ${pct}`;
+  const de = m.fuente === 'producto' && producto ? `de ${producto}` : RV_MARGEN_FUENTE[m.fuente] || '';
+  return de ? `${forma} (${de})` : forma;
+}
 const rvPanel = k => RV_BORRADOR ? (k === 'servicios' ? document.getElementById('ef-rv') : null) : document.querySelector(`#drawerContent [data-rv-panel="${k}"]`);
 const rvOpts = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
 const rvMonedaOpts = sel => RV_MONEDAS.map(m => `<option ${m === sel ? 'selected' : ''}>${m}</option>`).join('');
@@ -6071,7 +6081,7 @@ function rvCostoHtml(s) {
   if (s.costo_centavos == null) {
     return `<div class="rv-costo rv-falta"><i class="fas fa-lock"></i> Sin neto${s.proveedor ? ' · ' + esc(s.proveedor) : ' ni proveedor'}</div>`;
   }
-  const origen = !s.costo_auto ? 'manual' : s.margen_pct != null ? `auto ${Number(s.margen_pct).toLocaleString('es-VE')}%` : 'tarifa base';
+  const origen = !s.costo_auto ? 'manual' : 'auto · ' + rvMargenOrigen({ porcentaje: s.margen_pct, modo: s.margen_modo, fuente: s.margen_fuente || (s.margen_pct == null ? 'tarifa_base' : null) });
   const cxp = s.cxp ? (Number(s.cxp.abonado) >= Number(s.cxp.monto) ? ' · pagado al proveedor' : ` · por pagar ${rvMonto(Math.round((Number(s.cxp.monto) - Number(s.cxp.abonado)) * 100), 'USD')}`) : '';
   const falta = !s.proveedor_id && rvSeccion(s) !== 'otros';
   return `<div class="rv-costo${falta ? ' rv-falta' : ''}"><i class="fas fa-lock"></i> Neto ${rvMonto(s.costo_centavos, s.costo_moneda)} (${origen}) · ${esc(s.proveedor || 'falta proveedor')} · margen ${rvMonto(s.margen_usd_centavos, 'USD')}${cxp}</div>`;
@@ -7299,15 +7309,18 @@ function rvFormCosto(p) {
   const box = p.querySelector('[data-rv-form]');
   const modo = m => { box.querySelectorAll('[data-rv-modo]').forEach(b => b.classList.toggle('on', b.dataset.rvModo === m)); document.getElementById('rv-c-auto').hidden = m !== 'auto'; document.getElementById('rv-c-manual').hidden = m !== 'manual'; };
   box.querySelectorAll('[data-rv-modo]').forEach(b => b.onclick = () => modo(b.dataset.rvModo));
-  const pista = () => {
-    const provId = Number(val('rv-c-prov')) || null, prov = todos.find(x => x.id === provId);
-    const traslado = rvSeccion(s) === 'traslado', pct = rvMargenPct(s.tipo, provId);
-    const venta = Number(s.precio_usd_centavos || 0);
-    document.getElementById('rv-c-auto-txt').textContent = traslado && prov?.tarifa_base_centavos != null
-      ? `Neto = tarifa base de ${prov.nombre}: ${rvMonto(prov.tarifa_base_centavos, 'USD')}`
-      : pct != null ? `Neto = venta − ${Number(pct).toLocaleString('es-VE')}% de margen: ${rvMonto(Math.round(venta * (1 - pct / 100)), 'USD')}`
-      : traslado ? 'Este proveedor no tiene tarifa base: cárgala en Proveedores → Márgenes o usa neto manual.'
-      : 'Este tipo de servicio no tiene % cargado: configúralo en Proveedores → Márgenes o usa neto manual.';
+  // El cálculo lo hace la base (previsualizar_neto_servicio): % del producto, tarifa base, % del proveedor o general.
+  let pistaN = 0;
+  const pista = async () => {
+    const provId = Number(val('rv-c-prov')) || null, prov = todos.find(x => x.id === provId), n = ++pistaN;
+    const txt = document.getElementById('rv-c-auto-txt'); txt.textContent = 'Calculando…';
+    const { data: r, error } = await sb.rpc('previsualizar_neto_servicio', { p_servicio_id: s.id, p_proveedor_id: provId });
+    if (n !== pistaN || !txt.isConnected) return;
+    if (error || !r?.ok) { txt.textContent = 'No se pudo calcular el neto: ' + rvErr(error, r); return; }
+    txt.textContent = r.costo_usd_centavos == null
+      ? (rvSeccion(s) === 'traslado' ? 'Este proveedor no tiene tarifa base ni %: cárgalo en Proveedores o usa neto manual.'
+        : 'Sin % para este producto, proveedor ni tipo de servicio: configúralo en Proveedores o usa neto manual.')
+      : `Neto ${rvMonto(r.costo_usd_centavos, 'USD')} · ${rvMargenOrigen(r, prov?.nombre, r.producto)}`;
   };
   document.getElementById('rv-c-prov').onchange = pista; pista();
 }
@@ -24449,6 +24462,101 @@ function provPintarMargen() {
     ${malos.length ? `<h4>A revisar, no entran (${fmt(malos.length)})</h4><div class="prv-casos">${malos.map(prvCasoFila).join('')}</div>` : ''}
   </div>`;
 }
+/* ---------- % por producto del proveedor (migración 20261130110000) ----------
+   Le gana a la tarifa base y al % del proveedor por tipo. comision = la tarifa cargada es rack
+   (neto = venta × (1 − %)); recargo = el proveedor da neto y se le suma % (neto = venta ÷ (1 + %)). */
+// borr = cambios sin guardar por producto ({modo, v}): sobreviven al repintar la lista (buscar, filtrar, guardar otra fila).
+const PRP = { prov: null, lista: null, q: '', soloSin: false, borr: {} };
+const PRP_TIPO = { hotel: 'Hoteles', paquete: 'Paquetes', excursion: 'Excursiones', traslado: 'Traslados', destino: 'Destinos' };
+async function prpCargar(p) {
+  PRP.prov = p.id; PRP.lista = null; PRP.q = ''; PRP.soloSin = false; PRP.borr = {};
+  const { data: r, error } = await sb.rpc('listar_margenes_producto', { p_proveedor_id: p.id });
+  if (PROV_EDITANDO?.id !== p.id) return;
+  if (error || !r?.ok) errToast('No se pudieron cargar los productos: ' + rvErr(error, r));
+  PRP.lista = error || !r?.ok ? [] : r.productos || [];
+  if (PROV_TAB === 'productos') provPintarProductos();
+}
+function prpEjemplo(modo, v) {
+  if (!modo) return '';
+  if (!mgPctOk(String(v ?? ''))) return 'Escribe un % entre 0 y 99,99';
+  const p = Number(v);
+  return modo === 'recargo' ? `Neto $100 → cliente <b>${mgUsd(Math.round(10000 * (1 + p / 100)))}</b>`
+    : `Venta $100 → neto <b>${mgUsd(Math.round(10000 * (1 - p / 100)))}</b>`;
+}
+function prpFila(x) {
+  const h = x.heredado || {};
+  const her = h.fuente === 'tarifa_base' ? 'tarifa base' : h.porcentaje != null ? `${prvPct(h.porcentaje)} ${h.fuente === 'proveedor' ? 'del proveedor' : 'general'}` : 'sin %';
+  const real = Number(x.venta) > 0 ? Math.round(1000 * (x.venta - x.neto) / x.venta) / 10 : null;
+  const vendido = x.ventas ? `<small>${fmt(x.ventas)} ${x.ventas === 1 ? 'venta' : 'ventas'} · margen real ${prvPct(real)}</small>` : '';
+  const b = PRP.borr[x.id], modo = b ? b.modo : x.modo || '', v = b ? b.v : x.porcentaje != null ? String(Number(x.porcentaje)) : '';
+  return `<div class="prp-fila${x.modo ? ' propio' : ''}${b ? ' sucio' : ''}${x.activo ? '' : ' apagado'}" data-prp="${x.id}">
+    <div class="prp-nom"><b title="${esc(x.nombre)}">${esc(x.nombre)}</b><small>${esc([x.destino, !x.activo && 'inactivo'].filter(Boolean).join(' · '))}</small></div>
+    <select class="ei" data-prp-modo aria-label="Cómo viene el precio de ${esc(x.nombre)}">
+      <option value=""${modo ? '' : ' selected'}>Hereda: ${esc(her)}</option>
+      <option value="comision"${modo === 'comision' ? ' selected' : ''}>Comisionable (rack)</option>
+      <option value="recargo"${modo === 'recargo' ? ' selected' : ''}>Neto + recargo</option></select>
+    <label class="prp-pct"><input class="ei" data-prp-pct type="number" inputmode="decimal" min="0" max="99.99" step="0.01" value="${esc(v)}"${modo ? '' : ' disabled'} aria-label="% de ${esc(x.nombre)}"><b>%</b></label>
+    <span class="prp-ej"><span data-prp-ej>${prpEjemplo(modo, v)}</span>${vendido}</span>
+    <button class="btn-sm lt-primario" type="button" data-prp-guardar${b ? '' : ' disabled'}><i class="fas fa-check"></i> Guardar</button>
+  </div>`;
+}
+function prpPintarLista() {
+  const box = document.getElementById('prp-lista'); if (!box) return;
+  const q = cmNorm(PRP.q);
+  const lista = PRP.lista.filter(x => (!q || cmNorm(x.nombre + ' ' + (x.destino || '')).includes(q)) && (!PRP.soloSin || !x.modo));
+  const n = document.querySelector('[data-prp-sin-n]'); if (n) n.textContent = fmt(PRP.lista.filter(x => !x.modo).length);
+  const grupos = new Map();
+  lista.forEach(x => { const k = x.tipo; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(x); });
+  box.innerHTML = [...grupos].map(([t, xs]) => {
+    const todos = PRP.lista.filter(x => x.tipo === t), con = todos.filter(x => x.modo).length;
+    return `<h4>${esc(PRP_TIPO[t] || t)} · ${fmt(con)} de ${fmt(todos.length)} con % propio</h4>${xs.map(prpFila).join('')}`;
+  }).join('') || '<div class="pv-empty" style="padding:18px">Ningún producto coincide.</div>';
+}
+function provPintarProductos() {
+  const cont = document.getElementById('prov-reservas-box');
+  if (!PRP.lista || PRP.prov !== PROV_EDITANDO?.id) { cont.innerHTML = '<div class="pv-empty" style="padding:18px">Cargando productos…</div>'; return; }
+  if (!PRP.lista.length) { cont.innerHTML = '<div class="pv-empty" style="padding:18px">Este proveedor no tiene productos en el tarifario. Se ligan desde la ficha del producto (proveedor).</div>'; return; }
+  cont.innerHTML = `<div class="prv-ficha-m">
+    <div class="mg-intro"><div><b>% por producto.</b> Le gana al % del proveedor y a la tarifa base. <b>Comisionable</b>: lo cargado en el tarifario es el precio rack y el proveedor cobra venta − %. <b>Neto + recargo</b>: el proveedor manda neto y se carga en el tarifario neto + %. Los netos ya guardados en reservas no cambian.</div></div>
+    <div class="prp-barra"><input class="ei" type="search" data-prp-q placeholder="Buscar producto o destino" value="${esc(PRP.q)}" aria-label="Buscar producto">
+      <label><input type="checkbox" data-prp-sin${PRP.soloSin ? ' checked' : ''}> Solo sin % propio (<span data-prp-sin-n></span>)</label></div>
+    <div id="prp-lista" class="prv-ficha-m"></div></div>`;
+  prpPintarLista();
+  cont.oninput = e => {
+    if (e.target.matches('[data-prp-q]')) { PRP.q = e.target.value; prpPintarLista(); return; }
+    const f = e.target.closest('[data-prp]'); if (f) prpSucio(f);
+  };
+  cont.onchange = e => {
+    if (e.target.matches('[data-prp-sin]')) { PRP.soloSin = e.target.checked; prpPintarLista(); return; }
+    const f = e.target.closest('[data-prp]'); if (!f || !e.target.matches('[data-prp-modo]')) return;
+    const inp = f.querySelector('[data-prp-pct]'); inp.disabled = !e.target.value;
+    if (e.target.value && inp.value === '') inp.focus();
+    prpSucio(f);
+  };
+  cont.onkeydown = e => { if (e.key === 'Enter' && e.target.matches('[data-prp-pct]')) { e.preventDefault(); e.target.closest('[data-prp]').querySelector('[data-prp-guardar]').click(); } };
+  cont.onclick = e => { const b = e.target.closest('[data-prp-guardar]'); if (b && !b.disabled) prpGuardar(b.closest('[data-prp]')); };
+}
+function prpSucio(f) {
+  const x = PRP.lista.find(y => y.id === Number(f.dataset.prp)); if (!x) return;
+  const modo = f.querySelector('[data-prp-modo]').value, v = f.querySelector('[data-prp-pct]').value;
+  const sucio = modo !== (x.modo || '') || (modo && Number(v) !== Number(x.porcentaje)) || (modo && v === '');
+  f.classList.toggle('sucio', !!sucio);
+  if (sucio) PRP.borr[x.id] = { modo, v }; else delete PRP.borr[x.id];
+  f.querySelector('[data-prp-guardar]').disabled = !sucio;
+  f.querySelector('[data-prp-ej]').innerHTML = prpEjemplo(modo, v);
+}
+async function prpGuardar(f) {
+  const id = Number(f.dataset.prp), x = PRP.lista.find(y => y.id === id); if (!x) return;
+  const modo = f.querySelector('[data-prp-modo]').value, v = f.querySelector('[data-prp-pct]').value;
+  if (modo && !mgPctOk(v)) { errToast('El % va de 0 a 99,99'); f.querySelector('[data-prp-pct]').focus(); return; }
+  const btn = f.querySelector('[data-prp-guardar]'); btn.disabled = true;
+  const { data: r, error } = await sb.rpc('guardar_margen_producto', { p_producto_id: id, p_proveedor_id: PRP.prov, p_modo: modo || null, p_porcentaje: modo ? Number(v) : null });
+  if (error || !r?.ok) { errToast('No se pudo guardar: ' + rvErr(error, r)); btn.disabled = false; return; }
+  x.modo = modo || null; x.porcentaje = modo ? Math.round(Number(v) * 100) / 100 : null;
+  delete PRP.borr[id];
+  prpPintarLista();
+  okToast(modo ? `${x.nombre}: ${modo === 'recargo' ? 'neto + ' + prvPct(x.porcentaje) + ' de recargo' : 'comisión ' + prvPct(x.porcentaje)}` : `${x.nombre}: vuelve a heredar el %`);
+}
 // Margen por tipo (neto = venta × (1 − %)) y tarifa base de traslados (migración 20261016230000).
 // Panel pensado para administración: % grande editable, ejemplo en vivo y excepciones por proveedor.
 const MG_TIPOS = ['boleto_aereo', 'hospedaje', 'traslado_terrestre', 'traslado_maritimo', 'full_day', 'seguro', 'otro'];
@@ -24510,7 +24618,7 @@ function mgRender() {
     ${resto.length ? `<div class="mg-agregar"><span>Agregar margen a:</span>${resto.map(t => `<button class="mg-chip" type="button" data-mg-agregar="${t}"><i class="fas ${(RV_TIPOS[t] || [])[1] || 'fa-circle-dot'}"></i>${esc((RV_TIPOS[t] || [t])[0])}</button>`).join('')}</div>` : ''}
     <h3 class="mg-sub"><i class="fas fa-van-shuttle"></i> Tarifa base de traslados</h3>
     ${MG.traslados.length ? `<div class="mg-grid">${MG.traslados.map(mgTarjetaTraslado).join('')}</div>` : '<div class="pv-empty">No hay proveedores de traslado activos. Marca "Traslado terrestre" en la ficha del proveedor.</div>'}
-    <div class="mg-pie"><i class="fas fa-circle-info"></i><span>Los cambios valen para los servicios que se carguen de ahora en adelante. Para recalcular uno ya cargado: en la reserva, <b>Neto y proveedor</b> → <b>Neto automático</b> → Guardar.</span></div>`;
+    <div class="mg-pie"><i class="fas fa-circle-info"></i><span>Si un proveedor (como BT Travel) cobra distinto según el producto, ponle el % a cada producto en su ficha → <b>Productos</b>: le gana a todo lo de esta pantalla. Los cambios valen para los servicios que se carguen de ahora en adelante. Para recalcular uno ya cargado: en la reserva, <b>Neto y proveedor</b> → <b>Neto automático</b> → Guardar.</span></div>`;
 }
 async function mgCargar() {
   const { data, error } = await sb.rpc('listar_margenes');
@@ -24678,6 +24786,7 @@ function provTab(tab) {
   document.getElementById('prov-reservas-box').hidden = tab === 'ficha';
   document.querySelectorAll('#prov-tabs [data-prov-tab]').forEach(b => b.classList.toggle('on', b.dataset.provTab === tab));
   if (tab === 'margen') provPintarMargen();
+  else if (tab === 'productos') provPintarProductos();
   else if (tab !== 'ficha') provPintarReservas(tab);
 }
 function provServExtra(s) {
@@ -24697,12 +24806,13 @@ async function provCargarReservas(p) {
   const tabs = document.getElementById('prov-tabs');
   const pintarTabs = cuenta => {
     const nMargen = prvCasosDe(p.id).length;
-    tabs.innerHTML = [['ficha', 'Ficha'], ['margen', 'Margen'], ['todas', 'Todas las reservas'], ...(p.tipos || []).map(t => [t, PROV_TIPO_LABEL[t] || t])]
-      .map(([k, l]) => `<button class="pv-stage${k === PROV_TAB ? ' on' : ''}" type="button" data-prov-tab="${k}">${esc(l)}${k === 'margen' ? (nMargen ? ' · ' + nMargen : '') : k !== 'ficha' && cuenta ? ' · ' + (cuenta[k] || 0) : ''}</button>`).join('');
+    tabs.innerHTML = [['ficha', 'Ficha'], ['margen', 'Margen'], ['productos', 'Productos'], ['todas', 'Todas las reservas'], ...(p.tipos || []).map(t => [t, PROV_TIPO_LABEL[t] || t])]
+      .map(([k, l]) => `<button class="pv-stage${k === PROV_TAB ? ' on' : ''}" type="button" data-prov-tab="${k}">${esc(l)}${k === 'margen' ? (nMargen ? ' · ' + nMargen : '') : k !== 'ficha' && k !== 'productos' && cuenta ? ' · ' + (cuenta[k] || 0) : ''}</button>`).join('');
     tabs.querySelectorAll('[data-prov-tab]').forEach(b => b.onclick = () => provTab(b.dataset.provTab));
   };
   PROV_RES = null;
   pintarTabs(null);
+  prpCargar(p);
   const [r, bandeja] = await Promise.all([sb.rpc('listar_reservas_proveedor', { p_proveedor_id: p.id }), pvBandejaCompleta()]);
   if (PROV_EDITANDO?.id !== p.id) return;
   if (r.error || !r.data?.ok || !bandeja) {
