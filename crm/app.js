@@ -16087,7 +16087,7 @@ async function loadRanking() {
         <span class="bt-tag" style="--c:${i < 3 ? 'var(--amber)' : 'var(--muted)'}">${i < 3 ? medal[i] + ' ' : ''}#${i + 1}</span>
       </div>
       <div class="lt-card-meta"><i class="fas fa-user-plus"></i>${fmt(r.nuevos)} nuevos${r.atendidos_lote ? ` · ${fmt(r.atendidos_lote)} de lote` : ''} · <i class="fas fa-stopwatch"></i><span title="Mediana entre que entra el lead y el primer contacto (leads nuevos del período)">resp. típica ${fmtHorasResp(r.horas_respuesta)}</span></div>
-      <div class="lt-cifras">
+      <div class="lt-cifras" style="grid-template-columns:repeat(4,minmax(0,1fr))">
         <div><span>Ventas</span><b class="lt-ok">${fmt(r.ventas)}</b></div>
         <div><span>Ingresos</span><b>${money(r.monto)}</b></div>
         <div><span title="Ingresos ÷ ventas">Ticket prom.</span><b>${r.ticket == null ? '—' : money(r.ticket)}</b></div>
