@@ -14,6 +14,7 @@ import { crearMetodosPago } from './metodos-pago.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
+import { crearImportacionServicio } from './reservas-importacion.js';
 import { crearDisponibilidad } from './disponibilidad.js';
 import { crearProspeccion } from './prospeccion.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
@@ -5119,6 +5120,8 @@ async function pvPlanAccion(c, p, btn) {
 
 const pvPuedeAbonar = () => ['admin', 'asesor', 'administrativo'].includes(ROL);
 function abrirPostventa(c, accionInicial = null) {
+  if (RV_IMPORT?.sucio) return rvImportSalir().then(ok => { if (ok) abrirPostventa(c, accionInicial); });
+  RV_IMPORT?.destruir(); RV_IMPORT = null;
   if (!c) return; PV_ACTUAL = c;
   const clienteSoloLectura = ROL === 'asesor' && c.asesor_lead !== undefined && c.asesor_lead !== MI_NOMBRE;
   const opt = (obj, sel) => Object.entries(obj).map(([v, t]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
@@ -5547,6 +5550,7 @@ let RV_APERTURA = 0;
 // Comprobante que trae quien abre la reserva para registrar un pago (Pagos, Crear reserva, Nuevo cliente).
 let RV_CAPTURA = null;
 function rvIniciar(reservaId, tab, accionInicial = null) {
+  RV_IMPORT?.destruir(); RV_IMPORT = null;
   const apertura = ++RV_APERTURA;
   RV_RESERVA_ID = reservaId; RV_DET = null; RV_FORM = null; RV_APTOS = {};
   document.querySelectorAll('#drawerContent [data-rv-tab]').forEach(b => b.onclick = () => rvTab(b.dataset.rvTab));
@@ -5575,6 +5579,8 @@ function rvIniciar(reservaId, tab, accionInicial = null) {
 }
 // Boletería no pasa por la bandeja de Reservas: abre el cajón directo desde la pestaña Reservas de la sección Boletería.
 function rvAbrirReserva(reservaId, titulo, sub) {
+  if (RV_IMPORT?.sucio) return rvImportSalir().then(ok => { if (ok) rvAbrirReserva(reservaId, titulo, sub); });
+  RV_IMPORT?.destruir(); RV_IMPORT = null;
   PV_ACTUAL = null;
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-ticket"></i></div><div><div class="dn">${esc(titulo || 'Reserva')}</div><div class="dm">${esc(sub || '')}</div></div></div>
@@ -5595,6 +5601,7 @@ async function rvCargar() {
   const id = RV_RESERVA_ID, apertura = RV_APERTURA;
   const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: id });
   if (apertura !== RV_APERTURA || id !== RV_RESERVA_ID || !rvPanel('servicios')) return;
+  if (RV_IMPORT?.sucio) return;
   if (error || !data?.ok) {
     pvVouchersPintar(false);
     console.error('reserva_detalle', error || data);
@@ -5725,7 +5732,47 @@ function rvResumenTotal(r) {
   }
   pvDineroPintar();
 }
-function rvForm(f) { RV_FORM = f; rvRenderServicios(); rvRenderPasajeros(); }
+let RV_IMPORT = null;
+async function rvImportSalir() {
+  const actual = RV_IMPORT;
+  if (actual?.sucio && !(await actual.confirmarSalida())) return false;
+  if (RV_IMPORT !== actual) return false;
+  actual?.destruir(); RV_IMPORT = null; return true;
+}
+function rvForm(f, confirmado = false) {
+  if (!confirmado && RV_IMPORT?.sucio) return rvImportSalir().then(ok => ok ? rvForm(f, true) : false);
+  RV_IMPORT?.destruir(); RV_IMPORT = null;
+  RV_FORM = f; rvRenderServicios(); rvRenderPasajeros(); return true;
+}
+function rvImportBase(id) {
+  const datos = {
+    tipo: val('rv-s-tipo'), descripcion: val('rv-s-desc').trim(), destino_id: val('rv-s-destino') ? Number(val('rv-s-destino')) : null,
+    fecha_inicio: val('rv-s-inicio') || null, fecha_fin: val('rv-s-fin') || null, hora: val('rv-s-hora'),
+    pax_adultos: Number(val('rv-s-adultos') || 0), pax_ninos: Number(val('rv-s-ninos') || 0), localizador: val('rv-s-localizador').trim(),
+    estado: val('rv-s-estado'), detalle: { ...rvLeerDetalle(), ...rvDetalleOculto(id) }, precio: Number(val('rv-s-precio') || 0), precio_moneda: val('rv-s-moneda'),
+  };
+  if (datos.precio_moneda !== 'USD' && val('rv-s-tasa') !== '') datos.precio_tasa = Number(val('rv-s-tasa'));
+  const tl = document.getElementById('rv-s-tl'), previo = (RV_DET.servicios || []).find(s => s.id === id);
+  if (tl && tl.value !== rvDtLocal(previo?.time_limit)) datos.time_limit = tl.value ? new Date(tl.value).toISOString() : '';
+  return datos;
+}
+function rvImportMontar(p, servicio, tramos) {
+  if (RV_BORRADOR || rvVista() === 'boleteria' || !rvPuedeEditar()) return;
+  RV_IMPORT?.destruir();
+  const root = p.querySelector('#rv-s-import'), base = p.querySelector('#rv-s-base'), form = RV_FORM, reservaId = RV_RESERVA_ID, apertura = RV_APERTURA;
+  root.hidden = false;
+  const control = crearImportacionServicio({
+    root, sb, reservaId, servicio, tramos, pasajeros: RV_DET.pasajeros || [], tipo: () => val('rv-s-tipo'), pdfjs: cargarPdfjs,
+    leerBase: () => { if (RV_APTOS[servicio?.id] || RV_FORM?.hosp === 'apto') throw new Error('La importación no modifica apartamentos asignados. Usa la edición manual para preservar disponibilidad y costos.'); return rvImportBase(servicio?.id); }, aerolineas: () => bolCatalogo?.aerolineas || [], confirmar: confirmarSheet,
+    vigente: () => RV_FORM === form && RV_RESERVA_ID === reservaId && RV_APERTURA === apertura,
+    alActivar: activo => { base.hidden = activo; },
+    alOcupado: ocupado => { p.querySelectorAll('#rv-s-tipo,#rv-s-estado,#rv-s-precio,#rv-s-moneda,#rv-s-tasa,[data-rv-accion="guardar-servicio"]').forEach(e => { e.disabled = ocupado; }); },
+    alGuardar: async () => { control.destruir(); if (RV_IMPORT === control) RV_IMPORT = null; RV_FORM = null; okToast('Importación guardada: servicio, pasajeros, itinerario y boletos.'); rvTrasCambio(); },
+  });
+  RV_IMPORT = control;
+  if (val('rv-s-tipo') === 'boleto_aereo' && !bolCatalogo) bolAsegurarCatalogo().catch(() => {});
+}
+window.addEventListener('beforeunload', e => { if (RV_IMPORT?.sucio) { e.preventDefault(); e.returnValue = ''; } });
 function rvTrasCambio() {
   rvCargar();
   if (currentSec === 'postventa' && (esOficina() || ROL === 'asesor')) loadPostventa();
@@ -5794,6 +5841,7 @@ async function rvEnviar(btn, llamada) {
 
 /* Servicios */
 function rvRenderServicios(suave) {
+  if (RV_IMPORT?.sucio) return;
   const p = rvPanel('servicios'); if (!p || !RV_DET) return;
   if (RV_BORRADOR) efBotones();
   const forms = { servicio: rvFormServicio, costo: rvFormCosto, tramos: rvFormTramos, tickets: rvFormTickets, evento: rvFormEvento };
@@ -6376,7 +6424,8 @@ function rvFormServicio(p) {
       <div><label class="fl" for="rv-s-tipo">Tipo</label><select class="ei" id="rv-s-tipo">${rvOpts(RV_TIPOS, s?.tipo || RV_FORM.tipoInicial || 'hospedaje')}</select></div>
       <div><label class="fl" for="rv-s-estado">Estado</label><select class="ei" id="rv-s-estado">${rvOpts(RV_ESTADOS, s?.estado || 'cotizado')}</select></div>
     </div>
-    <div id="rv-s-top"></div>
+    <div id="rv-s-import" class="rvi" hidden></div>
+    <div id="rv-s-base"><div id="rv-s-top"></div>
     <div id="rv-s-boleto-box" ${esBoleto && !tramosPrevios.length ? '' : 'hidden'}>
       <label class="fl">Tipo de viaje</label>
       <div class="seg-group seg-group-sm rv-viaje" id="rv-s-viaje">
@@ -6402,7 +6451,7 @@ function rvFormServicio(p) {
     <div id="rv-s-tramos-existe" class="csub" ${esBoleto && tramosPrevios.length ? '' : 'hidden'}>Este boleto ya tiene ${tramosPrevios.length} tramo(s) cargado(s). Las fechas y horas se editan en Tramos.</div>
     <div class="rv-fila"><div><label class="fl" for="rv-s-adultos">Adultos</label><input class="ei" id="rv-s-adultos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_adultos ?? 0}"></div><div><label class="fl" for="rv-s-ninos">Niños</label><input class="ei" id="rv-s-ninos" type="number" inputmode="numeric" min="0" max="99" step="1" value="${s?.pax_ninos ?? 0}"></div><div id="rv-s-hora-box"><label class="fl" for="rv-s-hora">Hora</label><input class="ei" id="rv-s-hora" type="time" value="${esc(String(s?.hora || '').slice(0, 5))}"></div></div>
     ${s?.tipo === 'boleto_aereo' && rvAgente() ? `<label class="fl" for="rv-s-tl">Time limit (hora de Venezuela)</label><input class="ei" id="rv-s-tl" type="datetime-local" value="${esc(rvDtLocal(s.time_limit))}">` : ''}
-    <div id="rv-s-detalle"></div>
+    <div id="rv-s-detalle"></div></div>
     <div class="rv-sec"><i class="fas fa-tag"></i> Precio al cliente</div>
     <div class="rv-fila"><div><label class="fl" for="rv-s-precio">Monto</label><input class="ei" id="rv-s-precio" type="number" inputmode="decimal" min="0" step="0.01" value="${s ? Number(s.precio_centavos || 0) / 100 : ''}"></div><div><label class="fl" for="rv-s-moneda">Moneda</label><select class="ei" id="rv-s-moneda">${rvMonedaOpts(s?.precio_moneda || 'USD')}</select></div><div id="rv-s-tasa-box"><label class="fl" for="rv-s-tasa">Tasa por USD</label><input class="ei" id="rv-s-tasa" type="number" min="0" step="any" value="${s && s.precio_moneda !== 'USD' ? esc(s.precio_tasa) : ''}" placeholder="Automática"></div></div>
     ${rvBotones('guardar-servicio')}</div>`;
@@ -6413,7 +6462,13 @@ function rvFormServicio(p) {
   // Boleto nuevo cargado por el asesor: llega emitido (la emisión la hace Boletería antes de pasarlo).
   const est = document.getElementById('rv-s-estado');
   est.addEventListener('change', () => { est.dataset.manual = '1'; });
-  document.getElementById('rv-s-tipo').onchange = () => {
+  let tipoAnterior = val('rv-s-tipo');
+  document.getElementById('rv-s-tipo').onchange = async () => {
+    const selector = document.getElementById('rv-s-tipo'), nuevo = selector.value, control = RV_IMPORT;
+    selector.value = tipoAnterior;
+    if (control && !(await control.cambiarTipo(nuevo))) return;
+    if (!selector.isConnected || (control && RV_IMPORT !== control)) return;
+    selector.value = nuevo; tipoAnterior = nuevo;
     if (desc.dataset.manual !== '1') desc.value = '';
     if (!s && !rvAgente() && est.dataset.manual !== '1') est.value = val('rv-s-tipo') === 'boleto_aereo' ? 'emitido' : 'cotizado';
     rvCalCerrar(); rvDetalleCampos(rvLeerDetalle()); rvAptoCampo(); rvHoraVisible(); rvRangoPintar();
@@ -6448,6 +6503,7 @@ function rvFormServicio(p) {
   rvHoraVisible();
   if (RV_BORRADOR) efBorradorForm(s);
   rvRangoPintar(); rvHorasChips();
+  rvImportMontar(p, s, tramosPrevios);
 }
 // Calendario de rango (pedido del dueño 20-nov): un solo calendario para llegada → salida, con las noches y los días del
 // hotel de la misma reserva marcados. Los <input type=date> ocultos siguen siendo lo que lee y escribe todo el formulario.
@@ -7010,14 +7066,15 @@ const rvAptoNombre = () => { const u = RV_APTO_UNI.find(x => String(x.id) === va
 // y el producto del tarifario sale del buscador de hotel (RV_FORM.hotel.producto_id: elegido, conservado del guardado o soltado al escribir a mano).
 function rvDetalleOculto(id) {
   const previo = (RV_DET.servicios || []).find(x => x.id === id), tipo = val('rv-s-tipo');
+  const imp = previo?.tipo === tipo && previo.detalle?.importacion ? { importacion: previo.detalle.importacion } : {};
   // Traslado y full day: el producto y la tarifa del buscador quedan ligados (neto, destino y proveedor salen de ahí).
   if (RV_TAR_TIPO[tipo]) {
     const st = RV_FORM?.tar, t = st?.tipo === tipo ? rvTarActual(st) : null, pd = previo?.tipo === tipo ? previo.detalle || {} : {};
-    if (t) return { producto_id: st.prod.id, tarifa_id: t.id };
-    return pd.producto_id != null ? { producto_id: pd.producto_id, ...(pd.tarifa_id != null ? { tarifa_id: pd.tarifa_id } : {}) } : {};
+    if (t) return { ...imp, producto_id: st.prod.id, tarifa_id: t.id };
+    return { ...imp, ...(pd.producto_id != null ? { producto_id: pd.producto_id, ...(pd.tarifa_id != null ? { tarifa_id: pd.tarifa_id } : {}) } : {}) };
   }
-  if (tipo !== 'hospedaje') return {};
-  const o = {}, pd = previo?.detalle || {};
+  if (tipo !== 'hospedaje') return imp;
+  const o = { ...imp }, pd = previo?.tipo === tipo ? previo.detalle || {} : {};
   // En «Apartamento propio» va el producto del complejo, si tiene: con él el servidor resuelve el destino.
   const prod = RV_FORM?.hosp === 'apto' ? rvAptoProv(RV_FORM.aptoComp)?.producto_id : RV_FORM?.hotel?.producto_id;
   if (prod) o.producto_id = Number(prod);
@@ -7329,6 +7386,8 @@ function rvBoletoInit() {
   bolAsegurarCatalogo().then(() => { rvBoletoAerolineas(); rvBoletoSync(false); });
 }
 async function rvGuardarServicio(btn) {
+  if (RV_IMPORT?.activo) return RV_IMPORT.guardar();
+  if (RV_IMPORT?.sucio) return;
   const err = document.getElementById('rv-f-err'), id = RV_FORM?.id || null;
   const tramosPrevios = id ? (RV_DET.tramos || []).filter(t => t.servicio_id === id) : [];
   let datos;
@@ -7747,6 +7806,7 @@ async function rvTkContenido(file) {
 }
 async function rvTkSubirArchivos(files, s) {
   if (!s || !files?.length) return;
+  if (rvPuedeEditar() && rvVista() !== 'boleteria') return rvTkImportarArchivos(s, files);
   const estado = document.getElementById('rv-tk-estado'), drop = document.getElementById('rv-tk-drop');
   const malo = files.find(f => !RV_DOC_MIMES.includes(f.type));
   if (malo) { errToast(`${rvTkNombre(malo)}: ${RV_ERR.formato_invalido}`); return; }
@@ -7765,8 +7825,7 @@ async function rvTkSubirArchivos(files, s) {
       const { data, error } = await sb.rpc('registrar_documento', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: s.id, p_tipo: 'boleto', p_storage_path: firma.data.path, p_nombre: nombre });
       if (error || !data?.ok) { errToast(`No se pudo guardar ${nombre}: ${rvErr(error, data)}`); continue; }
       subidos++;
-      if (estado) estado.textContent = `Leyendo el ticket ${i + 1} de ${files.length}…`;
-      await rvTkLeer(data.documento_id, s, file);
+      // Adjuntar no autoriza a crear pasajeros ni modificar el itinerario.
     }
   } finally {
     drop?.classList.remove('cargando');
@@ -7776,105 +7835,26 @@ async function rvTkSubirArchivos(files, s) {
   await rvCargar();
   if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
 }
-async function rvTkLeer(docId, s, file) {
-  if (!docId || !file) return;
-  RV_TK_LEYENDO.add(docId);
-  rvTkRepintarLista(s);
-  try {
-    const contenido = await rvTkContenido(file);
-    const { data, error } = await sb.functions.invoke('analizar-ticket', { body: { documento_id: docId, ...contenido } });
-    if (error || !data?.ok) {
-      const m = error ? await msgErrorFn(error, data) : (data?.error || 'extraccion_fallida');
-      errToast(m === 'no_es_ticket' ? 'El archivo no parece un ticket aéreo' : `No pude leer el ticket: ${RV_ERR[m] || m}`);
-      return;
-    }
-    RV_DOC_IA[docId] = data.datos;
-    await rvTkAutoPasajeros(s, data.datos);
-  } finally {
-    RV_TK_LEYENDO.delete(docId);
-    rvTkRepintarLista(s);
-  }
+async function rvTkImportarArchivos(s, files) {
+  if (!s || !files?.length) return;
+  if (!rvPuedeEditar() || rvVista() === 'boleteria') { errToast('La importación completa requiere permiso para editar esta reserva; puedes adjuntar el ticket y editar sus números manualmente.'); return; }
+  const reservaId = RV_RESERVA_ID, apertura = RV_APERTURA;
+  if (!(await rvForm({ tipo: 'servicio', id: s.id }))) return;
+  if (RV_RESERVA_ID !== reservaId || RV_APERTURA !== apertura) return;
+  if (RV_FORM?.tipo === 'servicio' && RV_FORM.id === s.id) { if (RV_IMPORT) await RV_IMPORT.agregarArchivos(files); else errToast('No se pudo abrir la revisión de importación.'); }
 }
-// Del ticket leído por la IA, completa en el servicio lo que está vacío: localizador, aerolínea y ruta.
-// No pisa lo que el asesor ya escribió. Los tramos los arma el botón de la tarjeta del boleto.
-async function rvTkAutoServicio(s, datos) {
-  const loc = !s.localizador ? String(datos?.localizador || '').trim().slice(0, 60) : '';
-  const detalle = { ...(s.detalle || {}) };
-  let cambia = !!loc;
-  [['aerolinea', datos?.aerolinea], ['ruta', datos?.ruta]].forEach(([k, v]) => {
-    const t = String(v || '').trim();
-    if (t && !String(detalle[k] || '').trim()) { detalle[k] = t; cambia = true; }
-  });
-  if (!cambia) return;
-  const { data, error } = await sb.rpc('guardar_servicio', { p_reserva_id: RV_RESERVA_ID, p_servicio_id: s.id, p_datos: { ...(loc ? { localizador: loc } : {}), detalle } });
-  if (error || !data?.ok) console.error('rvTkAutoServicio', error || data);
-}
-async function rvTkAutoPasajeros(s, datos) {
-  if (!rvPuedeEditar()) return;
-  await rvTkAutoServicio(s, datos);
-  const det =(datos?.pasajeros || []).filter(p => p.nombre || p.apellido);
-  if (!det.length) return;
-  const norm = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
-  // La IA puede leer "YENIRETT" donde la reserva dice "YENIRET": una letra de diferencia
-  // se toma como el mismo pasajero para no duplicarlo al releer el ticket.
-  const dist = (a, b) => {
-    if (a === b) return 0;
-    if (Math.abs(a.length - b.length) > 2) return 3;
-    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-    for (let i = 1; i <= a.length; i++) {
-      const cur = [i];
-      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      prev = cur;
-    }
-    return prev[b.length];
-  };
-  const pasajeros = RV_DET.pasajeros || [];
-  const tickets = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id);
-  let creados = 0;
-  for (const p of det) {
-    const nombre = (p.nombre || p.apellido || '').trim(), apellido = (p.apellido || '').trim();
-    const clave = norm(`${apellido} ${nombre}`);
-    const ya = pasajeros.find(x => {
-      const a = norm(`${x.apellido || ''} ${x.nombre || ''}`), b = norm(`${x.nombre || ''} ${x.apellido || ''}`);
-      return a === clave || b === clave || (clave.length > 8 && (dist(a, clave) <= 1 || dist(b, clave) <= 1));
-    });
-    const tipo = p.tipo_documento || 'cedula';
-    const num = tipo === 'cedula' && p.numero_documento ? rvDocMostrar(p.numero_documento, 'cedula') : (p.numero_documento || '');
-    if (ya) {
-      if (p.numero_ticket && !tickets.some(b => b.pasajero_id === ya.id && b.numero_ticket)) {
-        await sb.rpc('boleteria_guardar_boleto', { p_servicio_id: s.id, p_pasajero_id: ya.id, p_numero_ticket: p.numero_ticket });
-        tickets.push({ pasajero_id: ya.id, numero_ticket: p.numero_ticket });
-      }
-      continue;
-    }
-    const { data } = await sb.rpc('guardar_pasajero', { p_reserva_id: RV_RESERVA_ID, p_pasajero_id: null, p_datos: {
-      nombre, apellido, tipo_documento: tipo, numero_documento: num, titular: !pasajeros.length && !creados } });
-    if (!data?.ok || !data.pasajero) continue;
-    creados++;
-    pasajeros.push(data.pasajero);
-    if (p.numero_ticket) {
-      await sb.rpc('boleteria_guardar_boleto', { p_servicio_id: s.id, p_pasajero_id: data.pasajero.id, p_numero_ticket: p.numero_ticket });
-      tickets.push({ pasajero_id: data.pasajero.id, numero_ticket: p.numero_ticket });
-    }
-  }
-  if (creados) okToast(creados === 1 ? 'Pasajero cargado del ticket' : `${creados} pasajeros cargados del ticket`);
-  return creados;
-}
-async function rvTkUsarPasajeros(docId) {
-  const s = rvServicioForm();
-  if (!s) return;
-  const creados = await rvTkAutoPasajeros(s, RV_DOC_IA[docId] || {});
-  if (!creados) errToast('Los pasajeros de este ticket ya están cargados');
-  await rvCargar();
-  if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
-}
+async function rvTkLeer(docId, s, file) { if (docId && file) await rvTkImportarArchivos(s, [file]); }
+async function rvTkUsarPasajeros(docId) { await rvTkLeerDoc(docId); }
 async function rvTkLeerDoc(docId) {
   const s = rvServicioForm(); if (!s) return;
   const d = (RV_DET.documentos || []).find(x => x.id === docId); if (!d) return;
-  const estado = document.getElementById('rv-tk-estado');
-  if (estado) estado.textContent = 'Leyendo el ticket…';
+  const estado = document.getElementById('rv-tk-estado'), reservaId = RV_RESERVA_ID, apertura = RV_APERTURA, form = RV_FORM;
+  if (estado) estado.textContent = 'Abriendo revisión del ticket…';
   try {
-    const blob = await (await fetch(await rvTkUrl(docId, true))).blob();
+    const respuesta = await fetch(await rvTkUrl(docId, true));
+    if (!respuesta.ok) throw new Error('No se pudo descargar el archivo privado.');
+    const blob = await respuesta.blob();
+    if (RV_RESERVA_ID !== reservaId || RV_APERTURA !== apertura || RV_FORM !== form) return;
     await rvTkLeer(docId, s, new File([blob], d.nombre, { type: d.mime }));
   } catch (e) {
     errToast('No pude abrir el ticket: ' + (e?.message || e));
@@ -10460,6 +10440,8 @@ async function drEmpresaPintar(l) {
   };
 }
 function openDrawer(l, opciones = {}) {
+  if (RV_IMPORT?.sucio) return rvImportSalir().then(ok => { if (ok) openDrawer(l, opciones); });
+  RV_IMPORT?.destruir(); RV_IMPORT = null;
   currentLead = l;
   camposSuciosLead = new Set(); conflictoLeadPendiente = false; CONFLICTO_IDS_LEAD = new Set();
   clearTimeout(autoguardadoTimer); clearTimeout(notasTimer);
@@ -16183,6 +16165,18 @@ window.closeDrawer = (fromNav) => {
   const contenido = document.getElementById('drawerContent')?.firstElementChild;
   let entrada = movil ? navEntradaMovil('drawer') : null;
   if (movil && CAPAS_MOVILES.cierreDrawer && CAPAS_MOVILES.cierreDrawer.entrada === entrada && CAPAS_MOVILES.cierreDrawer.contenido === contenido) return;
+  if (RV_IMPORT?.sucio) {
+    if (movil && fromNav && !entrada) entrada = navPush({ type: 'drawer' });
+    const actual = RV_IMPORT, solicitud = { entrada, contenido };
+    if (movil) CAPAS_MOVILES.cierreDrawer = solicitud;
+    actual.confirmarSalida().then(ok => {
+      if (movil && CAPAS_MOVILES.cierreDrawer === solicitud) CAPAS_MOVILES.cierreDrawer = null;
+      if (!ok || RV_IMPORT !== actual || contenido !== document.getElementById('drawerContent')?.firstElementChild) return;
+      actual.destruir(); RV_IMPORT = null; window.closeDrawer(fromNav);
+    });
+    return;
+  }
+  RV_IMPORT?.destruir(); RV_IMPORT = null;
   guardarPendientesLead(); // ficha del lead: lo escrito sin "salir" del campo se guarda igual
   const notas = document.getElementById('tar-notas');
   const cerrar = () => {
@@ -43518,6 +43512,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-21', emoji: '📄', titulo: 'Reservas: importar un servicio desde su PDF o fotos', texto: 'En cada servicio de la Reserva puedes subir el PDF o las fotos del servicio y revisar todo antes de guardar. Se leen todas las páginas y se recuperan pasajeros, documentos, localizador, rutas, conexiones, fechas y horas tal como están impresas; cada boleto queda con su pasajero. Los PDF de Boletos emitidos se recuperan completos, sin volver a escribirlos. Nada se guarda hasta que confirmes la revisión, y puedes corregir, añadir o quitar filas. Los archivos quedan adjuntos y privados en la reserva.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-20', emoji: '🔭', titulo: 'Búsqueda activa: salir a buscar empresas', texto: 'Nueva sección en Leads para buscar empresas, aliados y proveedores. La IA encuentra candidatos con su fuente, avisa si ya los tenemos, completa datos de contacto y redacta el primer mensaje y los seguimientos; tú lo envías. Los prospectos que tocan hoy aparecen en tu resumen del día.', roles: ['admin'] },
   { fecha: '2026-11-20', emoji: '💰', titulo: 'Comisiones por corte y cambios de fecha acordados', texto: 'Ahora ves cada corte con sus ventas, ajustes, factura e historial. Administración puede pasar comisiones verificadas o liquidadas a otro corte impago, abierto o cerrado, indicando el motivo y revisando el impacto antes de confirmar. Los pagos se marcan automáticamente desde las 12 del mediodía del día correspondiente, hora de Venezuela; oficina también puede registrarlos antes. Ese estado no confirma una transferencia bancaria. Cambiar el corte no envía mensajes: el reenvío de la factura se hace aparte.', roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-20', emoji: '📱', titulo: 'Fichas y ventanas más estables en el celular', texto: 'Las fichas, tareas y confirmaciones conservan mejor su orden al abrir unas sobre otras. Se ajustaron el botón Atrás, el foco, el bloqueo del fondo y el espacio al abrir el teclado, girar la pantalla o usar letra grande.', roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'] },

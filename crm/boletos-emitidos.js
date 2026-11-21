@@ -575,6 +575,8 @@ export async function construirPdf(d, numero, c) {
     doc.text(['Destino y Eventos Lotus 360', numeroTxt(numero)].filter(Boolean).join('  ·  '), X0, 770);
     doc.text(`Página ${i} de ${n}`, X1, 770, { align: 'right' });
   }
+  const { codificarMetadatos } = await import('./reservas-importacion-datos.js');
+  doc.setProperties({ subject: codificarMetadatos(d) });
   return doc.output('blob');
 }
 
