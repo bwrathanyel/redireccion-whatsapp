@@ -47,11 +47,48 @@ const CSS = `
 .be-item-cab b{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
 .be-quitar{margin-left:auto;min-width:36px;min-height:36px;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--muted);cursor:pointer}
 .be-quitar:hover{color:var(--danger);border-color:var(--danger)}
-.be-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 11px}
-.be-grid .be-2{grid-column:span 2}
+.be-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:0 10px}
+.be-grid>*{grid-column:span var(--c,3);min-width:0}
+.be-grid>.be-2{--c:6;--m:6}
+.be-grid>.be-todo{grid-column:1/-1}
 .be-grid .field{margin-bottom:0}
 .be-grid .fl{margin:9px 0 4px}
-.be-grid .ei{padding:9px 11px;font-size:14px}
+.be-grid .ei{padding:9px 11px;font-size:14px;min-height:42px}
+.be-fecha{display:flex;align-items:center;gap:7px;width:100%;text-align:left;cursor:pointer;font:inherit;font-size:14px;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden}
+.be-fecha>span{overflow:hidden;text-overflow:ellipsis}
+.be-fecha i{margin-left:auto;color:var(--accent)}
+.be-fecha.on,.be-fecha:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);outline:0}
+.be-fecha .ph{color:var(--muted2,var(--muted));font-weight:500}
+.be-fecha-dia{text-transform:capitalize;color:var(--muted)}
+.be-cal{margin-top:9px;padding:11px;border:1px solid var(--line2);border-radius:12px;background:var(--bg2,var(--panel))}
+.be-cal-cab{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:7px;font-size:12px;color:var(--muted);text-align:center}
+.be-cal-cab b{color:var(--txt)}
+.be-cal-nav{flex:none;width:38px;height:38px;border:1px solid var(--line2);border-radius:10px;background:transparent;color:var(--txt);cursor:pointer}
+.be-cal-nav:hover{border-color:var(--accent);color:var(--accent)}
+.be-cal-meses{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.be-cal-tit{margin-bottom:4px;text-align:center;font-size:13px;font-weight:700;text-transform:capitalize}
+.be-cal-sem,.be-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0}
+.be-cal-sem span{text-align:center;font-size:10.5px;color:var(--muted2,var(--muted));text-transform:uppercase}
+.be-cal-grid button{position:relative;height:36px;border:0;border-radius:8px;background:transparent;color:var(--txt);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .16s}
+.be-cal-grid button:hover{background:var(--accent-soft)}
+.be-cal-grid button.pasado{color:var(--muted2,var(--muted));font-weight:500}
+.be-cal-grid button.hoy{box-shadow:inset 0 0 0 1px var(--line2)}
+.be-cal-grid button.otro::after{content:'';position:absolute;left:50%;bottom:4px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--accent)}
+.be-cal-grid button.sel{background:var(--accent);color:var(--on-accent,#fff)}
+.be-cal-grid button.sel::after{background:currentColor}
+.be-cal-grid button:focus-visible,.be-cal-nav:focus-visible,.be-chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.be-cal-pie{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
+.be-chip{min-height:34px;padding:0 12px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--txt);font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.be-chip:hover,.be-chip.on{border-color:var(--accent);background:var(--accent-soft)}
+.be-cal-listo{margin-left:auto;font-weight:800}
+.be-mas{margin-top:9px;border-top:1px dashed var(--line)}
+.be-mas>summary{display:flex;align-items:center;gap:8px;min-height:38px;padding-top:7px;cursor:pointer;list-style:none;font-size:12px;color:var(--muted)}
+.be-mas>summary::-webkit-details-marker{display:none}
+.be-mas>summary b{color:var(--txt);font-weight:700}
+.be-mas>summary span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.be-mas>summary i{margin-left:auto;transition:transform .16s}
+.be-mas[open]>summary i{transform:rotate(180deg)}
+.be-mas>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 .be-logo{display:inline-flex;align-items:center;justify-content:center;background:var(--be-papel);border-radius:8px;padding:4px 7px;height:30px;min-width:30px}
 .be-logo img{max-height:22px;max-width:96px;display:block}
 .be-logo span{font-size:11px;font-weight:800;color:#0f172a;white-space:nowrap}
@@ -97,10 +134,33 @@ const CSS = `
 .be-vacio{padding:22px 0;text-align:center;color:var(--muted);font-size:12.5px}
 @media (max-width:1100px){.be-layout{grid-template-columns:1fr}.be-lateral{position:static}}
 @media (max-width:640px){
-  .be-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .be-root{gap:10px}
+  .be-cab .csub{display:none}
+  .be-cab h2{font-size:18px}
+  .be-tabs{width:100%}
+  .be-tabs button{flex:1}
+  .be-drop{padding:11px 14px}
+  .be-modo{flex-wrap:nowrap;overflow-x:auto}
+  .be-modo>span{white-space:nowrap}
+  .be-modo .be-tabs{width:auto}
+  .be-modo .be-tabs button{flex:none;white-space:nowrap}
+  .be-form{gap:10px}
+  .be-form>.card{padding:12px}
+  .be-item{padding:2px 11px 11px;margin-top:9px}
+  .be-item-cab{margin-top:7px}
+  .be-quitar{min-width:34px;min-height:34px}
+  .be-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:0 8px}
+  .be-grid>*{grid-column:span var(--m,3)}
+  .be-grid .fl{margin:7px 0 3px}
+  .be-grid .ei{padding:9px 10px}
+  .be-fecha{gap:4px}
+  .be-fecha i,.be-fecha-dia{display:none}
+  .be-cal-meses{grid-template-columns:1fr}
+  .be-cal-mes+.be-cal-mes{display:none}
+  .be-cal-grid button{height:42px}
+  .be-chip{min-height:38px}
   .be-fila{grid-template-columns:1fr auto}
   .be-fila .det:nth-child(3){display:none}
-  .be-grid .field:has(input[type=date]){grid-column:1/-1}
 }
 `;
 
@@ -201,6 +261,16 @@ export function duracionTxt(t) {
   return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ' ' + String(min % 60).padStart(2, '0') + ' min' : ''}`;
 }
 const fechaDe = iso => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12)) : null; };
+const hoyVe = () => new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+const isoSum = (iso, n) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const mesSum = (ym, n) => { const [y, m] = ym.split('-').map(Number), k = y * 12 + m - 1 + n; return `${Math.floor(k / 12)}-${String(k % 12 + 1).padStart(2, '0')}`; };
+const diasDelMes = ym => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+// «0830», «830», «8:30» o «83:0» (autoformato a medio tipear) → «08:30»; inválida → ''.
+export function horaTxt(v) {
+  const s = String(v || '').trim(), g = s.replace(/\D/g, ''), p = s.split(':').map(x => x.replace(/\D/g, ''));
+  const ok = (h, m) => (h !== '' && m !== '' && +h < 24 && +m < 60 ? `${h.padStart(2, '0')}:${m.padStart(2, '0')}` : '');
+  return (p.length === 2 && ok(p[0], p[1])) || (g.length && g.length <= 4 ? ok(g.length <= 2 ? g : g.slice(0, -2), g.length <= 2 ? '00' : g.slice(-2)) : '');
+}
 export const fechaLarga = iso => fechaDe(iso)?.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) || '';
 export const fechaCorta = iso => fechaDe(iso)?.toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).replace('.', '') || '';
 const fechaHoraTxt = iso => { const f = fechaCorta(iso), h = String(iso || '').slice(11, 16); return f ? f + (h ? ` · ${h}` : '') : ''; };
@@ -663,30 +733,113 @@ export function crearBoletosEmitidos(c) {
     + `<option value="otra" ${sel === 'otra' ? 'selected' : ''}>Otra aerolínea…</option>`;
   const chipLogo = a => (a.logo ? `<span class="be-logo"><img src="${logoDe(a)}" alt="${esc(a.nombre)}"></span>` : `<span class="be-logo"><span>${esc(a.nombre)}</span></span>`);
   const movil = matchMedia('(max-width:640px)').matches;
-  const campo = (lbl, k, v, extra = '', cls = '') => `<div class="field ${cls}"><label class="fl">${lbl}</label><input class="ei" data-k="${k}" value="${esc(v ?? '')}" ${extra}></div>`;
+  // sp = 'escritorio/celular' en columnas de 12/6 (ver .be-grid).
+  const ancho = sp => { if (!sp) return ''; const [c, m] = sp.split('/'); return ` style="--c:${c};--m:${m}"`; };
+  const campo = (lbl, k, v, extra = '', cls = '', sp = '') => `<div class="field ${cls}"${ancho(sp)}><label class="fl">${lbl}</label><input class="ei" data-k="${k}" value="${esc(v ?? '')}" ${extra}></div>`;
+  const hora = (lbl, k, v, cls) => campo(lbl, k, v, 'inputmode="numeric" maxlength="5" placeholder="--:--" autocomplete="off" data-hora', cls, '2/2');
+  const ESTADOS = [['OK', 'Confirmado'], ['RQ', 'En lista de espera'], ['SA', 'Sujeto a espacio']];
+  const masRes = t => [t.clase && `Clase ${t.clase}`, t.cabina || 'Económica', t.equipaje && equipajeTxt(t.equipaje), (ESTADOS.find(([v]) => v === (norm(t.estado) || 'OK')) || ESTADOS[0])[1], t.tarifa].filter(Boolean).join(' · ');
+  const fechaBoton = iso => {
+    const f = fechaDe(iso); if (!f) return '<span class="ph">Elegir fecha</span>';
+    const o = { timeZone: 'UTC' }, sinPunto = s => s.replace(/\./g, '');
+    const dia = sinPunto(f.toLocaleDateString('es-VE', { ...o, weekday: 'short' }));
+    const resto = sinPunto(f.toLocaleDateString('es-VE', { ...o, day: 'numeric', month: 'short', ...(iso.slice(0, 4) !== hoyVe().slice(0, 4) ? { year: 'numeric' } : {}) }));
+    return `<span><span class="be-fecha-dia">${dia}</span> ${resto}</span>`;
+  };
+
+  // Calendario en línea (mismo lenguaje que el editor de servicios de la Reserva), no el popup global de los type=date.
+  let cal = null;
+  const MESES_CAL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const mesesVisibles = () => (matchMedia('(max-width:640px)').matches ? 1 : 2);
+  function calHtml() {
+    const i = cal.i, t = d.tramos[i], hoy = hoyVe(), prev = d.tramos[i - 1]?.fecha;
+    const otros = new Set(d.tramos.filter((x, k) => k !== i && x.fecha).map(x => x.fecha));
+    const mes = ym => {
+      const [y, m] = ym.split('-').map(Number), off = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+      let h = '<span></span>'.repeat(off);
+      for (let k = 1; k <= diasDelMes(ym); k++) {
+        const iso = `${ym}-${String(k).padStart(2, '0')}`, cls = [iso === t.fecha && 'sel', iso === hoy && 'hoy', iso < hoy && 'pasado', otros.has(iso) && 'otro'].filter(Boolean).join(' ');
+        h += `<button type="button" data-dia="${iso}" class="${cls}" tabindex="${iso === cal.foco ? 0 : -1}" aria-label="${esc(fechaLarga(iso))}${otros.has(iso) ? ', otro vuelo' : ''}"${iso === t.fecha ? ' aria-current="date"' : ''}>${k}</button>`;
+      }
+      return `<div class="be-cal-mes"><div class="be-cal-tit">${MESES_CAL[m - 1]} ${y}</div><div class="be-cal-sem" aria-hidden="true">${['lu', 'ma', 'mi', 'ju', 'vi', 'sá', 'do'].map(x => `<span>${x}</span>`).join('')}</div><div class="be-cal-grid">${h}</div></div>`;
+    };
+    const ruta = [t.origen, t.destino].filter(Boolean).join(' → ');
+    const chips = [['Hoy', hoy], ['Mañana', isoSum(hoy, 1)], ...(prev ? [[`Mismo día que el vuelo ${i}`, prev], [`Día después del vuelo ${i}`, isoSum(prev, 1)]] : [])];
+    return `<div class="be-cal-cab"><button type="button" class="be-cal-nav" data-cal-mes="-1" aria-label="Mes anterior"><i class="fas fa-chevron-left"></i></button>
+        <span>Fecha del <b>vuelo ${i + 1}</b>${ruta ? ` · ${esc(ruta)}` : ''}</span>
+        <button type="button" class="be-cal-nav" data-cal-mes="1" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button></div>
+      <div class="be-cal-meses">${mes(cal.mes)}${mes(mesSum(cal.mes, 1))}</div>
+      <div class="be-cal-pie">${chips.map(([l, v]) => `<button type="button" class="be-chip${v === t.fecha ? ' on' : ''}" data-dia="${v}">${l}</button>`).join('')}${t.fecha ? '<button type="button" class="be-chip" data-dia="">Quitar fecha</button>' : ''}<button type="button" class="be-chip be-cal-listo" data-acc="cal-cerrar">Listo</button></div>`;
+  }
+  const calBox = () => (cal ? $(`.be-item[data-i="${cal.i}"] .be-cal`) : null);
+  function pintarCal(foco) {
+    const box = calBox(); if (!box) return;
+    box.innerHTML = calHtml();
+    if (foco) (typeof foco === 'string' ? box.querySelector(foco) : box.querySelector('.be-cal-grid [tabindex="0"]'))?.focus({ preventScroll: true });
+  }
+  function abrirCal(i) {
+    const foco = d.tramos[i].fecha || d.tramos[i - 1]?.fecha || hoyVe();
+    cal = { i, mes: foco.slice(0, 7), foco };
+    pintarTramos();
+    calBox()?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    pintarCal(true);
+  }
+  function cerrarCal(foco) {
+    const i = cal?.i; cal = null; pintarTramos();
+    if (foco && i != null) $(`.be-item[data-i="${i}"] [data-acc="fecha"]`)?.focus();
+  }
+  function calMover(iso) {
+    const ym = iso.slice(0, 7), ultimo = mesSum(cal.mes, mesesVisibles() - 1);
+    if (ym < cal.mes) cal.mes = ym; else if (ym > ultimo) cal.mes = mesSum(ym, 1 - mesesVisibles());
+    cal.foco = iso; pintarCal(true);
+  }
+  function elegirFecha(iso) {
+    const i = cal.i, t = d.tramos[i];
+    t.fecha = iso; cal = null; pintarTramos(); pintarPrevia();
+    const item = $(`.be-item[data-i="${i}"]`);
+    (iso && !t.sale ? item?.querySelector('[data-k="t.sale"]') : item?.querySelector('[data-acc="fecha"]'))?.focus();
+  }
+  function alTecla(e) {
+    if (!cal || !e.target.closest?.('.be-cal')) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarCal(true); return; }
+    const dia = e.target.closest('.be-cal-grid [data-dia]'); if (!dia) return;
+    const iso = dia.dataset.dia, paso = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+    if (paso) { e.preventDefault(); calMover(isoSum(iso, paso)); return; }
+    if (e.key === 'PageUp' || e.key === 'PageDown') {
+      e.preventDefault();
+      const ym = mesSum(iso.slice(0, 7), e.key === 'PageUp' ? -1 : 1);
+      calMover(`${ym}-${String(Math.min(+iso.slice(8), diasDelMes(ym))).padStart(2, '0')}`);
+    }
+  }
 
   function pintarTramos() {
+    if (cal && !d.tramos[cal.i]) cal = null;
     $('#be-tramos').innerHTML = d.tramos.map((t, i) => {
-      const a = t.aerolinea ? aerolineaDe(t) : null;
+      const a = t.aerolinea ? aerolineaDe(t) : null, abierto = cal?.i === i;
       return `<div class="be-item" data-i="${i}">
         <div class="be-item-cab"><b>Vuelo ${i + 1}</b>${a ? chipLogo(a) : ''}<button type="button" class="be-quitar" data-acc="quitar-tramo" aria-label="Quitar vuelo ${i + 1}" title="Quitar vuelo"><i class="fas fa-trash"></i></button></div>
         <div class="be-grid">
-          <div class="field be-2${t.aerolinea ? '' : ' be-falta'}"><label class="fl">Aerolínea</label><select class="ei" data-k="t.aerolinea"><option value="">Elige la aerolínea…</option>${opcionesAerolinea(t.aerolinea)}</select></div>
-          ${t.aerolinea === 'otra' ? campo('Nombre de la aerolínea', 't.aerolinea_nombre', t.aerolinea_nombre) + campo('Código (IATA)', 't.iata', t.iata, 'maxlength="3" style="text-transform:uppercase"') : ''}
-          ${campo('N° de vuelo', 't.vuelo', t.vuelo, 'inputmode="numeric" maxlength="5" placeholder="302"')}
-          ${campo('Código de reserva', 't.reserva', t.reserva, 'maxlength="8" placeholder="KPAKEE" style="text-transform:uppercase"')}
-          ${campo('Origen', 't.origen', t.origen, 'list="be-aeropuertos" placeholder="' + (movil ? 'CCS' : 'CCS o ciudad') + '"', t.origen ? '' : 'be-falta')}
-          ${campo('Destino', 't.destino', t.destino, 'list="be-aeropuertos" placeholder="' + (movil ? 'PMV' : 'PMV o ciudad') + '"', t.destino ? '' : 'be-falta')}
-          ${campo('Fecha', 't.fecha', t.fecha, 'type="date"', t.fecha ? '' : 'be-falta')}
-          ${campo('Sale', 't.sale', t.sale, 'type="time"', t.sale ? '' : 'be-falta')}
-          ${campo('Llega', 't.llega', t.llega, 'type="time"')}
-          ${campo('Clase', 't.clase', t.clase, 'maxlength="1" placeholder="T" style="text-transform:uppercase"')}
-          <div class="field"><label class="fl">Cabina</label><select class="ei" data-k="t.cabina">${['Económica', 'Ejecutiva', 'Primera'].map(x => `<option ${x === (t.cabina || 'Económica') ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
-          ${campo('Equipaje', 't.equipaje', t.equipaje, 'list="be-equipajes" placeholder="23K o 1P" style="text-transform:uppercase"')}
-          <div class="field"><label class="fl">Estado</label><select class="ei" data-k="t.estado">${[['OK', 'Confirmado'], ['RQ', 'En lista de espera'], ['SA', 'Sujeto a espacio']].map(([v, l]) => `<option value="${v}" ${v === (norm(t.estado) || 'OK') ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-          ${campo('Base tarifaria', 't.tarifa', t.tarifa, 'placeholder="Opcional" style="text-transform:uppercase"')}
+          <div class="field${t.aerolinea ? '' : ' be-falta'}"${ancho('5/6')}><label class="fl">Aerolínea</label><select class="ei" data-k="t.aerolinea"><option value="">Elige la aerolínea…</option>${opcionesAerolinea(t.aerolinea)}</select></div>
+          ${campo('N° de vuelo', 't.vuelo', t.vuelo, 'inputmode="numeric" maxlength="5" placeholder="302"', '', '3/3')}
+          ${campo('Código de reserva', 't.reserva', t.reserva, 'maxlength="8" placeholder="KPAKEE" autocomplete="off" style="text-transform:uppercase"', '', '4/3')}
+          ${t.aerolinea === 'otra' ? campo('Nombre de la aerolínea', 't.aerolinea_nombre', t.aerolinea_nombre, '', t.aerolinea_nombre ? '' : 'be-falta', '8/4') + campo('Código (IATA)', 't.iata', t.iata, 'maxlength="3" style="text-transform:uppercase"', '', '4/2') : ''}
+          ${campo('Origen', 't.origen', t.origen, 'list="be-aeropuertos" placeholder="' + (movil ? 'CCS' : 'CCS o ciudad') + '"', t.origen ? '' : 'be-falta', '2/3')}
+          ${campo('Destino', 't.destino', t.destino, 'list="be-aeropuertos" placeholder="' + (movil ? 'PMV' : 'PMV o ciudad') + '"', t.destino ? '' : 'be-falta', '2/3')}
+          <div class="field${t.fecha ? '' : ' be-falta'}"${ancho('4/2')}><label class="fl" id="be-fl-fecha-${i}">Fecha</label><button type="button" class="ei be-fecha${abierto ? ' on' : ''}" data-acc="fecha" aria-expanded="${abierto}" aria-labelledby="be-fl-fecha-${i} be-fb-${i}"><span id="be-fb-${i}" style="display:contents">${fechaBoton(t.fecha)}</span><i class="far fa-calendar"></i></button></div>
+          ${hora('Sale', 't.sale', t.sale, t.sale ? '' : 'be-falta')}
+          ${hora('Llega', 't.llega', t.llega, '')}
+          ${abierto ? '<div class="be-cal be-todo" role="group" aria-label="Calendario"></div>' : ''}
+          <details class="be-mas be-todo"${t._mas ? ' open' : ''}><summary><b>Más detalles</b><span class="be-mas-res">${esc(masRes(t))}</span><i class="fas fa-chevron-down" aria-hidden="true"></i></summary>
+            <div class="be-grid">
+              ${campo('Clase', 't.clase', t.clase, 'maxlength="1" placeholder="T" autocomplete="off" style="text-transform:uppercase"', '', '2/2')}
+              ${campo('Equipaje', 't.equipaje', t.equipaje, 'list="be-equipajes" placeholder="23K o 1P" style="text-transform:uppercase"', '', '2/2')}
+              ${campo('Base tarifaria', 't.tarifa', t.tarifa, 'placeholder="Opcional" style="text-transform:uppercase"', '', '2/2')}
+              <div class="field"${ancho('3/3')}><label class="fl">Cabina</label><select class="ei" data-k="t.cabina">${['Económica', 'Ejecutiva', 'Primera'].map(x => `<option ${x === (t.cabina || 'Económica') ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+              <div class="field"${ancho('3/3')}><label class="fl">Estado</label><select class="ei" data-k="t.estado">${ESTADOS.map(([v, l]) => `<option value="${v}" ${v === (norm(t.estado) || 'OK') ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+            </div></details>
         </div></div>`;
     }).join('');
+    if (cal) pintarCal(false);
   }
   function pintarPasajeros() {
     const grupos = gruposDe(d);

@@ -5358,11 +5358,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 /* Revisión IA de la reserva (no bloquea): chip en la tarjeta y caja en el cajón */
 .rvia-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--amber)}
 .rvia{margin:10px 0 4px;padding:11px 12px;border-radius:12px;background:color-mix(in srgb,var(--amber) 8%,transparent);border:1px solid color-mix(in srgb,var(--amber) 24%,transparent)}
+.rvia-top{cursor:pointer;list-style:none;min-height:32px}
+.rvia-top::-webkit-details-marker{display:none}
+.rvia-flecha{margin-left:8px;transition:transform .15s}
+.rvia[open] .rvia-flecha{transform:rotate(180deg)}
+.rvia:not([open]){padding-block:6px}
 .rvia-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;color:var(--txt)}
 .rvia-top b i{color:var(--amber);margin-right:4px}
 .rvia-top span{font-size:11px;color:var(--muted)}
 .rvia ul{list-style:none;margin:8px 0;padding:0;display:grid;gap:6px}
 .rvia li{font-size:12.5px;line-height:1.4;color:var(--txt);display:flex;gap:8px;align-items:baseline}
+.rvia li{flex-wrap:wrap}
+.rvia-txt{flex:1 1 200px;min-width:0}
+.rvia-fix{flex:none;margin-left:76px;font-size:11.5px;padding:5px 10px;border-color:color-mix(in srgb,var(--amber) 55%,transparent);color:var(--amber)}
+.rvia-fix:disabled{opacity:.6}
+.rvia-ok{margin-left:76px;font-size:11.5px;font-weight:700;color:var(--ok,#2fb67c)}
+.rvia li.rvia-hecho .rvia-txt{opacity:.55;text-decoration:line-through}
 .rvia-tag{flex:none;font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--tc);min-width:68px}
 .rvia-pie{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
 .pv-falta-i{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--amber) 15%,transparent);color:var(--amber)}

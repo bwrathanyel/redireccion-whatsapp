@@ -5640,6 +5640,74 @@ let RVIA_MAPA = new Map();
 const RVIA_NIVEL = { falta: ['Falta', 'var(--amber)'], error: ['Parece mal', 'var(--danger)'], revisar: ['Revisar', 'var(--muted)'] };
 const rviaChip = id => { const r = RVIA_MAPA.get(Number(id)); const n = r?.hallazgos?.length || 0;
   return n ? `<div class="pv-meta"><span class="rvia-chip" title="${esc(r.hallazgos.map(h => h.texto).join('\n'))}"><i class="fas fa-robot" aria-hidden="true"></i>IA: ${n} ${n === 1 ? 'cosa' : 'cosas'} por revisar</span></div>` : ''; };
+// Botones de arreglo (dueño 21-nov): cada hallazgo con salida automática trae su botón. El servidor puede
+// mandar h.accion; los hallazgos viejos o de reglas fijas se resuelven por clave o por el texto.
+const RVIA_CLAVE_ACCION = { 'r:sin_pasajeros': 'pasajeros_boletos', 'r:sin_documento': 'pasajeros_boletos', 'r:pax_incompletos': 'pasajeros_boletos' };
+const RVIA_TEXTO_ACCION = [[/fecha de fin del viaje/i, 'fin_viaje']];
+const rviaNorm = p => [p.nombre, p.apellido].filter(Boolean).join(' ').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');
+const rviaServiciosVivos = () => (RV_DET?.servicios || []).filter(s => !s.anulado_en);
+function rviaFinCalculado() {
+  const f = rviaServiciosVivos().map(s => String(s.fecha_fin || s.fecha_inicio || '').slice(0, 10)).filter(Boolean).sort();
+  return f.length ? f[f.length - 1] : '';
+}
+async function rviaPasajerosBoletos(id) {
+  const { data, error } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: id });
+  if (error || !data?.ok) throw new Error('no pude leer los boletos');
+  const docs = new Map((RV_DET.documentos || []).map(d => [d.id, d]));
+  const vistos = new Map();
+  for (const x of data.documentos || []) for (const p of x.datos_ia?.pasajeros || []) {
+    const k = rviaNorm(p); if (!k || !String(p.nombre || '').trim()) continue;
+    const prev = vistos.get(k) || { tickets: [] };
+    vistos.set(k, { ...prev, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v)),
+      tickets: p.numero_ticket ? [...prev.tickets, { servicio_id: docs.get(x.documento_id)?.servicio_id, numero: String(p.numero_ticket).trim() }] : prev.tickets });
+  }
+  if (!vistos.size) { errToast('Los boletos subidos no traen pasajeros legibles. Cárgalos a mano en Pasajeros.'); return false; }
+  const existentes = RV_DET.pasajeros || [], ticketsYa = RV_DET.boletos || [];
+  let nuevos = 0, completados = 0;
+  for (const [k, p] of vistos) {
+    const ya = existentes.find(e => rviaNorm(e) === k);
+    const tipo = RV_TIPO_DOC[p.tipo_documento] ? p.tipo_documento : 'cedula', numdoc = String(p.numero_documento || '').trim();
+    let pid = ya?.id;
+    if (!ya) {
+      const r = await sb.rpc('guardar_pasajero', { p_reserva_id: id, p_pasajero_id: null, p_datos: {
+        nombre: String(p.nombre).trim(), apellido: String(p.apellido || '').trim(), tipo_documento: numdoc ? tipo : null, numero_documento: numdoc,
+        titular: !existentes.length && nuevos === 0 } });
+      if (r.error || !r.data?.ok) throw new Error(rvErr(r.error, r.data));
+      pid = r.data.pasajero?.id; nuevos++;
+    } else if (!ya.numero_documento && numdoc) {
+      const r = await sb.rpc('guardar_pasajero', { p_reserva_id: id, p_pasajero_id: ya.id, p_datos: { tipo_documento: tipo, numero_documento: numdoc } });
+      if (r.error || !r.data?.ok) throw new Error(rvErr(r.error, r.data));
+      completados++;
+    }
+    // Número de boleto: solo donde ese pasajero todavía no tiene uno; si falla (rol sin permiso) no frena lo demás.
+    for (const t of p.tickets) {
+      if (!pid || !t.servicio_id || ticketsYa.some(b => b.servicio_id === t.servicio_id && b.pasajero_id === pid && b.numero_ticket)) continue;
+      await sb.rpc('boleteria_guardar_boleto', { p_servicio_id: t.servicio_id, p_pasajero_id: pid, p_numero_ticket: t.numero }).then(() => {}, () => {});
+    }
+  }
+  if (!nuevos && !completados) { okToast('Los pasajeros de los boletos ya estaban cargados.'); return true; }
+  okToast([nuevos ? `${nuevos} ${nuevos === 1 ? 'pasajero agregado' : 'pasajeros agregados'}` : '', completados ? `${completados} con documento completado` : ''].filter(Boolean).join(' · '));
+  rvTrasCambio();
+  return true;
+}
+async function rviaFinViaje() {
+  const fin = rviaFinCalculado(), campo = document.getElementById('pv-e-fin');
+  if (!fin) { errToast('Los servicios no tienen fechas para calcular el fin del viaje.'); return false; }
+  if (!campo) { errToast('Abre la pestaña Resumen para poner la fecha de fin.'); return false; }
+  campo.value = fin; campo.dispatchEvent(new Event('input', { bubbles: true })); campo.dispatchEvent(new Event('change', { bubbles: true }));
+  okToast(`Fin del viaje: ${pvFecha(fin)} (el último servicio). Toca «Guardar cambios» para confirmarlo.`);
+  return true;
+}
+const RVIA_ACCIONES = {
+  pasajeros_boletos: { texto: 'Tomar pasajeros de los boletos', icono: 'fa-user-plus', aplicar: rviaPasajerosBoletos,
+    disponible: () => (RV_DET?.documentos || []).some(d => d.tipo === 'boleto') },
+  fin_viaje: { texto: 'Usar fecha del último servicio', icono: 'fa-calendar-check', aplicar: rviaFinViaje, disponible: () => !!rviaFinCalculado() },
+};
+function rviaAccionDe(h) {
+  if (!rvPuedeEditar()) return null;
+  const a = RVIA_ACCIONES[h.accion] ? h.accion : RVIA_CLAVE_ACCION[h.clave] || RVIA_TEXTO_ACCION.find(([re]) => re.test(h.texto || ''))?.[1];
+  return a && RVIA_ACCIONES[a].disponible() ? a : null;
+}
 async function rviaCargar(id, apertura) {
   const { data, error } = await sb.rpc('reserva_revision_ia_ver', { p_reserva_id: id });
   const box = document.getElementById('rv-revision-ia');
@@ -5648,10 +5716,28 @@ async function rviaCargar(id, apertura) {
   const hs = r && !r.resuelta_en ? (r.hallazgos || []) : [];
   box.hidden = !hs.length;
   if (!hs.length) { box.innerHTML = ''; return; }
-  box.innerHTML = `<section class="rvia" aria-label="Revisión IA de la reserva">
-    <div class="rvia-top"><b><i class="fas fa-robot" aria-hidden="true"></i> La IA revisó esta reserva</b><span>${esc(tiempoRelativo(r.revisada_en))}</span></div>
-    <ul>${hs.map(h => { const [t, c] = RVIA_NIVEL[h.nivel] || RVIA_NIVEL.revisar; return `<li><span class="rvia-tag" style="--tc:${c}">${t}</span>${esc(h.texto)}</li>`; }).join('')}</ul>
-    <div class="rvia-pie"><span>No bloquea nada: el voucher se genera igual.</span><button class="pv-btn" type="button" data-rvia-listo><i class="fas fa-check" aria-hidden="true"></i> Ya lo revisé</button></div></section>`;
+  // Plegable (dueño 21-nov: era molesto): cerrado por defecto, solo el conteo; lo que el asesor elija se recuerda en este navegador.
+  let abierto = false; try { abierto = localStorage.getItem('rvia_abierto') === '1'; } catch { /* sin storage: cerrado */ }
+  box.innerHTML = `<details class="rvia" aria-label="Revisión IA de la reserva"${abierto ? ' open' : ''}>
+    <summary class="rvia-top"><b><i class="fas fa-robot" aria-hidden="true"></i> La IA encontró ${hs.length} ${hs.length === 1 ? 'cosa' : 'cosas'} por revisar</b><span>${esc(tiempoRelativo(r.revisada_en))}<i class="fas fa-chevron-down rvia-flecha" aria-hidden="true"></i></span></summary>
+    <ul>${hs.map((h, i) => { const [t, c] = RVIA_NIVEL[h.nivel] || RVIA_NIVEL.revisar; const a = rviaAccionDe(h);
+      return `<li><span class="rvia-tag" style="--tc:${c}">${t}</span><span class="rvia-txt">${esc(h.texto)}</span>${a ? `<button class="pv-btn rvia-fix" type="button" data-rvia-fix="${a}" data-i="${i}"><i class="fas ${RVIA_ACCIONES[a].icono}" aria-hidden="true"></i> ${RVIA_ACCIONES[a].texto}</button>` : ''}</li>`; }).join('')}</ul>
+    <div class="rvia-pie"><span>No bloquea nada: el voucher se genera igual.</span><button class="pv-btn" type="button" data-rvia-listo><i class="fas fa-check" aria-hidden="true"></i> Ya lo revisé</button></div></details>`;
+  box.querySelector('details.rvia').addEventListener('toggle', e => { try { localStorage.setItem('rvia_abierto', e.target.open ? '1' : '0'); } catch { /* sin storage */ } });
+  box.querySelectorAll('[data-rvia-fix]').forEach(b => {
+    // Un solo arreglo a la vez; si ya se aplicó otro igual (p. ej. dos hallazgos de pasajeros) el resto se marca solo.
+    b.onclick = async () => {
+      const acc = b.dataset.rviaFix, previo = b.innerHTML;
+      box.querySelectorAll('[data-rvia-fix]').forEach(x => { x.disabled = true; });
+      b.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Aplicando…';
+      let ok = false;
+      try { ok = await RVIA_ACCIONES[acc].aplicar(id); } catch (e) { console.error('rvia accion', acc, e); errToast('No se pudo aplicar: ' + (e?.message || 'error')); }
+      if (!box.isConnected || id !== RV_RESERVA_ID) return;
+      if (ok) box.querySelectorAll(`[data-rvia-fix="${acc}"]`).forEach(x => { const li = x.closest('li'); li.classList.add('rvia-hecho'); x.replaceWith(Object.assign(document.createElement('span'), { className: 'rvia-ok', innerHTML: '<i class="fas fa-circle-check" aria-hidden="true"></i> Hecho' })); });
+      else b.innerHTML = previo;
+      box.querySelectorAll('[data-rvia-fix]').forEach(x => { x.disabled = false; });
+    };
+  });
   const btn = box.querySelector('[data-rvia-listo]');
   btn.onclick = async () => {
     btn.disabled = true;
@@ -14260,8 +14346,10 @@ function efLeerViajeros() {
   for (const f of filas) {
     const n = f.querySelector('[data-v="n"]'), c = f.querySelector('[data-v="c"]');
     const nom = n.value.trim().replace(/\s+/g, ' '), ced = c.value.trim(), nino = f.dataset.nino === '1';
+    // Pasajero tomado de un boleto/documento: el ticket casi nunca trae cédula, así que no frena la creación (se completa luego en la reserva).
+    const deDocumento = JSON.parse(f.dataset.rviIdentidades || '[]').length > 0;
     if (!nom) { n.focus(); return { error: 'Escribe el nombre de cada persona que viaja' }; }
-    if (!nino && !/\d/.test(ced)) { c.focus(); return { error: `Falta la cédula de ${nom}` }; }
+    if (!nino && !deDocumento && !/\d/.test(ced)) { c.focus(); return { error: `Falta la cédula de ${nom}` }; }
     viajeros.push({ nom, ced, identidades: JSON.parse(f.dataset.rviIdentidades || '[]') });
   }
   return { viajeros };
@@ -14339,7 +14427,9 @@ function efImportMontar() {
       const nuevos = serviciosDeImportacion(lote, () => -(++RV_BORRADOR.seq));
       if (RV_BORRADOR.servicios.some(s => s._importacion?.archivos.some(a => lote.archivos.some(b => a.sha256 === b.sha256)))) throw new Error('Ese archivo ya está incorporado. Revisa sus servicios en el paso 2.');
       efImportViajeros(nuevos); RV_BORRADOR.servicios.push(...nuevos); efBorradorPintar();
-      document.getElementById('ef-importados').textContent = 'Documentos preparados en memoria. Revisa los servicios y completa sus precios en el paso 2. Cancelar no guardará estos documentos.';
+      const nPax = viajerosDeImportacion(nuevos).length;
+      document.getElementById('ef-importados').textContent = (nPax ? `Se tomaron ${nPax} ${nPax === 1 ? 'pasajero' : 'pasajeros'} del documento y ya están en la lista de viajeros (sin cédula se completan después en la reserva). ` : 'El documento no trae pasajeros legibles: agrégalos en la lista de viajeros. ')
+        + 'Revisa los servicios y completa sus precios en el paso 2. Cancelar no guardará estos documentos.';
     },
   });
   EF_IMPORT = control;
