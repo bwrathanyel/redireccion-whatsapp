@@ -4835,9 +4835,10 @@ function pvViaje(c) {
 // Nadie viaja sin pagar: si el viaje ya terminó y queda saldo, es un abono que no se cargó.
 // Se muestra como pagado (sin «Saldo»/«Cuotas vencidas», fuera de «con saldo»); el saldo
 // registrado queda en `saldo_sin_cargar` y el abono real se puede cargar desde Gestionar.
+// Empresas no: viajan a crédito y pagan la factura después, el saldo es real.
 function pvViajoPagado(lista) {
   lista.forEach(c => {
-    if (pvViaje(c).bucket !== 'volvio') return;
+    if (c.empresa_id != null || pvViaje(c).bucket !== 'volvio') return;
     const saldo = Number(c.saldo_pendiente) || 0;
     if (saldo > 0) {
       c.saldo_sin_cargar = saldo;
@@ -10383,6 +10384,32 @@ async function pintarOrigenPublicacion(leadId) {
   box.style.display = '';
 }
 
+// Empresa del lead (oficina): asignar_empresa_lead también mueve sus reservas que tenían la empresa anterior.
+async function drEmpresaPintar(l) {
+  const sel = document.getElementById('d-empresa');
+  if (!sel) return;
+  const { data, error } = await sb.rpc('listar_empresas_cliente', { p_solo_activos: false });
+  if (!sel.isConnected) return;
+  if (error) { sel.innerHTML = '<option value="">No se pudieron cargar</option>'; return; }
+  const lista = (data || []).filter(e => e.activo || e.id === l.empresa_id);
+  sel.innerHTML = '<option value="">Cliente particular</option>' + lista.map(e => `<option value="${e.id}">${esc(e.nombre)}${e.activo ? '' : ' (inactiva)'}</option>`).join('');
+  sel.value = l.empresa_id != null ? String(l.empresa_id) : '';
+  sel.disabled = false;
+  sel.onchange = async () => {
+    const antes = l.empresa_id ?? null, nueva = sel.value ? Number(sel.value) : null;
+    sel.disabled = true;
+    const { data: r, error: e } = await sb.rpc('asignar_empresa_lead', { p_lead_id: l.id, p_empresa_id: nueva });
+    sel.disabled = false;
+    if (e || !r?.ok) {
+      sel.value = antes != null ? String(antes) : '';
+      errToast(r?.error === 'empresa_no_registrada' ? 'Esa empresa está inactiva' : 'No se pudo cambiar la empresa');
+      return;
+    }
+    l.empresa_id = nueva;
+    const n = Number(r.reservas_actualizadas) || 0;
+    okToast(nueva ? `Lead asignado a ${r.empresa}${n ? ` (${n} reserva${n === 1 ? '' : 's'})` : ''}` : 'El lead quedó como cliente particular');
+  };
+}
 function openDrawer(l, opciones = {}) {
   currentLead = l;
   camposSuciosLead = new Set(); conflictoLeadPendiente = false; CONFLICTO_IDS_LEAD = new Set();
@@ -10468,6 +10495,7 @@ function openDrawer(l, opciones = {}) {
             ${lectura('Destino', 'e-destino')}
             ${lectura('Personas', 'e-personas')}
             ${lectura('Fecha de viaje', 'e-fecha-estimada', `<div class="csub">${fechaViajeInterpretada(l)}</div>`)}
+            ${esOficina() && !soloLectura ? '<div class="dl-fila"><dt>Empresa</dt><dd><select class="ei" id="d-empresa" aria-label="Empresa del lead" disabled><option value="">Cargando…</option></select></dd></div>' : ''}
           </dl>
           <div class="dl-consulta-wrap">
             <div class="dl-t">Consulta original</div>
@@ -10535,6 +10563,7 @@ function openDrawer(l, opciones = {}) {
 
   const datos = document.getElementById('d-datos');
   pintarLecturaDatos();
+  drEmpresaPintar(l);
   if (MI_USUARIO_ID) tareasV2().bloqueLead(document.getElementById('d-tareas-body'), { id: l.id, nombre: nombreLead(l), estado: l.estado, asesor: l.asesor });
   document.getElementById('e-estado').addEventListener('change', e => {
     document.getElementById('venta-box').classList.toggle('show', VENTA.includes(e.target.value));
@@ -25878,14 +25907,18 @@ function setupEmpresas() {
    filtro principal (igual que el canal en Leads). El lead nace con su empresa
    (leads.empresa_id) y la reserva la hereda; todo lo que muestra sale de
    postventa_bandeja + listar_leads_empresas, sin tablas nuevas en pantalla. */
-let RE_EMPRESAS = [], RE_RESERVAS = [], RE_LEADS = [], RE_EMPRESA = '', RE_VISTA = 'reservas', RE_BUSCAR = '';
+let RE_EMPRESAS = [], RE_RESERVAS = [], RE_LEADS = [], RE_FACTURAS = [], RE_EMPRESA = '', RE_VISTA = 'reservas', RE_BUSCAR = '';
+const RE_ABIERTOS = new Set();
 async function loadReservasEmpresas() {
   const grid = document.getElementById('re-grid');
   if (!grid || !esOficina()) return;
   grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
-  const [emp, bandeja, leads] = await Promise.all([
+  const [emp, bandeja, leads, fact] = await Promise.all([
     sb.rpc('listar_empresas_cliente', { p_solo_activos: false }), pvBandejaCompleta(), sb.rpc('listar_leads_empresas'),
+    sb.rpc('listar_facturas_empresa'),
   ]);
+  if (fact.error) console.error('reservas-empresas facturas', fact.error);
+  RE_FACTURAS = fact.error ? [] : (fact.data || []).filter(f => f.estado !== 'anulada');
   if (emp.error || !bandeja || leads.error) {
     console.error('reservas-empresas', emp.error || leads.error);
     grid.innerHTML = '<div class="pv-empty"><i class="fas fa-triangle-exclamation"></i>No se pudieron cargar las reservas de empresas</div>';
@@ -25895,7 +25928,7 @@ async function loadReservasEmpresas() {
   RE_EMPRESAS = emp.data || [];
   const enlace = new Map(RE_EMPRESAS.flatMap(e => (e.reservas || []).map(r => [r.id, e.id])));
   RE_RESERVAS = bandeja.map(c => ({ ...c, empresa_id: c.empresa_id ?? enlace.get(c.id) ?? null })).filter(c => c.empresa_id != null);
-  RE_LEADS = leads.data || [];
+  RE_LEADS = (leads.data || []).filter(l => l.estado !== 'PERDIDO');
   renderReservasEmpresas();
 }
 const reNombreEmpresa = id => RE_EMPRESAS.find(e => e.id === id)?.nombre || 'Empresa';
@@ -25911,33 +25944,136 @@ function renderReservasEmpresas() {
   if (RE_EMPRESA && !activas.some(e => String(e.id) === RE_EMPRESA)) RE_EMPRESA = '';
   const delaEmpresa = x => !RE_EMPRESA || String(x.empresa_id) === RE_EMPRESA;
   const verReservas = reservas.filter(delaEmpresa), verLeads = leads.filter(delaEmpresa);
-  const ahora = Date.now(), en14 = ahora + 14 * 864e5;
-  const viajes = verReservas.filter(c => c.etapa !== 'CERRADO' && c.fecha_viaje_inicio && new Date(c.fecha_viaje_inicio).getTime() >= ahora - 864e5 && new Date(c.fecha_viaje_inicio).getTime() <= en14).length;
-  document.getElementById('re-kpis').innerHTML = [
-    ['Reservas de empresas', fmt(verReservas.length), 'fa-building', 'var(--blue)'],
-    ['Cotizaciones en curso', fmt(verLeads.length), 'fa-file-invoice-dollar', 'var(--purple)'],
-    ['Cobros pendientes', fmt(verReservas.filter(c => c.etapa === 'COBRO_PENDIENTE').length), 'fa-wallet', 'var(--amber)'],
-    ['Viajes en 14 días', fmt(viajes), 'fa-plane-departure', 'var(--green)'],
-    ['Saldo por cobrar', money(verReservas.reduce((s, c) => s + Number(c.saldo_pendiente || 0), 0)), 'fa-coins', 'var(--accent)'],
-  ].map(c => `<div class="kpi pv-kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`).join('');
+  const empresa = RE_EMPRESA ? RE_EMPRESAS.find(e => String(e.id) === RE_EMPRESA) : null;
+  const ficha = document.getElementById('re-ficha');
+  if (ficha) { ficha.hidden = !empresa; ficha.innerHTML = empresa ? reFichaHtml(empresa) : ''; }
+  const kpi = c => `<div class="kpi pv-kpi" style="--kc:${c[3]}"><div class="kt"><i class="fas ${c[2]}"></i>${c[0]}</div><div class="kv">${c[1]}</div></div>`;
+  if (empresa) {
+    const m = reMontosEmpresa(RE_RESERVAS.filter(c => c.empresa_id === empresa.id), RE_FACTURAS.filter(f => f.empresa_id === empresa.id));
+    document.getElementById('re-kpis').innerHTML = [
+      ['Reservado', money(m.reservado), 'fa-suitcase', 'var(--blue)'],
+      ['Facturado', money(m.facturado), 'fa-file-invoice', 'var(--purple)'],
+      ['Cobrado', money(m.cobrado), 'fa-circle-check', 'var(--green)'],
+      ['Vencido', money(m.vencido), 'fa-triangle-exclamation', 'var(--danger)'],
+      ['Saldo por cobrar', money(m.porCobrar), 'fa-coins', 'var(--accent)'],
+    ].map(kpi).join('');
+  } else {
+    const ahora = Date.now(), en14 = ahora + 14 * 864e5;
+    const viajes = verReservas.filter(c => c.etapa !== 'CERRADO' && c.fecha_viaje_inicio && new Date(c.fecha_viaje_inicio).getTime() >= ahora - 864e5 && new Date(c.fecha_viaje_inicio).getTime() <= en14).length;
+    document.getElementById('re-kpis').innerHTML = [
+      ['Reservas de empresas', fmt(verReservas.length), 'fa-building', 'var(--blue)'],
+      ['Cotizaciones en curso', fmt(verLeads.length), 'fa-file-invoice-dollar', 'var(--purple)'],
+      ['Falta monto', fmt(verReservas.filter(c => !(Number(c.monto_total) > 0)).length), 'fa-pen-to-square', 'var(--amber)'],
+      ['Viajes en 14 días', fmt(viajes), 'fa-plane-departure', 'var(--green)'],
+      ['Saldo por cobrar', money(reMontosEmpresa(RE_RESERVAS, RE_FACTURAS).porCobrar), 'fa-coins', 'var(--accent)'],
+    ].map(kpi).join('');
+  }
   const chip = (attr, k, l, n, on) => `<button class="pv-stage${on ? ' on' : ''}" type="button" ${attr}="${esc(k)}" aria-pressed="${on}">${esc(l)} · ${n}</button>`;
   document.getElementById('re-vistas').innerHTML = chip('data-re-vista', 'reservas', 'Reservas', reservas.filter(delaEmpresa).length, RE_VISTA === 'reservas')
     + chip('data-re-vista', 'cotizaciones', 'Cotizaciones', leads.filter(delaEmpresa).length, RE_VISTA === 'cotizaciones');
   const base = RE_VISTA === 'reservas' ? reservas : leads;
   document.getElementById('re-empresas').innerHTML = chip('data-re-empresa', '', 'Todas las empresas', base.length, !RE_EMPRESA)
     + activas.map(e => chip('data-re-empresa', e.id, e.nombre, cuenta(base, e.id), RE_EMPRESA === String(e.id))).join('');
-  if (!activas.length) { grid.innerHTML = '<div class="pv-empty"><i class="fas fa-building"></i><b>Todavía no hay empresas</b><br>Crea una desde Corporativo › Empresas</div>'; return; }
+  if (!activas.length) { grid.innerHTML = '<div class="pv-empty"><i class="fas fa-building"></i><b>Todavía no hay empresas</b><br>Créala con «Nueva empresa» o desde Directorio › Empresas</div>'; return; }
   const lista = RE_VISTA === 'reservas' ? verReservas : verLeads;
   if (!lista.length) {
     grid.innerHTML = `<div class="pv-empty"><i class="fas fa-inbox"></i><b>${RE_VISTA === 'reservas' ? 'Sin reservas' : 'Sin cotizaciones en curso'}</b><br>${RE_EMPRESA ? 'Esta empresa todavía no tiene ninguna' : 'Crea un lead de empresa con el botón de arriba'}</div>`;
     return;
   }
   grid.innerHTML = RE_VISTA === 'reservas'
-    ? verReservas.map(c => pvCardHtml(c, `<div class="pv-serv"><span><i class="fas fa-building"></i> <b>${esc(reNombreEmpresa(c.empresa_id))}</b>${reRefDe(c) ? ' · ref. ' + esc(reRefDe(c)) : ''}</span></div>`)).join('')
+    ? reAgrupar(verReservas).map(([k, g]) => g.length > 1 ? reGrupoHtml(k, g) : reCardHtml(g[0])).join('')
     : verLeads.map(reLeadCardHtml).join('');
   pvWire(grid, RE_RESERVAS);
+  // La tarjeta de grupo no es una reserva: tocarla no abre nada, solo sus botones.
+  grid.querySelectorAll('.re-grupo').forEach(g => { g.onclick = null; g.classList.remove('pv-click'); });
   grid.querySelectorAll('[data-re-lead]').forEach(b => b.onclick = () => window.abrirLeadPorId(Number(b.dataset.reLead)));
   entradaLista(grid);
+}
+// Saldo por cobrar = facturas pendientes + saldo de las reservas que todavía no tienen factura
+// (una reserva facturada ya cuenta por su factura: sumar los dos la contaría doble).
+function reMontosEmpresa(reservas, facturas) {
+  const hoy = hoyCaracas(), n = v => Number(v) || 0;
+  const conFactura = new Set(facturas.map(f => f.reserva_id).filter(Boolean));
+  const pend = facturas.filter(f => f.estado === 'pendiente');
+  const saldoSinFactura = reservas.filter(c => !conFactura.has(c.id)).reduce((s, c) => s + Math.max(0, n(c.monto_total) - n(c.monto_pagado)), 0);
+  return {
+    reservado: reservas.reduce((s, c) => s + n(c.monto_total), 0),
+    facturado: facturas.reduce((s, f) => s + n(f.total), 0),
+    cobrado: facturas.filter(f => f.estado === 'pagada').reduce((s, f) => s + n(f.total), 0),
+    vencido: pend.filter(f => f.vence < hoy).reduce((s, f) => s + n(f.total), 0),
+    porCobrar: pend.reduce((s, f) => s + n(f.total), 0) + saldoSinFactura,
+    pendientes: pend,
+  };
+}
+function reFichaHtml(e) {
+  const m = reMontosEmpresa([], RE_FACTURAS.filter(f => f.empresa_id === e.id)), hoy = hoyCaracas();
+  const dato = (ic, v) => v ? `<span><i class="fas ${ic}" aria-hidden="true"></i>${esc(v)}</span>` : '';
+  const pend = m.pendientes.sort((a, b) => String(a.vence).localeCompare(String(b.vence)));
+  return `<div class="re-ficha-top">
+      <div><div class="re-ficha-n"><i class="fas fa-building" aria-hidden="true"></i> ${esc(e.nombre)}${e.activo ? '' : ' <span class="re-inactiva">inactiva</span>'}</div>
+        <div class="re-ficha-d">${dato('fa-id-card', e.rif)}${dato('fa-user', e.contacto)}${dato('fa-phone', e.telefono)}${dato('fa-envelope', e.email)}<span><i class="fas fa-calendar-days" aria-hidden="true"></i>${Number(e.dias_credito) > 0 ? `Crédito ${e.dias_credito} días` : 'Pago al recibir'}</span></div></div>
+      <div class="re-ficha-acc">
+        <button class="pv-btn" type="button" data-re-accion="editar"><i class="fas fa-pen" aria-hidden="true"></i> Editar empresa</button>
+        <button class="pv-btn" type="button" data-re-accion="factura"><i class="fas fa-file-invoice" aria-hidden="true"></i> Nueva factura</button>
+        <button class="pv-btn primary" type="button" data-re-accion="lead"><i class="fas fa-user-plus" aria-hidden="true"></i> Nuevo lead</button></div></div>
+    ${pend.length ? `<div class="re-ficha-f"><div class="re-ficha-ft">Facturas por cobrar · ${pend.length}</div>${pend.map(f => `<button class="re-fila${f.vence < hoy ? ' venc' : ''}" type="button" data-re-accion="facturas">
+        <b>${esc(f.numero_txt || '#' + f.id)}</b><span>${esc(f.reserva_codigo || f.referencia || 'Sin reserva')}</span><span>${f.vence < hoy ? 'Venció' : 'Vence'} ${esc(pvFecha(f.vence))}</span><b>${money(f.total)}</b></button>`).join('')}</div>`
+      : '<div class="re-ficha-f re-ficha-ok"><i class="fas fa-check" aria-hidden="true"></i> Sin facturas por cobrar</div>'}`;
+}
+const reFacturaDe = id => RE_FACTURAS.find(f => f.reserva_id === id);
+function reFactChip(f) {
+  if (!f) return '<span class="re-fact sin">Sin facturar</span>';
+  const [t, cls] = f.estado === 'pagada' ? ['pagada', 'ok'] : f.vence < hoyCaracas() ? ['vencida', 'venc'] : ['por cobrar', 'pend'];
+  return `<span class="re-fact ${cls}" title="Factura ${esc(f.numero_txt || '')} · vence ${esc(pvFecha(f.vence))}"><i class="fas fa-file-invoice" aria-hidden="true"></i>${esc(f.numero_txt || 'Factura')} · ${t}</span>`;
+}
+function reMontosHtml(total, pagado) {
+  const pct = total > 0 ? Math.min(100, Math.round(pagado / total * 100)) : 0;
+  return `<div class="re-montos"><span>Total<b>${money(total)}</b></span><span>Pagado<b>${money(pagado)}</b></span><span>Saldo<b>${money(Math.max(0, total - pagado))}</b></span></div>
+    <div class="pv-progress${pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>`;
+}
+const reFaltaMonto = c => `<div class="pv-falta"><span class="pv-falta-t">Falta monto</span><button class="pv-falta-i" type="button" data-pv-open="${c.id}">Cargarlo en Gestionar</button></div>`;
+function reCardHtml(c) {
+  const total = Number(c.monto_total) || 0, f = reFacturaDe(c.id), ref = reRefDe(c);
+  const wa = String(c.telefono || '').replace(/\D/g, '');
+  return `<article class="pv-card re-card" data-id="${c.id}">
+      <div class="pv-card-top"><span class="pv-chip"><i class="fas fa-building" aria-hidden="true"></i>${esc(reNombreEmpresa(c.empresa_id))}</span>${reFactChip(f)}</div>
+      <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span class="re-cod">${esc(c.codigo || '')}</span></div>
+      <div class="pv-dest"><i class="fas fa-location-dot" aria-hidden="true"></i> ${esc(c.destino || 'Destino sin definir')} · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}</div>
+      <div class="pv-serv">${ref ? `<span><i class="fas fa-hashtag" aria-hidden="true"></i> OC <b>${esc(ref)}</b></span>` : ''}<span><i class="fas fa-user-tie" aria-hidden="true"></i> ${esc(c.asesor || 'Sin asesor')}</span></div>
+      ${total > 0 ? reMontosHtml(total, Number(c.monto_pagado) || 0) : reFaltaMonto(c)}
+      <div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${!f && total > 0 ? `<button class="pv-btn" data-re-facturar="${c.id}" type="button"><i class="fas fa-file-invoice" aria-hidden="true"></i> Facturar</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Abrir reserva</button></div>
+    </article>`;
+}
+// Mismo viaje = misma empresa, destino, fechas y proveedor (FCA manda un voucher por pasajero).
+function reAgrupar(lista) {
+  const m = new Map();
+  lista.forEach(c => {
+    const k = c.fecha_viaje_inicio ? [c.empresa_id, c.destino_id ?? c.destino ?? '', c.fecha_viaje_inicio, c.fecha_viaje_fin || '', c.proveedor || ''].join('|') : 'r' + c.id;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(c);
+  });
+  return [...m.entries()];
+}
+function reGrupoHtml(k, g) {
+  const c0 = g[0], n = v => Number(v) || 0, abierto = RE_ABIERTOS.has(k);
+  const total = g.reduce((s, c) => s + n(c.monto_total), 0), pagado = g.reduce((s, c) => s + n(c.monto_pagado), 0);
+  const sinMonto = g.filter(c => !(n(c.monto_total) > 0)).length, facturadas = g.filter(c => reFacturaDe(c.id)).length;
+  const refs = [...new Set(g.map(reRefDe).filter(Boolean))];
+  const fila = c => {
+    const t = n(c.monto_total), f = reFacturaDe(c.id), ref = reRefDe(c);
+    return `<li class="re-viajero"><div class="re-v-info"><b>${esc(c.nombre || 'Sin nombre')}</b><span>${esc(c.codigo || '')}${ref ? ' · OC ' + esc(ref) : ''} · ${t > 0 ? money(t) + (t > n(c.monto_pagado) ? ' · saldo ' + money(t - n(c.monto_pagado)) : '') : '<em>falta monto</em>'}</span></div>
+      ${reFactChip(f)}<div class="re-v-acc">${!f && t > 0 ? `<button class="pv-btn" data-re-facturar="${c.id}" type="button">Facturar</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Abrir</button></div></li>`;
+  };
+  return `<article class="pv-card re-card re-grupo">
+      <div class="pv-card-top"><span class="pv-chip"><i class="fas fa-building" aria-hidden="true"></i>${esc(reNombreEmpresa(c0.empresa_id))}</span><span class="re-fact"><i class="fas fa-users" aria-hidden="true"></i>${g.length} viajeros</span></div>
+      <div class="pv-name">${esc(c0.destino || 'Destino sin definir')}</div>
+      <div class="pv-dest"><i class="fas fa-calendar" aria-hidden="true"></i> ${esc(pvRangoViaje(c0.fecha_viaje_inicio, c0.fecha_viaje_fin))}</div>
+      <div class="pv-serv">${refs.length ? `<span><i class="fas fa-hashtag" aria-hidden="true"></i> OC <b>${esc(refs.join(', '))}</b></span>` : ''}<span><i class="fas fa-file-invoice" aria-hidden="true"></i> ${facturadas} de ${g.length} facturadas</span></div>
+      ${sinMonto ? `<div class="pv-falta"><span class="pv-falta-t">Falta monto</span><span>${sinMonto === g.length ? 'Ningún viajero tiene monto cargado' : `${sinMonto} de ${g.length} sin monto`}</span></div>` : ''}
+      ${total > 0 ? reMontosHtml(total, pagado) : ''}
+      <button class="re-toggle" type="button" data-re-toggle="${esc(k)}" aria-expanded="${abierto}">${abierto ? 'Ocultar' : 'Ver'} viajeros <i class="fas fa-chevron-${abierto ? 'up' : 'down'}" aria-hidden="true"></i></button>
+      ${abierto ? `<ul class="re-viajeros">${g.map(fila).join('')}</ul>` : ''}
+    </article>`;
 }
 const reRefDe = c => c.referencia_empresa || (RE_EMPRESAS.find(e => e.id === c.empresa_id)?.reservas || []).find(r => r.id === c.id)?.referencia || '';
 function reLeadCardHtml(l) {
@@ -25960,6 +26096,24 @@ function setupReservasEmpresas() {
   document.getElementById('re-refresh')?.addEventListener('click', loadReservasEmpresas);
   document.getElementById('re-search')?.addEventListener('input', e => { RE_BUSCAR = e.target.value; renderReservasEmpresas(); });
   document.getElementById('re-nuevo')?.addEventListener('click', () => abrirNuevoLead(RE_EMPRESA ? Number(RE_EMPRESA) : null));
+  document.getElementById('re-nueva-empresa')?.addEventListener('click', () => abrirEmpresaSheet(null, { alGuardar: loadReservasEmpresas }));
+  const facturar = (empresaId, reservaId = null) => { activateSection('facturas-empresa'); facturasEmpresa().facturarA(empresaId, reservaId); };
+  document.getElementById('re-grid')?.addEventListener('click', e => {
+    const t = e.target.closest('[data-re-toggle]');
+    if (t) { const k = t.dataset.reToggle; RE_ABIERTOS.has(k) ? RE_ABIERTOS.delete(k) : RE_ABIERTOS.add(k); renderReservasEmpresas(); return; }
+    const f = e.target.closest('[data-re-facturar]');
+    const c = f && RE_RESERVAS.find(x => x.id === Number(f.dataset.reFacturar));
+    if (c) facturar(c.empresa_id, c.id);
+  });
+  document.getElementById('re-ficha')?.addEventListener('click', e => {
+    const a = e.target.closest('[data-re-accion]')?.dataset.reAccion, id = Number(RE_EMPRESA);
+    if (!a || !id) return;
+    // La ficha lee EMP_CACHE (Directorio › Empresas); si esa sección no se abrió, sirve la misma lista.
+    if (a === 'editar') { if (!EMP_CACHE.some(x => x.id === id)) EMP_CACHE = RE_EMPRESAS.slice(); abrirEmpresaSheet(id, { alGuardar: loadReservasEmpresas }); }
+    else if (a === 'factura') facturar(id);
+    else if (a === 'facturas') activateSection('facturas-empresa');
+    else if (a === 'lead') abrirNuevoLead(id);
+  });
 }
 /* ---------- Comisiones por corte ----------
    La comisión nace sola cuando la reserva queda pagada completa (trigger en la base); al cerrar el

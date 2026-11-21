@@ -701,10 +701,12 @@ export function crearFacturasEmpresa(c) {
     await cargarLista();
   }
   // Desde la ficha de una empresa (botón «Facturar»): abre el editor con ella elegida.
-  async function facturarA(empresaId) {
+  async function facturarA(empresaId, reservaId = null) {
     await cargar();
     if (!montado) return;
-    nueva(empresaId); mostrarVista('editor');
+    nueva(empresaId);
+    if (reservaId) d.reserva_id = Number(reservaId);
+    mostrarVista('editor');
   }
   return { cargar, facturarA };
 }
