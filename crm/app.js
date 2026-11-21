@@ -6409,7 +6409,7 @@ function rvFormServicio(p) {
   }
   const destinos = destinosPorGrupo(RV_DESTINOS || []).map(([g, ds]) => `<optgroup label="${esc(g)}">${ds.map(d => `<option value="${d.id}" ${d.id === s?.destino_id ? 'selected' : ''}>${esc(d.nombre)}</option>`).join('')}</optgroup>`).join('');
   const sinCatalogo = s?.destino_id && !(RV_DESTINOS || []).some(d => d.id === s.destino_id) ? `<option value="${s.destino_id}" selected>${esc(s.destino || 'Destino ' + s.destino_id)}</option>` : '';
-  const tramosPrevios = s ? (RV_DET.tramos || []).filter(t => t.servicio_id === s.id) : [];
+  const tramosPrevios = s ? (s._importacion?.servicio.tramos || (RV_DET.tramos || []).filter(t => t.servicio_id === s.id)) : [];
   const esBoleto = s?.tipo === 'boleto_aereo';
   const t0 = tramosPrevios[0], tN = tramosPrevios[tramosPrevios.length - 1];
   const viaje = s?.detalle?.ida_vuelta === false ? 'ow'
@@ -14303,7 +14303,7 @@ async function efGuardarViajeros(reservaId, viajeros) {
 // un borrador en memoria (RV_BORRADOR). Nada toca la base hasta «Crear reserva», que manda todo junto a
 // crear_reserva_con_servicios (cada servicio pasa por guardar_servicio, igual que desde la reserva).
 let EF_PASO = 1, EF_COTS = [], EF_COT = null, EF_OPCION = 0;
-let EF_IMPORT = null, EF_CREADA = null, EF_ENVIANDO = false;
+let EF_IMPORT = null, EF_CREADA = null, EF_ENVIANDO = false, EF_AVANZANDO = null;
 function efImportViajeros(servicios) {
   const actuales = [...document.querySelectorAll('#ef-viajeros .ef-viajero')].map(f => ({ nom: f.querySelector('[data-v="n"]').value.trim(), ced: f.querySelector('[data-v="c"]').value.trim(), nino: f.dataset.nino === '1', identidades: JSON.parse(f.dataset.rviIdentidades || '[]') })).filter(p => p.nom || p.ced);
   const clave = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f\W]/g, '').toUpperCase();
@@ -14360,6 +14360,24 @@ function efBorradorCerrar() {
   RV_BORRADOR = null;
   const p = document.getElementById('ef-rv'); if (p) p.innerHTML = '';
 }
+async function efIrPaso(n) {
+  const control = EF_IMPORT, solicitud = EF_SOLICITUD;
+  if (!RV_BORRADOR || EF_ENVIANDO || EF_CREADA || (EF_AVANZANDO && EF_AVANZANDO === control)) return false;
+  if (n > 1 && control?.sucio) {
+    EF_AVANZANDO = control;
+    try {
+      const incorporado = await control.guardar();
+      if (control !== EF_IMPORT || solicitud !== EF_SOLICITUD || !RV_BORRADOR) return false;
+      if (!incorporado) {
+        efPaso(1);
+        document.getElementById('ef-err').textContent = 'Revisa los datos del documento y los avisos antes de continuar; todavía no se ha incorporado.';
+        document.getElementById('ef-documentos')?.scrollIntoView({ block: 'start' });
+        return false;
+      }
+    } finally { if (EF_AVANZANDO === control) EF_AVANZANDO = null; }
+  }
+  efPaso(n); return true;
+}
 function efPaso(n) {
   EF_PASO = n;
   document.querySelectorAll('#enviar-facturacion-sheet [data-ef-panel]').forEach(x => { x.hidden = Number(x.dataset.efPanel) !== n; });
@@ -14407,6 +14425,17 @@ function efFalta(s) {
 }
 const efPrecioTxt = s => s.precio_moneda === 'USD' ? money(Number(s.precio) || 0) : rvMonto(s.precio_centavos, s.precio_moneda);
 const efTitulo = s => s.tipo === 'hospedaje' ? s.detalle?.hotel : s.tipo === 'boleto_aereo' ? [s.detalle?.ruta, s.detalle?.aerolinea].filter(Boolean).join(' · ') : s.descripcion || s.detalle?.excursion || '';
+function efDocumentoResumen(s) {
+  const imp = s._importacion; if (!imp) return '';
+  const { tramos = [], pasajeros = [], boletos = [] } = imp.servicio;
+  const texto = xs => esc(xs.filter(Boolean).join(' · '));
+  return `<details open><summary>Datos del documento · ${tramos.length} ${tramos.length === 1 ? 'tramo' : 'tramos'} · ${pasajeros.length} ${pasajeros.length === 1 ? 'pasajero' : 'pasajeros'} · ${boletos.length} ${boletos.length === 1 ? 'boleto' : 'boletos'}</summary>
+    ${s.localizador ? `<div class="csub">Localizador: ${esc(s.localizador)}</div>` : ''}
+    ${tramos.length ? `<ul class="csub">${tramos.map(t => `<li>${texto([`${t.origen_iata} → ${t.destino_iata}`, t.numero_vuelo && `Vuelo ${t.numero_vuelo}`, t.sale_en && `Salida ${t.sale_en.replace('T', ' ')}`, t.llega_en && `Llegada ${t.llega_en.replace('T', ' ')}`, t.clase && `Clase ${t.clase}`])}</li>`).join('')}</ul>` : ''}
+    ${pasajeros.length ? `<ul class="csub">${pasajeros.map(p => `<li>${texto([[p.nombre, p.apellido].filter(Boolean).join(' '), [p.tipo_documento, p.numero_documento].filter(Boolean).join(' '), p.nacimiento, p.nacionalidad, ...boletos.filter(b => b.pasajero_clave === p.clave).map(b => `Boleto ${b.numero_ticket}`)])}</li>`).join('')}</ul>` : ''}
+    ${imp.archivos.length ? `<div class="csub">Adjuntos al confirmar: ${imp.archivos.map(a => esc(a.file.name)).join(' · ')}</div>` : ''}
+    <div class="csub">Completa el precio de venta; no se toma del documento.</div></details>`;
+}
 function efBorradorCard(s) {
   const falta = efFalta(s), [nombre, icono] = RV_TIPOS[s.tipo] || [s.tipo, 'fa-circle-dot'];
   const titulo = efTitulo(s), sub = rvServicioSub(s).filter(Boolean).join(' · ');
@@ -14414,6 +14443,7 @@ function efBorradorCard(s) {
     <div class="ef-serv-top"><b><i class="fas ${icono}"></i>${esc(nombre)}</b><span class="ef-b-precio">${esc(efPrecioTxt(s))}</span></div>
     ${titulo ? `<div class="ef-b-tit">${esc(titulo)}</div>` : ''}
     ${sub ? `<div class="csub">${esc(sub)}</div>` : ''}
+    ${efDocumentoResumen(s)}
     ${s.detalle?.producto_id ? '<div class="csub ef-b-tar"><i class="fas fa-link"></i> Ligado al tarifario</div>' : ''}
     ${falta ? `<div class="ef-b-aviso"><i class="fas fa-triangle-exclamation"></i> ${esc(falta)}</div>` : ''}
     <div class="ef-b-acc"><button type="button" class="btn-sm" data-rv-accion="editar-servicio" data-id="${s.id}"><i class="fas fa-pen"></i> ${falta ? 'Completar' : 'Editar'}</button>
@@ -14853,12 +14883,12 @@ window.addEventListener('popstate', selLotusCerrar);
   if (!document.getElementById('ef-pasos') || !document.getElementById('ef-rv') || !document.getElementById('ef-cot')) return;
   const err = () => document.getElementById('ef-err');
   document.getElementById('ef-pasos').addEventListener('click', e => {
-    const b = e.target.closest('[data-ef-paso]'); if (b && RV_BORRADOR) { err().textContent = ''; efPaso(Number(b.dataset.efPaso)); }
+    const b = e.target.closest('[data-ef-paso]'); if (b && RV_BORRADOR) { err().textContent = ''; void efIrPaso(Number(b.dataset.efPaso)); }
   });
   document.getElementById('ef-siguiente').addEventListener('click', () => {
     err().textContent = '';
     if (EF_PASO === 2 && !RV_BORRADOR?.servicios.length) { err().textContent = 'Agrega al menos un servicio'; return; }
-    efPaso(Math.min(3, EF_PASO + 1));
+    void efIrPaso(Math.min(3, EF_PASO + 1));
   });
   document.getElementById('ef-rv').addEventListener('click', e => {
     if (!RV_BORRADOR) return;

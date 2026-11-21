@@ -125,7 +125,7 @@ export function crearImportacionServicio(c) {
   }
   async function guardar() {
     if (!datos) return false;
-    if (ocupado) return true;
+    if (ocupado) { mensaje('Espera a que termine la lectura del documento antes de continuar.', true); return false; }
     const reintento = !!pendiente;
     try {
       if (!pendiente) {
@@ -134,6 +134,7 @@ export function crearImportacionServicio(c) {
         const preparar = documentos => prepararGuardadoImportacion({ datos, base: c.leerBase(), reservaId: c.reservaId, servicio: c.servicio, operacionId, documentos, seleccion, precios, aerolineas: c.aerolineas?.() || [], reemplazarTramos: reemplazar });
         if (c.alBorrador) {
           const lote = preparar([]);
+          bloqueo('guardando');
           await c.alBorrador({ ...lote, archivos: archivos.map(a => ({ file: a.file, mime: a.mime, sha256: a.sha256, grupo: lote.servicios[Math.max(0, datos.grupos.findIndex(g => g.clave === a.grupo))]?.clave })) });
           limpiar(); mensaje('Documentos incorporados al borrador. Completa los precios en Servicios; se adjuntarán al crear la reserva.'); return true;
         }
@@ -163,7 +164,7 @@ export function crearImportacionServicio(c) {
       if (data?.ok === false) { pendiente = null; throw new Error(`${data?.error || 'Importación rechazada'}${data?.etapa ? ' · ' + data.etapa : ''}${data?.causa ? ': ' + data.causa : ''}. No se guardaron registros.`); }
       if (data?.ok !== true || !Array.isArray(data.servicios) || !data.servicios.length) throw new Error('Respuesta incompleta: reintenta el mismo guardado para confirmar el resultado.');
       pendiente = null; ocupado = ''; datos = null; await c.alGuardar(data); return true;
-    } catch (e) { mensaje(e.message || 'No se pudo guardar. La revisión sigue disponible.', true); return true; }
+    } catch (e) { mensaje(e.message || 'No se pudo guardar. La revisión sigue disponible.', true); return false; }
     finally { if (vigente()) { bloqueo(''); if (pendiente) { render(); mensaje('Resultado pendiente de confirmación. Reintenta la misma operación; no se duplicará.', true); } } }
   }
   c.root.addEventListener('input', e => {
