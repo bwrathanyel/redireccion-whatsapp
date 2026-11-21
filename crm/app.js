@@ -5651,6 +5651,7 @@ function rviaFinCalculado() {
   return f.length ? f[f.length - 1] : '';
 }
 async function rviaPasajerosBoletos(id) {
+  if (!(RV_DET?.documentos || []).some(d => d.tipo === 'boleto')) { rvTab('servicios'); errToast('Sube primero el PDF del boleto en Servicios > boleto aéreo > Tickets.'); return false; }
   const { data, error } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: id });
   if (error || !data?.ok) throw new Error('no pude leer los boletos');
   const docs = new Map((RV_DET.documentos || []).map(d => [d.id, d]));
@@ -5699,8 +5700,7 @@ async function rviaFinViaje() {
   return true;
 }
 const RVIA_ACCIONES = {
-  pasajeros_boletos: { texto: 'Tomar pasajeros de los boletos', icono: 'fa-user-plus', aplicar: rviaPasajerosBoletos,
-    disponible: () => (RV_DET?.documentos || []).some(d => d.tipo === 'boleto') },
+  pasajeros_boletos: { texto: 'Tomar pasajeros de los boletos', icono: 'fa-user-plus', aplicar: rviaPasajerosBoletos, disponible: () => true },
   fin_viaje: { texto: 'Usar fecha del último servicio', icono: 'fa-calendar-check', aplicar: rviaFinViaje, disponible: () => !!rviaFinCalculado() },
 };
 function rviaAccionDe(h) {
