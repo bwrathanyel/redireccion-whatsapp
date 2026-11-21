@@ -4428,10 +4428,13 @@ async function loadPostventa(silencioso) {
   if (!grid || ROL === 'marketing') return;
   if (!silencioso || !grid.children.length) grid.innerHTML = '<div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div>';
   const busqueda = document.getElementById('pv-search')?.value.trim() || null;
-  const [resumen, bandeja] = await Promise.all([
+  const [resumen, bandeja, revIa] = await Promise.all([
     sb.rpc('postventa_resumen'),
     sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: busqueda }),
+    sb.rpc('reserva_revision_ia_listar'),
   ]);
+  // Sin la revisión IA (error o rol sin acceso) la bandeja sigue igual, solo sin la marca.
+  if (!revIa.error && revIa.data?.ok) RVIA_MAPA = new Map((revIa.data.reservas || []).map(r => [Number(r.reserva_id), r]));
   if (resumen.error || bandeja.error) {
     console.error('postventa', resumen.error || bandeja.error);
     grid.innerHTML = '<div class="pv-empty"><i class="fas fa-triangle-exclamation"></i>No se pudo cargar postventa</div>';
@@ -4460,13 +4463,14 @@ const PV_RAPIDOS = {
   documentos: ['falta voucher', 'fa-folder-open', 'var(--blue)', c => (c.falta_resumen || []).some(f => f.codigo === 'voucher')],
   volvio: ['ya viajaron', 'fa-house-chimney', 'var(--muted)', c => pvViaje(c).bucket === 'volvio'],
   incidencia: ['con incidencia', 'fa-triangle-exclamation', 'var(--danger)', c => !!c.incidencia_abierta],
+  revision_ia: ['revisión IA', 'fa-robot', 'var(--amber)', c => RVIA_MAPA.has(c.id)],
 };
 function renderPvResumen(lista) {
   const el = document.getElementById('pv-resumen');
   if (!el) return;
   el.innerHTML = Object.entries(PV_RAPIDOS).map(([k, [t, ic, col, f]]) => {
     const sel = lista.filter(f), n = sel.length, on = PV_RAPIDO === k;
-    if (!n && !on && k === 'incidencia') return '';
+    if (!n && !on && (k === 'incidencia' || k === 'revision_ia')) return '';
     const extra = k === 'saldo' && n ? ` · ${money(sel.reduce((s, c) => s + Number(c.saldo_pendiente || 0), 0))}` : '';
     return `<button type="button" class="pv-rap${on ? ' on' : ''}" data-rapido="${k}" style="--tc:${col}" aria-pressed="${on}"${n || on ? '' : ' disabled'}><i class="fas ${ic}" aria-hidden="true"></i><b>${fmt(n)}</b> ${t}${extra}</button>`;
   }).join('');
@@ -4873,7 +4877,7 @@ function pvCardHtml(c, extra = '', accesos = false) {
       <div class="pv-name">${esc(c.nombre || 'Sin nombre')} <span style="font-size:10.5px;font-weight:500;color:var(--muted2)">${esc(c.codigo || '')}${c.principal === false ? ' · adicional' : ''}</span></div><div class="pv-dest"><i class="fas fa-location-dot"></i> ${esc(c.destino || c.servicio || 'Destino sin definir')}${falta === null ? '' : ` · ${esc(pvRangoViaje(c.fecha_viaje_inicio, c.fecha_viaje_fin))}`}</div>${ROL !== 'asesor' && c.asesor ? `<div class="pv-dest pv-asesor-l"><i class="fas fa-user-tie" aria-hidden="true"></i> ${esc(c.asesor)}</div>` : ''}${extra}
       <div class="pv-money-row"><span>Pagado <b>${money(pagado)}</b></span><span>${pagado > total ? 'Saldo a favor' : 'Saldo'} <b>${money(pagado > total ? pagado - total : Math.max(0, Number(c.saldo_pendiente) || 0))}</b></span></div>
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
-      ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}
+      ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}${rviaChip(c.id)}
       ${accesos ? `<div class="pv-card-foot pv-card-accesos">
         <button class="pv-btn pv-voucher" data-pv-voucher-ver="${c.id}" type="button" aria-label="Ver el voucher más reciente"><i class="fas fa-ticket" aria-hidden="true"></i> Voucher</button>
         <button class="pv-btn" data-pv-open="${c.id}" data-pv-inicio="estado" type="button"><i class="fas fa-pen" aria-hidden="true"></i> Cambiar estado</button>
@@ -5123,6 +5127,7 @@ function abrirPostventa(c, accionInicial = null) {
   document.getElementById('drawerContent').innerHTML = `
     <div class="dhead"><div class="dava" style="background:var(--accent-soft);color:var(--accent-ink)"><i class="fas fa-handshake-angle"></i></div><div><div class="dn">${esc(c.nombre)}</div><div class="dm">${esc(c.codigo || '')}${c.principal === false ? ' (adicional)' : ''} · ${esc(c.destino || c.servicio || 'Postventa')} · ${esc(c.asesor || 'Sin asignar')}</div></div></div>
     <div class="seg-group seg-group-sm rv-tabs">${rvTabsHtml(true)}</div>
+    <div id="rv-revision-ia" hidden></div>
     <div data-rv-panel="resumen"><div class="rs-wrap">
       <section class="pv-reserva-accesos" aria-label="Acciones rápidas de la reserva">
         <div class="pv-estado-linea"><div><span class="rs-lbl">Estado de la reserva</span><strong id="pv-e-etapa-txt">${esc((PV_ETAPAS[c.etapa] || [c.etapa])[0])}</strong></div>
@@ -5619,6 +5624,35 @@ async function rvCargar() {
   RV_DET = data;
   rvRender();
   rvTkCargarIa();
+  if (data.vista === 'admin' || data.vista === 'asesor') rviaCargar(id, apertura);
+}
+// Revisión IA (dueño 20-nov): lo que la IA vio que falta o está mal en la reserva. No bloquea nada
+// (el voucher sale igual); «Ya lo revisé» la cierra hasta que la reserva cambie y aparezca algo nuevo.
+let RVIA_MAPA = new Map();
+const RVIA_NIVEL = { falta: ['Falta', 'var(--amber)'], error: ['Parece mal', 'var(--danger)'], revisar: ['Revisar', 'var(--muted)'] };
+const rviaChip = id => { const r = RVIA_MAPA.get(Number(id)); const n = r?.hallazgos?.length || 0;
+  return n ? `<div class="pv-meta"><span class="rvia-chip" title="${esc(r.hallazgos.map(h => h.texto).join('\n'))}"><i class="fas fa-robot" aria-hidden="true"></i>IA: ${n} ${n === 1 ? 'cosa' : 'cosas'} por revisar</span></div>` : ''; };
+async function rviaCargar(id, apertura) {
+  const { data, error } = await sb.rpc('reserva_revision_ia_ver', { p_reserva_id: id });
+  const box = document.getElementById('rv-revision-ia');
+  if (!box || apertura !== RV_APERTURA || id !== RV_RESERVA_ID) return;
+  const r = !error && data?.ok ? data.revision : null;
+  const hs = r && !r.resuelta_en ? (r.hallazgos || []) : [];
+  box.hidden = !hs.length;
+  if (!hs.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<section class="rvia" aria-label="Revisión IA de la reserva">
+    <div class="rvia-top"><b><i class="fas fa-robot" aria-hidden="true"></i> La IA revisó esta reserva</b><span>${esc(tiempoRelativo(r.revisada_en))}</span></div>
+    <ul>${hs.map(h => { const [t, c] = RVIA_NIVEL[h.nivel] || RVIA_NIVEL.revisar; return `<li><span class="rvia-tag" style="--tc:${c}">${t}</span>${esc(h.texto)}</li>`; }).join('')}</ul>
+    <div class="rvia-pie"><span>No bloquea nada: el voucher se genera igual.</span><button class="pv-btn" type="button" data-rvia-listo><i class="fas fa-check" aria-hidden="true"></i> Ya lo revisé</button></div></section>`;
+  const btn = box.querySelector('[data-rvia-listo]');
+  btn.onclick = async () => {
+    btn.disabled = true;
+    const res = await sb.rpc('reserva_revision_ia_resolver', { p_reserva_id: id });
+    if (res.error || !res.data?.ok) { btn.disabled = false; return errToast('No se pudo marcar como revisada'); }
+    box.hidden = true; box.innerHTML = '';
+    RVIA_MAPA.delete(Number(id));
+    if (currentSec === 'postventa') renderPostventa();
+  };
 }
 function pvVouchersPintar(detalle) {
   const lista = document.getElementById('pv-voucher-lista'); if (!lista) return;
@@ -14972,7 +15006,7 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   // Pago en Bs leído del comprobante y sin tocar el monto: va el monto exacto en Bs (la cuenta en Bs sale de ahí).
   const ves = pagado > 0 && EF_OCR?.datos?.moneda === 'VES' && Number(EF_OCR.datos.monto) > 0 && EF_OCR.usd != null && Math.abs(pagado - EF_OCR.usd) < 0.005;
   // Una sola llamada crea la reserva con sus servicios y registra el abono; si algo falla no
-  // queda nada a medias (crear_reserva_con_servicios). El abono del asesor queda por verificar.
+  // queda nada a medias (crear_reserva_con_servicios). El abono del asesor cuenta ya, por conciliar.
   const { data, error } = await sb.rpc('crear_reserva_con_servicios', {
     p_lead_id: EF_LEAD_ACTUAL.id,
     p_servicios: ss.map(efServicioDatos),
@@ -15291,14 +15325,15 @@ function pagoWebCard(p) {
     </div>`;
 }
 
-// Finanzas Fase 1: abono que cargó un asesor en la reserva. No suma al pagado hasta verificarlo.
+// Abono que cargó un asesor. Desde el 20-nov ya cuenta (pagado, voucher, recibo) y queda «por conciliar»:
+// oficina lo coteja con el banco sin frenar al asesor. Rechazarlo lo saca del pagado.
 function pagoAbonoCard(p) {
   const bs = p.moneda === 'VES' ? `Bs ${Number(p.monto_original).toLocaleString('es-VE', { minimumFractionDigits: 2 })} · tasa ${p.tasa_usd_ves}` : '';
   const saldo = Math.max(0, Number(p.monto_total || 0) - Number(p.monto_pagado || 0));
   return `
     <div class="entity-card inbox-card" data-pago="${esc(p.id)}">
       <div class="ec-top"><div class="ec-nombre">${esc(p.lead_nombre || 'Sin nombre')}</div>
-        <span class="badge-st" style="color:var(--amber)">Abono por verificar</span></div>
+        <span class="badge-st" style="color:var(--amber)" title="${p.por_conciliar ? 'Ya cuenta en el pagado y el voucher' : 'No suma al pagado hasta verificarlo'}">${p.por_conciliar ? 'Abono por conciliar' : 'Abono por verificar'}</span></div>
       <div style="margin-top:10px;${PAGO_WEB_MONO};font-size:22px;font-weight:800;line-height:1.2;color:var(--txt)">$${esc(pagoWebDec(Number(p.monto_usd) * 100))}</div>
       <div class="ec-row" style="margin-top:2px">${esc([p.metodo, bs].filter(Boolean).join(' · '))}</div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
@@ -15309,10 +15344,10 @@ function pagoAbonoCard(p) {
       <div class="ec-row"><i class="fas fa-user"></i> ${esc(p.asesor || 'Sin asignar')}${p.creado_por && p.creado_por !== p.asesor ? ' · cargó ' + esc(p.creado_por) : ''}</div>
       <div class="ec-row"><i class="fas fa-clock"></i> Cargado ${esc(tiempoRelativo(p.fecha))}</div>
       ${p.nota ? `<div class="ec-row"><i class="fas fa-note-sticky"></i> ${esc(p.nota)}</div>` : ''}
-      ${PAGOS_PROBLEMAS.get(p.abono_id) ? `<div class="ec-row" style="color:var(--amber)"><i class="fas fa-robot"></i> Lyra: ${esc(PAGOS_PROBLEMAS.get(p.abono_id))}</div>` : ''}
+      ${PAGOS_PROBLEMAS.get(p.abono_id) || p.problema ? `<div class="ec-row" style="color:var(--amber)"><i class="fas fa-robot"></i> Lyra: ${esc(PAGOS_PROBLEMAS.get(p.abono_id) || p.problema)}</div>` : ''}
       <div class="inbox-actions">
         ${p.comprobante_path ? `<button type="button" class="inbox-btn pagos-sec" data-abono-comprobante="${p.abono_id}"><i class="fas fa-receipt"></i> Ver comprobante</button>` : '<span class="ec-row" style="color:var(--amber)"><i class="fas fa-triangle-exclamation"></i> Sin comprobante</span>'}
-        <button type="button" class="inbox-btn atender" data-abono-verificar="${p.abono_id}"><i class="fas fa-check"></i> Verificar</button>
+        <button type="button" class="inbox-btn atender" data-abono-verificar="${p.abono_id}"><i class="fas fa-check"></i> ${p.por_conciliar ? 'Llegó al banco' : 'Verificar'}</button>
         <button type="button" class="inbox-btn nopuedo" data-abono-rechazar="${p.abono_id}"><i class="fas fa-xmark"></i> Rechazar</button>
         <button type="button" class="inbox-btn" data-abono-reserva="${p.abono_id}"><i class="fas fa-folder-open"></i> Ver reserva</button>
       </div>
@@ -15324,14 +15359,15 @@ async function verificarAbonoTablero(abonoId, aprobar, btn) {
   if (!p) return;
   let motivo = null;
   if (!aprobar) {
-    motivo = await pedirTexto({ titulo: 'Rechazar abono', detalle: `$${pagoWebDec(Number(p.monto_usd) * 100)} · ${p.metodo}${p.referencia ? ' · ' + p.referencia : ''} · ${p.codigo}. No suma al pagado; el asesor ve el motivo y puede corregirlo.`,
+    motivo = await pedirTexto({ titulo: 'Rechazar abono', detalle: `$${pagoWebDec(Number(p.monto_usd) * 100)} · ${p.metodo}${p.referencia ? ' · ' + p.referencia : ''} · ${p.codigo}. ${p.por_conciliar ? 'Sale del pagado (el voucher ya emitido queda viejo: actualízalo desde la reserva)' : 'No suma al pagado'}; el asesor ve el motivo y puede corregirlo.`,
       label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Rechazar', destructivo: true });
     if (!motivo) return;
   }
   if (btn) btn.disabled = true;
   try {
     await verificarAbono(sb, abonoId, aprobar, motivo);
-    okToast(aprobar ? `Abono verificado en ${p.codigo}. Voucher y recibo: abre la reserva y toca «Generar documentos».` : 'Abono rechazado.');
+    okToast(aprobar ? (p.por_conciliar ? `Abono conciliado en ${p.codigo}.` : `Abono verificado en ${p.codigo}. Voucher y recibo: abre la reserva y toca «Generar documentos».`)
+      : p.por_conciliar ? `Abono rechazado: salió del pagado de ${p.codigo}. Actualiza el voucher desde la reserva.` : 'Abono rechazado.');
     loadPagos(true);
   } catch (e) { errToast(e.message); if (btn?.isConnected) btn.disabled = false; }
 }

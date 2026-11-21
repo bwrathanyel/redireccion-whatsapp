@@ -43,7 +43,7 @@ const ERRORES = {
   orden_desactualizado: 'Los abonos cambiaron mientras los ordenabas: se recargó la lista, vuelve a ordenarlos.',
   abono_no_pendiente: 'Ese abono ya no está por verificar: otra persona lo resolvió. Recarga.',
   datos_invalidos: 'Faltan datos para verificar el abono.',
-  abono_verificado: 'Ese abono ya fue verificado por administración: pídele a administración que corrija el monto, el método o la referencia.',
+  abono_verificado: 'Ese abono ya fue conciliado con el banco por administración: pídele a administración que corrija el monto, el método o la referencia.',
   destino_invalido: 'Elige otra reserva para aplicar el saldo.',
   otro_cliente: 'Esa reserva es de otro cliente (otro teléfono): el saldo a favor solo pasa entre reservas del mismo cliente.',
   sin_saldo_a_favor: 'La reserva ya no tiene saldo a favor. Recarga.',
@@ -157,7 +157,8 @@ export function crearAbonos(c) {
     const { data, error } = await sb.rpc('tasas_del_dia', { p_fecha: f });
     return error || !data ? null : data;
   }
-  // Finanzas Fase 1: solo lo verificado suma al pagado y entra al voucher. Lo por verificar sí ocupa saldo.
+  // Lo verificado suma al pagado y entra al voucher; desde el 20-nov el del asesor nace verificado y
+  // «por conciliar» (oficina lo coteja con el banco después). 'por_verificar' queda solo de legado.
   const cuenta = a => !a.anulado_en && (a.estado || 'verificado') === 'verificado';
   const ocupa = a => !a.anulado_en && a.estado !== 'rechazado';
   const oficina = () => !!c.oficina?.();
@@ -428,7 +429,7 @@ export function crearAbonos(c) {
         ${serv ? `<span class="ab-tag" title="${esc(nombreServ(serv))}">${esc(TIPO_SERV[serv.tipo] || serv.tipo)}</span>` : ''}
         ${/^inicial/i.test(a.nota || '') ? '<span class="ab-tag">Inicial reserva</span>' : ''}
         ${a.respaldo ? '<span class="ab-tag ab-respaldo" title="Lo cobrado antes de que existiera el registro de abonos: no tiene recibo propio">Cobrado antes</span>' : ''}
-        ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : a.estado === 'por_verificar' ? '<span class="ab-tag ab-pend-tag" title="Suma al pagado cuando administración lo verifique">Por verificar</span>' : a.estado === 'rechazado' ? '<span class="ab-tag ab-anulada-tag">Rechazado</span>' : ''}
+        ${a.anulado_en ? '<span class="ab-tag ab-anulada-tag">Anulado</span>' : a.por_conciliar && a.estado === 'verificado' ? '<span class="ab-tag ab-pend-tag" title="Ya cuenta en el pagado y en el voucher. Administración lo coteja con el banco">Por conciliar</span>' : a.estado === 'por_verificar' ? '<span class="ab-tag ab-pend-tag" title="Suma al pagado cuando administración lo verifique">Por verificar</span>' : a.estado === 'rechazado' ? '<span class="ab-tag ab-anulada-tag">Rechazado</span>' : ''}
       </div>
       <p class="ab-fila-sub">${esc(c.fecha(a.fecha))}${ref}${a.asesor ? ' · ' + esc(a.asesor) : ''}</p>
       ${pos ? `<p class="ab-acum">Lleva abonado <b>${usd(acum)}</b> <span>de ${usd(total)} · resta ${usd(Math.max(0, total - acum))}</span></p>` : ''}
@@ -436,7 +437,7 @@ export function crearAbonos(c) {
           : oficina() ? `<div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="deshacer-${rb ? 'reembolso' : 'traslado'}" data-tr="${esc(a.traslado_id)}">Deshacer ${rb ? 'reembolso' : 'traslado'}</button></div>` : '')
         : a.anulado_en ? `<p class="ab-fila-sub">Anulado: ${esc(a.anulado_motivo || 'sin motivo')}</p>
         <div class="ab-fila-acc"><button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button></div>`
-        : a.estado === 'por_verificar' || a.estado === 'rechazado' ? `${a.estado === 'rechazado' ? `<p class="ab-fila-sub">Rechazado: ${esc(a.rechazado_motivo || 'sin motivo')}${oficina() ? '' : '. Corrígelo con «Editar» y vuelve a verificación.'}</p>` : ''}
+        : a.estado === 'por_verificar' || a.estado === 'rechazado' ? `${a.estado === 'rechazado' ? `<p class="ab-fila-sub">Rechazado: ${esc(a.rechazado_motivo || 'sin motivo')}${oficina() ? '' : '. Corrígelo con «Editar» y vuelve a contar en el pagado.'}</p>` : ''}
         <div class="ab-fila-acc">
           ${btnComprobante(a)}
           ${a.estado === 'por_verificar' && oficina() ? `<button class="ab-mini" type="button" data-ab-accion="verificar" data-id="${a.id}"><i class="fas fa-check"></i>Verificar</button>
@@ -449,6 +450,8 @@ export function crearAbonos(c) {
           ${a.recibo_documento_id ? `<button class="ab-mini" type="button" data-ab-accion="recibo" data-id="${a.recibo_documento_id}"><i class="fas fa-file-pdf"></i>Recibo</button>` : ''}
           ${a.documentos_estado && a.documentos_estado !== 'listo' ? `<span class="ab-docs${a.documentos_estado === 'fallido' ? ' fallo' : ''}" title="${esc(a.documentos_error || '')}">${a.documentos_estado === 'fallido' ? 'Documentos con error' : 'Documentos pendientes'}</span>
             <button class="ab-mini" type="button" data-ab-accion="reintentar" data-id="${a.id}"><i class="fas fa-rotate"></i>${a.documentos_estado === 'fallido' ? 'Reintentar documentos' : 'Generar documentos'}</button>` : ''}
+          ${a.por_conciliar && oficina() ? `<button class="ab-mini" type="button" data-ab-accion="verificar" data-id="${a.id}" title="El dinero llegó al banco"><i class="fas fa-check"></i>Conciliar</button>
+          <button class="ab-mini" type="button" data-ab-accion="rechazar" data-id="${a.id}" title="El dinero no llegó: sale del pagado"><i class="fas fa-xmark"></i>Rechazar</button>` : ''}
           <button class="ab-mini" type="button" data-ab-accion="editar" data-id="${a.id}"><i class="fas fa-pen"></i>Editar</button>
           <button class="ab-anular" type="button" data-ab-accion="eliminar" data-id="${a.id}">Eliminar abono</button>
         </div>`}
@@ -735,7 +738,7 @@ export function crearAbonos(c) {
     if (!data?.ok) throw new Error(data?.error || 'Sin respuesta del servidor');
     est.archivo = null; est.solicitud = null;
     est.formAbierto = false;
-    // Abono de asesor: queda por verificar. Voucher y recibo salen cuando administración lo verifica.
+    // Legado: un servidor viejo devolvía 'por_verificar' para el asesor. Hoy nace verificado y sigue a documentos.
     if (data.estado === 'por_verificar') {
       c.ok(`Abono enviado a verificación · ${usd(data.monto_usd)}. Suma al pagado cuando administración lo confirme.`);
       est.datos = null;
@@ -827,7 +830,7 @@ export function crearAbonos(c) {
         return;
       }
       let docs = { fallo: null };
-      // Por verificar o rechazado: sin documentos hasta que administración lo apruebe.
+      // Rechazado (o legado por verificar): no cuenta, sin documentos.
       if (data.estado && data.estado !== 'verificado') { c.ok(`Abono editado${adjunto} · ${data.estado === 'por_verificar' ? 'queda por verificar' : 'sigue rechazado'}`); est.datos = null; await cargar(est.reservaId); c.pagosCambiaron?.(); return; }
       if (data.documentos_estado !== 'listo') docs = await cadenaAbono({
         id: data.abono_id, monto_usd: data.monto_usd, monto_original: data.monto_original,
@@ -1137,7 +1140,7 @@ export function crearAbonos(c) {
     if (!a || est.guardando) return;
     let motivo = null;
     if (!aprobar) {
-      motivo = await c.pedir({ titulo: 'Rechazar abono', detalle: `${usd(a.monto_usd)} · ${a.metodo}${a.referencia ? ' · ' + a.referencia : ''}. No suma al pagado; el asesor ve el motivo y puede corregirlo.`,
+      motivo = await c.pedir({ titulo: 'Rechazar abono', detalle: `${usd(a.monto_usd)} · ${a.metodo}${a.referencia ? ' · ' + a.referencia : ''}. ${a.por_conciliar ? 'Sale del pagado (el voucher ya emitido queda viejo)' : 'No suma al pagado'}; el asesor ve el motivo y puede corregirlo.`,
         label: 'Motivo', tipo: 'textarea', requerido: true, textoOk: 'Rechazar', destructivo: true });
       if (!motivo) return;
     }
@@ -1146,7 +1149,9 @@ export function crearAbonos(c) {
       const data = await verificarAbono(sb, id, aprobar, motivo);
       c.pagosCambiaron?.();
       // Rechazo, o ya lo había resuelto otra persona (sus documentos los armó quien lo verificó).
-      if (!aprobar || data.reutilizado) { est.datos = null; await cargar(est.reservaId); return c.ok(!aprobar ? 'Abono rechazado.' : 'Ese abono ya estaba verificado.'); }
+      if (!aprobar || data.reutilizado) { est.datos = null; await cargar(est.reservaId); return c.ok(!aprobar ? (data.conciliado ? 'Abono rechazado: salió del pagado. Actualiza el voucher desde Voucher.' : 'Abono rechazado.') : 'Ese abono ya estaba verificado.'); }
+      // Por conciliar: ya contaba y ya tiene sus documentos; solo queda conciliado.
+      if (data.conciliado) { est.datos = null; await cargar(est.reservaId); return c.ok('Abono conciliado con el banco.'); }
       const docs = await cadenaAbono({ id, monto_usd: data.monto_usd, monto_original: data.monto_original, moneda: data.moneda,
         tasa_usd_ves: data.tasa_usd_ves, tasa_tipo: data.tasa_tipo, metodo: data.metodo, referencia: data.referencia,
         servicio_id: data.servicio_id ?? null, fecha: data.fecha }, data.monto_pagado, data.saldo_pendiente);

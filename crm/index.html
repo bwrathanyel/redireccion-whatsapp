@@ -5355,6 +5355,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pv-progress.full span{background:var(--green)}
 .pv-falta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:9px 10px;margin:6px 0;border-radius:10px;background:color-mix(in srgb,var(--amber) 8%,transparent);border:1px solid color-mix(in srgb,var(--amber) 22%,transparent)}
 .pv-falta-t{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--amber)}
+/* Revisión IA de la reserva (no bloquea): chip en la tarjeta y caja en el cajón */
+.rvia-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--amber)}
+.rvia{margin:10px 0 4px;padding:11px 12px;border-radius:12px;background:color-mix(in srgb,var(--amber) 8%,transparent);border:1px solid color-mix(in srgb,var(--amber) 24%,transparent)}
+.rvia-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px;color:var(--txt)}
+.rvia-top b i{color:var(--amber);margin-right:4px}
+.rvia-top span{font-size:11px;color:var(--muted)}
+.rvia ul{list-style:none;margin:8px 0;padding:0;display:grid;gap:6px}
+.rvia li{font-size:12.5px;line-height:1.4;color:var(--txt);display:flex;gap:8px;align-items:baseline}
+.rvia-tag{flex:none;font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--tc);min-width:68px}
+.rvia-pie{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
 .pv-falta-i{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;background:color-mix(in srgb,var(--amber) 15%,transparent);color:var(--amber)}
 .pv-falta-i.overdue{color:#fb7185}
 button.pv-falta-i{border:0;font-family:inherit;line-height:inherit;cursor:pointer;transition:background .16s}
