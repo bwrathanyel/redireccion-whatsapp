@@ -5652,8 +5652,21 @@ function rviaFinCalculado() {
 }
 async function rviaPasajerosBoletos(id) {
   if (!(RV_DET?.documentos || []).some(d => d.tipo === 'boleto')) { rvTab('servicios'); errToast('Sube primero el PDF del boleto en Servicios > boleto aéreo > Tickets.'); return false; }
-  const { data, error } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: id });
+  let { data, error } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: id });
   if (error || !data?.ok) throw new Error('no pude leer los boletos');
+  // Los boletos subidos por la importación no guardan lectura IA: se leen ahora (analizar-ticket la guarda).
+  const leidos = new Set((data.documentos || []).map(x => x.documento_id));
+  const sinLeer = (RV_DET.documentos || []).filter(d => d.tipo === 'boleto' && !d.anulado_en && !leidos.has(d.id));
+  let fallos = 0;
+  for (const d of sinLeer) {
+    try {
+      const r = await fetch(await rvTkUrl(d.id, true)); if (!r.ok) throw new Error('descarga');
+      const contenido = await rvTkContenido(new File([await r.blob()], d.nombre, { type: d.mime }));
+      const a = await sb.functions.invoke('analizar-ticket', { body: { documento_id: d.id, ...contenido } });
+      if (a.error || !a.data?.ok) throw new Error(a.data?.error || 'lectura');
+    } catch (e) { console.error('rvia leer boleto', d.id, e); fallos++; }
+  }
+  if (sinLeer.length) { ({ data, error } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: id })); if (error || !data?.ok) throw new Error('no pude leer los boletos'); }
   const docs = new Map((RV_DET.documentos || []).map(d => [d.id, d]));
   const vistos = new Map();
   for (const x of data.documentos || []) for (const p of x.datos_ia?.pasajeros || []) {
@@ -5662,7 +5675,7 @@ async function rviaPasajerosBoletos(id) {
     vistos.set(k, { ...prev, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v)),
       tickets: p.numero_ticket ? [...prev.tickets, { servicio_id: docs.get(x.documento_id)?.servicio_id, numero: String(p.numero_ticket).trim() }] : prev.tickets });
   }
-  if (!vistos.size) { errToast('Los boletos subidos no traen pasajeros legibles. Cárgalos a mano en Pasajeros.'); return false; }
+  if (!vistos.size) { errToast(fallos ? 'No pude leer el PDF del boleto. Cárgalos a mano en Pasajeros.' : 'La IA no encontró pasajeros en los boletos. Cárgalos a mano en Pasajeros.'); return false; }
   const existentes = RV_DET.pasajeros || [], ticketsYa = RV_DET.boletos || [];
   let nuevos = 0, completados = 0;
   for (const [k, p] of vistos) {
