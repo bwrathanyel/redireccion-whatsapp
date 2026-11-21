@@ -15140,8 +15140,10 @@ async function efCompletarDocumentos() {
   btn.textContent = 'Adjuntando documentos…';
   try {
     if (!creada.viajerosListos) {
-      const fallos = await efGuardarViajeros(creada.data.reserva_id, creada.viajeros);
-      if (fallos) throw new Error('No se pudieron completar los viajeros. Reintenta.');
+      // Los viajeros no frenan los adjuntos (R-000409: un fallo aquí dejaba los boletos sin guardar). La importación del
+      // boleto vuelve a crear los pasajeros que falten; si aun así queda alguno, se avisa al final.
+      const fallos = await efGuardarViajeros(creada.data.reserva_id, creada.viajeros).catch(e => { console.error('efGuardarViajeros', e); return creada.viajeros.length; });
+      if (fallos) creada.fallas.push(fallos === 1 ? 'un pasajero' : fallos + ' pasajeros');
       creada.viajerosListos = true;
     }
     await finalizarImportaciones({ sb, reservaId: creada.data.reserva_id, servicios: creada.ss, leerDatos: efServicioDatos });
