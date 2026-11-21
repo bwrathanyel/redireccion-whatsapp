@@ -5712,13 +5712,26 @@ async function rviaFinViaje() {
   okToast(`Fin del viaje: ${pvFecha(fin)} (el último servicio). Toca «Guardar cambios» para confirmarlo.`);
   return true;
 }
+// Vuelos sin tramos: abre la lectura inteligente del boleto ya subido (la misma de Servicios) para revisar y guardar los tramos.
+async function rviaTramosBoleto(id, h) {
+  const sid = Number(String(h?.clave || '').split(':')[2]);
+  const s = rviaServiciosVivos().find(x => x.id === sid);
+  const d = (RV_DET.documentos || []).find(x => x.tipo === 'boleto' && !x.anulado_en && x.servicio_id === sid);
+  rvTab('servicios');
+  if (!s) { errToast('No encuentro ese servicio.'); return false; }
+  if (!d) { errToast('Ese vuelo no tiene PDF de boleto. Súbelo en Tickets y se leerán los tramos.'); return false; }
+  if (!(await rvForm({ tipo: 'tickets', id: sid }))) return false;
+  await rvTkLeerDoc(d.id);
+  return false;
+}
 const RVIA_ACCIONES = {
+  tramos_boleto: { texto: 'Leer tramos del boleto', icono: 'fa-route', aplicar: rviaTramosBoleto, disponible: () => true },
   pasajeros_boletos: { texto: 'Tomar pasajeros de los boletos', icono: 'fa-user-plus', aplicar: rviaPasajerosBoletos, disponible: () => true },
   fin_viaje: { texto: 'Usar fecha del último servicio', icono: 'fa-calendar-check', aplicar: rviaFinViaje, disponible: () => !!rviaFinCalculado() },
 };
 function rviaAccionDe(h) {
   if (!rvPuedeEditar()) return null;
-  const a = RVIA_ACCIONES[h.accion] ? h.accion : RVIA_CLAVE_ACCION[h.clave] || RVIA_TEXTO_ACCION.find(([re]) => re.test(h.texto || ''))?.[1];
+  const a = RVIA_ACCIONES[h.accion] ? h.accion : RVIA_CLAVE_ACCION[h.clave] || (/^r:sin_tramos:\d+$/.test(h.clave || '') ? 'tramos_boleto' : null) || RVIA_TEXTO_ACCION.find(([re]) => re.test(h.texto || ''))?.[1];
   return a && RVIA_ACCIONES[a].disponible() ? a : null;
 }
 async function rviaCargar(id, apertura) {
@@ -5744,7 +5757,7 @@ async function rviaCargar(id, apertura) {
       box.querySelectorAll('[data-rvia-fix]').forEach(x => { x.disabled = true; });
       b.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Aplicando…';
       let ok = false;
-      try { ok = await RVIA_ACCIONES[acc].aplicar(id); } catch (e) { console.error('rvia accion', acc, e); errToast('No se pudo aplicar: ' + (e?.message || 'error')); }
+      try { ok = await RVIA_ACCIONES[acc].aplicar(id, hs[Number(b.dataset.i)]); } catch (e) { console.error('rvia accion', acc, e); errToast('No se pudo aplicar: ' + (e?.message || 'error')); }
       if (!box.isConnected || id !== RV_RESERVA_ID) return;
       if (ok) box.querySelectorAll(`[data-rvia-fix="${acc}"]`).forEach(x => { const li = x.closest('li'); li.classList.add('rvia-hecho'); x.replaceWith(Object.assign(document.createElement('span'), { className: 'rvia-ok', innerHTML: '<i class="fas fa-circle-check" aria-hidden="true"></i> Hecho' })); });
       else b.innerHTML = previo;
