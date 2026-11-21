@@ -5628,31 +5628,17 @@ function pvVouchersPintar(detalle) {
   lista.innerHTML = vouchers.length ? vouchers.map(d => `<div class="pv-voucher-fila"><span>${esc(d.nombre || 'Voucher de la reserva')}</span><button class="pv-btn pv-voucher" data-pv-voucher-id="${Number(d.id)}" type="button" aria-label="${rvDocExt(d).toLowerCase() === 'pdf' ? 'Abrir PDF' : 'Abrir archivo'}: ${esc(d.nombre || 'Voucher de la reserva')}">${rvDocExt(d).toLowerCase() === 'pdf' ? 'Abrir PDF' : 'Abrir archivo'}</button></div>`).join('')
     : '<p class="csub">Esta reserva todavía no tiene vouchers.</p><button class="pv-btn" data-pv-atajo="documentos" type="button">Ver documentos</button>';
 }
-// Botón «Voucher» de la tarjeta: abre a pantalla completa el voucher más reciente de la reserva;
-// sin voucher de reserva cae a la sección del detalle (que ofrece generarlo).
+// Botón «Voucher» de la tarjeta: abre la reserva y genera en el momento el voucher de la reserva
+// (mismo que Servicios › Voucher de la reserva: lo adjunta reemplazando el anterior) y lo muestra a pantalla completa.
 async function pvVerUltimoVoucher(c, btn, antes = () => {}) {
   if (!c || btn.disabled) return;
   btn.disabled = true;
   try {
-    const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: c.id });
-    if (error || !data?.ok) { errToast('No se pudieron cargar los vouchers'); return; }
-    // Solo el voucher de la reserva completa (servicio_id null); los de un servicio suelto (traslado, hotel) no.
-    const v = (data.documentos || []).filter(d => d.tipo === 'voucher' && !d.anulado_en && d.servicio_id == null)
-      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) || Number(b.id) - Number(a.id))[0];
-    if (!v) { antes(); abrirPostventa(c, 'vouchers'); return; }
-    const r = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: v.id } });
-    if (r.error || !r.data?.ok) { const m = await msgErrorFn(r.error, r.data); errToast('No se pudo abrir: ' + (RV_ERR[m] || m)); return; }
-    const res = await fetch(r.data.url);
-    if (!res.ok) throw new Error('sin_archivo');
-    const blob = await res.blob(), mime = v.mime || r.data.mime || blob.type || 'application/pdf';
-    const ext = (mime.split('/')[1] || 'pdf').replace('jpeg', 'jpg');
-    const nombre = /^Lotus 360 - /.test(v.nombre || '') ? v.nombre : docNombre(['Voucher', data.reserva?.cliente || c.nombre, data.reserva?.codigo], ext);
-    if (mime === 'application/pdf') verPdf(blob, nombre);
-    else if (mime.startsWith('image/')) openLightbox([URL.createObjectURL(blob)], 0);
-    else docEntregarBlob(blob, nombre, mime);
-  } catch (e) {
-    console.error('pvVerUltimoVoucher', e);
-    errToast('No se pudo abrir el voucher');
+    antes(); abrirPostventa(c);
+    const hasta = Date.now() + 20000;
+    while (!(RV_RESERVA_ID === c.id && RV_DET) && Date.now() < hasta) await new Promise(r => setTimeout(r, 150));
+    if (RV_RESERVA_ID !== c.id || !RV_DET) { errToast('No se pudo cargar la reserva para generar el voucher'); return; }
+    await rvGenerarVoucherReserva(null, { ver: true });
   } finally { btn.disabled = false; }
 }
 function rvRender() {
@@ -6091,7 +6077,7 @@ async function rvGuardarRecibos(recibos) {
 // Voucher de la reserva (lote 3: une el del paquete y el de abonos): todos los servicios (hotel + vuelos +
 // traslados...) y, si hay abonos, cada abono. Si falta cédula, teléfono o forma de pago, la misma hoja
 // de confirmación los pide antes de armar el PDF.
-async function rvGenerarVoucherReserva(btn) {
+async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
   const c = PV_ACTUAL, det = RV_DET || {}, r = det.reserva || {};
   const servs = (det.servicios || []).filter(s => !s.anulado_en && s.estado !== 'cancelado');
   if (!servs.length) { errToast('La reserva no tiene servicios activos para el voucher.'); return; }
@@ -6177,9 +6163,10 @@ async function rvGenerarVoucherReserva(btn) {
     const deAbonos = d => String(d.nombre || '').startsWith(`Voucher abonos ${codigo || RV_RESERVA_ID} - `);
     let falla = null;
     try { falla = await vcAdjuntarVoucherReemplazando(RV_RESERVA_ID, null, blob, nombre, deAbonos); } catch (e) { falla = e?.message || 'error de red'; }
-    vcDescargarConHora(blob, nombre);
-    if (falla) errToast(`${que} generado y descargado, pero no se adjuntó a la reserva: ${falla}`);
-    else { okToast(`${que} generado, descargado y adjunto` + (pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
+    if (ver) verPdf(blob, nombre); else vcDescargarConHora(blob, nombre);
+    const hecho = ver ? 'generado' : 'generado y descargado';
+    if (falla) errToast(`${que} ${hecho}, pero no se adjuntó a la reserva: ${falla}`);
+    else { okToast(`${que} ${ver ? 'generado y adjunto' : 'generado, descargado y adjunto'}` +(pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
   } catch (e) {
     errToast(`No se pudo generar el ${que.toLowerCase()}: ` + (e?.message || e));
   } finally {
