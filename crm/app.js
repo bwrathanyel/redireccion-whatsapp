@@ -4540,6 +4540,7 @@ function renderPostventa() {
 }
 function pvWire(grid, lista, antes = () => {}) {
   grid.querySelectorAll('[data-pv-open]').forEach(b => b.onclick = () => { antes(); abrirPostventa(lista.find(c => c.id === Number(b.dataset.pvOpen)), b.dataset.pvInicio || null); });
+  grid.querySelectorAll('[data-pv-voucher-ver]').forEach(b => b.onclick = e => { e.stopPropagation(); pvVerUltimoVoucher(lista.find(c => c.id === Number(b.dataset.pvVoucherVer)), b, antes); });
   // Tocar la tarjeta equivale a «Gestionar», salvo en sus botones, en la franja de botones (hueco entre ellos)
   // y mientras el usuario selecciona texto.
   grid.querySelectorAll('.pv-card:has([data-pv-open])').forEach(card => {
@@ -4874,7 +4875,7 @@ function pvCardHtml(c, extra = '', accesos = false) {
       <div class="pv-progress${total > 0 && pagado >= total ? ' full' : ''}"><span style="width:${pct}%"></span></div>
       ${faltaHtml}${c.incidencia_abierta ? '<div class="pv-meta"><span class="overdue"><i class="fas fa-triangle-exclamation"></i>Incidencia</span></div>' : ''}
       ${accesos ? `<div class="pv-card-foot pv-card-accesos">
-        <button class="pv-btn pv-voucher" data-pv-open="${c.id}" data-pv-inicio="vouchers" type="button"><i class="fas fa-file-lines" aria-hidden="true"></i> Ver vouchers</button>
+        <button class="pv-btn pv-voucher" data-pv-voucher-ver="${c.id}" type="button" aria-label="Ver el voucher más reciente"><i class="fas fa-ticket" aria-hidden="true"></i> Voucher</button>
         <button class="pv-btn" data-pv-open="${c.id}" data-pv-inicio="estado" type="button"><i class="fas fa-pen" aria-hidden="true"></i> Cambiar estado</button>
         ${pvPuedeAbonar() ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente" aria-label="Registrar abono: sin saldo pendiente"'}><i class="fas fa-money-bill-wave" aria-hidden="true"></i> Registrar abono</button>` : ''}
         <button class="pv-btn primary" data-pv-open="${c.id}" type="button">Abrir reserva</button></div>` : `<div class="pv-card-foot">${wa ? `<button class="pv-btn wa" data-pv-wa="${wa}" type="button" aria-label="WhatsApp de ${esc(c.nombre || 'cliente')}" title="Abrir WhatsApp"><i class="fab fa-whatsapp" aria-hidden="true"></i></button>` : ''}${['admin','asesor','administrativo'].includes(ROL) ? `<button class="pv-btn" data-pv-abono="${c.id}" type="button" ${Number(c.saldo_pendiente) > 0 ? '' : 'disabled title="Sin saldo pendiente"'}>+ Abono</button><button class="pv-btn" data-pv-servicio="${c.id}" type="button">+ Servicio</button>` : ''}<button class="pv-btn primary" data-pv-open="${c.id}" type="button">Gestionar</button></div>`}
@@ -5626,6 +5627,32 @@ function pvVouchersPintar(detalle) {
   const vouchers = (detalle.documentos || []).filter(d => d.tipo === 'voucher');
   lista.innerHTML = vouchers.length ? vouchers.map(d => `<div class="pv-voucher-fila"><span>${esc(d.nombre || 'Voucher de la reserva')}</span><button class="pv-btn pv-voucher" data-pv-voucher-id="${Number(d.id)}" type="button" aria-label="${rvDocExt(d).toLowerCase() === 'pdf' ? 'Abrir PDF' : 'Abrir archivo'}: ${esc(d.nombre || 'Voucher de la reserva')}">${rvDocExt(d).toLowerCase() === 'pdf' ? 'Abrir PDF' : 'Abrir archivo'}</button></div>`).join('')
     : '<p class="csub">Esta reserva todavía no tiene vouchers.</p><button class="pv-btn" data-pv-atajo="documentos" type="button">Ver documentos</button>';
+}
+// Botón «Voucher» de la tarjeta: abre a pantalla completa el voucher más reciente de la reserva;
+// sin vouchers cae a la sección del detalle (que ofrece generarlo).
+async function pvVerUltimoVoucher(c, btn, antes = () => {}) {
+  if (!c || btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: c.id });
+    if (error || !data?.ok) { errToast('No se pudieron cargar los vouchers'); return; }
+    const v = (data.documentos || []).filter(d => d.tipo === 'voucher' && !d.anulado_en)
+      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) || Number(b.id) - Number(a.id))[0];
+    if (!v) { antes(); abrirPostventa(c, 'vouchers'); return; }
+    const r = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: v.id } });
+    if (r.error || !r.data?.ok) { const m = await msgErrorFn(r.error, r.data); errToast('No se pudo abrir: ' + (RV_ERR[m] || m)); return; }
+    const res = await fetch(r.data.url);
+    if (!res.ok) throw new Error('sin_archivo');
+    const blob = await res.blob(), mime = v.mime || r.data.mime || blob.type || 'application/pdf';
+    const ext = (mime.split('/')[1] || 'pdf').replace('jpeg', 'jpg');
+    const nombre = /^Lotus 360 - /.test(v.nombre || '') ? v.nombre : docNombre(['Voucher', data.reserva?.cliente || c.nombre, data.reserva?.codigo], ext);
+    if (mime === 'application/pdf') verPdf(blob, nombre);
+    else if (mime.startsWith('image/')) openLightbox([URL.createObjectURL(blob)], 0);
+    else docEntregarBlob(blob, nombre, mime);
+  } catch (e) {
+    console.error('pvVerUltimoVoucher', e);
+    errToast('No se pudo abrir el voucher');
+  } finally { btn.disabled = false; }
 }
 function rvRender() {
   const { servicios = [], pasajeros = [], documentos = [], reserva = {} } = RV_DET;
