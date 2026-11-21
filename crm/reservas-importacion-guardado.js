@@ -15,7 +15,7 @@ export function prepararGuardadoImportacion({ datos, base, reservaId, servicio, 
   const pasajeros = datos.pasajeros.map(p => {
     if (!p.nombre?.trim() || !p.apellido?.trim()) throw new Error(`Completa nombre y apellido de ${p.nombre || 'cada pasajero'}; no se separan automáticamente.`);
     if (p.numero_documento && !p.tipo_documento) throw new Error(`Selecciona el tipo de documento de ${p.nombre}.`);
-    return { clave: p.clave, ...(seleccion[p.clave] === 'nuevo' ? { crear_nuevo: true } : seleccion[p.clave] ? { pasajero_id: Number(seleccion[p.clave]) } : {}), nombre: p.nombre, apellido: p.apellido, tipo_documento: dato(p.tipo_documento), numero_documento: dato(p.numero_documento), nacimiento: dato(p.fecha_nacimiento), nacionalidad: dato(p.nacionalidad), categoria: dato(p.categoria) };
+    return { clave: p.clave, ...(seleccion[p.clave] === 'nuevo' ? { crear_nuevo: true } : seleccion[p.clave] ? { pasajero_id: Number(seleccion[p.clave]) } : {}), nombre: p.nombre, apellido: p.apellido, tipo_documento: dato(p.tipo_documento), numero_documento: dato(p.numero_documento), nacimiento: dato(p.fecha_nacimiento), nacionalidad: dato(p.nacionalidad), ...(({ adulto: 'ADT', nino: 'CHD', infante: 'INF' })[p.categoria] ? { tipo: ({ adulto: 'ADT', nino: 'CHD', infante: 'INF' })[p.categoria] } : {}) };
   });
   const servicios = grupos.map((g, i) => {
     const principal = {};
@@ -59,6 +59,15 @@ export function prepararGuardadoImportacion({ datos, base, reservaId, servicio, 
     const meta = { ...anterior, version: 1, operacion_id: operacionId, clave: s.clave, importado: { ...(anterior.importado || {}), ...datos }, pasajeros: s.pasajeros, tramos: s.tramos ?? anterior.tramos ?? [], boletos: s.boletos, documentos: [...(anterior.documentos || []), ...documentos.map(d => ({ ...d, documento_id: Number.MAX_SAFE_INTEGER }))] };
     if (peso(meta) > 1048576) throw new Error('La procedencia completa supera 1 MiB por servicio. Divide los documentos.');
   }
+  // Las claves de extracción contienen ':'; la RPC acepta solo identificadores ASCII acotados.
+  const claves = lista => new Map(lista.map((x, i) => [x.clave, `clave_${i + 1}`]));
+  const sg = claves(servicios), ps = claves(pasajeros);
+  for (const s of servicios) {
+    s.clave = sg.get(s.clave);
+    s.pasajeros = s.pasajeros.map(p => ({ ...p, clave: ps.get(p.clave) }));
+    s.boletos = s.boletos.map(b => ({ ...b, pasajero_clave: ps.get(b.pasajero_clave) }));
+  }
+  documentos = documentos.map(d => ({ ...d, servicio_clave: sg.get(d.servicio_clave) || d.servicio_clave }));
   const payload = { operacion_id: operacionId, reserva_id: Number(reservaId), ...(servicio ? { servicio_id: servicio.id, version_servicio: servicio.updated_at } : {}), servicios, documentos };
   if (peso(payload) > 4194304) throw new Error('La operación supera 4 MiB. Divide los documentos; no se ha truncado.');
   return payload;

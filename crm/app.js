@@ -15,6 +15,7 @@ import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearImportacionServicio } from './reservas-importacion.js';
+import { serviciosDeImportacion, viajerosDeImportacion, sincronizarViajerosImportados, finalizarImportaciones } from './reservas-importacion-borrador.js';
 import { crearDisponibilidad } from './disponibilidad.js';
 import { crearProspeccion } from './prospeccion.js';
 import { crearFacturasEmpresa } from './facturas-empresa.js';
@@ -5772,7 +5773,7 @@ function rvImportMontar(p, servicio, tramos) {
   RV_IMPORT = control;
   if (val('rv-s-tipo') === 'boleto_aereo' && !bolCatalogo) bolAsegurarCatalogo().catch(() => {});
 }
-window.addEventListener('beforeunload', e => { if (RV_IMPORT?.sucio) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (RV_IMPORT?.sucio || EF_IMPORT?.sucio || EF_ENVIANDO || RV_BORRADOR?.servicios.some(s => s._importacion)) { e.preventDefault(); e.returnValue = ''; } });
 function rvTrasCambio() {
   rvCargar();
   if (currentSec === 'postventa' && (esOficina() || ROL === 'asesor')) loadPostventa();
@@ -14235,7 +14236,7 @@ const EF_ERRORES = {
 function efPintarViajeros(lead) {
   const cont = document.getElementById('ef-viajeros');
   if (!cont) return;
-  const prev = [...cont.querySelectorAll('.ef-viajero')].map(f => ({ n: f.querySelector('[data-v="n"]').value, c: f.querySelector('[data-v="c"]').value }));
+  const prev = [...cont.querySelectorAll('.ef-viajero')].map(f => ({ n: f.querySelector('[data-v="n"]').value, c: f.querySelector('[data-v="c"]').value, identidades: f.dataset.rviIdentidades || '[]' }));
   if (lead) {
     prev.length = 0;
     const nom = String(lead.nombre || '').trim().replace(/\s+/g, ' ');
@@ -14246,7 +14247,7 @@ function efPintarViajeros(lead) {
   cont.innerHTML = Array.from({ length: total }, (_, i) => {
     const nino = i >= nAd, k = nino ? i - nAd + 1 : i + 1;
     const etiqueta = nino ? `Niño ${k}` : (i === 0 ? 'Adulto 1 (titular)' : `Adulto ${k}`);
-    return `<div class="ef-viajero ef-fila" data-nino="${nino ? 1 : 0}">
+    return `<div class="ef-viajero ef-fila" data-nino="${nino ? 1 : 0}" data-rvi-identidades="${esc(prev[i]?.identidades || '[]')}">
       <div style="flex:3"><label class="fl-sub">${etiqueta}</label><input data-v="n" class="ei" placeholder="Nombre y apellido" autocomplete="off" value="${esc(prev[i]?.n || '')}"></div>
       <div style="flex:2"><label class="fl-sub">Cédula${nino ? ' (si tiene)' : ''}</label><input data-v="c" class="ei" placeholder="V-12.345.678" autocomplete="off" value="${esc(prev[i]?.c || '')}"></div>
     </div>`;
@@ -14261,7 +14262,7 @@ function efLeerViajeros() {
     const nom = n.value.trim().replace(/\s+/g, ' '), ced = c.value.trim(), nino = f.dataset.nino === '1';
     if (!nom) { n.focus(); return { error: 'Escribe el nombre de cada persona que viaja' }; }
     if (!nino && !/\d/.test(ced)) { c.focus(); return { error: `Falta la cédula de ${nom}` }; }
-    viajeros.push({ nom, ced });
+    viajeros.push({ nom, ced, identidades: JSON.parse(f.dataset.rviIdentidades || '[]') });
   }
   return { viajeros };
 }
@@ -14284,7 +14285,8 @@ async function efGuardarViajeros(reservaId, viajeros) {
   const autoTitular = existentes.find(p => p.titular && !p.numero_documento);
   let hayTitular = existentes.some(p => p.titular), fallos = 0;
   for (const [i, v] of viajeros.entries()) {
-    const datos = efDatosViajero(v);
+    const importado = viajerosDeImportacion(RV_BORRADOR?.servicios || []).find(p => [p.nombre, p.apellido].filter(Boolean).join(' ').toUpperCase() === v.nom.toUpperCase() && (p.numero_documento || '') === v.ced);
+    const datos = importado ? { nombre: importado.nombre, apellido: importado.apellido, tipo_documento: importado.tipo_documento || 'cedula', numero_documento: importado.numero_documento || '' } : efDatosViajero(v);
     const clave = datos.numero_documento.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
     if (clave && docs.has(clave)) continue;
     let id = null;
@@ -14301,6 +14303,48 @@ async function efGuardarViajeros(reservaId, viajeros) {
 // un borrador en memoria (RV_BORRADOR). Nada toca la base hasta «Crear reserva», que manda todo junto a
 // crear_reserva_con_servicios (cada servicio pasa por guardar_servicio, igual que desde la reserva).
 let EF_PASO = 1, EF_COTS = [], EF_COT = null, EF_OPCION = 0;
+let EF_IMPORT = null, EF_CREADA = null, EF_ENVIANDO = false;
+function efImportViajeros(servicios) {
+  const actuales = [...document.querySelectorAll('#ef-viajeros .ef-viajero')].map(f => ({ nom: f.querySelector('[data-v="n"]').value.trim(), ced: f.querySelector('[data-v="c"]').value.trim(), nino: f.dataset.nino === '1', identidades: JSON.parse(f.dataset.rviIdentidades || '[]') })).filter(p => p.nom || p.ced);
+  const clave = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f\W]/g, '').toUpperCase();
+  for (const p of viajerosDeImportacion(servicios)) {
+    const nom = [p.nombre, p.apellido].filter(Boolean).join(' '), ced = p.numero_documento || '';
+    const previo = actuales.find(q => clave(q.nom) === clave(nom) || (ced && clave(q.ced) === clave(ced)));
+    if (previo) { if (!previo.nom) previo.nom = nom; if (!previo.ced) previo.ced = ced; previo.identidades = [...new Set([...previo.identidades, ...p.identidades])]; }
+    else actuales.push({ nom, ced, nino: p.tipo === 'CHD' || p.tipo === 'INF', identidades: p.identidades });
+  }
+  if (actuales.length > 30) throw new Error('Hay más de 30 viajeros entre el formulario y los documentos. Revisa los duplicados.');
+  actuales.sort((a, b) => Number(a.nino) - Number(b.nino));
+  document.getElementById('ef-adultos').value = actuales.filter(p => !p.nino).length;
+  document.getElementById('ef-ninos').value = actuales.filter(p => p.nino).length;
+  efPintarViajeros();
+  document.querySelectorAll('#ef-viajeros .ef-viajero').forEach((f, i) => { f.querySelector('[data-v="n"]').value = actuales[i]?.nom || ''; f.querySelector('[data-v="c"]').value = actuales[i]?.ced || ''; f.dataset.rviIdentidades = JSON.stringify(actuales[i]?.identidades || []); });
+}
+function efBloquearFormulario() {
+  document.querySelectorAll('#enviar-facturacion-sheet [data-ef-panel] input,#enviar-facturacion-sheet [data-ef-panel] select,#enviar-facturacion-sheet [data-ef-panel] textarea,#enviar-facturacion-sheet [data-ef-panel] button,#ef-pasos button').forEach(e => { if (!e.dataset.efImportBloqueado) e.dataset.efImportBloqueado = e.disabled ? 'previo' : 'si'; e.disabled = true; });
+}
+function efDesbloquearFormulario() {
+  document.querySelectorAll('[data-ef-import-bloqueado]').forEach(e => { e.disabled = e.dataset.efImportBloqueado === 'previo'; delete e.dataset.efImportBloqueado; });
+}
+function efImportMontar() {
+  EF_IMPORT?.destruir(); EF_CREADA = null; EF_ENVIANDO = false;
+  const solicitud = EF_SOLICITUD, root = document.getElementById('ef-import');
+  const selector = document.getElementById('ef-import-tipo'); selector.value = 'boleto_aereo';
+  document.getElementById('ef-importados').textContent = '';
+  const control = crearImportacionServicio({ root, sb, leadId: EF_LEAD_ACTUAL.id, reservaId: 0, pasajeros: [], tipo: () => selector.value, pdfjs: cargarPdfjs,
+    leerBase: () => ({ tipo: selector.value, precio: 0, precio_moneda: 'USD', estado: 'solicitado', detalle: {}, pax_adultos: 0, pax_ninos: 0 }),
+    vigente: () => EF_SOLICITUD === solicitud && !!RV_BORRADOR,
+    confirmar: confirmarSheet, alOcupado: ocupado => { selector.disabled = ocupado; },
+    alBorrador: lote => {
+      const nuevos = serviciosDeImportacion(lote, () => -(++RV_BORRADOR.seq));
+      if (RV_BORRADOR.servicios.some(s => s._importacion?.archivos.some(a => lote.archivos.some(b => a.sha256 === b.sha256)))) throw new Error('Ese archivo ya está incorporado. Revisa sus servicios en el paso 2.');
+      efImportViajeros(nuevos); RV_BORRADOR.servicios.push(...nuevos); efBorradorPintar();
+      document.getElementById('ef-importados').textContent = 'Documentos preparados en memoria. Revisa los servicios y completa sus precios en el paso 2. Cancelar no guardará estos documentos.';
+    },
+  });
+  EF_IMPORT = control;
+  selector.onchange = async () => { const nuevo = selector.value; if (!(await control.cambiarTipo(nuevo))) selector.value = selector.dataset.previo || 'boleto_aereo'; else selector.dataset.previo = nuevo; };
+}
 function efBorradorAbrir() {
   RV_BORRADOR ??= { servicios: [], seq: 0, previo: { RV_DET, RV_RESERVA_ID, RV_FORM, RV_APTOS } };
   RV_BORRADOR.servicios.length = 0;
@@ -14310,6 +14354,7 @@ function efBorradorAbrir() {
 }
 // Al cerrar la hoja (por cualquier vía) vuelve el estado de la reserva que estuviera abierta debajo.
 function efBorradorCerrar() {
+  EF_IMPORT?.destruir(); EF_IMPORT = null; EF_CREADA = null;
   if (!RV_BORRADOR) return;
   ({ RV_DET, RV_RESERVA_ID, RV_FORM, RV_APTOS } = RV_BORRADOR.previo);
   RV_BORRADOR = null;
@@ -14411,7 +14456,7 @@ function efBorradorGuardar(id, datos) {
   if (!datos.fecha_inicio) { err.textContent = 'Falta la fecha.'; return; }
   if (datos.fecha_inicio < cbHoy()) { err.textContent = 'La fecha ya pasó.'; return; }
   const previo = RV_BORRADOR.servicios.find(x => x.id === id);
-  const s = { ...datos, id: id || -(++RV_BORRADOR.seq), origen: previo?.origen || 'manual', anulado_en: null,
+  const s = { ...datos, ...(previo?._importacion ? { _importacion: previo._importacion } : {}), id: id || -(++RV_BORRADOR.seq), origen: previo?.origen || 'manual', anulado_en: null,
     precio_centavos: Math.round(Number(datos.precio || 0) * 100),
     apto: datos.tipo === 'hospedaje' && RV_FORM?.hosp === 'apto' ? val('rv-s-apto-sel') : '' };
   if (s.tipo === 'boleto_aereo') s.hora = s.hora_ida || s.hora;
@@ -14435,12 +14480,13 @@ function efTramosBorrador() {
 }
 // Lo que viaja a guardar_servicio: sin los campos propios del borrador.
 function efServicioDatos(s) {
-  const { id, origen, apto, precio_centavos, anulado_en, hora_ida, hora_vuelta, ...d } = s;
+  const { id, origen, apto, precio_centavos, anulado_en, hora_ida, hora_vuelta, _importacion, ...d } = s;
   return d;
 }
 
 async function abrirEnviarFacturacionSheet(l) {
   EF_LEAD_ACTUAL = l; EF_COMPROBANTE = null; EF_ARCHIVO = null; EF_FOTO = null; EF_OCR = null;
+  document.querySelectorAll('[data-ef-import-bloqueado]').forEach(e => { if (e.dataset.efImportBloqueado === 'si') e.disabled = false; delete e.dataset.efImportBloqueado; });
   document.getElementById('ef-comp-previa')?.remove();
   document.getElementById('ef-err').textContent = '';
   efCalCerrar();
@@ -14457,6 +14503,7 @@ async function abrirEnviarFacturacionSheet(l) {
   document.getElementById('ef-cot').innerHTML = '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Buscando cotizaciones del cliente…</div>';
   openSheet('enviar-facturacion-sheet');
   efBorradorAbrir();
+  efImportMontar();
   efPaso(1);
   efBorradorPintar();
   efPrecargar(l, EF_SOLICITUD).catch(e => { console.error('efPrecargar', e); efCotPintar(); });
@@ -14576,7 +14623,7 @@ async function efPosCreacion(reservaId, ss, agente) {
       const a = await sb.rpc('asignar_apartamento', { p_servicio_id: sid, p_apartamento_id: Number(s.apto) });
       if (a.error || !a.data?.ok) fallas.push('el apartamento (' + (RV_APTO_ERR[a.data?.error] || a.error?.message || 'error') + ')');
     }
-    if (agente && s.tipo === 'boleto_aereo') {
+    if (agente && s.tipo === 'boleto_aereo' && !s._importacion) {
       const r = await rvCrearTramosBoleto(sid, s).catch(e => ({ falla: e.message }));
       if (r.falla) fallas.push('los tramos del boleto');
     }
@@ -14963,10 +15010,35 @@ async function efSubirComprobante() {
 
 document.getElementById('ef-cancelar')?.addEventListener('click', () => {
   document.getElementById('ef-err').textContent = '';
-  if (EF_PASO > 1) efPaso(EF_PASO - 1); else closeSheet('enviar-facturacion-sheet');
+  if (EF_ENVIANDO) return;
+  if (!EF_CREADA && EF_PASO > 1) efPaso(EF_PASO - 1); else closeSheet('enviar-facturacion-sheet');
 });
+async function efCompletarDocumentos() {
+  const creada = EF_CREADA, btn = document.getElementById('ef-enviar'), err = document.getElementById('ef-err');
+  if (!creada || EF_ENVIANDO) return;
+  EF_ENVIANDO = true; btn.disabled = true;
+  btn.textContent = 'Adjuntando documentos…';
+  try {
+    if (!creada.viajerosListos) {
+      const fallos = await efGuardarViajeros(creada.data.reserva_id, creada.viajeros);
+      if (fallos) throw new Error('No se pudieron completar los viajeros. Reintenta.');
+      creada.viajerosListos = true;
+    }
+    await finalizarImportaciones({ sb, reservaId: creada.data.reserva_id, servicios: creada.ss, leerDatos: efServicioDatos });
+    const codigo = creada.data.codigo;
+    EF_CREADA = null; EF_ENVIANDO = false;
+    closeSheet('enviar-facturacion-sheet');
+    if (currentSec === 'postventa') loadPostventa();
+    if (currentSec === 'historicos') loadHistoricos();
+    if (creada.fallas.length) errToast(`Reserva ${codigo} creada y documentos adjuntos; revisa ${creada.fallas.join(', ')}.`);
+    else okToast(`Reserva ${codigo} creada con sus documentos.`);
+  } catch (e) { err.textContent = `La reserva ${creada.data.codigo || creada.data.reserva_id} ya está creada. ${e.message || 'No se pudo finalizar.'} Conserva esta ventana y reintenta los adjuntos; no se repetirá el pago.`; }
+  finally { EF_ENVIANDO = false; if (!EF_CREADA) efDesbloquearFormulario(); btn.disabled = false; btn.textContent = EF_CREADA ? 'Reintentar adjuntos de la reserva creada' : 'Crear reserva'; }
+}
 document.getElementById('ef-enviar')?.addEventListener('click', async () => {
-  if (!EF_LEAD_ACTUAL || !RV_BORRADOR) return;
+  if (!EF_LEAD_ACTUAL || !RV_BORRADOR || EF_ENVIANDO) return;
+  if (EF_CREADA) return efCompletarDocumentos();
+  if (EF_IMPORT?.sucio) { efPaso(1); document.getElementById('ef-err').textContent = 'Incorpora o descarta la revisión de documentos antes de crear la reserva.'; return; }
   const btn = document.getElementById('ef-enviar'), err = document.getElementById('ef-err');
   const num = id => { const v = parseFloat(val(id)); return Number.isFinite(v) ? v : null; };
   const ent = id => { const v = parseInt(val(id), 10); return Number.isFinite(v) ? v : null; };
@@ -14981,8 +15053,18 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   const pagado = num('ef-monto-pagado') ?? 0; // vacío = todavía no pagó
   if (pagado > 0 && !val('ef-metodo')) { err.textContent = EF_ERRORES.falta_metodo_pago; return; }
   if (pagado > 0 && !val('ef-referencia')) { err.textContent = EF_ERRORES.referencia_requerida; return; }
+  try {
+    if (ss.some(s => s._importacion && (s.apto || s.tipo !== s._importacion.servicio.datos.tipo))) throw new Error('Un servicio importado debe conservar su tipo y no puede asignarse a un apartamento propio. Corrígelo en Servicios antes de crear.');
+    sincronizarViajerosImportados(ss, viajeros, (v, p) => {
+      const d = efDatosViajero(v), mismoNombre = v.nom.toUpperCase() === [p.nombre, p.apellido].filter(Boolean).join(' ').toUpperCase();
+      return { ...d, ...(mismoNombre ? { nombre: p.nombre, apellido: p.apellido } : {}), ...(v.ced === (p.numero_documento || '') ? { tipo_documento: p.tipo_documento, numero_documento: p.numero_documento } : p.tipo_documento === 'pasaporte' ? { tipo_documento: 'pasaporte', numero_documento: v.ced.toUpperCase() } : {}) };
+    });
+  } catch (e) { err.textContent = e.message; efPaso(1); return; }
   const agente = rvAgente();
+  EF_ENVIANDO = true;
+  efBloquearFormulario();
   btn.disabled = true; btn.innerHTML = 'Creando... <i class="fas fa-spinner fa-spin"></i>';
+  try {
   // Sin captura el abono entra igual (con referencia); oficina lo verifica contra el banco.
   const comp = pagado > 0 ? await efSubirComprobante().catch(e => { console.error('efSubirComprobante', e); return null; }) : null;
   // Pago en Bs leído del comprobante y sin tocar el monto: va el monto exacto en Bs (la cuenta en Bs sale de ahí).
@@ -15010,15 +15092,25 @@ document.getElementById('ef-enviar')?.addEventListener('click', async () => {
   }
   // Apartamento, tramos y pasajeros van aparte: si alguno falla la reserva ya existe y se completa desde ella.
   const fallas = await efPosCreacion(data.reserva_id, ss, agente).catch(e => { console.error('efPosCreacion', e); return ['el apartamento o los tramos']; });
+  if (ss.some(s => s._importacion)) {
+    EF_CREADA = { data, ss, viajeros, fallas, viajerosListos: false };
+    efBloquearFormulario();
+    if (EF_COMPROBANTE && pagado > 0) WB?.marcarComprobante(EF_COMPROBANTE, 'registrado');
+    EF_ENVIANDO = false;
+    await efCompletarDocumentos(); return;
+  }
   const fallosPax = await efGuardarViajeros(data.reserva_id, viajeros).catch(e => { console.error('efGuardarViajeros', e); return viajeros.length; });
   if (fallosPax) fallas.push(fallosPax === 1 ? 'un pasajero' : fallosPax + ' pasajeros');
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Crear reserva';
+  EF_ENVIANDO = false;
   closeSheet('enviar-facturacion-sheet');
   if (EF_COMPROBANTE && pagado > 0) WB?.marcarComprobante(EF_COMPROBANTE, 'registrado');
   if (currentSec === 'postventa') loadPostventa();
   if (currentSec === 'historicos') loadHistoricos();
   if (fallas.length) errToast(`Reserva ${data.codigo} creada, pero no se guardó ${fallas.join(', ')}: complétalo en la reserva`);
   else okToast(`Reserva ${data.codigo} creada${data.saldo_pendiente > 0 ? ` · saldo ${money(data.saldo_pendiente)}` : ''}`);
+  } catch (e) { err.textContent = 'No se pudo confirmar la creación. Conserva esta ventana y reintenta el mismo envío; no se duplicará: ' + (e.message || 'error de red'); }
+  finally { EF_ENVIANDO = false; if (!EF_CREADA) efDesbloquearFormulario(); btn.disabled = false; btn.textContent = EF_CREADA ? 'Reintentar adjuntos de la reserva creada' : 'Crear reserva'; }
 });
 
 /* ---------- Bandeja de Entrada de Facturación (admin) ---------- */
@@ -42889,6 +42981,8 @@ function openSheet(id) {
   if (movil) pintarEstadoBody();
 }
 function closeSheet(id, fromNav) {
+  if (id === 'enviar-facturacion-sheet' && EF_ENVIANDO) { errToast('Espera a que termine el envío antes de cerrar.'); return; }
+  if (id === 'enviar-facturacion-sheet' && EF_CREADA && !window.confirm('La reserva ya está creada, pero quedan documentos sin confirmar. Si cierras perderás los archivos pendientes y tendrás que adjuntarlos desde la reserva. ¿Cerrar de todas formas?')) return;
   const movil = esMovil(), el = document.getElementById(id);
   if (movil && !el?.classList.contains('open')) return;
   const entrada = movil ? navEntradaMovil('sheet', id) : null;
@@ -43512,6 +43606,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-21', emoji: '📎', titulo: 'PDF y fotos desde Crear reserva del lead', texto: 'En el paso 1 Viaje puedes leer PDF o fotos, revisar viajeros e itinerarios e incorporar sus servicios al borrador. Completa los precios en Servicios. Los documentos privados se adjuntan solo al crear la reserva; cancelar antes no guarda nada. Se corrigió el error de lectura del proveedor y, si falla un adjunto después de crear, puedes reintentarlo sin repetir la reserva ni el pago.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-21', emoji: '📄', titulo: 'Reservas: importar un servicio desde su PDF o fotos', texto: 'En cada servicio de la Reserva puedes subir el PDF o las fotos del servicio y revisar todo antes de guardar. Se leen todas las páginas y se recuperan pasajeros, documentos, localizador, rutas, conexiones, fechas y horas tal como están impresas; cada boleto queda con su pasajero. Los PDF de Boletos emitidos se recuperan completos, sin volver a escribirlos. Nada se guarda hasta que confirmes la revisión, y puedes corregir, añadir o quitar filas. Los archivos quedan adjuntos y privados en la reserva.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-20', emoji: '🔭', titulo: 'Búsqueda activa: salir a buscar empresas', texto: 'Nueva sección en Leads para buscar empresas, aliados y proveedores. La IA encuentra candidatos con su fuente, avisa si ya los tenemos, completa datos de contacto y redacta el primer mensaje y los seguimientos; tú lo envías. Los prospectos que tocan hoy aparecen en tu resumen del día.', roles: ['admin'] },
   { fecha: '2026-11-20', emoji: '💰', titulo: 'Comisiones por corte y cambios de fecha acordados', texto: 'Ahora ves cada corte con sus ventas, ajustes, factura e historial. Administración puede pasar comisiones verificadas o liquidadas a otro corte impago, abierto o cerrado, indicando el motivo y revisando el impacto antes de confirmar. Los pagos se marcan automáticamente desde las 12 del mediodía del día correspondiente, hora de Venezuela; oficina también puede registrarlos antes. Ese estado no confirma una transferencia bancaria. Cambiar el corte no envía mensajes: el reenvío de la factura se hace aparte.', roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba'] },

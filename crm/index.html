@@ -13439,6 +13439,13 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
 
   <div class="edit-box ef-panel" data-ef-panel="1">
     <div id="ef-cot"></div>
+    <details id="ef-documentos" open>
+      <summary class="fl">Adjuntar PDF o fotos del viaje <span class="ef-opc">(opcional)</span></summary>
+      <label class="fl-sub" for="ef-import-tipo">¿Qué servicio contiene el documento?</label>
+      <select id="ef-import-tipo" class="ei"><option value="boleto_aereo">Boleto aéreo</option><option value="hospedaje">Hospedaje</option><option value="traslado_terrestre">Traslado terrestre</option><option value="traslado_maritimo">Traslado marítimo</option><option value="full_day">Full day / excursión</option><option value="seguro">Seguro</option><option value="otro">Otro</option></select>
+      <div id="ef-import" class="rvi"></div>
+      <p id="ef-importados" class="csub" role="status" aria-live="polite"></p>
+    </details>
     <label class="fl">¿Cuántas personas viajan?</label>
     <div class="ef-fila">
       <div style="flex:1"><label class="fl-sub" for="ef-adultos">Adultos</label><input id="ef-adultos" class="ei" type="number" inputmode="numeric" min="0" step="1" placeholder="2"></div>

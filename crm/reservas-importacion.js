@@ -66,8 +66,8 @@ export function crearImportacionServicio(c) {
       ${revision.advertencias.length || revision.errores.length ? `<details class="rvi-avisos" open><summary>Datos pendientes y observaciones (${revision.advertencias.length + revision.errores.length})</summary><ul>${[...revision.errores, ...revision.advertencias].map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}
       ${c.servicio && tipo === 'boleto_aereo' ? `<label class="rvi-check"><input type="checkbox" data-rvi-reemplazar ${reemplazar ? 'checked' : ''}> Confirmo reemplazar el itinerario actual (${c.tramos?.length || 0} tramos) con el revisado. Los boletos existentes no se sobrescriben.</label>` : ''}
       <p class="csub">Precio, moneda y estado comercial se revisan en el formulario inferior: no se extraen del documento. El precio principal no se repite en servicios adicionales; nacen cotizados, sin pagos.</p>
-      <label class="rvi-check"><input type="checkbox" data-rvi-aceptado ${aceptado ? 'checked' : ''}> Revisé los datos, las relaciones de los boletos y los avisos. Guardar creará o actualizará estos registros y adjuntará los archivos.</label>
-      <div class="rvi-pie">${boton('descartar', 'Descartar importación y volver al formulario')}</div>` : '<p class="rvi-nota">Primero leerás y corregirás los datos. No se crea ningún pasajero, boleto ni servicio hasta que confirmes Guardar.</p>'}</fieldset>
+      <label class="rvi-check"><input type="checkbox" data-rvi-aceptado ${aceptado ? 'checked' : ''}> Revisé los datos, las relaciones de los boletos y los avisos. ${c.alBorrador ? 'Incorporar solo prepara el borrador; los archivos se adjuntan al crear la reserva.' : 'Guardar creará o actualizará estos registros y adjuntará los archivos.'}</label>
+      <div class="rvi-pie">${c.alBorrador ? boton('reintentar', 'Incorporar al borrador') : ''}${boton('descartar', 'Descartar importación y volver al formulario')}</div>` : '<p class="rvi-nota">Primero leerás y corregirás los datos. No se crea ningún pasajero, boleto ni servicio hasta que confirmes Guardar.</p>'}</fieldset>
       <p class="rvi-mensaje" data-rvi-mensaje role="status" aria-live="polite"></p>${pendiente ? boton('reintentar', 'Reintentar el mismo guardado de forma segura') : ''}`;
     c.alActivar?.(!!datos);
   }
@@ -102,8 +102,12 @@ export function crearImportacionServicio(c) {
     try {
       const base = datos ? null : c.leerBase(); bloqueo('leyendo'); mensaje('Preparando lectura completa…');
       const r = await leerArchivosImportacion(files, { tipo, signal: aborto.signal, pdfjs: c.pdfjs, progreso: mensaje, extraer: async b => {
-        const { data, error } = await c.sb.functions.invoke('analizar-servicio', { body: { ...b, paginas: b.paginas.map(p => ({ numero: p.numero, texto: p.texto })), reserva_id: c.reservaId }, signal: aborto.signal });
-        if (error || !data?.ok) throw new Error(data?.ayuda || data?.error || 'No se pudo extraer el documento. La función analizar-servicio debe estar disponible; no se guardó nada.');
+        const { data, error } = await c.sb.functions.invoke('analizar-servicio', { body: { ...b, paginas: b.paginas.map(p => ({ numero: p.numero, texto: p.texto })), ...(c.leadId ? { lead_id: c.leadId } : { reserva_id: c.reservaId }) }, signal: aborto.signal });
+        if (error || !data?.ok) {
+          let detalle = data;
+          if (!detalle && error?.context?.clone) { try { detalle = await error.context.clone().json(); } catch (_) { /* Respuesta no JSON. */ } }
+          throw new Error([detalle?.ayuda, detalle?.error].filter(Boolean).join(' · ') || 'No se pudo leer el documento. Reintenta; no se guardó nada.');
+        }
         return data.datos;
       } });
       if (!vigente() || aborto.signal.aborted) return;
@@ -128,6 +132,11 @@ export function crearImportacionServicio(c) {
         if (!aceptado) throw new Error('Marca que revisaste los datos y los avisos antes de guardar.');
         if (invalidos.size || conflictos.some(x => !x.resuelto)) throw new Error('Resuelve las diferencias y corrige los campos marcados antes de guardar.');
         const preparar = documentos => prepararGuardadoImportacion({ datos, base: c.leerBase(), reservaId: c.reservaId, servicio: c.servicio, operacionId, documentos, seleccion, precios, aerolineas: c.aerolineas?.() || [], reemplazarTramos: reemplazar });
+        if (c.alBorrador) {
+          const lote = preparar([]);
+          await c.alBorrador({ ...lote, archivos: archivos.map(a => ({ file: a.file, mime: a.mime, sha256: a.sha256, grupo: lote.servicios[Math.max(0, datos.grupos.findIndex(g => g.clave === a.grupo))]?.clave })) });
+          limpiar(); mensaje('Documentos incorporados al borrador. Completa los precios en Servicios; se adjuntarán al crear la reserva.'); return true;
+        }
         preparar(archivos.map(a => ({ path: '0'.repeat(400), nombre: a.file.name, mime: a.mime, tamano: a.file.size, sha256: a.sha256, tipo: tipo === 'boleto_aereo' ? 'boleto' : 'otro', servicio_clave: a.grupo }))); bloqueo('guardando'); mensaje('Adjuntando archivos privados…');
         const documentos = [];
         for (const a of archivos) {
