@@ -5629,14 +5629,15 @@ function pvVouchersPintar(detalle) {
     : '<p class="csub">Esta reserva todavía no tiene vouchers.</p><button class="pv-btn" data-pv-atajo="documentos" type="button">Ver documentos</button>';
 }
 // Botón «Voucher» de la tarjeta: abre a pantalla completa el voucher más reciente de la reserva;
-// sin vouchers cae a la sección del detalle (que ofrece generarlo).
+// sin voucher de reserva cae a la sección del detalle (que ofrece generarlo).
 async function pvVerUltimoVoucher(c, btn, antes = () => {}) {
   if (!c || btn.disabled) return;
   btn.disabled = true;
   try {
     const { data, error } = await sb.rpc('reserva_detalle', { p_reserva_id: c.id });
     if (error || !data?.ok) { errToast('No se pudieron cargar los vouchers'); return; }
-    const v = (data.documentos || []).filter(d => d.tipo === 'voucher' && !d.anulado_en)
+    // Solo el voucher de la reserva completa (servicio_id null); los de un servicio suelto (traslado, hotel) no.
+    const v = (data.documentos || []).filter(d => d.tipo === 'voucher' && !d.anulado_en && d.servicio_id == null)
       .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) || Number(b.id) - Number(a.id))[0];
     if (!v) { antes(); abrirPostventa(c, 'vouchers'); return; }
     const r = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: v.id } });
