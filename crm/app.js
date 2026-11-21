@@ -5472,11 +5472,8 @@ const RV_METODO_A_VOUCHER = { 'Pago móvil': 'Pago móvil', Zelle: 'Zelle', Efec
 const RV_TIPO_DOC = { cedula: 'Cédula', pasaporte: 'Pasaporte', rif: 'RIF', otro: 'Otro' };
 const RV_DOC_TIPOS = { voucher: 'Voucher', boleto: 'Boleto', comprobante: 'Comprobante', documento_identidad: 'Documento de identidad', otro: 'Otro' };
 const RV_DOC_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
-// Lectura IA de los tickets: las URLs firmadas duran 120 s (se cachean 90) y `datos_ia` se
-// guarda en reserva_documentos, así que RV_DOC_IA se recarga junto con la reserva.
+// Las URLs firmadas de los tickets duran 120 s (se cachean 90).
 const RV_TK_URLS = new Map();
-const RV_TK_LEYENDO = new Set();
-let RV_DOC_IA = {}, RV_TK_IA_CARGANDO = false;
 const RV_ERR = {
   'no autorizado': 'No tienes permiso sobre esta reserva', no_autorizado: 'No tienes permiso sobre esta reserva',
   reserva_no_existe: 'La reserva no existe', servicio_no_existe: 'El servicio ya no existe', servicio_anulado: 'El servicio está anulado',
@@ -5631,7 +5628,6 @@ async function rvCargar() {
   RV_APTOS = aptos;
   RV_DET = data;
   rvRender();
-  rvTkCargarIa();
   if (data.vista === 'admin' || data.vista === 'asesor') rviaCargar(id, apertura);
 }
 // Revisión IA (dueño 20-nov): lo que la IA vio que falta o está mal en la reserva. No bloquea nada
@@ -5642,67 +5638,12 @@ const rviaChip = id => { const r = RVIA_MAPA.get(Number(id)); const n = r?.halla
   return n ? `<div class="pv-meta"><span class="rvia-chip" title="${esc(r.hallazgos.map(h => h.texto).join('\n'))}"><i class="fas fa-robot" aria-hidden="true"></i>IA: ${n} ${n === 1 ? 'cosa' : 'cosas'} por revisar</span></div>` : ''; };
 // Botones de arreglo (dueño 21-nov): cada hallazgo con salida automática trae su botón. El servidor puede
 // mandar h.accion; los hallazgos viejos o de reglas fijas se resuelven por clave o por el texto.
-const RVIA_CLAVE_ACCION = { 'r:sin_pasajeros': 'pasajeros_boletos', 'r:sin_documento': 'pasajeros_boletos', 'r:pax_incompletos': 'pasajeros_boletos' };
+const RVIA_CLAVE_ACCION = { 'r:sin_pasajeros': 'leer_boleto', 'r:sin_documento': 'leer_boleto', 'r:pax_incompletos': 'leer_boleto' };
 const RVIA_TEXTO_ACCION = [[/fecha de fin del viaje/i, 'fin_viaje']];
-const rviaNorm = p => [p.nombre, p.apellido].filter(Boolean).join(' ').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');
 const rviaServiciosVivos = () => (RV_DET?.servicios || []).filter(s => !s.anulado_en);
 function rviaFinCalculado() {
   const f = rviaServiciosVivos().map(s => String(s.fecha_fin || s.fecha_inicio || '').slice(0, 10)).filter(Boolean).sort();
   return f.length ? f[f.length - 1] : '';
-}
-async function rviaPasajerosBoletos(id) {
-  if (!(RV_DET?.documentos || []).some(d => d.tipo === 'boleto')) { rvTab('servicios'); errToast('Sube primero el PDF del boleto en Servicios > boleto aéreo > Tickets.'); return false; }
-  let { data, error } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: id });
-  if (error || !data?.ok) throw new Error('no pude leer los boletos');
-  // Los boletos subidos por la importación no guardan lectura IA: se leen ahora (analizar-ticket la guarda).
-  const leidos = new Set((data.documentos || []).map(x => x.documento_id));
-  const sinLeer = (RV_DET.documentos || []).filter(d => d.tipo === 'boleto' && !d.anulado_en && !leidos.has(d.id));
-  let fallos = 0;
-  for (const d of sinLeer) {
-    try {
-      const r = await fetch(await rvTkUrl(d.id, true)); if (!r.ok) throw new Error('descarga');
-      const contenido = await rvTkContenido(new File([await r.blob()], d.nombre, { type: d.mime }));
-      const a = await sb.functions.invoke('analizar-ticket', { body: { documento_id: d.id, ...contenido } });
-      if (a.error || !a.data?.ok) throw new Error(a.data?.error || 'lectura');
-    } catch (e) { console.error('rvia leer boleto', d.id, e); fallos++; }
-  }
-  if (sinLeer.length) { ({ data, error } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: id })); if (error || !data?.ok) throw new Error('no pude leer los boletos'); }
-  const docs = new Map((RV_DET.documentos || []).map(d => [d.id, d]));
-  const vistos = new Map();
-  for (const x of data.documentos || []) for (const p of x.datos_ia?.pasajeros || []) {
-    const k = rviaNorm(p); if (!k || !String(p.nombre || '').trim()) continue;
-    const prev = vistos.get(k) || { tickets: [] };
-    vistos.set(k, { ...prev, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v)),
-      tickets: p.numero_ticket ? [...prev.tickets, { servicio_id: docs.get(x.documento_id)?.servicio_id, numero: String(p.numero_ticket).trim() }] : prev.tickets });
-  }
-  if (!vistos.size) { errToast(fallos ? 'No pude leer el PDF del boleto. Cárgalos a mano en Pasajeros.' : 'La IA no encontró pasajeros en los boletos. Cárgalos a mano en Pasajeros.'); return false; }
-  const existentes = RV_DET.pasajeros || [], ticketsYa = RV_DET.boletos || [];
-  let nuevos = 0, completados = 0;
-  for (const [k, p] of vistos) {
-    const ya = existentes.find(e => rviaNorm(e) === k);
-    const tipo = RV_TIPO_DOC[p.tipo_documento] ? p.tipo_documento : 'cedula', numdoc = String(p.numero_documento || '').trim();
-    let pid = ya?.id;
-    if (!ya) {
-      const r = await sb.rpc('guardar_pasajero', { p_reserva_id: id, p_pasajero_id: null, p_datos: {
-        nombre: String(p.nombre).trim(), apellido: String(p.apellido || '').trim(), tipo_documento: numdoc ? tipo : null, numero_documento: numdoc,
-        titular: !existentes.length && nuevos === 0 } });
-      if (r.error || !r.data?.ok) throw new Error(rvErr(r.error, r.data));
-      pid = r.data.pasajero?.id; nuevos++;
-    } else if (!ya.numero_documento && numdoc) {
-      const r = await sb.rpc('guardar_pasajero', { p_reserva_id: id, p_pasajero_id: ya.id, p_datos: { tipo_documento: tipo, numero_documento: numdoc } });
-      if (r.error || !r.data?.ok) throw new Error(rvErr(r.error, r.data));
-      completados++;
-    }
-    // Número de boleto: solo donde ese pasajero todavía no tiene uno; si falla (rol sin permiso) no frena lo demás.
-    for (const t of p.tickets) {
-      if (!pid || !t.servicio_id || ticketsYa.some(b => b.servicio_id === t.servicio_id && b.pasajero_id === pid && b.numero_ticket)) continue;
-      await sb.rpc('boleteria_guardar_boleto', { p_servicio_id: t.servicio_id, p_pasajero_id: pid, p_numero_ticket: t.numero }).then(() => {}, () => {});
-    }
-  }
-  if (!nuevos && !completados) { okToast('Los pasajeros de los boletos ya estaban cargados.'); return true; }
-  okToast([nuevos ? `${nuevos} ${nuevos === 1 ? 'pasajero agregado' : 'pasajeros agregados'}` : '', completados ? `${completados} con documento completado` : ''].filter(Boolean).join(' · '));
-  rvTrasCambio();
-  return true;
 }
 async function rviaFinViaje() {
   const fin = rviaFinCalculado(), campo = document.getElementById('pv-e-fin');
@@ -5712,26 +5653,27 @@ async function rviaFinViaje() {
   okToast(`Fin del viaje: ${pvFecha(fin)} (el último servicio). Toca «Guardar cambios» para confirmarlo.`);
   return true;
 }
-// Vuelos sin tramos: abre la lectura inteligente del boleto ya subido (la misma de Servicios) para revisar y guardar los tramos.
-async function rviaTramosBoleto(id, h) {
-  const sid = Number(String(h?.clave || '').split(':')[2]);
-  const s = rviaServiciosVivos().find(x => x.id === sid);
-  const d = (RV_DET.documentos || []).find(x => x.tipo === 'boleto' && !x.anulado_en && x.servicio_id === sid);
+// Una sola salida para pasajeros y tramos: la lectura inteligente del boleto ya subido (la de Servicios), que
+// propone pasajeros, tramos y números de ticket juntos y los guarda cuando el asesor confirma.
+async function rviaLeerBoleto(id, h) {
+  const docs = (RV_DET.documentos || []).filter(x => x.tipo === 'boleto' && !x.anulado_en);
+  const pedido = Number(String(h?.clave || '').split(':')[2]);
+  const d = docs.find(x => x.servicio_id === pedido) || docs.find(x => rviaServiciosVivos().some(s => s.id === x.servicio_id));
   rvTab('servicios');
-  if (!s) { errToast('No encuentro ese servicio.'); return false; }
-  if (!d) { errToast('Ese vuelo no tiene PDF de boleto. Súbelo en Tickets y se leerán los tramos.'); return false; }
-  if (!(await rvForm({ tipo: 'tickets', id: sid }))) return false;
+  if (!d) { errToast('Sube primero el PDF del boleto en Servicios > boleto aéreo > Tickets.'); return false; }
+  if (!(await rvForm({ tipo: 'tickets', id: d.servicio_id }))) return false;
   await rvTkLeerDoc(d.id);
   return false;
 }
 const RVIA_ACCIONES = {
-  tramos_boleto: { texto: 'Leer tramos del boleto', icono: 'fa-route', aplicar: rviaTramosBoleto, disponible: () => true },
-  pasajeros_boletos: { texto: 'Tomar pasajeros de los boletos', icono: 'fa-user-plus', aplicar: rviaPasajerosBoletos, disponible: () => true },
+  leer_boleto: { texto: 'Leer el boleto y cargar todo', icono: 'fa-wand-magic-sparkles', aplicar: rviaLeerBoleto, disponible: () => true },
   fin_viaje: { texto: 'Usar fecha del último servicio', icono: 'fa-calendar-check', aplicar: rviaFinViaje, disponible: () => !!rviaFinCalculado() },
 };
+const RVIA_ALIAS = { pasajeros_boletos: 'leer_boleto', tramos_boleto: 'leer_boleto' };
 function rviaAccionDe(h) {
   if (!rvPuedeEditar()) return null;
-  const a = RVIA_ACCIONES[h.accion] ? h.accion : RVIA_CLAVE_ACCION[h.clave] || (/^r:sin_tramos:\d+$/.test(h.clave || '') ? 'tramos_boleto' : null) || RVIA_TEXTO_ACCION.find(([re]) => re.test(h.texto || ''))?.[1];
+  const ac = RVIA_ALIAS[h.accion] || h.accion;
+  const a = RVIA_ACCIONES[ac] ? ac : RVIA_CLAVE_ACCION[h.clave] || (/^r:sin_tramos:\d+$/.test(h.clave || '') ? 'leer_boleto' : null) || RVIA_TEXTO_ACCION.find(([re]) => re.test(h.texto || ''))?.[1];
   return a && RVIA_ACCIONES[a].disponible() ? a : null;
 }
 async function rviaCargar(id, apertura) {
@@ -5938,7 +5880,6 @@ function rvAccion(accion, id, btn) {
     case 'tickets': return rvForm({ tipo: 'tickets', id: n });
     case 'guardar-tickets': return rvGuardarTickets(btn);
     case 'leer-ticket': return rvTkLeerDoc(n);
-    case 'pasajeros-ticket': return rvTkUsarPasajeros(n);
     case 'evento': return rvForm({ tipo: 'evento', id: n, evento: btn.dataset.evento });
     case 'guardar-evento': return rvGuardarEvento(btn);
   }
@@ -7832,18 +7773,12 @@ function rvTicketsDocsHtml(s) {
   const docs = rvTicketsDocs(s);
   if (!docs.length) return '<div class="pv-empty">Todavía no hay tickets subidos.</div>';
   return `<div class="rv-bol-t"><i class="fas fa-paperclip"></i> Tickets subidos (${docs.length})</div>` + docs.map(d => {
-    const ia = RV_DOC_IA[d.id], pas = ia?.pasajeros || [], leyendo = RV_TK_LEYENDO.has(d.id);
-    const det = ia ? [ia.ruta, ia.aerolinea, ia.fecha ? pvFecha(ia.fecha) : '', ia.localizador ? 'Loc. ' + ia.localizador : ''].filter(Boolean).join(' · ') : '';
     return `<div class="rv-tk-card">
       <div class="rv-tk-thumb" data-tk-thumb="${d.id}"><i class="fas ${d.mime === 'application/pdf' ? 'fa-file-pdf' : 'fa-file-image'}"></i></div>
       <div class="rv-tk-body">
         <div class="rv-tk-name">${esc(d.nombre)}</div>
         <div class="rv-meta"><span>${rvPeso(Number(d.tamano_bytes || 0))}</span><span>${pvFecha(d.created_at)}${d.subido_por ? ' · ' + esc(d.subido_por) : ''}</span></div>
-        ${pas.length ? `<div class="rv-tk-pas">${pas.map(p => `<span class="rv-tk-chip"><i class="fas fa-user"></i>${esc([p.nombre, p.apellido].filter(Boolean).join(' '))}${p.numero_ticket ? ' · <b>' + esc(p.numero_ticket) + '</b>' : ''}</span>`).join('')}</div>`
-          : leyendo ? '<div class="csub"><i class="fas fa-spinner fa-spin"></i> Leyendo el ticket…</div>'
-          : `<div class="csub">${ia ? 'No detecté pasajeros en este ticket' : 'Sin lectura: prueba Releer'}</div>`}
-        ${det ? `<div class="rv-tk-det">${esc(det)}</div>` : ''}
-        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}">${docBotonVer()}</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Releer</button>${pas.length && rvPuedeEditar() ? `<button class="btn-sm" type="button" data-rv-accion="pasajeros-ticket" data-id="${d.id}"><i class="fas fa-user-plus"></i> Usar en Pasajeros</button>` : ''}<button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
+        <div class="rv-acciones"><button class="btn-sm" type="button" data-rv-accion="descargar" data-id="${d.id}">${docBotonVer()}</button><button class="btn-sm" type="button" data-rv-accion="descargar-archivo" data-id="${d.id}"><i class="fas fa-download"></i> Descargar</button><button class="btn-sm" type="button" data-rv-accion="leer-ticket" data-id="${d.id}"><i class="fas fa-wand-magic-sparkles"></i> Leer y cargar</button><button class="btn-sm rv-danger" type="button" data-rv-accion="anular-documento" data-id="${d.id}"><i class="fas fa-ban"></i> Quitar</button></div>
       </div>
     </div>`;
   }).join('');
@@ -7869,12 +7804,6 @@ async function rvTkMiniaturas() {
       box.classList.add('con-foto');
     } catch (e) { console.error('miniatura ticket', e); }
   }
-}
-function rvTkRepintarLista(s) {
-  const box = document.getElementById('rv-tk-lista');
-  if (!box || !s) return;
-  box.innerHTML = rvTicketsDocsHtml(s);
-  rvTkMiniaturas();
 }
 function rvFormTickets(p) {
   const s = rvServicioForm(); if (!s) { RV_FORM = null; return rvRenderServicios(); }
@@ -7902,20 +7831,6 @@ function rvTkNombre(file) {
   const ext = (String(file?.type || '').split('/')[1] || 'bin').replace('jpeg', 'jpg');
   if (!n || /^image\.\w+$/i.test(n)) return `captura-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
   return n.slice(0, 150);
-}
-async function rvTkContenido(file) {
-  if (file.type === 'application/pdf') {
-    const texto = await textoDelPdf(file).catch(() => '');
-    if (texto.length >= 40) return { texto };
-    const lib = await cargarPdfjs();
-    const pdf = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
-    const page = await pdf.getPage(1), vp = page.getViewport({ scale: 1 });
-    const canvas = document.createElement('canvas');
-    canvas.width = 1400; canvas.height = Math.round(1400 / vp.width * vp.height);
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: page.getViewport({ scale: 1400 / vp.width }) }).promise;
-    return { mime: 'image/jpeg', imagen: canvas.toDataURL('image/jpeg', .82).split(',')[1] };
-  }
-  return { mime: file.type, imagen: await archivoABase64(file) };
 }
 async function rvTkSubirArchivos(files, s) {
   if (!s || !files?.length) return;
@@ -7956,8 +7871,6 @@ async function rvTkImportarArchivos(s, files) {
   if (RV_RESERVA_ID !== reservaId || RV_APERTURA !== apertura) return;
   if (RV_FORM?.tipo === 'servicio' && RV_FORM.id === s.id) { if (RV_IMPORT) await RV_IMPORT.agregarArchivos(files); else errToast('No se pudo abrir la revisión de importación.'); }
 }
-async function rvTkLeer(docId, s, file) { if (docId && file) await rvTkImportarArchivos(s, [file]); }
-async function rvTkUsarPasajeros(docId) { await rvTkLeerDoc(docId); }
 async function rvTkLeerDoc(docId) {
   const s = rvServicioForm(); if (!s) return;
   const d = (RV_DET.documentos || []).find(x => x.id === docId); if (!d) return;
@@ -7968,7 +7881,7 @@ async function rvTkLeerDoc(docId) {
     if (!respuesta.ok) throw new Error('No se pudo descargar el archivo privado.');
     const blob = await respuesta.blob();
     if (RV_RESERVA_ID !== reservaId || RV_APERTURA !== apertura || RV_FORM !== form) return;
-    await rvTkLeer(docId, s, new File([blob], d.nombre, { type: d.mime }));
+    await rvTkImportarArchivos(s, [new File([blob], d.nombre, { type: d.mime })]);
   } catch (e) {
     errToast('No pude abrir el ticket: ' + (e?.message || e));
   } finally { if (estado) estado.textContent = ''; }
@@ -7981,19 +7894,6 @@ function rvTkPaste(e) {
   e.preventDefault();
   const files = fotos.map((f, i) => { try { return new File([f], f.name || `captura-${Date.now()}-${i}.png`, { type: f.type }); } catch { return f; } });
   rvTkSubirArchivos(files, s);
-}
-async function rvTkCargarIa() {
-  if (!(RV_DET?.documentos || []).some(d => d.tipo === 'boleto')) { RV_DOC_IA = {}; return; }
-  if (RV_TK_IA_CARGANDO) return;
-  RV_TK_IA_CARGANDO = true;
-  try {
-    const { data } = await sb.rpc('reserva_tickets_ia', { p_reserva_id: RV_RESERVA_ID });
-    if (!data?.ok) return;
-    const map = {};
-    (data.documentos || []).forEach(x => { if (x.datos_ia) map[x.documento_id] = x.datos_ia; });
-    RV_DOC_IA = map;
-    if (RV_FORM?.tipo === 'tickets') rvTkRepintarLista(rvServicioForm());
-  } finally { RV_TK_IA_CARGANDO = false; }
 }
 async function rvGuardarTickets(btn) {
   const err = document.getElementById('rv-f-err'), id = RV_FORM.id;
@@ -8344,7 +8244,7 @@ async function rvAnularDocumento(id) {
   if (error || !data?.ok) { errToast('No se pudo quitar: ' + rvErr(error, data)); return; }
   okToast('Documento quitado');
   if (RV_DET?.documentos) RV_DET.documentos = RV_DET.documentos.filter(d => d.id !== id);
-  delete RV_DOC_IA[id]; RV_TK_URLS.delete(id);
+  RV_TK_URLS.delete(id);
   if (RV_FORM?.tipo === 'tickets') rvFormTickets(rvPanel('servicios'));
   rvTrasCambio();
 }
