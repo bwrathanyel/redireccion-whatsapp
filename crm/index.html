@@ -8818,9 +8818,16 @@ textarea.tk-input{height:auto;min-height:70px;padding:11px 12px;resize:vertical}
   #leads-cards .lead-card .lc-foot{padding-top:9px}
   #leads-cards .lead-card .lc-fill{flex-basis:9px}
 }
+/* El buscador/favoritos no deben reintroducir Corporativo ni Pausa para asesores. */
+body.rol-asesor #sidebar-nav > [data-sec="grp-directorio"],
+body.rol-asesor #sidebar-nav > [data-padre="grp-directorio"],
+body.rol-asesor #nav-pausa-turno,
+body.rol-asesor #hoy-pausa-pill,
+body.rol-asesor #hoy-pausa-btns,
+body.rol-asesor #pausa-turno-sheet,
+body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
 /* QA móvil 2026-11-06 */
 @media (max-width:760px){
-  .rol-asesor .nav-item.nav-pausa-turno{display:flex}
   /* FABs: nada flotante sobre paneles, hojas de filtros, teclado ni barras fijas */
   body.lyra-abierta .mfab,body.con-mfs :is(.mfab,.chat-fab,.lyra-fab),body.teclado :is(.mfab,.chat-fab,.lyra-fab){opacity:0;pointer-events:none;transform:scale(.8)}
   body.en-voucher :is(.lyra-fab,.chat-fab){bottom:calc(84px + var(--safe-b) + var(--bi-h,0px))}

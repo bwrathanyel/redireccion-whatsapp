@@ -689,6 +689,7 @@ async function entrarSegunRol() {
   document.body.classList.toggle('rol-marketing', ROL === 'marketing');
   document.body.classList.toggle('rol-boleteria', ROL === 'boleteria');
   document.body.classList.toggle('rol-administrativo', ROL === 'administrativo');
+  aplicarTarifarioPorRol();
   // Rol boleteria vive siempre en modo Boletería -- se aplica acá, antes de
   // startApp(), para que no haya un parpadeo de colores normales al cargar.
   if (ROL === 'boleteria') { modoBoleteria = true; document.body.classList.add('modo-boleteria'); }
@@ -10291,9 +10292,13 @@ function setupHoy() {
 // y solo refleja el estado real después de tocar un botón acá.
 function setupPausaAsesor() {
   document.querySelectorAll('[data-pausa]').forEach(btn => btn.onclick = () => pausaAsesorClick(btn.dataset.pausa, btn));
-  document.getElementById('nav-pausa-turno')?.addEventListener('click', () => { cerrarMenuMovil('silencioso'); openSheet('pausa-turno-sheet'); });
+  document.getElementById('nav-pausa-turno')?.addEventListener('click', () => {
+    if (ROL === 'asesor') return;
+    cerrarMenuMovil('silencioso'); openSheet('pausa-turno-sheet');
+  });
 }
 async function pausaAsesorClick(modo, btn) {
+  if (ROL === 'asesor') return;
   if (btn) btn.disabled = true;
   const { data, error } = await sb.rpc('set_pausa_asesor', { p_modo: modo });
   if (btn) btn.disabled = false;
@@ -27161,6 +27166,18 @@ function setupTarMas() {
   document.addEventListener('click', e => { if (!pop.contains(e.target)) abrir(false); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') abrir(false); });
 }
+const tarTabPermitidaPorRol = tab => ROL !== 'asesor' || tab !== 'ia';
+function aplicarTarifarioPorRol() {
+  const grupo = document.getElementById('tar-tabs');
+  if (!grupo) return;
+  const orden = TAR_TAB_META.map(t => t.key);
+  if (ROL === 'asesor') orden.unshift(...orden.splice(orden.indexOf('hotel'), 1));
+  orden.forEach(tab => { const b = grupo.querySelector(`[data-tab="${tab}"]`); if (b) grupo.append(b); });
+  tarTab = ROL === 'asesor' ? 'hotel' : 'hotsale';
+  grupo.querySelectorAll('.seg').forEach(b => b.classList.toggle('on', b.dataset.tab === tarTab));
+  aplicarTabsOcultas();
+  actualizarVisibilidadFiltrosTarifario();
+}
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -27169,6 +27186,7 @@ function setupTarifarioTabs() {
     + `<option value="${mesActual}">Este mes (${MESL[mesActual - 1]})</option>`
     + MESL.map((m, i) => `<option value="${i + 1}">${m.charAt(0).toUpperCase() + m.slice(1)}</option>`).join('');
   document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
+    if (!tarTabPermitidaPorRol(b.dataset.tab) || (tabsOcultas.includes(b.dataset.tab) && !tarVerOcultos())) return;
     document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); tarTab = b.dataset.tab;
     const g = esMovil() && b.parentNode; if (g) g.scrollLeft = b.offsetLeft - (g.clientWidth - b.offsetWidth) / 2;
@@ -27734,14 +27752,13 @@ function aplicarTabsOcultas() {
   document.querySelectorAll('#tar-tabs .seg').forEach(b => {
     const oculto = tabsOcultas.includes(b.dataset.tab);
     b.classList.toggle('tab-oculta', oculto && tarVerOcultos());
-    b.style.display = oculto && !tarVerOcultos() ? 'none' : '';
+    b.style.display = !tarTabPermitidaPorRol(b.dataset.tab) || (oculto && !tarVerOcultos()) ? 'none' : '';
   });
-  if (!tarVerOcultos()) {
-    const activo = document.querySelector('#tar-tabs .seg.on');
-    if (activo && tabsOcultas.includes(activo.dataset.tab)) {
-      const primera = [...document.querySelectorAll('#tar-tabs .seg')].find(b => !tabsOcultas.includes(b.dataset.tab));
-      primera?.click();
-    }
+  const activo = document.querySelector('#tar-tabs .seg.on');
+  if (!activo || !tarTabPermitidaPorRol(activo.dataset.tab) || (tabsOcultas.includes(activo.dataset.tab) && !tarVerOcultos())) {
+    const primera = [...document.querySelectorAll('#tar-tabs .seg')].find(b => tarTabPermitidaPorRol(b.dataset.tab) && getComputedStyle(b).display !== 'none');
+    if (primera) primera.click();
+    else if (ROL === 'asesor') { activo?.classList.remove('on'); tarTab = null; loadTarifario(); }
   }
 }
 // Último TARIFARIO NACIONAL de BT Travel tal cual llegó al Drive (Edge Function tarifario-bt-pdf).
@@ -28020,6 +28037,12 @@ function cargadorIniciar(el, { titulo = 'Cargando…', icono = 'fa-plane-departu
 const TAR_CARGADOR_TITULO = { hotsale: 'Cargando Hot Sales', ia: 'Cargando curaduría IA', promo: 'Cargando promociones', excursion: 'Cargando excursiones', traslado: 'Cargando traslados', hotel: 'Cargando hoteles', paquete: 'Cargando paquetes', boleteria: 'Cargando boletería' };
 
 async function loadTarifario() {
+  if (!tarTab) {
+    document.getElementById('tar-loading').classList.remove('show');
+    document.getElementById('tar-grid').style.display = 'none';
+    document.getElementById('tar-empty').classList.add('show');
+    return;
+  }
   loadTarifarioInfo();
   // TOP IA: la lista corta que el bot recorta (ia_top_productos). Solo se usa
   // para el badge informativo "Fuera de TOP IA" de la pestaña IA -- se trae una
@@ -28159,6 +28182,7 @@ async function loadTarifario() {
     q = soloVivos(sb.from('productos').select(selProductos).eq('tipo', tarTab).eq('es_boleteria', false)).order('nombre');
   }
   if (q) ({ data, error } = await q);
+  if (!tarTab) { carga.fin(); return; }
   carga.fin(); grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
   // Un paquete puede heredar las fotos de su hotel vinculado (productos.hotel_id)
@@ -28842,6 +28866,7 @@ async function tarDescartarBorrador() {
   await tarCerrarBorrador('descartar_excursiones_borrador', 'Borrador descartado');
 }
 function renderTarifario() {
+  if (!tarTab) return;
   detenerCarruseles();
   tarPintarBorrador();
   // La pestaña IA no es una grilla de tarjetas: es una lista curada (tri-estado
@@ -40533,8 +40558,12 @@ function conSondeoNav(fn) {
 // Cada sondeo recalcula estilos de TODO el documento (clase en body): se hace
 // una sola vez por combinación de clases de body + ancho y se reusa.
 let NAV_VIS = null, NAV_VIS_CLAVE = '';
+function seccionRestringidaAsesor(sec) {
+  sec = SECCIONES_REUBICADAS[sec] || sec;
+  return ROL === 'asesor' && (sec === 'grp-directorio' || PADRE_DE[sec] === 'grp-directorio');
+}
 function navVisiblePorRol(el) {
-  if (!el) return false;
+  if (!el || seccionRestringidaAsesor(el.dataset.sec)) return false;
   const clave = document.body.className.replace(/nav-(sondeo|buscando)/g, '') + '|' + innerWidth;
   if (!NAV_VIS || NAV_VIS_CLAVE !== clave) { NAV_VIS = new Map(); NAV_VIS_CLAVE = clave; }
   if (!NAV_VIS.has(el)) conSondeoNav(() => document.querySelectorAll('#sidebar-nav > .nav-item').forEach(x => NAV_VIS.set(x, getComputedStyle(x).display !== 'none')));
@@ -40544,7 +40573,10 @@ function navVisiblePorRol(el) {
 const navOpcionalApagada = sec => NAV_OPCIONALES.some(o => o.sec === sec) && !navExtraActivas().includes(sec);
 function hijasVisibles(padre) { return NAV_ITEMS.filter(it => it.padre === padre && !(MI_ASESOR_INTEGRAL && it.sec === 'wa-bandeja') && !navOpcionalApagada(it.sec) && navVisiblePorRol(navItemDe(it.sec))); }
 function actualizarPadresNav() {
-  document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => p.classList.toggle('nav-padre-vacio', !hijasVisibles(p.dataset.sec).length));
+  document.querySelectorAll('#sidebar-nav > .nav-padre').forEach(p => {
+    p.classList.toggle('nav-padre-vacio', !hijasVisibles(p.dataset.sec).length);
+    NAV_VIS?.delete(p);
+  });
 }
 // Clic en un padre: la última hija que se usó de ese grupo, o la primera visible.
 // Reservas abre siempre en Clientes, no en la última pestaña usada (pedido del dueño 2026-10-12).
@@ -40727,6 +40759,7 @@ function setupNavBuscador() {
 }
 
 function activateSection(sec, fromNav) {
+  if (seccionRestringidaAsesor(sec)) sec = seccionInicialPermitida();
   if (sec?.startsWith('grp-')) sec = destinoDePadre(sec);
   sec = SECCIONES_REUBICADAS[sec] || sec;
   // Mensajes ya no es una sección: es un panel flotante encima de cualquier pantalla.
@@ -43654,6 +43687,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-22', emoji: '🏨', titulo: 'Menú de asesores más simple', texto: 'El Tarifario abre en Hoteles y lo muestra primero; Hot Sales sigue disponible. Para asesores se retiraron la pestaña IA del Tarifario y los accesos a Pausa de turno y Corporativo. Los demás roles conservan su navegación.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-21', emoji: '📎', titulo: 'PDF y fotos desde Crear reserva del lead', texto: 'En el paso 1 Viaje puedes leer PDF o fotos, revisar viajeros e itinerarios e incorporar sus servicios al borrador. Completa los precios en Servicios. Los documentos privados se adjuntan solo al crear la reserva; cancelar antes no guarda nada. Se corrigió el error de lectura del proveedor y, si falla un adjunto después de crear, puedes reintentarlo sin repetir la reserva ni el pago.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-21', emoji: '📄', titulo: 'Reservas: importar un servicio desde su PDF o fotos', texto: 'En cada servicio de la Reserva puedes subir el PDF o las fotos del servicio y revisar todo antes de guardar. Se leen todas las páginas y se recuperan pasajeros, documentos, localizador, rutas, conexiones, fechas y horas tal como están impresas; cada boleto queda con su pasajero. Los PDF de Boletos emitidos se recuperan completos, sin volver a escribirlos. Nada se guarda hasta que confirmes la revisión, y puedes corregir, añadir o quitar filas. Los archivos quedan adjuntos y privados en la reserva.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-20', emoji: '🔭', titulo: 'Búsqueda activa: salir a buscar empresas', texto: 'Nueva sección en Leads para buscar empresas, aliados y proveedores. La IA encuentra candidatos con su fuente, avisa si ya los tenemos, completa datos de contacto y redacta el primer mensaje y los seguimientos; tú lo envías. Los prospectos que tocan hoy aparecen en tu resumen del día.', roles: ['admin'] },
