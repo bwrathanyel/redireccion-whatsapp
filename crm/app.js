@@ -10143,6 +10143,7 @@ function renderInbox(opts = {}) {
     if (el.classList.contains('inbox-card')) antes.set(el.dataset.id, { el, izq: sinMovimiento ? 0 : el.getBoundingClientRect().left });
   });
   const vivos = new Set();
+  const primeraAntes = grid.querySelector('.inbox-card.es-siguiente')?.dataset.id;
   INBOX_LEADS.forEach((l, i) => {
     const id = String(l.id);
     vivos.add(id);
@@ -10164,6 +10165,8 @@ function renderInbox(opts = {}) {
     pintarTarjetaInbox(card, l, i);
   });
   antes.forEach(({ el }, id) => { if (!vivos.has(id)) el.remove(); });
+  // Si la primera cambia en vivo, los botones se mueven: se ignoran toques ~400 ms para no atender/reasignar otra.
+  if (primeraAntes && primeraAntes !== String(INBOX_LEADS[0]?.id ?? '')) grid._bloqueoToques = Date.now() + 400;
   if (!sinMovimiento) antes.forEach(({ el, izq }, id) => {
     if (!vivos.has(id) || !el.animate) return;
     const dx = izq - el.getBoundingClientRect().left;
@@ -10179,6 +10182,7 @@ function pintarTarjetaInbox(card, l, i, opts = {}) {
   if (card.parentElement?.id === 'inbox-grid') card.setAttribute('role', 'listitem');
   if (opts.orden !== false) {
     card.classList.toggle('es-siguiente', i === 0);
+    if (i === 0) card.classList.remove('abierta');
     const orden = card.querySelector('.inbox-orden');
     if (orden) orden.textContent = i === 0 ? 'Primera por atender' : '#' + (i + 1);
   }
@@ -10206,6 +10210,14 @@ function actualizarMascaraCola() {
   if (!grid) return;
   grid.classList.toggle('hay-mas', grid.scrollWidth - grid.scrollLeft - grid.clientWidth > 8);
 }
+// Móvil: primer toque en una fila de la cola la abre en el sitio (botones a la vista); el segundo abre la ficha.
+function abrirFilaMovil(card) {
+  if (!matchMedia('(max-width:760px)').matches || card.classList.contains('es-siguiente') || card.classList.contains('abierta')) return false;
+  card.parentElement.querySelectorAll('.inbox-card.abierta').forEach(c => c.classList.remove('abierta'));
+  card.classList.add('abierta');
+  card.scrollIntoView({ block: 'nearest' });
+  return true;
+}
 function setupColaInbox() {
   const grid = document.getElementById('inbox-grid');
   if (!grid) return;
@@ -10217,7 +10229,8 @@ function setupColaInbox() {
     const l = lista().find(x => String(x.id) === card.dataset.id);
     if (!l) return;
     const btn = e.target.closest('.inbox-btn');
-    if (!btn) { openDrawer(l); return; }
+    if (contenedor === grid && btn && Date.now() < (grid._bloqueoToques || 0)) { e.stopPropagation(); return; }
+    if (!btn) { if (contenedor === grid && abrirFilaMovil(card)) return; openDrawer(l); return; }
     if (btn.classList.contains('avisar')) { abrirAvisarTelefono(l); return; }
     const accion = btn.classList.contains('atender') ? () => atenderInboxLead(l) : btn.classList.contains('nopuedo') ? () => noPuedoInboxLead(l) : null;
     if (accion) candadoInbox(card)(accion)(e);
