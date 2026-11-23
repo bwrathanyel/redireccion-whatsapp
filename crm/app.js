@@ -43843,7 +43843,7 @@ const TOUR_CAPITULOS = [
   ]},
   { id: 'leads', titulo: 'Leads', icono: 'fa-users', roles: ['admin', 'asesor'], seccion: 'leads', pasos: [
     { titulo: 'Tus clientes', texto: () => ROL === 'asesor' ? 'Acá aparecen los clientes que te asignaron. Los nuevos suben arriba de todo.' : 'Acá el admin ve y filtra todos los leads del negocio, de todos los asesores.', selector: '#sec-leads' },
-    { titulo: 'Leads nuevos por atender', texto: 'Las consultas nuevas aparecen primero, por orden de llegada a tu asignación. Atiende la primera: el plazo confirmado indica si requiere atención ahora. Debajo están Seguimientos y Recontactos, sin cambiar de pestaña. Atender registra la gestión; No puedo lo pasa a otro asesor.', selector: '#inbox-grid' },
+    { titulo: 'Leads nuevos por atender', texto: 'Las consultas nuevas aparecen primero, por orden de llegada a tu asignación. Atiende la primera: el plazo confirmado indica si requiere atención ahora. Debajo están Clientes Atendidos y Recontactos, sin cambiar de pestaña. Atender registra la gestión; No puedo lo pasa a otro asesor.', selector: '#inbox-grid' },
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor solo ve sus propios leads nuevos, con estos mismos 3 botones. Si no toca ninguno a tiempo, el lead se reasigna automático a otro asesor.', mockup: mockupBandejaAsesor },
   ]},
   { id: 'mensajes', titulo: 'Mensajes', icono: 'fa-comment-dots', roles: ['admin', 'asesor', 'marketing'], seccion: 'mensajes', pasos: [
