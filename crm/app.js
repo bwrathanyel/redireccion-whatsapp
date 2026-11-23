@@ -14,6 +14,7 @@ import { crearMetodosPago } from './metodos-pago.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
+import { crearCalendarioRango } from './cotizaciones-calendario.js';
 import { crearImportacionServicio } from './reservas-importacion.js';
 import { serviciosDeImportacion, viajerosDeImportacion, sincronizarViajerosImportados, finalizarImportaciones } from './reservas-importacion-borrador.js';
 import { crearDisponibilidad } from './disponibilidad.js';
@@ -4294,7 +4295,8 @@ window.prospeccionContarHoy = () => (ROL === 'admin' ? prospeccion().contarHoy()
 let BOLETOS_EMITIDOS = null;
 const boletosEmitidos = () => BOLETOS_EMITIDOS ||= crearBoletosEmitidos({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL, raiz: document.getElementById('boletos-emitidos-root'),
   librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), paleta: VCP,
-  entregar: pdfEntregar, slug: pdfSlug, limpiar: pdfSinEmojis, pdfjs: cargarPdfjs, catalogo: () => bolAsegurarCatalogo().then(() => bolCatalogo) });
+  entregar: pdfEntregar, slug: pdfSlug, limpiar: pdfSinEmojis, pdfjs: cargarPdfjs, catalogo: () => bolAsegurarCatalogo().then(() => bolCatalogo),
+  asesores: async () => { const { data, error } = await sb.rpc('usuarios_chat'); if (error) throw error; return data || []; } });
 let FACTURAS_EMPRESA = null;
 const facturasEmpresa = () => FACTURAS_EMPRESA ||= crearFacturasEmpresa({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, pintarKPIs, hoy: hoyCaracas, rol: () => ROL, raiz: document.getElementById('facturas-empresa-root'),
   librerias: ensureVoucherLibs, fuentes: cargarFuentesPdf, imagen: cargarImagenBase64, membrete: (doc, ctx) => vcpMembrete(doc, ctx), franja: (...a) => vcpFranja(...a), paleta: VCP,
@@ -37829,9 +37831,19 @@ function cbVerStopSales(it) {
   document.getElementById('ss-v-entrada').value = it.ida; document.getElementById('ss-v-salida').value = it.vuelta;
   activateSection('stop-sales');
 }
-function cbFechasHtml(it, i, f) {
+let cbCalendario = null;
+function cbAbrirCalendario(boton) {
+  cbCalendario ||= crearCalendarioRango({ raiz: document.getElementById('cb-items'), esc, obtener: i => cbItems[i], aplicar: (i, fechas) => {
+    const it = cbItems[i]; Object.assign(it, fechas);
+    if (it.auto) { delete it.auto.ida; delete it.auto.vuelta; }
+    cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador();
+  } });
+  cbCalendario.abrir(boton);
+}
+function cbFechasHtml(it, i) {
   const n = +cbNoches(it.ida, it.vuelta) || 0;
-  return `<div class="cb-fechas cb-full">${f('ida', 'Check-in', 'type="date"')}${f('vuelta', 'Check-out', 'type="date"')}<div class="field cb-noches"><span class="fl" id="cb-noches-l-${i}">${cbEmo('🌙')}Noches</span><div class="cb-step" role="group" aria-labelledby="cb-noches-l-${i}"><button type="button" class="cb-step-b" data-cb-noches="-1" aria-label="Una noche menos">−</button><output class="ei" aria-live="polite">${n || '–'}</output><button type="button" class="cb-step-b" data-cb-noches="1" aria-label="Una noche más">+</button></div></div></div>${cbStopHtml(it)}`;
+  const campo = (k, nombre) => `<div class="field"><span class="fl" id="cb-fecha-l-${k}-${i}">${nombre}</span><input type="hidden" data-k="${k}" value="${esc(it[k] || '')}"><button type="button" class="ei cb-fecha" data-cb-fecha="${k}" aria-labelledby="cb-fecha-l-${k}-${i} cb-fecha-t-${k}-${i}" aria-haspopup="dialog" aria-expanded="false" aria-controls="cb-calendario"><i class="far fa-calendar" aria-hidden="true"></i><span id="cb-fecha-t-${k}-${i}">${esc(cbFechaLarga(it[k]) || 'Elegir fecha')}</span></button></div>`;
+  return `<div class="cb-fechas cb-full">${campo('ida', 'Check-in')}${campo('vuelta', 'Check-out')}<div class="field cb-noches"><span class="fl" id="cb-noches-l-${i}">${cbEmo('🌙')}Noches</span><div class="cb-step" role="group" aria-labelledby="cb-noches-l-${i}"><button type="button" class="cb-step-b" data-cb-noches="-1" aria-label="Una noche menos">−</button><output class="ei" aria-live="polite">${n || '–'}</output><button type="button" class="cb-step-b" data-cb-noches="1" aria-label="Una noche más">+</button></div></div></div>${cbStopHtml(it)}`;
 }
 function cbDesgloseHtml(it) {
   const total = cbImporte(it);
@@ -38046,6 +38058,7 @@ function cbRenderItems() {
   if (cbRenderizando) return;
   cbRenderizando = true;
   try {
+    cbCalendario?.cerrar();
     const lista = document.getElementById('cb-items'), foco = document.activeElement;
     // Al quitar un input enfocado, Chrome dispara change/blur durante innerHTML.
     // Resolverlos antes evita que otro render modifique los mismos nodos.
@@ -38110,7 +38123,11 @@ function cbAutoSincronizar() {
     if (!cambios.length || !card) return;
     if (!card.contains(document.activeElement)) { card.outerHTML = cbItemHtml(it, i); return; }
     // Rehacer la tarjeta en edición le quitaría el foco.
-    cambios.forEach(k => { const inp = card.querySelector(`[data-k="${k}"]`); if (inp && inp !== document.activeElement) inp.value = it[k]; });
+    cambios.forEach(k => {
+      const inp = card.querySelector(`[data-k="${k}"]`); if (inp && inp !== document.activeElement) inp.value = it[k];
+      const fecha = card.querySelector(`[data-cb-fecha="${k}"] span`); if (fecha) fecha.textContent = cbFechaLarga(it[k]) || 'Elegir fecha';
+    });
+    const noches = card.querySelector('.cb-noches output'); if (noches) noches.textContent = +cbNoches(it.ida, it.vuelta) || '–';
     card.querySelector('.cb-importe').textContent = cbImporteTexto(it);
     const desglose = card.querySelector('.cb-desglose'); if (desglose) desglose.outerHTML = cbDesgloseHtml(it);
   });
@@ -39150,6 +39167,7 @@ async function cbCargarSeccion() {
       else if (e.key === 'Escape') { cbApCerrar(inp); }
     });
     cbLista.addEventListener('click', e => {
+      const fecha = e.target.closest('[data-cb-fecha]'); if (fecha) { cbAbrirCalendario(fecha); return; }
       const iata = e.target.closest('[data-iata-agregar]');
       if (iata) { const inp = iata.closest('.cb-ap')?.querySelector('.cb-ap-in'); bolIataBoton(iata, () => { inp?.blur(); cbRefrescarRutas(); }); return; }
       const hab = e.target.closest('[data-cb-hab]'); if (hab) { cbHabElegir(hab); return; }
@@ -39168,7 +39186,7 @@ async function cbCargarSeccion() {
       }
       const noches = e.target.closest('[data-cb-noches]');
       if (noches) {
-        if (!it.ida) { errToast('Primero elige el check-in'); docEnfocar(card.querySelector('[data-k="ida"]')); return; }
+        if (!it.ida) { errToast('Primero elige el check-in'); cbAbrirCalendario(card.querySelector('[data-cb-fecha="ida"]')); return; }
         it.vuelta = cbSumarDias(it.ida, Math.max(1, (+cbNoches(it.ida, it.vuelta) || 0) + Number(noches.dataset.cbNoches)));
         if (it.auto) delete it.auto.vuelta;
         cbHotelRecalcular(it); cbAutoTodos(); cbRenderItems(); cbProgramarBorrador(); return;
@@ -43687,6 +43705,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-22', emoji: '📅', titulo: 'Calendario de estancia y asesor en boletos', texto: 'En Cotizaciones puedes elegir entrada y salida desde un calendario de rango, con dos meses en escritorio y uno en móvil. Boletos emitidos permite añadir un asesor opcional: en la previa y el PDF aparece solo su nombre, sin teléfono.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-11-22', emoji: '🏨', titulo: 'Menú de asesores más simple', texto: 'El Tarifario abre en Hoteles y lo muestra primero; Hot Sales sigue disponible. Para asesores se retiraron la pestaña IA del Tarifario y los accesos a Pausa de turno y Corporativo. Los demás roles conservan su navegación.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-21', emoji: '📎', titulo: 'PDF y fotos desde Crear reserva del lead', texto: 'En el paso 1 Viaje puedes leer PDF o fotos, revisar viajeros e itinerarios e incorporar sus servicios al borrador. Completa los precios en Servicios. Los documentos privados se adjuntan solo al crear la reserva; cancelar antes no guarda nada. Se corrigió el error de lectura del proveedor y, si falla un adjunto después de crear, puedes reintentarlo sin repetir la reserva ni el pago.', roles: ['admin', 'asesor', 'asesor_prueba'] },
   { fecha: '2026-11-21', emoji: '📄', titulo: 'Reservas: importar un servicio desde su PDF o fotos', texto: 'En cada servicio de la Reserva puedes subir el PDF o las fotos del servicio y revisar todo antes de guardar. Se leen todas las páginas y se recuperan pasajeros, documentos, localizador, rutas, conexiones, fechas y horas tal como están impresas; cada boleto queda con su pasajero. Los PDF de Boletos emitidos se recuperan completos, sin volver a escribirlos. Nada se guarda hasta que confirmes la revisión, y puedes corregir, añadir o quitar filas. Los archivos quedan adjuntos y privados en la reserva.', roles: ['admin', 'asesor', 'asesor_prueba'] },

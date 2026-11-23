@@ -387,14 +387,17 @@ export function parsearBoleto(lineas) {
   };
 }
 
-export const datosVacios = () => ({ pasajeros: [], tramos: [], emision: {}, emisoras: {}, notas: '' });
+export const snapshotAsesor = a => { const nombre = String(a?.nombre || '').trim(); return nombre ? { id: String(a.id || ''), nombre } : null; };
+export const asesoresVisibles = lista => (Array.isArray(lista) ? lista : []).filter(a => a && a.rol === 'asesor' && a.activo !== false && a.visible !== false && !a.es_prueba && !/^(__gate|prueba|invitado)/i.test(String(a.nombre || '').trim()))
+  .map(snapshotAsesor).filter(a => a?.id).filter((a, i, arr) => arr.findIndex(x => x.id === a.id) === i).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+export const datosVacios = () => ({ pasajeros: [], tramos: [], emision: {}, emisoras: {}, notas: '', asesor: null });
 const clavePax = p => `${norm(p.apellido)}/${norm(p.nombre)}|${String(p.documento || '').replace(/\D/g, '')}`;
 const claveTramo = t => [t.iata || claveAerolinea(t), String(+t.vuelo || t.vuelo), t.fecha, norm(t.origen), norm(t.destino), norm(t.reserva)].join('|');
 
 // Junta los recibos leídos (uno por boleto) en un solo documento, sobre lo que ya haya en `base`.
 export function unirBoletos(recibos, base = datosVacios()) {
   const d = JSON.parse(JSON.stringify(base));
-  d.pasajeros ||= []; d.tramos ||= []; d.emision ||= {}; d.emisoras ||= {};
+  d.pasajeros ||= []; d.tramos ||= []; d.emision ||= {}; d.emisoras ||= {}; d.asesor = snapshotAsesor(d.asesor);
   for (const r of recibos.filter(Boolean)) {
     for (const t of r.tramos) if (!d.tramos.some(x => claveTramo(x) === claveTramo(t))) d.tramos.push(t);
     const k = clavePax(r.pasajero);
@@ -597,6 +600,16 @@ export async function construirPdf(d, numero, c) {
   });
   y = doc.lastAutoTable.finalY + 16;
 
+  const asesor = snapshotAsesor(d.asesor);
+  if (asesor) {
+    font('medium', 8.6, P.navy);
+    const lineas = doc.splitTextToSize(limpiar(`Asesor: ${asesor.nombre}`), W), max = Math.floor((PIE - 48 - 9) / 11);
+    for (let i = 0; i < lineas.length; i += max) {
+      const parte = lineas.slice(i, i + max); asegurar(parte.length * 11 + 9);
+      font('medium', 8.6, P.navy); parte.forEach((l, k) => doc.text(l, X0, y + 9 + k * 11)); y += parte.length * 11 + 9;
+    }
+  }
+
   // ---------- Antes de volar ----------
   const vinetas = [...ANTES_DE_VOLAR, ...(d.notas ? [d.notas] : [])].map(limpiar);
   font('normal', 8, P.cuerpo);
@@ -660,6 +673,8 @@ export function crearBoletosEmitidos(c) {
   const { sb, esc, raiz } = c;
   let montado = false, vista = 'editor', d = datosVacios(), editando = null, aviso = null, ocupado = false, pedido = 0, verAnulados = false, histQ = '';
   let lote = [], iLote = 0, modo = 'reserva', crudos = [], porCompartir = null;
+  let asesores = [], cargandoAsesores = false, errorAsesores = false;
+  const asesorPorRecibo = new WeakMap(), recibosPorDocumento = new WeakMap();
   try { modo = localStorage.getItem('be_modo_lote') || 'reserva'; } catch (_e) { /* sin almacenamiento */ }
   const $ = sel => raiz.querySelector(sel);
   const permitido = () => ['admin', 'boleteria'].includes(typeof c.rol === 'function' ? c.rol() : c.rol);
@@ -698,6 +713,7 @@ export function crearBoletosEmitidos(c) {
           <div class="card be-bloque"><h3><i class="fas fa-user"></i> Pasajeros</h3><div id="be-pasajeros"></div>
             <button type="button" class="be-agregar" data-acc="pax"><i class="fas fa-plus"></i> Agregar pasajero</button>
             <div class="field"><label class="fl" for="be-notas">Nota para el pasajero (opcional, sale en «Antes de volar»)</label><textarea id="be-notas" class="ei" rows="2" data-k="notas"></textarea></div></div>
+          <div class="card be-bloque"><div class="field"><label class="fl" for="be-asesor">Asesor (opcional, solo nombre en el boleto)</label><select class="ei" id="be-asesor" data-k="asesor" aria-describedby="be-asesor-estado"></select></div><div id="be-asesor-estado" class="be-estado" role="status"></div></div>
           <details class="card be-bloque" id="be-emision"><summary><i class="fas fa-building"></i> Datos de emisión <small id="be-emision-res"></small></summary><div class="be-grid" id="be-emision-campos"></div></details>
         </div>
         <aside class="card be-lateral" aria-label="Vista previa del boleto">
@@ -853,6 +869,22 @@ export function crearBoletosEmitidos(c) {
         ${grupos.map(g => campo(`N° de boleto ${esc(g.aerolinea.nombre)}${grupos.length > 1 && g.reserva ? ' · ' + esc(g.reserva) : ''}`, 'p.boleto', p.boletos?.[g.clave], `data-g="${esc(g.clave)}" inputmode="numeric" placeholder="765-0380712859" data-boleto`, 'be-2')).join('')}
       </div></div>`).join('');
   }
+  function pintarAsesor() {
+    const sel = snapshotAsesor(d.asesor), indice = asesores.findIndex(a => a.id === sel?.id && a.nombre === sel.nombre);
+    $('#be-asesor').innerHTML = `<option value="" ${!sel ? 'selected' : ''}>Sin asesor</option>${sel && indice < 0 ? `<option value="historico" selected>${esc(sel.nombre)} (guardado)</option>` : ''}${asesores.map((a, i) => `<option value="a:${i}" ${i === indice ? 'selected' : ''}>${esc(a.nombre)}</option>`).join('')}`;
+    $('#be-asesor-estado').innerHTML = cargandoAsesores ? 'Cargando asesores…' : errorAsesores ? 'No se pudo cargar la lista. Puedes continuar sin asesor. <button type="button" class="be-btn" data-acc="asesores-recargar">Reintentar</button>' : !asesores.length ? 'No hay asesores disponibles. Puedes continuar sin asesor. <button type="button" class="be-btn" data-acc="asesores-recargar">Actualizar</button>' : '';
+  }
+  async function cargarAsesores() {
+    if (cargandoAsesores) return;
+    cargandoAsesores = true; errorAsesores = false; pintarAsesor();
+    try { asesores = asesoresVisibles(await c.asesores?.()); } catch (_e) { errorAsesores = true; }
+    finally { cargandoAsesores = false; pintarAsesor(); }
+  }
+  const recibosDe = datos => recibosPorDocumento.get(datos) || [];
+  const asesorDeRecibos = rs => {
+    const valores = rs.map(r => snapshotAsesor(asesorPorRecibo.get(r))), primero = valores[0] || null;
+    return valores.every(a => a?.id === primero?.id && a?.nombre === primero?.nombre) ? primero : null;
+  };
   function pintarEmision() {
     const e = d.emision;
     $('#be-emision-campos').innerHTML = `${campo('Fecha y hora de emisión', 'e.fecha', e.fecha, 'type="datetime-local"', 'be-2')}${campo('Agencia emisora', 'e.agencia', e.agencia, '', 'be-2')}
@@ -878,6 +910,7 @@ export function crearBoletosEmitidos(c) {
         <div><small>Reserva</small><b>${esc(grupos.map(g => g.reserva).filter(Boolean).join(' · ') || '—')}</b></div>
         <div><small>Ruta</small><b>${esc(ruta.join(' - ') || '—')}</b></div>
         <div style="grid-column:1/-1"><small>${d.pasajeros.length === 1 ? 'Pasajero' : `${d.pasajeros.length} pasajeros`}</small><b>${esc(d.pasajeros.map(nombreTxt).filter(Boolean).join(', ') || '—')}</b></div>
+        ${snapshotAsesor(d.asesor) ? `<div style="grid-column:1/-1"><small>Asesor</small><b>${esc(snapshotAsesor(d.asesor).nombre)}</b></div>` : ''}
       </div>${pases ? `<div style="display:flex;flex-direction:column;gap:7px;margin-top:9px">${pases}</div>` : ''}
       ${duros.length || suaves.length ? `<ul class="be-faltan" style="margin-top:9px">${[...duros, ...suaves].slice(0, 6).map(x => `<li>${esc(x)}</li>`).join('')}${duros.length + suaves.length > 6 ? `<li>y ${duros.length + suaves.length - 6} más</li>` : ''}</ul>` : ''}`;
     raiz.querySelector('[data-acc="guardar"]').disabled = ocupado || duros.length > 0;
@@ -903,7 +936,7 @@ export function crearBoletosEmitidos(c) {
     const ico = { ok: 'fa-circle-check', leyendo: 'fa-spinner fa-spin' }[aviso?.tipo] || 'fa-triangle-exclamation';
     box.innerHTML = aviso ? `<div class="be-aviso ${aviso.tipo}" role="status"><i class="fas ${ico}"></i><div>${aviso.html}</div>${aviso.abrir ? `<button type="button" class="be-btn" data-acc="abrir" data-id="${esc(aviso.abrir)}">Abrir</button>` : ''}${aviso.compartir ? '<button type="button" class="be-btn" data-acc="compartir-lote"><i class="fas fa-share-nodes"></i> Compartir</button>' : ''}</div>` : '';
   }
-  function pintarTodo() { pintarTramos(); pintarPasajeros(); pintarEmision(); pintarPrevia(); pintarAviso(); pintarModo(); }
+  function pintarTodo() { pintarTramos(); pintarPasajeros(); pintarEmision(); pintarAsesor(); pintarPrevia(); pintarAviso(); pintarModo(); }
   function mostrarVista(v) {
     vista = v;
     raiz.querySelectorAll('.be-tabs button').forEach(b => { const on = b.dataset.vista === v; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
@@ -917,6 +950,13 @@ export function crearBoletosEmitidos(c) {
     const item = el.closest('.be-item'), i = item ? +item.dataset.i : -1;
     const [zona, campoK] = k.includes('.') ? k.split('.') : [k, null];
     let v = el.value;
+    if (zona === 'asesor') {
+      if (e.type !== 'change' || v === 'historico') return;
+      d.asesor = snapshotAsesor(asesores[Number(v.replace(/^a:/, ''))]);
+      if (!v) d.asesor = null;
+      recibosDe(d).forEach(r => asesorPorRecibo.set(r, snapshotAsesor(d.asesor)));
+      pintarAsesor(); pintarPrevia(); return;
+    }
     if (zona === 'notas') { d.notas = v; pintarPrevia(); return; }
     if (zona === 'e') { d.emision[campoK] = v; if (e.type === 'change') recordarEmisor(d.emision); $('#be-emision-res').textContent = [d.emision.agencia, d.emision.office_id].filter(Boolean).join(' · '); pintarPrevia(); return; }
     if (zona === 't') {
@@ -962,6 +1002,7 @@ export function crearBoletosEmitidos(c) {
       nuevo(); pintarTodo();
     }
     else if (acc === 'lote-ir') { lote[iLote].editando = editando; iLote = +b.dataset.n; d = lote[iLote].d; editando = lote[iLote].editando; aviso = null; pintarTodo(); buscarDuplicado(); }
+    else if (acc === 'asesores-recargar') cargarAsesores();
     else if (acc === 'lote-guardar') guardarLote();
     else if (acc === 'compartir-lote') compartirLote();
     else if (acc === 'guardar') guardar();
@@ -980,7 +1021,7 @@ export function crearBoletosEmitidos(c) {
     } catch (err) { console.error('boletos-emitidos pdf', err); c.error('No se pudo armar el PDF. Revisa la conexión e intenta de nuevo.'); }
   }
 
-  const limpiar = x => JSON.parse(JSON.stringify(x, (k, v) => (k.startsWith('_') ? undefined : v)));
+  const limpiar = x => JSON.parse(JSON.stringify({ ...x, asesor: snapshotAsesor(x.asesor) }, (k, v) => (k.startsWith('_') ? undefined : v)));
   const grabar = (datos, ed) => (ed ? sb.from('boletos_emitidos').update({ datos: limpiar(datos) }).eq('id', ed.id) : sb.from('boletos_emitidos').insert({ datos: limpiar(datos) })).select('id, numero, estado').single();
 
   // Varios PDF: en el teléfono se comparten juntos; en la computadora se descargan uno tras otro.
@@ -1095,14 +1136,17 @@ export function crearBoletosEmitidos(c) {
     const x = unirBoletos(rs, base);
     if (!x.emision.fecha) x.emision.fecha = ahoraIso();
     for (const [k, v] of Object.entries(emisorGuardado())) if (!x.emision[k] && v) x.emision[k] = v;
+    recibosPorDocumento.set(x, [...new Set([...recibosDe(base), ...rs])]);
     return x;
   };
   // Arma el formulario (o el lote) desde cero con todo lo leído.
   function desdeCrudos() {
     const grupos = separarRecibos(crudos, modo);
     editando = null; iLote = 0;
-    if (grupos.length < 2) { lote = []; d = armar(crudos); return; }
-    lote = grupos.map(g => ({ clave: g.clave, d: armar(g.recibos), editando: null }));
+    // Una combinación con nombres distintos no debe atribuirse al primer asesor del lote.
+    const datosGrupo = rs => { const x = armar(rs); x.asesor = asesorDeRecibos(rs); return x; };
+    if (grupos.length < 2) { lote = []; d = datosGrupo(crudos); return; }
+    lote = grupos.map(g => ({ clave: g.clave, d: datosGrupo(g.recibos), editando: null }));
     d = lote[0].d;
   }
   function cambiarModo(m) {
@@ -1140,18 +1184,22 @@ export function crearBoletosEmitidos(c) {
     } finally { ocupado = false; lector?.terminate(); }
     if (!recibos.length) { aviso = { tipo: 'warn', html: `No pude leer datos de boleto en ${esc(sinLeer.join(', '))}. Si la foto está borrosa o torcida, prueba con una captura de pantalla o llénalo a mano.` }; pintarAviso(); pintarPrevia(); return; }
     // `crudos` guarda lo leído solo mientras todo el formulario/lote salió de archivos: así cambiar el modo lo rearma.
-    if (formVacio()) { crudos = [...recibos]; desdeCrudos(); }
+    if (formVacio()) {
+      separarRecibos(recibos, modo).forEach((g, i) => g.recibos.forEach(r => asesorPorRecibo.set(r, i === 0 ? snapshotAsesor(d.asesor) : null)));
+      crudos = [...recibos]; desdeCrudos();
+    }
     else if (lote.length) {
       lote[iLote].editando = editando;
       for (const g of separarRecibos(recibos, modo)) {
         const x = lote.find(y => y.clave === g.clave);
+        g.recibos.forEach(r => asesorPorRecibo.set(r, snapshotAsesor(x?.d.asesor)));
         if (x) x.d = armar(g.recibos, x.d); else lote.push({ clave: g.clave, d: armar(g.recibos), editando: null });
       }
       d = lote[iLote].d;
       if (crudos.length) crudos.push(...recibos);
     } else {
       const grupos = separarRecibos(recibos, modo);
-      if (grupos.length < 2) d = armar(recibos, d);
+      if (grupos.length < 2) { recibos.forEach(r => asesorPorRecibo.set(r, snapshotAsesor(d.asesor))); d = armar(recibos, d); }
       else { lote = [{ clave: 'actual', d, editando }, ...grupos.map(g => ({ clave: g.clave, d: armar(g.recibos), editando: null }))]; iLote = 0; }
       if (crudos.length) crudos.push(...recibos);
     }
@@ -1184,7 +1232,7 @@ export function crearBoletosEmitidos(c) {
     if (!montado) {
       css();
       if (!permitido()) { raiz.innerHTML = '<div class="card be-vacio">Esta sección es solo para Boletería y administración.</div>'; return; }
-      marco(); nuevo(); pintarTodo(); mostrarVista('editor'); montado = true;
+      marco(); nuevo(); pintarTodo(); mostrarVista('editor'); montado = true; cargarAsesores();
       c.catalogo?.().then(cat => {
         fijarAeropuertos(cat?.aeropuertos);
         const dl = $('#be-aeropuertos');
