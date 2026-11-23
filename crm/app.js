@@ -262,7 +262,7 @@ function ejecutarAccionLead(l, key) {
   }
 }
 // Asesor: cuenta desde que le llegó el lead (lotes y reasignaciones traen fecha_creacion vieja).
-const fechaLlegadaLead = l => ROL !== 'asesor' ? l.fecha_creacion : [l.fecha_asignacion_actual, l.lote_asignado_at].filter(Boolean).reduce((a, b) => new Date(b) > new Date(a) ? b : a, l.fecha_creacion);
+const fechaLlegadaLead = l => l._reingreso ? l._reingreso.desde : ROL !== 'asesor' ? l.fecha_creacion : [l.fecha_asignacion_actual, l.lote_asignado_at].filter(Boolean).reduce((a, b) => new Date(b) > new Date(a) ? b : a, l.fecha_creacion);
 function badgeNombreDudoso(l) {
   if (!l.nombre_dudoso) return '';
   return ` <span style="color:#f59e0b" title="No parece un Nombre propio, cuando tengas su nombre, edítalo">❓</span>`;
@@ -2548,7 +2548,7 @@ async function guardarLoteAuto() {
   const cada = Number(chipGroupValores('la-cada-chips')[0] || 60);
   const f = apFiltros(), sla = AP_SLA_OPCIONES.find(o => o.valor === chipGroupValores('ap-sla-chips')[0]);
   if (!(await confirmarSheet({ titulo: '¿Encender el reparto continuo?',
-    detalle: `${sel.map(apNombre).join(', ')} reciben ${cantidad} cada ${LA_CADA.find(o => o.valor === String(cada)).etiqueta}, de ${desde} a ${hasta}, hasta tener ${tope} pendientes.\n\nUsa el período, destinos y plazo de arriba. Los leads pasan a ser suyos, con tarea de contacto, en Clientes Fríos.`,
+    detalle: `${sel.map(apNombre).join(', ')} reciben ${cantidad} cada ${LA_CADA.find(o => o.valor === String(cada)).etiqueta}, de ${desde} a ${hasta}, hasta tener ${tope} pendientes.\n\nUsa el período, destinos y plazo de arriba. Los leads pasan a ser suyos, con tarea de contacto, en Recontactos.`,
     textoOk: 'Encender' }))) return;
   const { data, error } = await sb.rpc('lote_auto_guardar', { p_usuario_ids: sel, p_cada_min: cada, p_cantidad: cantidad, p_tope_pendientes: tope,
     p_hora_desde: desde, p_hora_hasta: hasta, p_fecha_desde: f.p_fecha_desde, p_fecha_hasta: f.p_fecha_hasta,
@@ -3120,7 +3120,7 @@ function abrirEditorPersona(usuarioId, desdeFicha) {
       <div class="gpf-sec-t"><i class="fas fa-key"></i> Permisos</div>
       ${permiso('pe-freelancer', u.es_freelancer, 'Freelancer', 'Se bloquea a los 15 min sin actividad.')}
       ${permiso('pe-boleteria', u.es_boleteria, 'Agente de boletería', 'Atiende la cola de solicitudes de vuelos. Para un asesor, elige el rol «Asesor + Boletería».')}
-      ${u.rol === 'asesor' ? permiso('pe-integral', u.asesor_integral, 'Asesor integral', 'Además de lo suyo, recibe cada mañana el lote de clientes fríos (pestaña Clientes Fríos en Leads).') : ''}
+      ${u.rol === 'asesor' ? permiso('pe-integral', u.asesor_integral, 'Asesor integral', 'Además de lo suyo, recibe cada mañana el lote de clientes fríos (pestaña Recontactos en Leads).') : ''}
       ${permiso('pe-voucher', u.ve_voucher, 'Ve vouchers', 'Accede a la sección de vouchers.')}
       ${permiso('pe-informe', u.ve_informe_diario, 'Ve informe diario', 'Recibe y consulta el informe del día.')}
     </section>
@@ -8405,42 +8405,92 @@ function estadoRendimiento(pct) {
   return ['Crítico', '#ef4444'];
 }
 const pctTxt = (n, t) => t ? Math.round(1000 * n / t) / 10 : 0;
+let genCargaRendimiento = 0;
+const rangoAtencionCaracas = (fd, fh) => [fd ? new Date(fd + 'T00:00:00-04:00').toISOString() : null, fh ? new Date(Date.parse(fh + 'T00:00:00-04:00') + 864e5).toISOString() : null];
 async function cargarRendimientoAsesores() {
   const box = document.getElementById('rendList');
   if (!box) return;
-  let desde = null, hasta = null;
-  const fd = val('ase-desde'), fh = val('ase-hasta');
-  if (fd && fh) { const [d, h] = aseRango(fd, fh); desde = iso(d); hasta = iso(h); }
-  const { data, error } = await sb.rpc('rendimiento_asesores', { p_desde: desde, p_hasta: hasta });
-  if (error) { console.error(error); box.innerHTML = '<div class="muted" style="font-size:12.5px">No se pudo cargar el rendimiento</div>'; return; }
-  renderRendimiento(data || {});
+  const gen = ++genCargaRendimiento;
+  const [desde, hasta] = rangoAtencionCaracas(val('ase-desde'), val('ase-hasta'));
+  box.innerHTML = '<p class="muted" role="status">Cargando asignaciones del período…</p>';
+  let resultado, reingresos, ahora;
+  try {
+    [resultado, reingresos, ahora] = await Promise.all([sb.rpc('rendimiento_asesores', { p_desde: desde, p_hasta: hasta }),
+      sb.rpc('rendimiento_reingresos', { p_desde: desde, p_hasta: hasta }).then(r => r, error => ({ error })),
+      sb.rpc('reingresos_pendientes_admin').then(r => r, error => ({ error }))]);
+  } catch (_) { resultado = { error: true }; }
+  if (gen !== genCargaRendimiento) return;
+  if (resultado.error) { box.innerHTML = '<p class="muted" role="status">No se pudo cargar el informe de atención. Verifica el período y vuelve a intentar.</p>'; return; }
+  // Sin la RPC de reingresos (backend antiguo) el informe sale igual; otro error se declara, no se oculta.
+  if (reingresos?.error && !RPC_INEXISTENTE(reingresos.error)) { box.innerHTML = '<p class="muted" role="status">No se pudieron cargar las consultas repetidas del período. Vuelve a intentar.</p>'; return; }
+  renderRendimiento(sumarReingresos(resultado.data || {}, reingresos?.error ? null : reingresos?.data));
+  box.insertAdjacentHTML('afterbegin', reingresosAhoraHtml(ahora));
+  box.querySelectorAll('.rend-re-lead').forEach(b => b.addEventListener('click', async () => {
+    const { data, error } = await sb.from('leads').select('*').eq('id', Number(b.dataset.leadId)).maybeSingle();
+    if (error || !data) { errToast('No se pudo abrir ese lead'); return; }
+    openDrawer(data);
+  }));
+}
+// Lo que espera ahora mismo, sin importar el período: clientes ya gestionados que volvieron a escribir.
+function reingresosAhoraHtml(r) {
+  if (r?.error) return RPC_INEXISTENTE(r.error) ? '' : '<p class="muted rend-re-error" role="status">No se pudieron cargar los clientes que volvieron a escribir.</p>';
+  const filas = Array.isArray(r?.data) ? r.data : [];
+  if (!filas.length) return '';
+  const porAsesor = new Map();
+  filas.forEach(f => { const k = f.asesor || 'Sin asesor'; porAsesor.set(k, [...(porAsesor.get(k) || []), f]); });
+  const plazo = f => f.vencido ? '<span class="mal">fuera de plazo</span>' : `${Math.ceil(Math.max(0, Number(f.restantes_min) || 0))} min${f.pausado ? ' · pausado' : ''}`;
+  return `<section class="rend-re" aria-label="Clientes que volvieron a escribir y esperan respuesta">
+    <h4><i class="fas fa-rotate-left" aria-hidden="true"></i> Ahora: ${filas.length} cliente(s) volvieron a escribir y esperan respuesta</h4>
+    ${[...porAsesor].map(([a, fs]) => `<div class="rend-re-asesor"><b>${esc(a)}</b> <span class="muted">${fs.length}</span><ul>${fs.map(f => `<li><button type="button" class="rend-re-lead" data-lead-id="${Number(f.lead_id)}">${esc(f.nombre || 'Lead ' + f.lead_id)}</button> <span class="muted">${esc(f.estado || '')} · ${esc(tiempoRelativo(f.desde))}${f.contactos > 1 ? ` · ${Number(f.contactos)} contactos` : ''} ·</span> ${plazo(f)}</li>`).join('')}</ul></div>`).join('')}
+  </section>`;
+}
+// Cada reingreso cuenta como un ciclo más del mismo asesor, con las mismas categorías.
+function sumarReingresos(datos, re) {
+  if (datos?.version !== 2 || !Array.isArray(datos.asesores) || re?.version !== 1 || !Array.isArray(re.asesores)) return datos;
+  const filas = datos.asesores.map(v => ({ ...v }));
+  re.asesores.forEach(r => {
+    let v = filas.find(x => x.asesor === r.asesor);
+    if (!v) filas.push(v = { asesor: r.asesor, recibidas: 0, atendidos: 0, pendientes: 0, perdidos: 0, manuales: 0, manuales_por_motivo: { manual_no_puedo: 0, admin_manual: 0 }, automaticos: 0, sin_evidencia: 0 });
+    ['recibidas', 'atendidos', 'pendientes', 'perdidos', 'sin_evidencia'].forEach(k => { v[k] = (Number(v[k]) || 0) + (Number(r[k]) || 0); });
+    v.reingresos = { recibidas: Number(r.recibidas) || 0, atendidos: Number(r.atendidos) || 0, perdidos: Number(r.perdidos) || 0, reasignados: Number(r.reasignados) || 0 };
+  });
+  return { ...datos, asesores: filas, reingresos_desde: re.desde_corte || null };
 }
 function renderRendimiento(datos) {
   const box = document.getElementById('rendList');
   if (!box) return;
-  const entries = Object.entries(datos).filter(([, v]) => v.asignados + v.perdidos > 0);
-  if (!entries.length) { box.innerHTML = '<div class="muted" style="font-size:12.5px">Sin actividad en el periodo</div>'; return; }
-  const promedio = entries.reduce((s, [, v]) => s + v.pct_perdido, 0) / entries.length;
-  entries.sort((a, b) => b[1].pct_perdido - a[1].pct_perdido);
-  const ok = entries.reduce((s, [, v]) => s + v.asignados, 0), mal = entries.reduce((s, [, v]) => s + v.perdidos, 0), tot = ok + mal;
-  const fmtN = n => n.toLocaleString('es');
-  const resumen = `<div class="rend-res">
-      <div class="rend-kpi"><b>${fmtN(tot)}</b><span>Leads recibidos</span></div>
-      <div class="rend-kpi ok"><b>${fmtN(ok)}</b><span>Atendidos a tiempo</span></div>
-      <div class="rend-kpi mal"><b>${fmtN(mal)}</b><span>Perdidos por no responder</span></div>
-      <div class="rend-kpi"><b style="color:${colorPctPerdido(pctTxt(mal, tot))}">${pctTxt(mal, tot)}%</b><span>Se pierde en el equipo</span></div>
-    </div>
-    <div class="rend-ley"><span><i style="background:var(--green)"></i>Atendidos a tiempo</span><span><i style="background:var(--danger)"></i>Perdidos: no respondió y pasaron a otro asesor</span><span class="d">% = perdidos sobre recibidos · pasa el mouse para ver detalle</span></div>`;
-  box.innerHTML = resumen + entries.map(([nombre, v]) => {
-    const total = v.asignados + v.perdidos, [estado, c] = estadoRendimiento(v.pct_perdido);
-    const dest = (v.top_destinos_perdidos || []).map(d => `${d.destino} (${d.c})`).join(', ');
-    const tip = `${nombre}: recibió ${total}, atendió ${v.asignados}, perdió ${v.perdidos}. ${opinionAsesor(v.pct_perdido, promedio)}${dest ? ' Perdió más en: ' + dest : ''}`;
-    return `<div class="rend-row" title="${esc(tip)}"><div class="ava" style="background:${c}">${initials(nombre)}</div>
-      <div class="rend-id"><span class="n">${esc(nombre)}</span><span class="rend-pill" style="color:${c};background:${c}1f">${estado}</span></div>
-      <div class="rend-bar">${v.asignados ? `<div class="ok" style="flex:${v.asignados}"></div>` : ''}${v.perdidos ? `<div class="mal" style="flex:${v.perdidos}"></div>` : ''}</div>
-      <div class="rend-num"><span class="ok"><i class="fas fa-check"></i>${fmtN(v.asignados)}</span><span class="mal"><i class="fas fa-xmark"></i>${fmtN(v.perdidos)}</span><span class="t">de ${fmtN(total)}</span></div>
-      <b class="rend-pct" style="color:${c}">${v.pct_perdido}%</b></div>`;
-  }).join('');
+  if (datos?.version !== 2 || !Array.isArray(datos.asesores)) {
+    box.innerHTML = '<p class="muted">Informe de atención no disponible: falta actualizar el servicio de datos. La cartera actual no se interpreta como atención registrada.</p>';
+    return;
+  }
+  const entries = datos.asesores.filter(v => v.recibidas > 0);
+  const cantidad = n => Math.max(0, Number(n) || 0), fmtN = n => cantidad(n).toLocaleString('es');
+  const tasa = v => cantidad(v.atendidos) + cantidad(v.perdidos) ? Math.round(1000 * cantidad(v.perdidos) / (cantidad(v.atendidos) + cantidad(v.perdidos))) / 10 : null;
+  const pct = n => n === null ? '—' : n.toLocaleString('es', { maximumFractionDigits: 1 }) + '%';
+  const suma = campo => entries.reduce((s, v) => s + cantidad(v[campo]), 0);
+  const total = { atendidos: suma('atendidos'), perdidos: suma('perdidos') }, porcentaje = tasa(total);
+  const cobertura = datos.cobertura || {};
+  const aviso = `<p class="rend-cobertura">${esc(cobertura.advertencia || 'Solo se cuentan asignaciones con inicio y evidencia documentados. Atención registrada no verifica una respuesta externa.')}${cantidad(cobertura.leads_sin_inicio_documentado) ? ` Sin inicio documentado: ${fmtN(cobertura.leads_sin_inicio_documentado)} leads en todo el histórico, fuera del período.` : ''}</p>`;
+  if (!entries.length) { box.innerHTML = aviso + '<p class="muted">Sin asignaciones documentadas en el período.</p>'; return; }
+  entries.sort((a, b) => (tasa(b) ?? -1) - (tasa(a) ?? -1) || String(a.asesor).localeCompare(String(b.asesor), 'es'));
+  const totalRe = entries.reduce((t, v) => ({ recibidas: t.recibidas + cantidad(v.reingresos?.recibidas), atendidos: t.atendidos + cantidad(v.reingresos?.atendidos), perdidos: t.perdidos + cantidad(v.reingresos?.perdidos), reasignados: t.reasignados + cantidad(v.reingresos?.reasignados) }), { recibidas: 0, atendidos: 0, perdidos: 0, reasignados: 0 });
+  const detalle = v => `Pendientes: ${fmtN(v.pendientes)} · Cambio manual antes de atención: ${fmtN(v.manuales)}${v.manuales_por_motivo ? ` (No puedo: ${fmtN(v.manuales_por_motivo.manual_no_puedo)}; administrativo: ${fmtN(v.manuales_por_motivo.admin_manual)})` : ''} · Automáticos: ${fmtN(v.automaticos)} · Sin evidencia suficiente: ${fmtN(v.sin_evidencia)}${v.reingresos?.recibidas ? ` · Incluye ${fmtN(v.reingresos.recibidas)} consulta(s) repetida(s) de clientes ya gestionados: ${fmtN(v.reingresos.atendidos)} a tiempo, ${fmtN(v.reingresos.perdidos)} fuera de plazo${v.reingresos.reasignados ? `, ${fmtN(v.reingresos.reasignados)} reasignada(s) a otro asesor` : ''}` : ''}`;
+  box.innerHTML = aviso + `<div class="rend-res">
+      <div class="rend-kpi"><b>${fmtN(suma('recibidas'))}</b><span>Asignaciones recibidas</span></div>
+      <div class="rend-kpi ok"><b>${fmtN(total.atendidos)}</b><span>Atención registrada</span></div>
+      <div class="rend-kpi mal"><b>${fmtN(total.perdidos)}</b><span>Timeout confirmado sin atención previa</span></div>
+      <div class="rend-kpi"><b>${pct(porcentaje)}</b><span>Timeout entre resultados evaluables</span></div>
+    </div><p class="rend-otros">${detalle({ pendientes: suma('pendientes'), manuales: suma('manuales'), automaticos: suma('automaticos'), sin_evidencia: suma('sin_evidencia'), reingresos: totalRe })}</p>
+    <div class="rend-ley"><span><i style="background:var(--green)"></i>Atención registrada</span><span><i style="background:var(--danger)"></i>Timeout confirmado</span></div>
+    <p class="rend-formula">Barras y %: timeout ÷ (atención registrada + timeout). Los demás resultados no entran en el porcentaje. Cada reasignación abre otro ciclo, y también cada nueva consulta de un cliente ya gestionado (se atiende con Atender o con una acción del asesor en el CRM: cambio de etapa, cotización confirmada o llamada contestada; después del plazo cuenta como timeout); un cliente puede aparecer más de una vez.</p>` + entries.map(v => {
+      const nombre = v.asesor, p = tasa(v), c = p === null ? 'var(--muted2)' : colorPctPerdido(p);
+      const tip = `${nombre}: ${fmtN(v.recibidas)} asignaciones, ${fmtN(v.atendidos)} con atención registrada, ${fmtN(v.perdidos)} con timeout confirmado. ${detalle(v)}`;
+      return `<div class="rend-asesor"><div class="rend-row" title="${esc(tip)}"><div class="ava" style="background:${c}">${esc(initials(nombre))}</div>
+        <div class="rend-id"><span class="n">${esc(nombre)}</span></div>
+        <div class="rend-bar" role="img" aria-label="${esc(`${fmtN(v.atendidos)} con atención registrada; ${fmtN(v.perdidos)} con timeout confirmado`)}">${v.atendidos ? `<div class="ok" style="flex:${cantidad(v.atendidos)}"></div>` : ''}${v.perdidos ? `<div class="mal" style="flex:${cantidad(v.perdidos)}"></div>` : ''}</div>
+        <div class="rend-num"><span class="ok">${fmtN(v.atendidos)}</span><span class="mal">${fmtN(v.perdidos)}</span><span class="t">de ${fmtN(v.recibidas)}</span></div>
+        <b class="rend-pct" style="color:${c}">${pct(p)}</b></div><div class="rend-otros">${detalle(v)}</div></div>`;
+    }).join('');
 }
 
 /* ---------- Mis Ventas: leads en PAGO REALIZADO/VENTA COMPLETA con lo cobrado ----------
@@ -9392,7 +9442,7 @@ function renderChips() {
   document.getElementById('clearAll').onclick = () => { clearFiltersQuiet(); refresh(); };
 }
 function setDrop(id, v) { const el = document.getElementById(id); el.value = v; if (id.endsWith('-desde') || id.endsWith('-hasta')) el.dispatchEvent(new Event('change')); refresh(); }
-function refresh() { page = 1; loadTable(); renderChips(); if (leadsTab === 'frios') loadClientesFrios(); }
+function refresh() { page = 1; loadTable(); renderChips(); if (ROL === 'asesor') loadClientesFrios(); }
 {
   const pop = document.getElementById('leads-filtros-pop'), btn = document.getElementById('leads-filtros-btn');
   const abrir = a => { pop?.classList.toggle('lf-abierto', a); btn?.setAttribute('aria-expanded', a); };
@@ -9423,9 +9473,16 @@ let PARA_CERRAR_PAGINA = [];
 // Mismos estados que lote_estado_regestionable() + el POR ATENDER que deja el lote.
 const FRIOS_ESTADOS = ['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO', 'Sin gestionar'];
 const FRIOS_ESTADOS_PG = FRIOS_ESTADOS.map(e => `"${e}"`).join(',');
-// Los del lote diario no van a la tabla de Leads mientras sigan en regestión: POR ATENDER vive en la
-// cola horizontal (loadInboxLeads) y ya atendidos en Clientes Fríos, hasta que se cotizan.
-const sinFriosLote = q => MI_ASESOR_INTEGRAL ? q.or(`lote_origen.is.null,estado.not.in.(${FRIOS_ESTADOS_PG})`) : q;
+// Consultas, seguimientos y recontactos son conjuntos disjuntos, incluso al buscar.
+const consultaPosteriorAlLote = l => l.lote_asignado_at && Array.isArray(l.raw?.contactos_extra) && l.raw.contactos_extra.some(c => Date.parse(c.fecha) > Date.parse(l.lote_asignado_at));
+// Reingreso (dueño 2026-11-23): cliente ya gestionado que vuelve a consultar. Vuelve a
+// Consultas de su asesor sin cambiar la etapa; el servidor (reingresos_pendientes) decide.
+const REINGRESOS = new Map();
+const esReingresoLead = l => REINGRESOS.has(String(l.id));
+const esRecontactoLead = l => !esReingresoLead(l) && l.lote_origen === 'diario' && FRIOS_ESTADOS.includes(l.estado) && !(l.estado === 'POR ATENDER' && consultaPosteriorAlLote(l));
+const esConsultaPorAtender = l => (l.estado === 'POR ATENDER' || !!l._reingreso) && !esRecontactoLead(l) && !l.eliminado_at && !l.contacto_directo_enviado_at && l.servicio !== SERVICIO_POSADA_IA && !CANALES_VOUCHER.includes(l.canal);
+const sinReingresos = q => ROL === 'asesor' && REINGRESOS.size ? q.not('id', 'in', `(${[...REINGRESOS.keys()].join(',')})`) : q;
+const sinFriosLote = q => ROL === 'asesor' ? sinReingresos(q.or(`lote_origen.is.null,lote_origen.neq.diario,estado.not.in.(${FRIOS_ESTADOS_PG})`).neq('estado', 'POR ATENDER')) : q;
 
 function buildQuery(forCount) {
   let q = sb.from('leads').select('*', forCount ? { count: 'exact' } : {})
@@ -9434,8 +9491,7 @@ function buildQuery(forCount) {
     // falta porque `neq` sobre un NULL da NULL y escondería esos leads.
     .is('eliminado_at', null).is('contacto_directo_enviado_at', null).or(`servicio.is.null,servicio.neq."${SERVICIO_POSADA_IA}"`);
   const fc = val('f-canal'), fe = val('f-estado'), fa = val('f-asesor'), fy = val('f-anio'), fs = val('f-servicio'), fd = val('f-desde'), fh = val('f-hasta'), qs = val('global-search').trim(), fst = val('f-sin-telefono');
-  // Buscando por nombre/teléfono sí salen los de Clientes Fríos.
-  if (!qs) q = sinFriosLote(q);
+  q = sinFriosLote(q);
   // Los leads que crea un voucher ya son ventas y viven en Reservas (dueño 2026-11-10);
   // siguen saliendo si se los busca por nombre/teléfono o se filtra por ese canal.
   if (!qs && !CANALES_VOUCHER.includes(fc)) q = q.or(`canal.is.null,canal.not.in.(${CANALES_VOUCHER.map(c => `"${c}"`).join(',')})`);
@@ -9511,9 +9567,10 @@ async function loadTable(silencioso) {
   const from = (page - 1) * PER;
   const paraCerrar = val('f-seguimiento') === 'para_cerrar';
   const porSeguimiento = !!val('f-seguimiento') && !paraCerrar; // con el filtro, lo más urgente primero
+  const recientes = ROL === 'asesor' && !porSeguimiento && !paraCerrar; // asesor: lo último que tocó arriba (un recontacto atendido no se pierde entre los viejos)
   let qTabla = paraCerrar ? buildQuery(true).order('updated_at', { ascending: true })
-    : buildQuery(true).order(porSeguimiento ? 'proxima_accion_at' : 'fecha_creacion', { ascending: porSeguimiento, nullsFirst: false });
-  if (porSeguimiento) qTabla = qTabla.order('id'); // los atajos repiten la hora exacta: sin desempate .range() pagina inestable
+    : buildQuery(true).order(porSeguimiento ? 'proxima_accion_at' : recientes ? 'updated_at' : 'fecha_creacion', { ascending: porSeguimiento, nullsFirst: false });
+  if (porSeguimiento || recientes) qTabla = qTabla.order('id', { ascending: !recientes }); // los atajos repiten la hora exacta: sin desempate .range() pagina inestable
   const { data, count, error } = await qTabla.range(from, from + PER - 1);
   if (gen !== genCarga) return;
   loading.classList.remove('show');
@@ -9934,24 +9991,138 @@ function renderPager(pages) {
 async function loadInboxLeads() {
   if (ROL !== 'asesor') return;
   document.getElementById('inbox-loading').classList.add('show');
-  // El lote vuelve un lead a POR ATENDER sin borrar el primer contacto del asesor anterior: igual va a la cola.
-  const { data, error } = await sb.from('leads').select('*')
-    .eq('estado', 'POR ATENDER').or('fecha_primer_contacto.is.null,lote_origen.eq.diario').is('eliminado_at', null);
+  const gen = ++genCargaInbox, aviso = document.getElementById('inbox-error');
+  if (aviso) aviso.hidden = true;
+  const consulta = () => sb.from('leads').select('*').eq('estado', 'POR ATENDER').eq('asesor', MI_NOMBRE).is('eliminado_at', null);
+  // Separar el lote evita que el límite del API esconda consultas nuevas entre cientos de históricos.
+  const [resultados, reingreso] = await Promise.all([Promise.all([
+    consulta().or('lote_origen.is.null,lote_origen.neq.diario'),
+    consulta().eq('lote_origen', 'diario').not('raw->contactos_extra', 'is', null)
+  ]), pedirReingresos()]);
+  if (gen !== genCargaInbox) return;
+  const cambioReingresos = aplicarReingresos(reingreso);
+  const error = resultados.find(r => r.error)?.error, data = [...resultados.flatMap(r => r.data || []), ...(reingreso.lista || [])];
+  if (cambioReingresos) { loadTable(); if (typeof loadClientesFrios === 'function') loadClientesFrios(); }
+  pintarAvisoReingreso(currentLead);
   document.getElementById('inbox-loading').classList.remove('show');
-  if (error) { console.error('inbox', error); errToast('No se pudo cargar el inbox de leads'); return; }
+  if (error) { console.error('inbox', error); if (aviso) aviso.hidden = false; errToast('No se pudieron actualizar las consultas por atender'); return; }
   // Cola: el más antiguo primero. Se ordena por fecha de llegada al asesor
   // (fechaLlegadaLead), no por fecha_creacion -- un lote o una reasignación
   // trae fecha_creacion vieja y quedaría delante de leads que sí esperan hace rato.
-  INBOX_LEADS = ordenarInbox(data || []);
+  INBOX_LEADS = ordenarInbox([...new Map((data || []).filter(esConsultaPorAtender).map(l => [String(l.id), l])).values()]);
   renderInbox();
+  actualizarPlazosInbox();
   renderHoyAsesor();
   refrescarKpisHoyAsesor();
 }
-// En caliente = llegó por canal normal (IG/WhatsApp/web). Lo que viene de un lote de
-// clientes fríos (lote_origen 'diario') es histórico: espera detrás de cualquier caliente.
-const leadEnCaliente = l => l.lote_origen !== 'diario';
-const ordenarInbox = arr => arr.sort((a, b) => (leadEnCaliente(b) - leadEnCaliente(a)) || (new Date(fechaLlegadaLead(a)) - new Date(fechaLlegadaLead(b))));
-const COLA_PACIENCIA_MIN = [15, 60];
+let genCargaInbox = 0;
+// Backend sin la RPC (producción antigua) = sin reingresos, sin error visible.
+const RPC_INEXISTENTE = e => e && (e.code === 'PGRST202' || e.code === '42883');
+async function pedirReingresos() {
+  try {
+    const { data, error } = await sb.rpc('reingresos_pendientes');
+    if (error) return RPC_INEXISTENTE(error) ? { lista: [], vacio: true } : { error };
+    const recibido = Date.now();
+    return { lista: (Array.isArray(data) ? data : []).filter(x => x?.lead?.id != null).map(x => ({ ...x.lead, _reingreso: { desde: x.desde, ultimo: x.ultimo, contactos: x.contactos, plazo: x.plazo, recibido } })) };
+  } catch (error) { return { error }; }
+}
+// Un error transitorio conserva el conjunto anterior: así nada salta entre bloques.
+function aplicarReingresos(r) {
+  if (r.error) { r.lista = INBOX_LEADS.filter(l => l._reingreso); return false; }
+  const previos = new Set(REINGRESOS.keys()), antes = [...previos].sort().join();
+  r.lista = r.lista.filter(l => !l.eliminado_at && !l.contacto_directo_enviado_at && l.servicio !== SERVICIO_POSADA_IA && !CANALES_VOUCHER.includes(l.canal));
+  REINGRESOS.clear();
+  r.lista.forEach(l => REINGRESOS.set(String(l.id), l._reingreso));
+  // Con el CRM abierto el aviso es un toast; el push cubre la app cerrada. La primera carga no avisa.
+  const nuevos = reingresosIniciados ? r.lista.filter(l => !previos.has(String(l.id))) : [];
+  reingresosIniciados = true;
+  if (nuevos.length) okToast(nuevos.length === 1 ? `${nombreLead(nuevos[0])} volvió a escribir: está en Consultas` : `${nuevos.length} clientes volvieron a escribir: están en Consultas`);
+  return [...REINGRESOS.keys()].sort().join() !== antes;
+}
+let reingresosIniciados = false;
+let reingresosCargando = false;
+async function refrescarReingresos() {
+  if (ROL !== 'asesor' || reingresosCargando) return;
+  reingresosCargando = true;
+  try {
+    const r = await pedirReingresos();
+    if (aplicarReingresos(r)) { loadInboxLeads(); return; }
+    let rehacer = false;
+    (r.lista || []).forEach(n => {
+      const l = INBOX_LEADS.find(x => String(x.id) === String(n.id));
+      if (!l) return;
+      Object.assign(l, n);
+      const card = document.querySelector(`#inbox-grid .inbox-card[data-id="${l.id}"]`);
+      if (card?.dataset.v !== versionTarjetaInbox(l)) rehacer = true;
+      else if (card) pintarTarjetaInbox(card, l, -1, { orden: false });
+    });
+    if (rehacer) { renderInbox(); renderHoyAsesor(); }
+    pintarAvisoReingreso(currentLead);
+  } finally { reingresosCargando = false; }
+}
+function estadoPlazoReingreso(r, ahora) {
+  const p = r.plazo, edad = Math.max(0, ahora - r.recibido);
+  if (!p || edad > 90000 || !Number.isFinite(p.limite_min) || p.limite_min <= 0) return { texto: 'Plazo no confirmado', urgente: false };
+  if (p.estado === 'vencido') return { texto: 'Plazo vencido · cuenta fuera de tiempo', urgente: false };
+  if (p.estado === 'pausado') return { texto: 'Plazo pausado · fuera del horario de atención', urgente: false };
+  if (p.estado !== 'activo' || !Number.isFinite(p.restantes_min)) return { texto: 'Plazo no confirmado', urgente: false };
+  const restante = Math.max(0, p.restantes_min - edad / 60000);
+  if (restante <= 0) return { texto: 'Plazo vencido · cuenta fuera de tiempo', urgente: false };
+  return { texto: `${Math.ceil(restante)} min para atender a tiempo`, urgente: restante <= p.limite_min * .25, ambar: restante <= p.limite_min * .5, avance: Math.max(0, Math.min(100, (1 - restante / p.limite_min) * 100)) };
+}
+const leadEnCaliente = l => !esRecontactoLead(l);
+const ordenarInbox = arr => arr.sort((a, b) => (new Date(fechaLlegadaLead(a)).getTime() || 0) - (new Date(fechaLlegadaLead(b)).getTime() || 0) || String(a.id).localeCompare(String(b.id), 'es', { numeric: true }));
+const PLAZOS_INBOX = new Map();
+let plazosCargando = false, plazosRepetir = false;
+const clavePlazoInbox = l => [l.id, l.asesor, l.fecha_asignacion_actual, l.lote_asignado_at].join('|');
+function estadoPlazoInbox(l, ahora = Date.now()) {
+  if (l._reingreso) return estadoPlazoReingreso(l._reingreso, ahora);
+  if (esRecontactoLead(l)) return { texto: 'Lote histórico', urgente: false };
+  if (l.no_reasignar) return { texto: 'Sin reasignación automática', urgente: false };
+  const cache = PLAZOS_INBOX.get(String(l.id)), p = cache?.plazo;
+  const desconocido = { texto: 'Plazo no confirmado', urgente: false };
+  if (!p || cache.clave !== clavePlazoInbox(l) || ahora - cache.recibido > 90000) return desconocido;
+  if (p.estado === 'sin_reasignacion') return { texto: 'Sin reasignación automática', urgente: false };
+  if (p.estado === 'pausado') return { texto: 'Plazo pausado · pendiente de horario de atención', urgente: false };
+  if (p.estado !== 'activo' || !Number.isFinite(p.restantes_min) || !Number.isFinite(p.limite_min) || p.limite_min <= 0) return desconocido;
+  const restante = Math.max(0, p.restantes_min - Math.max(0, ahora - cache.recibido) / 60000);
+  return { texto: restante > 0 ? `${Math.ceil(restante)} min para reasignación` : 'Plazo agotado · verificando asignación', urgente: restante > 0 && restante <= p.limite_min * .25, ambar: restante > 0 && restante <= p.limite_min * .5, avance: restante > 0 ? Math.max(0, Math.min(100, (1 - restante / p.limite_min) * 100)) : undefined };
+}
+async function actualizarPlazosInbox() {
+  if (ROL !== 'asesor') return;
+  if (plazosCargando) { plazosRepetir = true; return; }
+  plazosCargando = true;
+  const pendientes = INBOX_LEADS.filter(l => !l.no_reasignar && !l._reingreso && (!PLAZOS_INBOX.has(String(l.id)) || PLAZOS_INBOX.get(String(l.id)).clave !== clavePlazoInbox(l) || Date.now() - PLAZOS_INBOX.get(String(l.id)).recibido >= 55000));
+  let siguiente = 0;
+  try {
+    await Promise.all(Array.from({ length: Math.min(4, pendientes.length) }, async () => {
+      while (siguiente < pendientes.length) {
+        const l = pendientes[siguiente++], clave = clavePlazoInbox(l);
+        let plazo = null, estado = null;
+        try { const { data, error } = await sb.rpc('estado_reasignacion_lead', { p_lead_id: l.id }); if (!error) { estado = data; plazo = data?.plazo || null; } } catch (_) { /* Sin conexión: no presentar un reloj inventado. */ }
+        const actual = INBOX_LEADS.find(x => String(x.id) === String(l.id));
+        if (!actual || clavePlazoInbox(actual) !== clave) continue;
+        if (estado?.ok && estado.mio === false) {
+          const card = document.querySelector(`#inbox-grid .inbox-card[data-id="${l.id}"]`);
+          card?.querySelectorAll('button').forEach(b => { b.disabled = true; });
+          if (card?.querySelector('.inbox-plazo')) card.querySelector('.inbox-plazo').textContent = 'Reasignado · actualizando bandeja';
+          quitarDeInbox(l.id, 'fuera');
+          if (currentLead?.id === l.id) pintarAvisoReasignacion(estado);
+          continue;
+        }
+        if (plazo?.estado === 'activo' && plazo.asignado_at && Date.parse(plazo.asignado_at) !== Date.parse(actual.fecha_asignacion_actual)) plazo = null;
+        PLAZOS_INBOX.set(String(l.id), { clave, plazo, recibido: Date.now() });
+        const card = document.querySelector(`#inbox-grid .inbox-card[data-id="${l.id}"]`);
+        if (card) pintarTarjetaInbox(card, actual, -1, { orden: false });
+      }
+    }));
+  } finally {
+    const vivos = new Set(INBOX_LEADS.map(l => String(l.id)));
+    PLAZOS_INBOX.forEach((_, id) => { if (!vivos.has(id)) PLAZOS_INBOX.delete(id); });
+    plazosCargando = false;
+    if (plazosRepetir) { plazosRepetir = false; actualizarPlazosInbox(); }
+  }
+}
 const prefiereMenosMovimiento = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 function minutosEsperaInbox(l) {
   const llegada = new Date(fechaLlegadaLead(l)).getTime();
@@ -9976,13 +10147,20 @@ function renderInbox(opts = {}) {
     const id = String(l.id);
     vivos.add(id);
     let card = antes.get(id)?.el;
-    if (!card) {
+    if (!card || card.dataset.v !== versionTarjetaInbox(l)) {
       const tpl = document.createElement('div');
       tpl.innerHTML = inboxCardHtml(l).trim();
-      card = tpl.firstElementChild;
-      if (!sinMovimiento && id === String(opts.entrada ?? '')) card.classList.add('inbox-entra');
+      const nueva = tpl.firstElementChild;
+      if (card) { card.replaceWith(nueva); antes.get(id).el = nueva; }
+      else if (!sinMovimiento && id === String(opts.entrada ?? '')) nueva.classList.add('inbox-entra');
+      card = nueva;
     }
-    grid.appendChild(card);
+    if (grid.children[i] !== card) {
+      const foco = card.contains(document.activeElement) ? document.activeElement : null;
+      if (grid.moveBefore && card.parentElement === grid) grid.moveBefore(card, grid.children[i] || null);
+      else grid.insertBefore(card, grid.children[i] || null);
+      if (foco && document.activeElement !== foco) foco.focus({ preventScroll: true });
+    }
     pintarTarjetaInbox(card, l, i);
   });
   antes.forEach(({ el }, id) => { if (!vivos.has(id)) el.remove(); });
@@ -9991,8 +10169,7 @@ function renderInbox(opts = {}) {
     const dx = izq - el.getBoundingClientRect().left;
     if (Math.abs(dx) > 1) el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' });
   });
-  const nCal = INBOX_LEADS.filter(leadEnCaliente).length;
-  if (sub) sub.textContent = INBOX_LEADS.length ? `${INBOX_LEADS.length} en espera${nCal ? ` · ${nCal} en caliente primero` : ''} · el más antiguo ${tiempoRelativo(fechaLlegadaLead(INBOX_LEADS[0]))}` : '';
+  if (sub) sub.textContent = INBOX_LEADS.length ? `Empieza por la primera · esperando ${tiempoRelativo(fechaLlegadaLead(INBOX_LEADS[0]))}` : '';
   actualizarMascaraCola();
   actualizarBadgeLeads(INBOX_LEADS.length);
 }
@@ -10003,14 +10180,17 @@ function pintarTarjetaInbox(card, l, i, opts = {}) {
   if (opts.orden !== false) {
     card.classList.toggle('es-siguiente', i === 0);
     const orden = card.querySelector('.inbox-orden');
-    if (orden) orden.textContent = i === 0 ? (leadEnCaliente(l) ? '¡Atender ya!' : 'Siguiente') : '#' + (i + 1);
+    if (orden) orden.textContent = i === 0 ? 'Primera por atender' : '#' + (i + 1);
   }
-  const caliente = leadEnCaliente(l);
-  card.classList.toggle('inbox-caliente', caliente);
-  if (caliente && !card.querySelector('.inbox-hot')) card.querySelector('.ec-top')?.insertAdjacentHTML('beforeend', '<span class="inbox-hot"><i class="fas fa-fire"></i> En caliente</span>');
-  // El histórico no corre contra reloj: sin barra ni ámbar/rojo, así no compite con lo caliente.
-  card.classList.toggle('cola-ambar', caliente && min >= COLA_PACIENCIA_MIN[0] && min < COLA_PACIENCIA_MIN[1]);
-  card.classList.toggle('cola-roja', caliente && min >= COLA_PACIENCIA_MIN[1]);
+  const plazo = estadoPlazoInbox(l);
+  card.classList.toggle('cola-ambar', !!plazo.ambar && !plazo.urgente);
+  card.classList.toggle('cola-roja', !!plazo.urgente);
+  const textoPlazo = card.querySelector('.inbox-plazo');
+  if (textoPlazo) textoPlazo.textContent = plazo.texto;
+  const atender = card.querySelector('.inbox-btn.atender');
+  if (atender) atender.lastChild.textContent = plazo.urgente ? ' Atender ahora' : esRecontactoLead(l) ? ' Atender recontacto' : ' Atender consulta';
+  const reing = card.querySelector('.inbox-reingreso span');
+  if (reing && l._reingreso) reing.textContent = textoReingreso(l);
   const tel = card.querySelector('.inbox-tel');
   if (tel) tel.textContent = l.telefono || 'Sin teléfono';
   const tiempo = card.querySelector('.inbox-tiempo');
@@ -10019,7 +10199,7 @@ function pintarTarjetaInbox(card, l, i, opts = {}) {
     tiempo.title = min < 1 ? 'Llegó ahora mismo' : `Esperando hace ${min} min`;
   }
   const barra = card.querySelector('.inbox-paciencia i');
-  if (barra) barra.style.width = Math.min(100, Math.round(min / COLA_PACIENCIA_MIN[1] * 100)) + '%';
+  if (barra) { barra.style.width = (plazo.avance ?? 0) + '%'; barra.parentElement.hidden = plazo.avance === undefined; }
 }
 function actualizarMascaraCola() {
   const grid = document.getElementById('inbox-grid');
@@ -10031,10 +10211,10 @@ function setupColaInbox() {
   if (!grid) return;
   // Delegación: las tarjetas se reutilizan y reordenan, así que un listener por
   // tarjeta se duplicaría o se perdería.
-  grid.addEventListener('click', e => {
+  const delegar = (contenedor, lista) => contenedor?.addEventListener('click', e => {
     const card = e.target.closest('.inbox-card');
-    if (!card || !grid.contains(card)) return;
-    const l = INBOX_LEADS.find(x => String(x.id) === card.dataset.id);
+    if (!card || !contenedor.contains(card)) return;
+    const l = lista().find(x => String(x.id) === card.dataset.id);
     if (!l) return;
     const btn = e.target.closest('.inbox-btn');
     if (!btn) { openDrawer(l); return; }
@@ -10042,6 +10222,8 @@ function setupColaInbox() {
     const accion = btn.classList.contains('atender') ? () => atenderInboxLead(l) : btn.classList.contains('nopuedo') ? () => noPuedoInboxLead(l) : null;
     if (accion) candadoInbox(card)(accion)(e);
   });
+  delegar(grid, () => INBOX_LEADS);
+  delegar(document.getElementById('cf-grid'), () => CF_LEADS);
   grid.addEventListener('scroll', actualizarMascaraCola, { passive: true });
   const mover = dir => {
     const primera = grid.querySelector('.inbox-card');
@@ -10054,6 +10236,8 @@ function setupColaInbox() {
 // "hace X min" y la barra de paciencia envejecen solos: cada minuto se toca
 // solo lo que cambió, sin re-render ni perder el scroll de la cola.
 function refrescarRelojInbox() {
+  // El sondeo de reingresos va primero: con la bandeja vacía es justo cuando hace falta.
+  if (ROL === 'asesor' && !document.hidden && (INBOX_LEADS.some(l => l._reingreso) || Date.now() - ultimoRefrescoReingresos > 300000)) { ultimoRefrescoReingresos = Date.now(); refrescarReingresos(); }
   if (!leadsVisible() || !INBOX_LEADS.length) return;
   const grid = document.getElementById('inbox-grid');
   if (!grid) return;
@@ -10061,24 +10245,42 @@ function refrescarRelojInbox() {
     const card = grid.querySelector(`.inbox-card[data-id="${l.id}"]`);
     if (card) pintarTarjetaInbox(card, l, -1, { orden: false });
   });
+  actualizarPlazosInbox();
 }
+let ultimoRefrescoReingresos = Date.now();
 // Doble toque = dos RPC y dos WhatsApp: Atender y No puedo se bloquean juntos hasta que responda.
+const INBOX_ACCIONES_EN_CURSO = new Set();
 function candadoInbox(card) {
-  const btns = [...card.querySelectorAll('.inbox-btn.atender,.inbox-btn.nopuedo')];
+  const btns = [...card.querySelectorAll('.inbox-btn.atender,.inbox-btn.nopuedo')], id = card.dataset.id;
   const abre = () => btns.forEach(b => { b.disabled = false; });
   return fn => e => {
     e.stopPropagation();
-    if (btns.some(b => b.disabled)) return;
+    if (INBOX_ACCIONES_EN_CURSO.has(id) || btns.some(b => b.disabled)) return;
+    INBOX_ACCIONES_EN_CURSO.add(id);
     btns.forEach(b => { b.disabled = true; });
-    Promise.resolve(fn()).then(ok => { if (!ok) abre(); }, abre);
+    const terminar = ok => { INBOX_ACCIONES_EN_CURSO.delete(id); if (!ok) abre(); };
+    try { Promise.resolve(fn()).then(terminar, () => terminar(false)); } catch (_) { terminar(false); }
   };
 }
+// La consulta que trajo de vuelta al cliente (último contacto extra del episodio), no la original.
+function consultaReingreso(l) {
+  const re = l._reingreso || REINGRESOS.get(String(l.id)), extra = Array.isArray(l.raw?.contactos_extra) ? l.raw.contactos_extra : [];
+  if (!re) return null;
+  const desde = (Date.parse(re.desde) || 0) - 60000;
+  return extra.filter(c => c && (Date.parse(c.fecha) || 0) >= desde).sort((a, b) => (Date.parse(b.fecha) || 0) - (Date.parse(a.fecha) || 0))[0] || null;
+}
+const textoReingreso = l => { const n = consultaReingreso(l); return `Volvió a escribir${n?.canal ? ` por ${n.canal}` : ''} · sigue en ${l.estado || 'su etapa'}${l._reingreso?.contactos > 1 ? ` · ${l._reingreso.contactos} contactos` : ''}`; };
+// Una consulta nueva del mismo cliente cambia el contenido: la tarjeta se rehace, no se repinta.
+const versionTarjetaInbox = l => String(l._reingreso?.ultimo || '');
 function inboxCardHtml(l) {
-  const av = clientAvatar(l), pc = partesConsulta(l.destino_consulta);
-  return `<div class="entity-card inbox-card" data-id="${l.id}">
+  const av = clientAvatar(l), nueva = l._reingreso ? consultaReingreso(l) : null;
+  const pc = partesConsulta(nueva ? nueva.consulta : l.destino_consulta), destino = nueva?.destino || l.destino;
+  const antes = nueva?.destino && l.destino && nueva.destino !== l.destino ? ` <span class="inbox-antes">antes ${esc(l.destino)}</span>` : '';
+  return `<div class="entity-card inbox-card" data-id="${l.id}" data-v="${esc(versionTarjetaInbox(l))}">
     <div class="ec-top"><div class="ec-ava" style="background:${av.color}22;color:${av.color}"><i class="fas ${av.icon}"></i></div><div class="ec-nombre">${esc(nombreLead(l))}${badgePrioridadIA(l)}${badgeSeguidorIG(l)}${badgeNombreDudoso(l)}</div><span class="inbox-orden"></span></div>
+    ${l._reingreso ? `<div class="ec-row inbox-reingreso"><i class="fas fa-rotate-left" aria-hidden="true"></i> <span>${esc(textoReingreso(l))}</span></div>` : ''}
     <div class="ec-row"><i class="fas fa-phone"></i> <span class="inbox-tel">${esc(l.telefono) || 'Sin teléfono'}</span></div>
-    <div class="ec-row"><i class="fas fa-location-dot"></i> ${esc(l.destino) || '—'}</div>
+    <div class="ec-row inbox-destino"><i class="fas fa-location-dot"></i> ${esc(destino) || '—'}${antes}</div>
     ${pc.resumen ? `<div class="lc-consulta" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
     ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>${esc(pc.oferta)}</span></div>` : ''}
     <div class="ec-row inbox-meta">
@@ -10087,16 +10289,39 @@ function inboxCardHtml(l) {
       <span class="inbox-tiempo"><i class="fas fa-clock"></i> ${tiempoRelativo(fechaLlegadaLead(l))}</span>
       ${l.no_reasignar ? `<span title="Llegó directo por WhatsApp: no se reasigna"><i class="fas fa-lock"></i> directo</span>` : ''}
     </div>
+    <div class="inbox-plazo">${esc(estadoPlazoInbox(l).texto)}</div>
     <div class="inbox-actions">
-      <button type="button" class="inbox-btn atender"><i class="fas fa-check"></i> Atender</button>
-      ${l.no_reasignar ? '' : `<button type="button" class="inbox-btn nopuedo"><i class="fas fa-xmark"></i> No puedo</button>`}
+      <button type="button" class="inbox-btn atender"><i class="fas fa-check"></i> ${esRecontactoLead(l) ? 'Atender recontacto' : 'Atender consulta'}</button>
+      ${l.no_reasignar || l._reingreso ? '' : `<button type="button" class="inbox-btn nopuedo"><i class="fas fa-xmark"></i> No puedo</button>`}
       <button type="button" class="inbox-btn avisar" title="Avisar número incorrecto"><i class="fas fa-flag"></i></button>
     </div>
     <div class="inbox-paciencia" aria-hidden="true"><i></i></div>
   </div>`;
 }
+// Reingreso: registra el acuse (reingreso_atendido) sin tocar estado, dueño ni plazos de reparto.
+async function atenderReingresoInbox(l) {
+  const compartido = !!l.whatsapp_perfil_compartido, wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
+  const winRef = !compartido && wa ? window.open(`https://wa.me/${wa}`, '_blank') : null;
+  let data, error;
+  try { ({ data, error } = await sb.rpc('atender_reingreso', { p_lead_id: l.id })); }
+  catch (_) { winRef?.close(); errToast('Sin conexión: no se pudo registrar la atención. Vuelve a intentar.'); return false; }
+  if (!error && data?.motivo === 'no_es_tuyo') { winRef?.close(); REINGRESOS.delete(String(l.id)); pintarAvisoReingreso(currentLead); quitarDeInbox(l.id, 'fuera'); avisarLeadYaNoEsMio(l, data.asesor_actual); return false; }
+  if (error || !data?.ok) { winRef?.close(); errToast('No se pudo registrar la atención: ' + (error?.message || data?.motivo || '')); return false; }
+  REINGRESOS.delete(String(l.id)); delete l._reingreso;
+  pintarAvisoReingreso(currentLead);
+  quitarDeInbox(l.id, 'atendido');
+  loadTable();
+  okToast(data.pendiente === false ? 'Esta consulta ya estaba atendida' : data.a_tiempo ? 'Consulta atendida a tiempo' : 'Consulta atendida fuera de plazo');
+  // Sin leadAtender: no dispara la plantilla automática de saludo, el cliente ya es conocido.
+  if (compartido) await waAbrirChatDeTelefono(l.telefono);
+  else if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">toca aquí para abrir WhatsApp</a>`);
+  return true;
+}
 async function atenderInboxLead(l) {
   if (leadSoloLectura()) return;
+  // También desde una ficha o un enlace: un reingreso nunca pasa por actualizar_lead (bajaría la etapa a ATENDIDO).
+  const re = l._reingreso || REINGRESOS.get(String(l.id));
+  if (re) { l._reingreso = re; return atenderReingresoInbox(l); }
   // Número compartido: Atender envía la plantilla y ese envío lo pasa a ATENDIDO.
   if (l.whatsapp_perfil_compartido) { await waAbrirChatDeTelefono(l.telefono, l); return false; }
   // window.open ANTES del await -- si va después, ya no corre dentro del
@@ -10106,19 +10331,21 @@ async function atenderInboxLead(l) {
   // para heredar), se ofrece el link a mano en vez de fallar en silencio.
   const wa = l.telefono ? l.telefono.replace(/\D/g, '') : '';
   const winRef = wa ? window.open(`https://wa.me/${wa}`, '_blank') : null;
-  let { data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' });
-  // Se reasignó por timeout con la ficha abierta (caso lead 54925, 2026-11-16):
-  // dentro de los 10 min siguientes el asesor original todavía lo recupera.
-  let rescatado = false;
-  if (error && LEAD_YA_NO_ES_MIO.test(error.message || '')) {
-    const r = await sb.rpc('rescatar_lead_timeout', { p_lead_id: l.id });
-    if (r.error || !r.data?.ok) { winRef?.close(); avisarLeadYaNoEsMio(l, r.data?.asesor_actual); return false; }
-    ({ data, error } = r); rescatado = true; l.asesor = MI_NOMBRE;
-  }
-  if (error || !data?.ok) { errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return false; }
+  let data, error, rescatado = false;
+  try {
+    ({ data, error } = await sb.rpc('actualizar_lead', { p_lead_id: l.id, p_estado: 'ATENDIDO' }));
+    // El rescate mantiene la ventana de 10 minutos ya existente en el servidor.
+    if (error && LEAD_YA_NO_ES_MIO.test(error.message || '')) {
+      const r = await sb.rpc('rescatar_lead_timeout', { p_lead_id: l.id });
+      if (r.error || !r.data?.ok) { winRef?.close(); avisarLeadYaNoEsMio(l, r.data?.asesor_actual); return false; }
+      ({ data, error } = r); rescatado = true; l.asesor = MI_NOMBRE;
+    }
+  } catch (_) { winRef?.close(); errToast('Sin conexión: no se pudo registrar la atención. Vuelve a intentar.'); return false; }
+  if (error || !data?.ok) { winRef?.close(); errToast('No se pudo marcar como atendido: ' + (error?.message || data?.error || '')); return false; }
   // El mismo objeto lo usa la ficha abierta para repintar estado y botón principal.
   l.estado = 'ATENDIDO'; l.fecha_primer_contacto = l.fecha_primer_contacto || new Date().toISOString();
   quitarDeInbox(l.id, 'atendido');
+  if (l.lote_origen === 'diario') loadClientesFrios();
   if (currentLead?.id === l.id) pintarAvisoReasignacion(null);
   okToast(rescatado ? 'Recuperaste el lead y quedó como atendido' : 'Lead marcado como atendido');
   if (wa && !winRef) linkToast(`El navegador bloqueó la apertura automática -- <a href="https://wa.me/${wa}" target="_blank" rel="noopener">toca aquí para abrir WhatsApp</a>`);
@@ -10143,6 +10370,24 @@ function pintarAvisoReasignacion(info) {
     : `<i class="fas fa-ban"></i><span>Este lead pasó a ${quien}${porTimeout}. Ya no puedes atenderlo.</span>`;
   const cta = document.getElementById('e-a-cta');
   if (cta?.dataset.accion === 'atender') cta.hidden = !info.rescatable;
+}
+// Ficha de un cliente que volvió a escribir: mismo acuse que su tarjeta en Consultas.
+function pintarAvisoReingreso(l) {
+  const abierta = l && ROL === 'asesor' && document.getElementById('drawer')?.classList.contains('open') && String(currentLead?.id) === String(l.id);
+  const re = abierta ? REINGRESOS.get(String(l.id)) : null;
+  let el = document.getElementById('d-reingreso');
+  if (!re) { el?.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'd-reingreso'; el.className = 'd-reasig d-reingreso'; el.setAttribute('role', 'status'); document.querySelector('#drawerContent .dacc')?.before(el); }
+  const datos = { ...l, _reingreso: re }, nueva = consultaReingreso(datos), id = String(l.id);
+  el.innerHTML = `<i class="fas fa-rotate-left" aria-hidden="true"></i><span><b>${esc(textoReingreso(datos))}</b>${nueva?.consulta ? `<q>${esc(String(nueva.consulta).slice(0, 180))}</q>` : ''}<small>${esc(estadoPlazoReingreso(re, Date.now()).texto)}</small></span><button type="button" class="inbox-btn atender"${INBOX_ACCIONES_EN_CURSO.has(id) ? ' disabled' : ''}><i class="fas fa-check" aria-hidden="true"></i> Atender</button>`;
+  el.querySelector('button').addEventListener('click', e => {
+    const b = e.currentTarget;
+    if (INBOX_ACCIONES_EN_CURSO.has(id)) return;
+    INBOX_ACCIONES_EN_CURSO.add(id); b.disabled = true;
+    const lead = INBOX_LEADS.find(x => String(x.id) === id) || Object.assign(l, { _reingreso: re });
+    // Sin await antes: atenderReingresoInbox abre WhatsApp dentro del gesto del toque.
+    atenderReingresoInbox(lead).then(ok => ok, () => false).then(ok => { INBOX_ACCIONES_EN_CURSO.delete(id); if (!ok && b.isConnected) b.disabled = false; });
+  });
 }
 function avisarLeadYaNoEsMio(l, asesor) {
   quitarDeInbox(l.id, 'fuera');
@@ -10264,7 +10509,8 @@ async function refrescarKpisHoyAsesor() {
     if (err) { console.error('hoy kpis', err.message || err); return; }
     // Si falla solo la consulta de seguimientos, los otros 3 KPIs se pintan igual y se conserva lo último conocido.
     if (seg.error) console.error('hoy seguimientos', seg.error.message || seg.error);
-    HOY_KPIS_ASESOR = { por_atender: pa.count ?? 0, mes: mm.count ?? 0, total: tot.count ?? 0, seg: seg.error ? (HOY_KPIS_ASESOR?.seg ?? 0) : (seg.count ?? 0) };
+    // Los reingresos esperan en la misma cola sin estar POR ATENDER: se suman para que KPI, badge y cola coincidan.
+    HOY_KPIS_ASESOR = { por_atender: (pa.count ?? 0) + REINGRESOS.size, mes: mm.count ?? 0, total: tot.count ?? 0, seg: seg.error ? (HOY_KPIS_ASESOR?.seg ?? 0) : (seg.count ?? 0) };
     if (!seg.error) HOY_SEG_ASESOR = seg.data || [];
     pintarKpisHoyAsesor();
   } finally {
@@ -10342,7 +10588,9 @@ async function quitarDeInbox(leadId, tipo = 'fuera') {
   const card = document.querySelector(`#inbox-grid .inbox-card[data-id="${leadId}"]`);
   if (card && !prefiereMenosMovimiento()) await animarSalidaInbox(card, tipo);
   INBOX_LEADS = INBOX_LEADS.filter(x => x.id !== leadId);
+  if (REINGRESOS.delete(String(leadId)) && tipo !== 'atendido') loadTable();
   renderInbox();
+  if (tipo !== 'atendido' && CF_LEADS.some(l => l.id === leadId)) loadClientesFrios();
   renderHoyAsesor();
   refrescarKpisHoyAsesor();
 }
@@ -10480,7 +10728,7 @@ function openDrawer(l, opciones = {}) {
       <summary><i class="fas ${icono} dsec-ic"></i> <span class="dsec-t">${titulo}</span><span class="dsec-res" id="${id}-resumen"></span> <i class="fas fa-chevron-down dsec-arrow"></i></summary>
       <div class="dsec-body">${cuerpo}</div>
     </details>`;
-  const lectura = (etiqueta, id, extra = '') => `<div class="dl-fila"><dt>${etiqueta}</dt><dd><span data-lect="${id}"></span>${extra}</dd></div>`;
+  const lectura = (etiqueta, id, extra = '', icono = '') => `<div class="dl-fila"><dt>${icono ? `<i class="fas ${icono}"></i>` : ''}${etiqueta}</dt><dd><span data-lect="${id}"></span>${extra}</dd></div>`;
   const dis = soloLectura ? 'disabled' : '';
   const badges = `${badgeNombreDudoso(l)}${badgeLeadRescatado(l)}${badgeContactoDirecto(l)}${badgeAsignadoEnLote(l)}${badgeCampanaOrigen(l)}`;
   if (l.meta_ad_id || l.meta_ref) queueMicrotask(() => pintarOrigenAnuncio(l.id));
@@ -10541,12 +10789,12 @@ function openDrawer(l, opciones = {}) {
         <section class="dbloque" id="d-datos" data-dsec="datos" data-dtab="resumen">
           <div class="dbloque-h"><span><i class="fas fa-user-pen"></i> Datos del cliente</span>${soloLectura ? '' : '<button type="button" class="dbloque-btn" id="d-editar"><i class="fas fa-pen"></i> Editar</button>'}</div>
           <dl class="dlect">
-            ${lectura('Teléfono', 'e-telefono')}
-            ${lectura('Canal', 'e-canal')}
-            ${lectura('Destino', 'e-destino')}
-            ${lectura('Personas', 'e-personas')}
-            ${lectura('Fecha de viaje', 'e-fecha-estimada', `<div class="csub">${fechaViajeInterpretada(l)}</div>`)}
-            ${esOficina() && !soloLectura ? '<div class="dl-fila"><dt>Empresa</dt><dd><select class="ei" id="d-empresa" aria-label="Empresa del lead" disabled><option value="">Cargando…</option></select></dd></div>' : ''}
+            ${lectura('Teléfono', 'e-telefono', '', 'fa-phone')}
+            ${lectura('Canal', 'e-canal', '', 'fa-share-nodes')}
+            ${lectura('Destino', 'e-destino', '', 'fa-location-dot')}
+            ${lectura('Personas', 'e-personas', '', 'fa-users')}
+            ${lectura('Fecha de viaje', 'e-fecha-estimada', `<div class="csub">${fechaViajeInterpretada(l)}</div>`, 'fa-calendar-days')}
+            ${esOficina() && !soloLectura ? '<div class="dl-fila"><dt><i class="fas fa-building"></i>Empresa</dt><dd><select class="ei" id="d-empresa" aria-label="Empresa del lead" disabled><option value="">Cargando…</option></select></dd></div>' : ''}
           </dl>
           <div class="dl-consulta-wrap">
             <div class="dl-t">Consulta original</div>
@@ -10652,6 +10900,7 @@ function openDrawer(l, opciones = {}) {
   btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
   document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
   vigilarReasignacionFicha(l);
+  pintarAvisoReingreso(l);
   document.getElementById('e-a-recordar')?.addEventListener('click', () => { document.getElementById('dacc-mas').hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); recordarLeadManana(l); });
   document.getElementById('e-a-llamar')?.addEventListener('click', () => llamadasApp?.llamar(l, postWa(l.telefono)));
   document.getElementById('e-a-wa-msg')?.addEventListener('click', () => waElegirMensaje(l));
@@ -10707,6 +10956,8 @@ function tabFichaLead(tab) {
   const h = c.querySelector('details[data-dsec="historial"]');
   if (tab === 'hist' && h && !h.open) h.open = true;
   if (esMovil()) { alturaFichaLead(true); document.getElementById('drawer').scrollTop = 0; }
+  // «Conversación» abre directo el chat de la IA; sin chat queda el aviso de la pestaña.
+  if (tab === 'conv' && esMovil() && CONV_HIST?.length) openSheet('conv-lead-sheet');
 }
 function prepararFichaMovil() {
   const c = document.getElementById('drawerContent');
@@ -16333,6 +16584,8 @@ window.closeDrawer = (fromNav) => {
     if (movil) { drawer._limpiarArrastre?.(); if (entrada) navConsume(entrada); pintarEstadoBody(); }
     else if (!fromNav) navConsume();
     if (cbLead) setTimeout(cbRefrescarLeadFicha, 800);
+    // Una cotización o una llamada hecha en la ficha cierra el reingreso en el servidor: la cola se entera al salir.
+    if (currentLead && REINGRESOS.has(String(currentLead.id))) setTimeout(refrescarReingresos, 1200);
   };
   if (notas && notas.value.trim() !== (notas.dataset.original || '').trim()) {
     // Atrás ya consumió la ficha: rearmarla antes del confirm permite cancelar
@@ -39951,7 +40204,10 @@ function subscribeRealtime() {
       // masivo con estado ya PAGO REALIZADO, hallazgo real 2026-07-24: sin
       // este chequeo, cualquier INSERT terminaba en el inbox del asesor con
       // botón Atender aunque la venta ya estuviera cerrada).
-      if (ROL === 'asesor' && payload.new.estado === 'POR ATENDER' && !payload.new.fecha_primer_contacto && !payload.new.contacto_directo_enviado_at) recibirLeadNuevoInbox(payload.new);
+      if (ROL === 'asesor') {
+        if (esConsultaPorAtender(payload.new) && payload.new.asesor === MI_NOMBRE) recibirLeadNuevoInbox(payload.new);
+        if (esRecontactoLead(payload.new)) programarRecontactosLive();
+      }
     })
     // RLS ya filtra este evento a leads propios -- si uno deja de estar
     // pendiente por otra vía (ej. lo editan a mano en el drawer/tabla), sale
@@ -39959,11 +40215,15 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leads' }, payload => {
       if (canal !== canalLeadsLive) return;
       if (cbLead?.id === payload.new.id) cbLeadActualizado(payload.new);
-      if (ROL === 'asesor' && INBOX_LEADS.some(x => x.id === payload.new.id)
-          && (payload.new.estado !== 'POR ATENDER' || (payload.new.fecha_primer_contacto && payload.new.lote_origen !== 'diario') || payload.new.eliminado_at)) quitarDeInbox(payload.new.id, 'fuera');
-      // El reparto de clientes fríos asigna con UPDATE, no INSERT: sin esto el lead recién repartido no entra a la cola hasta recargar.
-      else if (ROL === 'asesor' && payload.new.lote_origen === 'diario' && payload.new.estado === 'POR ATENDER' && payload.new.asesor === MI_NOMBRE
-          && !payload.new.eliminado_at && !INBOX_LEADS.some(x => x.id === payload.new.id)) recibirLeadNuevoInbox(payload.new);
+      if (ROL === 'asesor') {
+        const l = payload.new;
+        const reing = esReingresoLead(l);
+        if (esConsultaPorAtender(l) && l.asesor === MI_NOMBRE) recibirLeadNuevoInbox(l);
+        else if (INBOX_LEADS.some(x => x.id === l.id) && !(reing && l.asesor === MI_NOMBRE && !l.eliminado_at && l.estado !== 'POR ATENDER')) quitarDeInbox(l.id, 'fuera');
+        // La ingesta deduplicada suma contactos_extra: puede ser un reingreso nuevo.
+        if (l.asesor === MI_NOMBRE && l.estado !== 'POR ATENDER' && (reing || Date.now() - Date.parse(l.raw?.contactos_extra?.at?.(-1)?.fecha) < 120000)) refrescarReingresos();
+        if (esRecontactoLead(l) || CF_LEADS.some(x => x.id === l.id)) programarRecontactosLive();
+      }
       // Solo ventas, con debounce y sin esqueleto: cada UPDATE de cualquier lead
       // (el bot escribe sin parar) recargaba la pestaña Reservas entera.
       if (payload.new.estado === 'PAGO REALIZADO' && document.getElementById('sec-postventa')?.classList.contains('active')) {
@@ -40037,12 +40297,15 @@ function detenerPollLeads() { clearInterval(leadsPollInterval); leadsPollInterva
 // Card nueva al tope del inbox en vivo + notificación local instantánea si la
 // pestaña no está en foco (no depende de la latencia del push del servidor).
 function recibirLeadNuevoInbox(lead) {
-  // En caliente primero (del que más espera al más nuevo), después los históricos de lote.
-  INBOX_LEADS.push(lead);
+  if (!esConsultaPorAtender(lead) || lead.asesor !== MI_NOMBRE) return;
+  const existente = INBOX_LEADS.find(l => l.id === lead.id);
+  if (existente) Object.assign(existente, lead); else INBOX_LEADS.push(lead);
   ordenarInbox(INBOX_LEADS);
   const grid = document.getElementById('inbox-grid');
   const alFinalVisible = !grid || grid.scrollWidth - grid.scrollLeft - grid.clientWidth < 320;
-  renderInbox({ entrada: lead.id });
+  renderInbox({ entrada: existente ? null : lead.id });
+  actualizarPlazosInbox();
+  if (existente) return;
   const card = grid?.querySelector(`.inbox-card[data-id="${lead.id}"]`);
   if (card) { card.classList.add('inbox-new'); setTimeout(() => card.classList.remove('inbox-new'), 2200); }
   // Sin autoscroll a propósito: moverle la cola al asesor mientras atiende es
@@ -40382,14 +40645,13 @@ function setupMisNotas() {
 // .nav-item.nav-hijo ocultas: usuarioPuedeAbrirSeccion y el buscador del menú
 // las necesitan. Mis Notas, Voz IA y Consultor IA salieron del
 // menú por falta de uso; su HTML y sus setup* siguen intactos.
+// Clientes Asignados y Llamadas, igual (dueño, 2026-11-23).
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
   { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-no' },
-  { sec: 'clientes-asignados', icon: 'fas fa-user-clock', label: 'Clientes Asignados', padre: 'grp-leads', roles: 'nav-asesor-only' },
-  { sec: 'llamadas', icon: 'fas fa-phone', label: 'Llamadas', padre: 'grp-leads', roles: 'nav-administrativo-no', sub: 'Llamadas sin resultado y métricas por asesor' },
   { sec: 'repartir', icon: 'fas fa-share-nodes', label: 'Repartir números', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Pega números o capturas y se reparten entre los asesores' },
   { sec: 'prospeccion', icon: 'fas fa-binoculars', label: 'Búsqueda activa', padre: 'grp-leads', roles: 'nav-admin-only nav-administrativo-no', sub: 'Salir a buscar empresas, aliados y proveedores' },
   { sec: 'mensajes', icon: 'fas fa-comment-dots', label: 'Mensajes', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Chat interno del equipo', badge: 'nav-msg-count', badgeDefault: '—' },
@@ -40626,12 +40888,43 @@ function montarPlegablesEquipo() {
 arrancar(montarPlegablesEquipo);
 // El buscador de Leads no ocupa fila propia: en el celular comparte fila con el filtro y en
 // escritorio con las pestañas (que pintarPestanasNav reinserta al inicio en cada visita).
+// En el celular esa fila vive dentro de la barra de la app (pedido del dueño 23-nov: la
+// cabecera «Leads» comía pantalla); el CSS solo la muestra con Leads activo.
+// En móvil el título de la sección ya está en la barra de la app: el primer h2 que
+// lo repite se marca y el CSS móvil lo oculta. Observa la sección porque varias
+// pintan su cabecera al cargar (módulos *-root).
+let TIT_OBS = null, INTRO_TOQUE = false;
+function marcarTituloRepetido(secEl, tit) {
+  const n = s => (s || '').replace(/\s+/g, ' ').trim().toLowerCase(), t = n(tit);
+  TIT_OBS?.disconnect(); TIT_OBS = null;
+  if (!INTRO_TOQUE) {
+    INTRO_TOQUE = true;
+    document.addEventListener('click', e => {
+      if (!KPI_MQ.matches || e.target.closest('a,button,input,select,textarea,label')) return;
+      const el = e.target.closest('.section .ce-intro, .section .tit-repetido ~ .csub');
+      if (el && (el.classList.contains('abierta') || el.scrollHeight > el.clientHeight + 1)) el.classList.toggle('abierta');
+    });
+  }
+  if (!secEl || !t) return;
+  const marcar = () => { const h = secEl.querySelector('h2'); if (h && !h.classList.contains('tit-repetido') && n(h.textContent) === t) h.classList.add('tit-repetido'); };
+  marcar();
+  let pend = false;
+  TIT_OBS = new MutationObserver(() => { if (pend) return; pend = true; requestAnimationFrame(() => { pend = false; marcar(); }); });
+  TIT_OBS.observe(secEl, { childList: true, subtree: true });
+}
+
 let buscadorLeadsMQ = false;
 function ubicarBuscadorLeads() {
-  const s = document.getElementById('global-search')?.closest('.search'), sec = document.getElementById('sec-leads'), head = sec?.querySelector('.leads-pipeline-head');
-  if (!s || !head) return;
+  const s = document.getElementById('global-search')?.closest('.search'), sec = document.getElementById('sec-leads'), head = document.querySelector('.leads-pipeline-head');
+  if (!s || !sec || !head) return;
   if (!buscadorLeadsMQ) { buscadorLeadsMQ = true; KPI_MQ.addEventListener('change', ubicarBuscadorLeads); }
-  if (KPI_MQ.matches) { if (s.parentElement !== head) head.querySelector('.live-indicator').after(s); return; }
+  const barra = document.querySelector('.mobile-brand'), panel = sec.querySelector('[data-leads-panel="pipeline"]');
+  if (KPI_MQ.matches) {
+    if (barra && head.parentElement !== barra) barra.querySelector('.mb-tit')?.after(head);
+    if (s.parentElement !== head) head.querySelector('.live-indicator').after(s);
+    return;
+  }
+  if (panel && head.parentElement !== panel) panel.prepend(head);
   let fila = sec.querySelector(':scope > .leads-fila-top');
   if (!fila) { fila = document.createElement('div'); fila.className = 'leads-fila-top'; sec.prepend(fila); }
   const tabs = sec.querySelector(':scope > .nav-tabs-sec');
@@ -40829,6 +41122,7 @@ function activateSection(sec, fromNav) {
   // Mismo título en la barra de arriba de móvil (en escritorio no existe).
   const mbT = document.getElementById('mb-title'); if (mbT) mbT.textContent = t[0];
   const mbS = document.getElementById('mb-sub'); if (mbS) mbS.textContent = t[1];
+  marcarTituloRepetido(secEl, t[0]);
   sincronizarFAB(sec);
   sincronizarBotonTutorial(sec);
   document.querySelector('.mobile-brand')?.classList.remove('appbar-oculta');
@@ -40872,7 +41166,7 @@ function cargarSeccion(sec) {
   if (sec === 'historicos') loadHistoricos();
   if (sec === 'informe-diario') loadInformeDiario();
   if (sec === 'hoy') renderHoy();
-  if (sec === 'leads') { if (ROL === 'asesor') loadInboxLeads(); iniciarPollLeads(); }
+  if (sec === 'leads') { if (ROL === 'asesor') { loadInboxLeads(); loadClientesFrios(); } iniciarPollLeads(); }
   if (sec === 'clientes-asignados') loadClientesAsignados();
   if (sec === 'mis-notas') loadMisNotas();
   if (sec === 'tarifario') loadTarifario();
@@ -41334,9 +41628,11 @@ function setupLeadsTabs() {
     if (leadsTab === 'frios') loadClientesFrios();
   }));
   const tabs = document.getElementById('leads-tabs');
-  if (tabs) tabs.hidden = !MI_ASESOR_INTEGRAL;
+  if (tabs) { tabs.hidden = true; tabs.style.display = 'none'; }
+  const recontactos = document.querySelector('[data-leads-panel="frios"]');
+  if (recontactos) recontactos.style.display = ROL === 'asesor' ? '' : 'none';
   document.getElementById('cf-refrescar')?.addEventListener('click', () => loadClientesFrios());
-  if (MI_ASESOR_INTEGRAL) loadClientesFrios();
+  if (ROL === 'asesor') loadClientesFrios();
   document.getElementById('lf-refrescar')?.addEventListener('click', () => loadLeadsEnFacturacion());
   document.getElementById('ll-refrescar')?.addEventListener('click', () => loadLeadsAsignadosLote());
   loadLeadsAsignadosLote(); // idem: el badge de "Asignados en lote" cuenta pendientes
@@ -42800,46 +43096,78 @@ async function loadLeadsAsignadosLote() {
   wireLeadCards(grid, filas);
 }
 
-/* ---------- Clientes Fríos (sub-pestaña de Leads, solo asesor integral) ----------
+/* ---------- Recontactos (sub-pestaña de Leads, solo asesor integral) ----------
    Leads viejos sin cotizar que repartir_lotes_diarios le asigna cada mañana
    (lote_origen = 'diario'). Se quedan acá mientras sigan en un estado de
    regestión; al cotizar pasan al pipeline normal (buildQuery los excluye).
    Los POR ATENDER no salen acá: esperan en la cola horizontal hasta que el asesor los atiende. */
+let CF_LEADS = [], genCargaFrios = 0, CF_RT_TIMER = null;
+function programarRecontactosLive() {
+  if (!leadsVisible()) return;
+  clearTimeout(CF_RT_TIMER);
+  CF_RT_TIMER = setTimeout(loadClientesFrios, 800);
+}
 async function loadClientesFrios() {
   const grid = document.getElementById('cf-grid');
-  if (!grid || !MI_ASESOR_INTEGRAL) return;
+  if (!grid || ROL !== 'asesor') return;
+  const gen = ++genCargaFrios, aviso = document.getElementById('cf-error');
+  if (aviso) aviso.hidden = true;
   const loading = document.getElementById('cf-loading'), empty = document.getElementById('cf-empty');
   loading?.classList.add('show');
   const qs = val('global-search').trim().replace(/[,()%]/g, '');
   let q = sb.from('leads').select('*')
     .is('eliminado_at', null).eq('lote_origen', 'diario').eq('asesor', MI_NOMBRE)
-    .in('estado', FRIOS_ESTADOS.filter(e => e !== 'POR ATENDER'));
+    .in('estado', FRIOS_ESTADOS);
   if (qs) q = q.or(`nombre.ilike.%${qs}%,telefono.ilike.%${qs}%`);
   const { data, error } = await q.order('lote_asignado_at', { ascending: false }).limit(300);
+  if (gen !== genCargaFrios) return;
   loading?.classList.remove('show');
-  if (error) { console.error('clientes_frios', error); errToast('No se pudieron cargar los clientes fríos'); return; }
-  const filas = data || [];
+  if (error) { console.error('clientes_frios', error); if (aviso) aviso.hidden = false; errToast('No se pudieron cargar los recontactos'); return; }
+  const filas = CF_LEADS = (data || []).filter(esRecontactoLead);
   empty?.classList.toggle('show', filas.length === 0);
   const et = empty?.querySelector('.es-t'), es = empty?.querySelector('.es-s');
-  if (et) et.textContent = qs ? `Ningún cliente frío coincide con «${qs}»` : 'Sin clientes fríos por ahora';
-  if (es) es.textContent = qs ? 'Prueba con otra parte del nombre o del teléfono' : 'Los nuevos llegan a tu cola de Por atender; al atenderlos quedan acá';
-  grid.innerHTML = filas.map(leadCardHtml).join('');
-  wireLeadCards(grid, filas);
-  await cfPintarResultados(grid, filas);
+  if (et) et.textContent = qs ? `Ningún recontacto coincide con «${qs}»` : 'Sin recontactos por ahora';
+  if (es) es.textContent = qs ? 'Prueba con otra parte del nombre o del teléfono. Las consultas nuevas siguen arriba.' : 'Aquí aparecerán tus lotes históricos para volver a contactar.';
+  const existentes = new Map([...grid.children].map(c => [c.dataset.id || c.dataset.leadId, c]));
+  filas.forEach((l, i) => {
+    let card = existentes.get(String(l.id));
+    const pendiente = l.estado === 'POR ATENDER';
+    if (!card || !pendiente || !card.classList.contains('inbox-card')) {
+      const tmp = document.createElement('div'); tmp.innerHTML = pendiente ? inboxCardHtml(l) : leadCardHtml(l);
+      const nueva = tmp.firstElementChild;
+      if (card) card.replaceWith(nueva);
+      card = nueva;
+      if (!pendiente) wireTarjetaLead(card, l);
+    }
+    if (grid.children[i] !== card) {
+      if (grid.moveBefore && card.parentElement === grid) grid.moveBefore(card, grid.children[i] || null);
+      else grid.insertBefore(card, grid.children[i] || null);
+    }
+    if (pendiente) pintarTarjetaInbox(card, l, i, { orden: false });
+    if (!card.querySelector('.cf-origen')) card.insertAdjacentHTML('afterbegin', '<div class="cf-origen">Cliente de cartera · Recontacto</div>');
+    existentes.delete(String(l.id));
+  });
+  existentes.forEach(c => c.remove());
+  const conteo = document.getElementById('cf-count');
+  if (conteo) conteo.textContent = `${filas.length} recontactos${qs ? ' en la búsqueda' : ''}${(data || []).length >= 300 ? ' · límite de 300: usa la búsqueda para acotar' : ''}`;
+  await cfPintarResultados(grid, filas, gen);
+  if (gen !== genCargaFrios) return;
   // Pendiente = falta cargar el resultado del contacto. Con búsqueda el conteo saldría parcial.
   const badge = document.getElementById('leads-frios-count');
   if (badge && !qs) { const pendientes = grid.querySelectorAll('.cf-resultados').length; badge.textContent = pendientes; badge.style.display = pendientes ? '' : 'none'; }
 }
 const CF_RESULTADOS = [['no_contesta', 'No contesta'], ['interesado', 'Interesado'], ['no_interesa', 'No interesa'], ['ya_viajo', 'Ya viajó'], ['numero_equivocado', 'Número equivocado']];
 // Tarea más reciente de cada lead. «No contesta» queda abierto al reintento aunque la tarea esté completada.
-async function cfPintarResultados(grid, filas) {
+async function cfPintarResultados(grid, filas, gen) {
   if (!filas.length) return;
   const { data, error } = await sb.from('tasks').select('id,lead_id,estado,resultado_contacto').eq('tipo', 'lead').eq('asesor_id', MI_USUARIO_ID).in('lead_id', filas.map(l => l.id)).order('id', { ascending: false });
+  if (gen !== genCargaFrios) return;
   if (error) { console.error('clientes_frios tareas', error); return; }
   const tareas = new Map();
   (data || []).forEach(t => { if (!tareas.has(t.lead_id)) tareas.set(t.lead_id, t); });
   [...grid.querySelectorAll('.entity-card')].forEach((card, i) => {
     const l = filas[i], t = tareas.get(l?.id);
+    card.querySelector('.cf-resultados')?.remove();
     if (!t || t.estado === 'cancelada' || (['completada', 'cerrada'].includes(t.estado) && t.resultado_contacto !== 'no_contesta')) return;
     card.insertAdjacentHTML('beforeend', `<div class="seg-group cf-resultados" role="group" aria-label="Resultado del contacto">${CF_RESULTADOS.map(([r, n]) => `<button class="seg" type="button" data-cf-r="${r}">${n}</button>`).join('')}</div>`);
     const box = card.querySelector('.cf-resultados');
@@ -43515,7 +43843,7 @@ const TOUR_CAPITULOS = [
   ]},
   { id: 'leads', titulo: 'Leads', icono: 'fa-users', roles: ['admin', 'asesor'], seccion: 'leads', pasos: [
     { titulo: 'Tus clientes', texto: () => ROL === 'asesor' ? 'Acá aparecen los clientes que te asignaron. Los nuevos suben arriba de todo.' : 'Acá el admin ve y filtra todos los leads del negocio, de todos los asesores.', selector: '#sec-leads' },
-    { titulo: 'Leads nuevos por atender', texto: 'La cola avanza en una sola fila: la primera tarjeta es la siguiente y el resto espera a la derecha. Cada una tiene 3 botones: ✅ Atender (lo tomas), ❌ No puedo (se lo pasas a otro asesor), 🚩 (avisas que el número está mal).', selector: '#inbox-grid' },
+    { titulo: 'Leads nuevos por atender', texto: 'Las consultas nuevas aparecen primero, por orden de llegada a tu asignación. Atiende la primera: el plazo confirmado indica si requiere atención ahora. Debajo están Seguimientos y Recontactos, sin cambiar de pestaña. Atender registra la gestión; No puedo lo pasa a otro asesor.', selector: '#inbox-grid' },
     { soloAdmin: true, titulo: '🔎 Así lo ve un asesor', texto: 'Cada asesor solo ve sus propios leads nuevos, con estos mismos 3 botones. Si no toca ninguno a tiempo, el lead se reasigna automático a otro asesor.', mockup: mockupBandejaAsesor },
   ]},
   { id: 'mensajes', titulo: 'Mensajes', icono: 'fa-comment-dots', roles: ['admin', 'asesor', 'marketing'], seccion: 'mensajes', pasos: [
