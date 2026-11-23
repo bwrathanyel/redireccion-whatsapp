@@ -53,7 +53,38 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
   const CORREO_VISTAS = [['negocio', 'fa-briefcase', 'Negocio'], ['recibidos', 'fa-inbox', 'Recibidos'], ['destacados', 'fa-star', 'Destacados'], ['enviados', 'fa-paper-plane', 'Enviados']];
   const CORREO_MAS = [['spam', 'fa-ban', 'Spam'], ['papelera', 'fa-trash', 'Papelera'], ['contactos', 'fa-address-book', 'Contactos']];
 
+  /* Cuerpo HTML ajeno (iframe sandbox sin scripts, mismo origen): pliega el historial citado
+     detrás de un <details> nativo (no necesita JS dentro del iframe) y suaviza el blanco.
+     Si el correo es solo cita (reenvío), no se pliega nada. */
+  const SEL_CITA = '.gmail_quote,.yahoo_quoted,blockquote';
+  function plegarCitasIframe(f) {
+    try {
+      const d = f.contentDocument;
+      if (!d?.body || d.body.dataset.plegado) return;
+      d.body.dataset.plegado = '1';
+      const citas = [...d.body.querySelectorAll(SEL_CITA)].filter(n => !n.parentElement.closest(SEL_CITA));
+      const st = d.createElement('style');
+      st.textContent = 'html{background:#f8f9fa}body{padding:12px 16px}blockquote{margin:6px 0}details.cita-plegada>summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;margin:6px 0;border-radius:10px;background:#e8eaed;color:#5f6368;font-size:12px;line-height:18px;letter-spacing:2px;user-select:none}details.cita-plegada>summary::-webkit-details-marker{display:none}details.cita-plegada[open]>summary{background:#dadce0}';
+      d.head.appendChild(st);
+      f.style.borderRadius = '8px';
+      if (!citas.length) return;
+      const resto = d.body.cloneNode(true);
+      resto.querySelectorAll(SEL_CITA).forEach(n => n.remove());
+      if (!resto.textContent.trim()) return;
+      citas.forEach(c => {
+        const det = d.createElement('details'), sum = d.createElement('summary');
+        det.className = 'cita-plegada';
+        sum.textContent = '···'; sum.title = 'Ver historial citado';
+        c.replaceWith(det);
+        det.append(sum, c);
+      });
+    } catch { /* sin acceso al documento: queda como vino */ }
+  }
+
   function setupCorreo() {
+    document.getElementById('correo-detalle-body').addEventListener('load', (e) => {
+      if (e.target?.classList?.contains('correo-msg-iframe')) plegarCitasIframe(e.target);
+    }, true);
     // Solo conecta los botones acá -- el estado y la bandeja se cargan recién
     // cuando se activa la sección (ver activateSection), mismo patrón perezoso
     // que el resto de las secciones. La excepción es el badge del menú: una
