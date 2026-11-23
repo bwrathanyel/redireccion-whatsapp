@@ -124,6 +124,16 @@ const ERRORES = {
   items_no_disponibles: 'Algún alojamiento ya no está abierto: recarga', no_tomada: 'Nadie la tenía tomada', destino_invalido: 'Ese admin no está activo',
   padre_no_disponible: 'La solicitud original no está disponible', item_no_existe: 'Ese alojamiento ya no está en la solicitud',
 };
+// Lyra consulta al proveedor (Edge Function lyra-proveedores, 2026-11-23).
+const ESTADO_LYRA = { esperando: ['Lyra espera respuesta', 'azul'], repreguntada: ['Lyra repreguntó', 'azul'], respondida: ['Respondió a Lyra', 'verde'],
+  sin_respuesta: ['No respondió', 'rojo'], escalada: ['Necesita un humano', 'ambar'], pausada: ['La lleva un admin', ''], cerrada: ['Cerrada', ''] };
+const ERRORES_LYRA = {
+  lyra_apagada: 'Lyra está apagada para proveedores', ya_consultando_lyra: 'Lyra ya tiene una consulta en curso para esos alojamientos', canal_invalido: 'Elige WhatsApp o correo', destino_invalido: 'Revisa el WhatsApp o el correo del proveedor',
+  varios_proveedores: 'Esos alojamientos son de proveedores distintos', sin_proveedor: 'Elige el proveedor', tope_diario: 'Lyra llegó al tope de mensajes de hoy',
+  fechas_distintas_whatsapp: 'Por WhatsApp el primer mensaje admite una sola fecha: consulta cada fecha por separado o usa correo',
+  remitente_sin_gmail: 'El correo de la empresa está desconectado del CRM: reconéctalo en Correo', sin_remitente: 'Falta el correo remitente de Lyra',
+  ventana_cerrada: 'WhatsApp no deja escribir libre a ese número ahora', mensaje_largo: 'El mensaje es demasiado largo', no_activa: 'Esa consulta ya no está activa',
+};
 const DIA = 864e5;
 const hoyISO = () => new Date(Date.now() - 4 * 36e5).toISOString().slice(0, 10);
 const fCorta = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
@@ -324,12 +334,14 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
         ${s.notas ? `<div class="dp-linea">${esc(s.notas)}</div>` : ''}
         <div class="dp-acc">${accs}</div></div>
       <div class="dp-bloque"><h4>Alojamientos</h4>${items}</div>
+      ${bloqueLyra(d)}
       <div class="dp-bloque dp-chat"><h4>Chat</h4><div class="dp-msgs" id="dp-msgs"></div>
         ${s.estado !== 'cancelada' ? '<form id="dp-chat-f"><textarea rows="1" placeholder="Escribe al ' + (admin && !mia ? 'asesor' : 'admin') + '…" aria-label="Mensaje"></textarea><button class="btn-acc" type="submit" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button></form>' : ''}</div>
       <div class="dp-bloque"><h4>Historial</h4><ul class="dp-tl">${(d.eventos || []).map(ev => `<li>${hora(ev.creado_en)} · <b>${esc(ev.usuario_nombre || 'Sistema')}</b> ${esc(accionTxt(ev, s))}</li>`).join('')}</ul></div>`);
     abierta = id;
     if (scroll) v.querySelector('.dp-cuerpo').scrollTop = scroll;
     pintarChat(d);
+    pintarLyra(v, d);
     if (d.mensajes?.length) rpc('disp_marcar_leido', { p_id: id }, true);
     v.querySelector('#dp-chat-f')?.addEventListener('submit', async e => {
       e.preventDefault(); const ta = e.target.querySelector('textarea'), txt = ta.value.trim(); if (!txt) return;
@@ -347,6 +359,12 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
         const listo = ocupado(b);
         if (await rpc(simple[0], { p_id: id })) { ok(simple[1]); await refrescar(id); }
         return listo();
+      }
+      if (b.dataset.lyraPausar) {
+        if (!(await confirmar({ titulo: '¿Lo tomas tú?', detalle: 'Lyra deja de escribirle a este proveedor. Lo que conteste te llega por Telegram.', textoOk: 'Lo tomo yo' }))) return;
+        const listo = ocupado(b), r = await lyra({ modo: 'pausar', consulta_id: +b.dataset.lyraPausar }); listo();
+        if (r?.ok) { ok('Lyra ya no le escribe'); await refrescar(id); }
+        return;
       }
       if (a === 'pasar') return pasar(s);
       if (a === 'consultar') return consultar(s.items.filter(i => ['pendiente', 'consultando'].includes(i.estado)).map(i => i.id), s);
@@ -378,6 +396,11 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       case 'reconfirmada': return 'pidió re-confirmar';
       case 'item_agregado': return `agregó${nom}`;
       case 'item_quitado': return `quitó${nom}`;
+      case 'lyra_respondio': return `· Lyra cargó la respuesta de ${d.proveedor || 'el proveedor'}`;
+      case 'lyra_escalo': return `· Lyra pidió ayuda con ${d.proveedor || 'el proveedor'}${d.motivo ? ': ' + d.motivo : ''}`;
+      case 'lyra_sin_respuesta': return `· ${d.proveedor || 'El proveedor'} no le respondió a Lyra`;
+      case 'lyra_mensaje': return `· ${d.proveedor || 'El proveedor'} escribió: ${String(d.texto || '').slice(0, 120)}`;
+      case 'lyra_pausada': return 'tomó la conversación con el proveedor (Lyra en pausa)';
       default: return ev.accion.replace(/_/g, ' ');
     }
   }
@@ -432,8 +455,10 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       <label class="dp-campo"><span>WhatsApp del proveedor</span><input data-tel inputmode="tel" value="${esc(g[0].proveedor_telefono || '')}" placeholder="0414…"></label>
       ${g[0].proveedor_id && !g[0].proveedor_telefono ? '<div class="dp-linea">Sin teléfono en Proveedores: el que escribas se guarda.</div>' : ''}
       <label class="dp-campo"><span>Mensaje</span><textarea data-msg rows="8">${esc(texto(g))}</textarea></label>
-      <div class="dp-acc"><button class="btn-acc" data-enviar="${k}"><i class="fa-brands fa-whatsapp"></i> Abrir WhatsApp y marcar consultando</button><button class="btn-sm" data-solo="${k}">Solo marcar consultando</button></div></div>`).join(''), '', false);
+      <div class="dp-acc"><button class="btn-acc" data-enviar="${k}"><i class="fa-brands fa-whatsapp"></i> Abrir WhatsApp y marcar consultando</button><button class="btn-sm" data-solo="${k}">Solo marcar consultando</button><button class="btn-sm" data-lyra="${k}"><i class="fas fa-robot"></i> Que consulte Lyra</button></div></div>`).join(''), '', false);
     v.addEventListener('click', async e => {
+      const bl = e.target.closest('[data-lyra]');
+      if (bl) { const k = +bl.dataset.lyra; return lyraForm(v.querySelector(`[data-g="${k}"]`), grupos[k], sol, () => { grupos[k].forEach(i => sel.delete(i.id)); }); }
       const b = e.target.closest('[data-enviar],[data-solo]'); if (!b) return;
       const k = +(b.dataset.enviar ?? b.dataset.solo), caja = v.querySelector(`[data-g="${k}"]`), g = grupos[k];
       const tel = caja.querySelector('[data-tel]').value.trim(), msg = caja.querySelector('[data-msg]').value.trim(), wa = telWa(tel);
@@ -449,6 +474,81 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       if (fin && !sol) cerrarPanel();
       await refrescar(fin && sol ? sol.id : null);
     });
+  }
+
+  // ---------- Lyra le escribe al proveedor y sigue la conversación ----------
+  async function lyra(body) {
+    const { data, error: e } = await sb.functions.invoke('lyra-proveedores', { body });
+    if (e || !data) { error('No se pudo hablar con Lyra'); return null; }
+    if (!data.ok) { error(ERRORES_LYRA[data.error] || ERRORES[data.error] || data.error || 'Error'); return data; }
+    return data;
+  }
+  let proveedoresLyra = null;
+  async function lyraForm(caja, g, sol, alEnviar) {
+    const ids = g.map(i => i.id), st = { canal: undefined, destino: undefined, proveedor_id: g[0].proveedor_id || null };
+    const cargar = async () => {
+      caja.innerHTML = '<div class="dp-vacio">Lyra prepara el mensaje…</div>';
+      const b = await lyra({ modo: 'borrador', item_ids: ids, canal: st.canal, destino: st.destino, proveedor_id: st.proveedor_id });
+      if (b?.error === 'sin_proveedor') return elegirProveedor();
+      if (!b?.ok) { caja.innerHTML = `<div class="dp-linea">${esc(ERRORES_LYRA[b?.error] || 'No se pudo preparar')}</div>`; return; }
+      st.canal = b.canal; st.destino = b.destino; st.proveedor_id = b.proveedor.id;
+      const activa = (b.lyra_activa || []).length;
+      caja.innerHTML = `<div class="dp-cab"><span><i class="fas fa-robot"></i> Lyra consulta a ${esc(b.proveedor.nombre)}</span><small>${g.length} alojamiento${g.length > 1 ? 's' : ''}</small></div>
+        ${b.config && !b.config.envio_real ? '<div class="dp-linea"><b>Modo prueba:</b> el mensaje queda registrado pero no le llega al proveedor (salvo números de prueba).</div>' : ''}
+        ${activa ? '<div class="dp-linea">Lyra ya tiene una consulta abierta con estos alojamientos.</div>' : ''}
+        <div class="dp-acc">${['whatsapp', 'correo'].map(c => `<button type="button" class="btn-sm${b.canal === c ? ' btn-acc' : ''}" data-canal="${c}"><i class="${c === 'whatsapp' ? 'fa-brands fa-whatsapp' : 'fas fa-envelope'}"></i> ${c === 'whatsapp' ? 'WhatsApp' : 'Correo'}</button>`).join('')}</div>
+        <label class="dp-campo"><span>${b.canal === 'whatsapp' ? 'WhatsApp del proveedor' : 'Correo del proveedor'}</span><input data-dest ${b.canal === 'whatsapp' ? 'inputmode="tel" placeholder="584141234567"' : 'type="email" placeholder="reservas@hotel.com"'} value="${esc(b.destino || '')}"></label>
+        ${b.asunto != null ? `<label class="dp-campo"><span>Asunto</span><input data-asunto maxlength="200" value="${esc(b.asunto)}"></label>` : ''}
+        <label class="dp-campo"><span>Mensaje${b.editable ? '' : ' (plantilla aprobada de WhatsApp, no se edita)'}</span><textarea data-msg rows="8"${b.editable ? '' : ' readonly'}>${esc(b.mensaje)}</textarea></label>
+        <div class="dp-linea">Lyra solo pregunta disponibilidad y tarifa. Si el proveedor pide confirmar, pagar o negociar, te avisa por Telegram.</div>
+        <div class="dp-acc"><button class="btn-acc" data-lyra-enviar><i class="fas fa-paper-plane"></i> Enviar con Lyra</button></div>`;
+      caja.onclick = async e => {
+        const c = e.target.closest('[data-canal]');
+        if (c && c.dataset.canal !== st.canal) { st.canal = c.dataset.canal; st.destino = undefined; return cargar(); }
+        const env = e.target.closest('[data-lyra-enviar]'); if (!env) return;
+        const destino = caja.querySelector('[data-dest]').value.trim();
+        if (!destino) return error(st.canal === 'whatsapp' ? 'Escribe el WhatsApp del proveedor' : 'Escribe el correo del proveedor');
+        const listo = ocupado(env);
+        const r = await lyra({ modo: 'enviar', item_ids: ids, canal: st.canal, destino: st.canal === 'whatsapp' ? (telWa(destino) || destino) : destino,
+          proveedor_id: st.proveedor_id, mensaje: b.editable ? caja.querySelector('[data-msg]').value : null, asunto: caja.querySelector('[data-asunto]')?.value || null });
+        listo();
+        if (!r?.ok) return;
+        alEnviar?.();
+        ok(r.simulado ? 'Registrado en modo prueba' : 'Lyra le escribió al proveedor');
+        caja.onclick = null;
+        caja.innerHTML = `<div class="dp-linea"><i class="fas fa-robot"></i> <b>${esc(b.proveedor.nombre)}</b>: Lyra está consultando${r.simulado ? ' (prueba)' : ''}.</div>`;
+        await refrescar(sol ? sol.id : null);
+      };
+    };
+    const elegirProveedor = async () => {
+      proveedoresLyra ||= (await rpc('listar_proveedores', { p_solo_activos: true }, true)) || [];
+      caja.innerHTML = `<label class="dp-campo"><span>¿A qué proveedor le escribe Lyra?</span><select data-prov><option value="">Elegir…</option>${proveedoresLyra.map(p => `<option value="${p.id}">${esc(p.nombre)}</option>`).join('')}</select></label>`;
+      caja.querySelector('[data-prov]').onchange = e => { if (e.target.value) { st.proveedor_id = +e.target.value; cargar(); } };
+    };
+    await cargar();
+  }
+  function bloqueLyra(d) {
+    const cs = (d.consultas || []).filter(c => c.agente === 'lyra');
+    if (!admin || !cs.length) return '';
+    return `<div class="dp-bloque"><h4><i class="fas fa-robot"></i> Lyra con proveedores</h4>${cs.map(c => {
+      const [txt, color] = ESTADO_LYRA[c.estado_lyra] || [c.estado_lyra, ''];
+      return `<div class="dp-item" data-lyra-cons="${c.id}"><h5><span>${esc(c.proveedor_nombre || 'Proveedor')}</span><span class="dp-chip ${color}">${esc(txt)}</span></h5>
+        <div class="dp-linea">${c.canal === 'whatsapp' ? 'WhatsApp' : 'Correo'} · ${esc(c.destino || '')} · pidió ${esc(c.admin_nombre || '')} ${hace(c.enviado_en)}${c.recordatorios ? ` · ${c.recordatorios} recordatorio${c.recordatorios > 1 ? 's' : ''}` : ''}</div>
+        ${c.escalado_motivo && ['escalada', 'sin_respuesta'].includes(c.estado_lyra) ? `<div class="dp-linea"><b>Motivo:</b> ${esc(c.escalado_motivo)}</div>` : ''}
+        <div class="dp-msgs" data-lyra-msgs="${c.id}"><div class="dp-vacio">Cargando conversación…</div></div>
+        ${['esperando', 'repreguntada', 'escalada'].includes(c.estado_lyra) ? `<div class="dp-acc"><button class="btn-sm" data-lyra-pausar="${c.id}">Lo tomo yo</button></div>` : ''}</div>`;
+    }).join('')}</div>`;
+  }
+  async function pintarLyra(v, d) {
+    const ids = (d.consultas || []).filter(c => c.agente === 'lyra').map(c => c.id);
+    if (!admin || !ids.length) return;
+    const { data } = await sb.from('disponibilidad_consulta_mensajes').select('consulta_id,direccion,autor,texto,simulado,creado_en').in('consulta_id', ids).order('creado_en');
+    for (const id of ids) {
+      const box = v.querySelector(`[data-lyra-msgs="${id}"]`); if (!box) continue;
+      const ms = (data || []).filter(m => m.consulta_id === id);
+      box.innerHTML = ms.map(m => `<div class="dp-msg${m.direccion === 'saliente' ? ' mio' : ''}"><small>${m.direccion === 'saliente' ? 'Lyra' : 'Proveedor'} · ${hora(m.creado_en)}${m.simulado ? ' · prueba, no enviado' : ''}</small>${esc(m.texto)}</div>`).join('') || '<div class="dp-vacio">Sin mensajes.</div>';
+      box.scrollTop = box.scrollHeight;
+    }
   }
 
   // ---------- Formulario (nueva o editar) ----------
