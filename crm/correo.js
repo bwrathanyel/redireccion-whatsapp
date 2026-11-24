@@ -224,9 +224,17 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
      se pliega. En el teléfono (≤760) la barra lateral es un cajón: ahí manda
      la barra de arriba de la sección (#correo-movil-bar). */
   let CORREO_NAV_ON = false;
+  const CORREO_NAV_PLEGADO_KEY = 'crm.correoNavPlegado';
+  let CORREO_NAV_PLEGADO = (() => { try { return localStorage.getItem(CORREO_NAV_PLEGADO_KEY) === '1'; } catch { return false; } })();
   function navCorreo(on) {
     CORREO_NAV_ON = on;
-    if (!on) { document.getElementById('correo-nav')?.remove(); return; }
+    if (!on) { document.getElementById('correo-nav')?.remove(); document.querySelector('#sidebar-nav > .nav-item[data-sec="correo"]')?.removeAttribute('aria-expanded'); return; }
+    pintarNavCorreo();
+  }
+  // Click en «Correo» estando dentro: pliega o despliega su menú y lo recuerda.
+  function alternarNavCorreo() {
+    CORREO_NAV_PLEGADO = !CORREO_NAV_PLEGADO;
+    try { localStorage.setItem(CORREO_NAV_PLEGADO_KEY, CORREO_NAV_PLEGADO ? '1' : '0'); } catch {}
     pintarNavCorreo();
   }
   function pintarNavCorreo() {
@@ -241,6 +249,8 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
       nav.addEventListener('click', clickNavCorreo);
     }
     if (nav.previousElementSibling !== padre) padre.after(nav);
+    nav.classList.toggle('plegado', CORREO_NAV_PLEGADO);
+    padre.setAttribute('aria-expanded', String(!CORREO_NAV_PLEGADO));
     const n = v => v ? `<span class="n">${v > 99 ? '99+' : v}</span>` : '';
     const vivas = cuentasVivas();
     const cuenta = (id, punto, texto, extra, title) => `<button type="button" class="correo-nav-it${String(CORREO_CUENTA_ACTIVA) === String(id) ? ' on' : ''}" data-cn-cuenta="${esc(id)}" title="${esc(title || texto)}">${punto}<span class="t">${esc(texto)}</span>${extra}</button>`;
@@ -1280,5 +1290,5 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
     if (hecho) e.preventDefault();
   }
 
-  return { setupCorreo, cargarCorreoSeccion, programarRecargaCorreo, navCorreo };
+  return { setupCorreo, cargarCorreoSeccion, programarRecargaCorreo, navCorreo, alternarNavCorreo };
 }

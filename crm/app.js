@@ -40265,6 +40265,7 @@ function setupNav() {
     const n = e.target.closest('.nav-item[data-sec], .nav-tabs-sec [data-nav-tab]');
     if (!n) return;
     const sec = n.dataset.navTab || (n.dataset.sec.startsWith('grp-') ? destinoDePadre(n.dataset.sec) : n.dataset.sec);
+    if (sec === 'correo' && currentSec === 'correo' && n.matches('#sidebar-nav > .nav-item') && !matchMedia('(max-width:760px)').matches) { correoMod().alternarNavCorreo(); return; }
     incrementarUsoSeccion(sec);
     activateSection(sec);
   });
