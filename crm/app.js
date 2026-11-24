@@ -6344,6 +6344,12 @@ function rvRutaCorta(ruta, idaVuelta) {
   if (p.length === 3 && p[0] === p[2] && idaVuelta !== false) p.pop();
   return p.join(' → ');
 }
+// «MAD-VLN» = 1 tramo, «CCS-PMV-CCS» = 2, «CCS-PMV» de ida y vuelta = 2; texto libre = 0 (no se puede contar).
+function rvTramosDeRuta(ruta, idaVuelta) {
+  const p = String(ruta || '').trim().toUpperCase().split(/\s*[-–>→]+\s*/);
+  if (p.length < 2 || p.some(x => !/^[A-Z]{3}$/.test(x))) return 0;
+  return p.length === 2 && idaVuelta === true ? 2 : p.length - 1;
+}
 function rvServicioTitulo(s) {
   const d = s.detalle || {};
   if (s.tipo === 'hospedaje') return d.hotel || s.descripcion || 'Hospedaje';
@@ -6373,10 +6379,12 @@ function rvChipsServicio(s) {
   if (s.tipo === 'hospedaje' && ['confirmado', 'emitido'].includes(s.estado) && !rvTieneVoucher(s)) c.push(rvChip('Sin voucher', 'warn'));
   // Tramos, tickets y emisión son de Boletería: el asesor no los ve como pendientes.
   if (s.tipo === 'boleto_aereo' && rvAgente()) {
-    const tramos = (RV_DET.tramos || []).filter(t => t.servicio_id === s.id).length;
+    // Sin filas en reserva_tramos el boleto puede traer la ruta en detalle (alta/importación): eso ya son tramos.
+    const ruta = String(s.detalle?.ruta || '').trim();
+    const tramos = (RV_DET.tramos || []).filter(t => t.servicio_id === s.id).length || rvTramosDeRuta(ruta, s.detalle?.ida_vuelta);
     const pax = (RV_DET.pasajeros || []).length || Number(s.pax_adultos || 0) + Number(s.pax_ninos || 0);
     const tks = (RV_DET.boletos || []).filter(b => b.servicio_id === s.id && b.numero_ticket).length;
-    c.push(tramos ? rvChip(rvPlural(tramos, 'tramo', 'tramos')) : rvChip('Sin tramos', 'warn'));
+    c.push(tramos ? rvChip(rvPlural(tramos, 'tramo', 'tramos')) : ruta ? rvChip('Ruta cargada') : rvChip('Sin tramos', 'warn'));
     if (pax) c.push(rvChip(`${tks} de ${pax} tickets`, tks >= pax ? 'ok' : 'warn'));
     if (['cotizado', 'solicitado', 'confirmado'].includes(s.estado)) c.push(rvChip('Falta emitir', 'warn'));
     const tl = s.time_limit && BOL_TL_ABIERTO.includes(s.estado) ? bolTl(s.time_limit) : null;
