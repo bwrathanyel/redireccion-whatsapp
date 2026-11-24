@@ -9275,7 +9275,7 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
    estado + pestañas, barra de acciones abajo. Pestañas = data-dtab en cada
    bloque; los bloques sin data-dtab se ven siempre. Escritorio: solo oculta
    los elementos nuevos. */
-.dtabs,.dtab-atajos,.dh-est,.dtab-vacio,.dacc-ic.dacc-tel{display:none}
+.dtabs,.dtab-atajos,.dh-estado,.dtab-vacio,.dacc-ic.dacc-tel{display:none}
 @media(max-width:760px){
   .drawer:has(.dhead-lead){height:calc(54dvh / var(--zoom,1));max-height:none;padding-top:0;padding-bottom:0;overscroll-behavior:contain;transition:transform .3s cubic-bezier(.3,1,.4,1)}
   .drawer.d-completa:has(.dhead-lead){height:calc((100dvh - env(safe-area-inset-top,0px) - 12px) / var(--zoom,1))}
@@ -9292,8 +9292,25 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
   .dhead-lead :is(.dm,.dh-badges){order:2;grid-column:1/-1;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-top:9px}
   .dhead-lead :is(.dm,.dh-badges)::-webkit-scrollbar{display:none}
   .dhead-lead :is(.dm-chip,.badge-st){flex-shrink:0;white-space:nowrap}
-  .dh-est{order:1;justify-self:start;display:inline-flex;align-items:center;gap:7px;margin-top:4px;padding:3px 11px 3px 9px;border:1px solid color-mix(in srgb,var(--est) 40%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--est) 14%,transparent);color:var(--txt);font-size:12px;font-weight:800}
-  .dh-est::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--est)}
+  /* Estado: ‹ chip › con avance del embudo debajo (boceto aprobado 24-nov). El chip se desliza de lado
+     (touch-action:none: la cabecera es pan-x) y tocarlo abre la lista. */
+  .dh-estado{order:2;grid-column:1/-1;display:grid;grid-template-columns:var(--tap) minmax(0,1fr) var(--tap);gap:6px;align-items:center;margin-top:9px}
+  .dh-est-ar{width:var(--tap);height:var(--tap);display:grid;place-items:center;padding:0;border:0;border-radius:10px;background:rgba(var(--ink-rgb),.06);color:var(--txt);font-size:14px;cursor:pointer;transition:background .16s,opacity .16s}
+  .dh-est-ar:disabled{opacity:.3;cursor:default}
+  .dh-est{position:relative;overflow:hidden;min-width:0;min-height:var(--tap);display:flex;align-items:center;justify-content:center;padding:0 12px;border:1px solid color-mix(in srgb,var(--est) 42%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--est) 14%,transparent);color:var(--txt);font:inherit;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+  .dh-est-lab{display:inline-flex;align-items:center;gap:8px;min-width:0;font-size:13px;font-weight:800;white-space:nowrap;transition:transform .16s,opacity .16s}
+  .dh-est-lab::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;background:var(--est)}
+  .dh-est-lab i{font-size:10px;color:var(--muted)}
+  .dh-est.arrastre .dh-est-lab{transition:none}
+  .dh-est:focus-visible,.dh-est-ar:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .dh-est-pr{grid-column:2;display:flex;align-items:center;gap:8px;font-size:10.5px;font-weight:600;color:var(--muted2);font-variant-numeric:tabular-nums}
+  .dh-est-barra{flex:1;max-width:178px;display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+  .dh-est-barra>span{height:3px;border-radius:999px;background:rgba(var(--ink-rgb),.1)}
+  .dh-est-barra>span.on{background:var(--est)}
+  .dh-estado.solo-lectura .dh-est-ar{visibility:hidden}
+  .dh-estado.solo-lectura .dh-est{cursor:default}
+  .dh-estado.solo-lectura .dh-est-lab i{display:none}
+  .estado-opt-sep{height:12px;border-bottom:1px solid var(--line2)}
   .dtabs{order:3;grid-column:1/-1;display:flex;margin:7px -15px 0;padding:0 7px;overflow-x:auto;scrollbar-width:none}
   .dtabs::-webkit-scrollbar{display:none}
   .dtab{flex:1 0 auto;min-height:var(--tap);padding:0 9px;border:0;border-bottom:2px solid transparent;background:none;color:var(--muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:color .16s,border-color .16s}
@@ -9428,15 +9445,12 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
   /* Ficha: hoja más baja, nombre y estado en una fila, pie de una fila. */
   .drawer .dhead-lead{grid-template-columns:auto minmax(0,1fr) auto;padding-top:18px}
   .dhead-lead .dava{grid-row:1;width:32px;height:32px;border-radius:10px;font-size:14px}
-  .dhead-lead .dn{padding-right:0;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .dh-est{grid-column:3;grid-row:1;margin:0 48px 0 0}
+  .dhead-lead .dn{padding-right:48px;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .drawer:has(.dhead-lead) .dacc{flex-wrap:nowrap;padding-block:7px calc(7px + var(--safe-b))}
   .drawer:has(.dhead-lead) .dacc-cta{order:-1;flex:1 1 auto;min-width:0}
-  /* Con botón principal, el estado se lee en la cabecera: abajo queda como punto que abre el selector. */
-  .drawer:has(.dhead-lead) .dacc:has(.dacc-cta:not([hidden])) .dacc-estado{flex:0 0 var(--tap)}
-  .drawer:has(.dhead-lead) .dacc:has(.dacc-cta:not([hidden])) .dacc-estado::before{left:50%;margin-left:-4px}
-  .drawer:has(.dhead-lead) .dacc:has(.dacc-cta:not([hidden])) .dacc-estado select{width:var(--tap);padding:0;color:transparent}
-  .drawer:has(.dhead-lead) .dacc:has(.dacc-cta:not([hidden])) .dacc-estado>i{display:none}
+  /* El estado se cambia en la cabecera (‹ chip ›): el select de abajo sigue en el DOM como fuente
+     del autoguardado, pero no se ve y el botón principal gana su lugar. */
+  .drawer:has(.dhead-lead) .dacc-estado{display:none}
   .drawer:has(.dhead-lead) .dacc-mas,.drawer:has(.dacc-cta:not([hidden])) .dacc-mas{bottom:calc(var(--tap) + 15px + var(--safe-b))}
 }
 
@@ -9490,13 +9504,16 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
   #sec-leads:not(.vista-compacta) :is(#inbox-grid,#cf-grid)>.inbox-card .inbox-paciencia{order:7}
 
   /* Clientes atendidos: ficha F; WhatsApp y ⋯ arriba a la derecha, tocar abre la ficha */
-  #sec-leads:not(.vista-compacta) #leads-cards.card-grid{gap:8px}
+  /* Una ficha por fila (boceto 24-nov): a ~470 px el auto-fill armaba 2 columnas, cortaba los nombres
+     y estiraba la más baja de cada fila (el hueco bajo la consulta). Casilla solo en computadora. */
+  #sec-leads:not(.vista-compacta) #leads-cards.card-grid{grid-template-columns:minmax(0,1fr);gap:8px}
   #sec-leads:not(.vista-compacta) #leads-cards .lead-card{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;grid-template-areas:"ava nom wa mas" "ava sub wa mas";column-gap:9px;row-gap:5px;align-items:center;align-content:start;padding:10px 8px 10px 11px;border-radius:12px}
-  #sec-leads:not(.vista-compacta) #leads-cards .lead-card:has(>.lead-check:not([style*="none"])){grid-template-columns:22px 28px minmax(0,1fr) auto auto;grid-template-areas:"chk ava nom wa mas" "chk ava sub wa mas"}
   #sec-leads:not(.vista-compacta) #leads-cards .lead-card :is(.ec-top,.ec-headtext,.lc-foot){display:contents}
-  #sec-leads:not(.vista-compacta) #leads-cards .lead-card :is(.estado-stepper,.sin-atender-movil,.lc-sub,.ec-context,.lc-chips,.lc-fill,.lc-cta,.lc-cta-vacio,.lc-head>.chip-seg){display:none}
+  #sec-leads:not(.vista-compacta) #leads-cards .lead-card :is(.lead-check,.estado-stepper,.sin-atender-movil,.lc-sub,.ec-context,.lc-chips,.lc-fill,.lc-cta-vacio,.lc-head>.chip-seg){display:none}
   #sec-leads:not(.vista-compacta) #leads-cards .lead-card>:is(.lf-viaje,.lf-gestion,.lf-nota,.lc-consulta,.lc-oferta){grid-column:1/-1;min-width:0;margin:0}
-  #sec-leads:not(.vista-compacta) #leads-cards .lead-card .lead-check{grid-area:chk;position:relative!important;top:auto!important;right:auto!important}
+  /* El paso que toca, abajo y a todo el ancho; «Ver reserva» con borde porque solo mira. */
+  #sec-leads:not(.vista-compacta) #leads-cards .lead-card .lc-cta{order:3;grid-column:1/-1;min-height:var(--tap);margin:2px 3px 0 0}
+  #sec-leads:not(.vista-compacta) #leads-cards .lead-card .lc-cta-ver{background:none;border:1px solid var(--line2);color:var(--txt);box-shadow:none}
   #sec-leads:not(.vista-compacta) #leads-cards .lead-card .ec-ava{grid-area:ava;align-self:start;width:28px;height:28px;font-size:12px;border-radius:8px}
   #sec-leads:not(.vista-compacta) #leads-cards .lead-card .ec-nombre{grid-area:nom;display:block;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #sec-leads:not(.vista-compacta) #leads-cards .lead-card .lc-head{grid-area:sub;display:flex;flex-wrap:nowrap;align-items:center;gap:7px;min-width:0;margin:0}

@@ -235,13 +235,55 @@ function partesConsulta(texto) {
 }
 // Botón principal de la tarjeta y del drawer según el estado. Mismos permisos
 // por rol que tenían los botones rápidos del drawer.
+// l._tieneReserva sale de leads_con_reserva (marcarLeadsConReserva): true/false, o
+// undefined mientras no se consultó -- ahí manda la regla por estado.
 function accionPrincipalLead(l) {
   const vende = ROL === 'asesor' || ROL === 'admin';
+  const verReserva = { key: 'reservas', texto: 'Ver reserva', icono: 'fa-suitcase-rolling', ver: true };
   if (l.estado === 'POR ATENDER' && !l.fecha_primer_contacto && ROL === 'asesor' && !leadSoloLectura()) return { key: 'atender', texto: 'Atender', icono: 'fa-check' };
+  if (l._tieneReserva && vende) return verReserva;
   if (['POR ATENDER', 'ATENDIDO', 'CLIENTE CONTACTADO'].includes(l.estado)) return vende ? { key: 'cotizar', texto: 'Cotizar', icono: 'fa-file-invoice-dollar' } : null;
-  if (['COTIZACION ENVIADA', 'EN ESPERA DE PAGO'].includes(l.estado)) return ROL === 'asesor' || esOficina() ? { key: 'reserva', texto: 'Crear reserva', icono: 'fa-plus' } : null;
-  if (VENTA.includes(l.estado)) return vende ? { key: 'reservas', texto: 'Ver reservas', icono: 'fa-suitcase-rolling' } : null;
+  if (['COTIZACION ENVIADA', 'EN ESPERA DE PAGO'].includes(l.estado) || (l.estado === 'PAGO REALIZADO' && l._tieneReserva === false)) return ROL === 'asesor' || esOficina() ? { key: 'reserva', texto: 'Crear reserva', icono: 'fa-plus' } : null;
+  if (VENTA.includes(l.estado)) return vende ? verReserva : null;
   return null;
+}
+// Botón principal de la tarjeta (mismo HTML en leadCardHtml y al repintarlo tras leads_con_reserva).
+const ctaTarjetaLeadHtml = cta => cta
+  ? `<button type="button" class="lc-cta${cta.ver ? ' lc-cta-ver' : ''}" data-accion="${cta.key}"><i class="fas ${cta.icono}"></i>${cta.texto}</button>`
+  : '<span class="lc-cta-vacio"></span>';
+// Una sola consulta por página: qué leads tienen reserva activa (migración 20261206210000).
+// Si falla (RPC ausente, rol sin acceso) las tarjetas se quedan con la regla por estado.
+let genReservasLeads = 0;
+async function marcarLeadsConReserva(leads, { pagina = false } = {}) {
+  if (!(ROL === 'asesor' || esOficina()) || !leads?.length) return;
+  const gen = pagina ? ++genReservasLeads : genReservasLeads;
+  const { data, error } = await sb.rpc('leads_con_reserva', { p_ids: leads.map(l => l.id) });
+  if (error) { console.warn('leads_con_reserva', error.message); return; }
+  if (pagina && gen !== genReservasLeads) return; // llegó una página más nueva
+  const con = new Set((data || []).map(String));
+  leads.forEach(l => {
+    const tiene = con.has(String(l.id)), antes = accionPrincipalLead(l)?.key;
+    l._tieneReserva = tiene;
+    // Solo se repinta lo que muestra ESTE objeto (un parche en vivo pudo reemplazarlo).
+    if (LEADS_PAGINA[l.id] === l && accionPrincipalLead(l)?.key !== antes) pintarCtaTarjetaLead(l);
+    if (currentLead?.id === l.id && currentLead.estado === l.estado && document.getElementById('drawer')?.classList.contains('open')) {
+      currentLead._tieneReserva = tiene; pintarCtaDrawer(currentLead);
+    }
+  });
+}
+function pintarCtaTarjetaLead(l) {
+  const viejo = document.querySelector(`#leads-cards [data-lead-id="${l.id}"] :is(.lc-cta,.lc-cta-vacio)`);
+  if (!viejo) return;
+  const tmp = document.createElement('div'); tmp.innerHTML = ctaTarjetaLeadHtml(accionPrincipalLead(l));
+  const nuevo = tmp.firstElementChild;
+  viejo.replaceWith(nuevo);
+  if (nuevo.matches('.lc-cta')) nuevo.addEventListener('click', e => { e.stopPropagation(); ejecutarAccionLead(LEADS_PAGINA[l.id] || l, e.currentTarget.dataset.accion); });
+}
+// Parche en vivo: conserva lo que ya se sabía de la reserva si la etapa no cambió.
+function heredarReservaLead(lead) {
+  const prev = LEADS_PAGINA[lead.id];
+  if (prev && prev._tieneReserva !== undefined && prev.estado === lead.estado) lead._tieneReserva = prev._tieneReserva;
+  return lead;
 }
 // Navegar a otra sección solo cuando el drawer terminó de cerrar (su popstate):
 // si se navega antes, el history.back del drawer deshace la navegación.
@@ -310,6 +352,10 @@ function iconoCanalLead(canal) {
 const ESTADOS_CICLO = ESTADOS;
 const SERVICIOS = ['Vuelos', 'Full Day', 'Hospedaje', 'Paquete Todo Incluido', 'Hotel', 'Tour', 'Evento', 'Otro'];
 const VENTA = ['PAGO REALIZADO', 'VENTA COMPLETA'];
+// Lo que recorren las flechas/deslizar del estado en la ficha móvil (dueño 24-nov): sin CLIENTE
+// CONTACTADO (cuenta como Atendido), PERDIDO ni NUMERO INVALIDO; esos solo desde la lista.
+const EMBUDO_FICHA = ['POR ATENDER', 'ATENDIDO', 'COTIZACION ENVIADA', 'EN ESPERA DE PAGO', 'PAGO REALIZADO', 'VENTA COMPLETA'];
+const posEmbudoFicha = est => EMBUDO_FICHA.indexOf(est === 'CLIENTE CONTACTADO' ? 'ATENDIDO' : est);
 const LINK_PAGO_ESTADOS = ['COTIZACION ENVIADA', 'EN ESPERA DE PAGO', ...VENTA];
 // Próxima acción (leads.proxima_accion_*): los leads cerrados no cuentan como seguimiento.
 const ESTADOS_SIN_SEGUIMIENTO = [...VENTA, 'PERDIDO'];
@@ -9697,6 +9743,7 @@ async function loadTable(silencioso) {
   LEADS_PAGINA = {};
   data.forEach(l => { LEADS_PAGINA[l.id] = l; });
   wireLeadCards(cardsEl, data, { drag: true });
+  marcarLeadsConReserva(data, { pagina: true });
   wireLeadChecks();
   document.querySelectorAll('.solo-admin-borrar').forEach(el => el.style.display = ROL === 'admin' ? '' : 'none');
   applyLeadsView();
@@ -9776,9 +9823,11 @@ async function parcharLeadLive(evento) {
   const card = cards?.querySelector(`[data-lead-id="${evento.new.id}"]`);
   if (!lead) { if (card) { card.remove(); delete LEADS_PAGINA[evento.new.id]; totalFiltered = Math.max(0, totalFiltered - 1); document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; renderPager(Math.max(Math.ceil(totalFiltered / PER), 1)); } return; }
   if (!card && (page !== 1 || evento.eventType !== 'INSERT')) { if (evento.eventType === 'INSERT') mostrarLeadsNuevos(1); return; }
+  heredarReservaLead(lead);
   const tmp = document.createElement('div'); tmp.innerHTML = leadCardHtml(lead);
   const nuevo = tmp.firstElementChild;
   LEADS_PAGINA[lead.id] = lead;
+  if (lead._tieneReserva === undefined) queueMicrotask(() => marcarLeadsConReserva([lead]));
   if (card && card.outerHTML === nuevo.outerHTML) { if (currentLead?.id === lead.id && !document.getElementById('drawer')?.classList.contains('open')) currentLead = lead; return; }
   if (card) card.replaceWith(nuevo); else { cards.prepend(nuevo); document.getElementById('tbl-empty').classList.remove('show'); totalFiltered++; document.getElementById('t-count').textContent = `${fmt(totalFiltered)} leads`; }
   wireLeadCardLive(nuevo, lead);
@@ -9892,12 +9941,14 @@ async function reconciliarLoteLive(ids) {
   for (const lead of data || []) {
     const card = document.querySelector(`#leads-cards [data-lead-id="${lead.id}"]`);
     if (!card) continue;
-    const html = leadCardHtml(lead);
+    const html = leadCardHtml(heredarReservaLead(lead));
     const tmp = document.createElement('div'); tmp.innerHTML = html;
     LEADS_PAGINA[lead.id] = lead;
     if (card.outerHTML === tmp.firstElementChild.outerHTML) continue;
     const nuevo = tmp.firstElementChild; card.replaceWith(nuevo); wireLeadCardLive(nuevo, lead);
   }
+  const sinDato = (data || []).filter(lead => lead._tieneReserva === undefined && LEADS_PAGINA[lead.id] === lead);
+  if (sinDato.length) marcarLeadsConReserva(sinDato);
 }
 /* ---------- Arrastrar un lead a una pestaña (solo escritorio) ----------
    Soltar una tarjeta sobre "Boletería" o "En facturación" abre el mismo
@@ -10018,7 +10069,7 @@ function leadCardHtml(l) {
     ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-hotel"></i><span>IA recomendó: ${esc(pc.oferta)}</span></div>` : ''}
     <div class="lc-fill"></div>
     <div class="lc-foot">
-      ${cta ? `<button type="button" class="lc-cta" data-accion="${cta.key}"><i class="fas ${cta.icono}"></i>${cta.texto}</button>` : '<span class="lc-cta-vacio"></span>'}
+      ${ctaTarjetaLeadHtml(cta)}
       ${wa ? `<a class="wa-btn" ${waAtributosLead(l, wa)} title="Abrir WhatsApp" aria-label="Abrir WhatsApp" onclick="event.stopPropagation()"><i class="fab fa-whatsapp"></i></a>` : ''}
       <button type="button" class="lc-mas" title="Más acciones" aria-label="Más acciones"><i class="fas fa-ellipsis"></i></button>
     </div>
@@ -10042,17 +10093,19 @@ async function moverEstadoLead(l, dir) {
 }
 // Chip de estado (móvil): reemplaza el stepper < estado > por una hoja con
 // el ciclo completo. Mismo RPC que moverEstadoLead vía setEstadoLead.
-function abrirEstadoLeadSheet(l) {
+// alElegir: la ficha abierta cambia el select (autoguardado) en vez de llamar al RPC directo.
+function abrirEstadoLeadSheet(l, alElegir = nuevo => setEstadoLead(l, nuevo)) {
   const cont = document.getElementById('estado-lead-opciones');
   if (!cont) return;
+  // Perdido y Número inválido van aparte, debajo de una línea (boceto 24-nov).
   cont.innerHTML = ESTADOS_CICLO.map(e => {
     const col = ESTADO_COLORS[e] || '#8b93ad', actual = e === l.estado;
-    return `<button type="button" class="estado-opt${actual ? ' actual' : ''}" data-estado="${esc(e)}"><span class="eo-dot" style="background:${col}"></span><span class="eo-txt">${esc(niceEstado(e))}</span>${actual ? '<i class="fas fa-check"></i>' : ''}</button>`;
+    return `${e === 'PERDIDO' ? '<div class="estado-opt-sep" role="separator"></div>' : ''}<button type="button" class="estado-opt${actual ? ' actual' : ''}" data-estado="${esc(e)}"${actual ? ' aria-current="true"' : ''}><span class="eo-dot" style="background:${col}"></span><span class="eo-txt">${esc(niceEstado(e))}</span>${actual ? '<i class="fas fa-check"></i>' : ''}</button>`;
   }).join('');
   cont.querySelectorAll('.estado-opt').forEach(b => b.addEventListener('click', () => {
     const nuevo = b.dataset.estado;
     closeSheet('estado-lead-sheet');
-    setEstadoLead(l, nuevo);
+    alElegir(nuevo);
   }));
   openSheet('estado-lead-sheet');
 }
@@ -10863,7 +10916,12 @@ function openDrawer(l, opciones = {}) {
       ${l.meta_ad_id || l.meta_ref ? '<div class="dm"><span class="dm-chip" id="d-origen-ad"><i class="fas fa-bullhorn"></i>Vino de un anuncio de Meta</span></div>' : ''}
       <div class="dm" id="d-origen-post" style="display:none"></div>
       ${badges.trim() ? `<div class="dh-badges">${badges}</div>` : ''}</div>
-      <span class="dh-est" id="dh-est" style="--est:${estColor}">${esc(niceEstado(l.estado))}</span>
+      <div class="dh-estado" id="dh-estado" style="--est:${estColor}">
+        <button type="button" class="dh-est-ar" data-dir="-1" aria-label="Etapa anterior"><i class="fas fa-chevron-left"></i></button>
+        <button type="button" class="dh-est" id="dh-est" aria-haspopup="dialog" aria-label="Cambiar estado"><span class="dh-est-lab" id="dh-est-lab">${esc(niceEstado(l.estado))}<i class="fas fa-chevron-down"></i></span></button>
+        <button type="button" class="dh-est-ar" data-dir="1" aria-label="Etapa siguiente"><i class="fas fa-chevron-right"></i></button>
+        <div class="dh-est-pr"><span class="dh-est-barra">${EMBUDO_FICHA.map(() => '<span></span>').join('')}</span><span id="dh-est-n"></span></div>
+      </div>
       <div class="dtabs" role="tablist" aria-label="Secciones de la ficha">${FICHA_TABS.map(([k, t], i) => `<button type="button" role="tab" class="dtab" data-dtab-btn="${k}" aria-selected="${i === 0}">${t}</button>`).join('')}</div></div>
 
     <div class="dacc">
@@ -11022,6 +11080,8 @@ function openDrawer(l, opciones = {}) {
   const mas = document.getElementById('dacc-mas'), btnMas = document.getElementById('e-a-mas');
   btnMas.addEventListener('click', () => { mas.hidden = !mas.hidden; btnMas.setAttribute('aria-expanded', String(!mas.hidden)); });
   document.getElementById('e-a-cta').addEventListener('click', e => accionPrincipalDrawer(l, e.currentTarget.dataset.accion));
+  if (l._tieneReserva === undefined) marcarLeadsConReserva([l]); // abierta desde fuera de la lista
+  prepararEstadoFicha();
   vigilarReasignacionFicha(l);
   pintarAvisoReingreso(l);
   document.getElementById('e-a-recordar')?.addEventListener('click', () => { document.getElementById('dacc-mas').hidden = true; document.getElementById('e-a-mas')?.setAttribute('aria-expanded', 'false'); recordarLeadManana(l); });
@@ -11065,11 +11125,78 @@ function openDrawer(l, opciones = {}) {
 // acciones abajo. El CSS solo actúa en móvil; en escritorio esto no cambia nada.
 const FICHA_TABS = [['resumen', 'Resumen'], ['conv', 'Conversación'], ['cot', 'Cotización'], ['hist', 'Historial']];
 let fichaArrastreListo = false;
-function pintarEstadoFicha(est) {
+function pintarEstadoFicha(est, dir = 0) {
   const col = ESTADO_COLORS[est] || '#8b93ad';
   document.getElementById('dacc-estado')?.style.setProperty('--est', col);
-  const p = document.getElementById('dh-est');
-  if (p) { p.style.setProperty('--est', col); p.textContent = niceEstado(est); }
+  const caja = document.getElementById('dh-estado'), lab = document.getElementById('dh-est-lab');
+  if (!caja || !lab) return;
+  const sel = document.getElementById('e-estado'), i = posEmbudoFicha(est), fijo = !sel || sel.disabled;
+  caja.style.setProperty('--est', col);
+  caja.classList.toggle('solo-lectura', fijo);
+  lab.innerHTML = `${esc(niceEstado(est))}<i class="fas fa-chevron-down"></i>`;
+  document.getElementById('dh-est')?.setAttribute('aria-label', `Estado: ${niceEstado(est)}. Cambiar estado`);
+  const [ant, sig] = caja.querySelectorAll('.dh-est-ar');
+  ant.disabled = fijo || i <= 0;
+  sig.disabled = fijo || i === -1 || i === EMBUDO_FICHA.length - 1;
+  caja.querySelectorAll('.dh-est-barra>span').forEach((b, k) => b.classList.toggle('on', i !== -1 && k <= i));
+  document.getElementById('dh-est-n').textContent = i === -1 ? 'Fuera del embudo' : `${i + 1} de ${EMBUDO_FICHA.length}`;
+  if (dir) {
+    lab.style.transition = 'none'; lab.style.transform = `translateX(${dir * 40}px)`; lab.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { lab.style.transition = ''; lab.style.transform = ''; lab.style.opacity = ''; }));
+  }
+}
+// Estado en la cabecera de la ficha (móvil, boceto aprobado 24-nov): ‹ chip ›, deslizar el chip
+// y tocarlo para la lista. Todo pasa por el select #e-estado + `change`, o sea el mismo
+// autoguardado (y el mismo pedido de monto al llegar a Pago realizado) que en escritorio.
+function cambiarEstadoFicha(nuevo, dir = 0) {
+  const sel = document.getElementById('e-estado');
+  if (!sel || sel.disabled || !nuevo || sel.value === nuevo) return;
+  sel.value = nuevo;
+  sel.dispatchEvent(new Event('input', { bubbles: true }));
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  if (dir) pintarEstadoFicha(nuevo, dir);
+  if (VENTA.includes(nuevo)) { tabFichaLead('resumen'); document.getElementById('venta-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+function moverEstadoFicha(dir) {
+  const i = posEmbudoFicha(document.getElementById('e-estado')?.value);
+  if (i === -1) return;
+  cambiarEstadoFicha(EMBUDO_FICHA[Math.min(EMBUDO_FICHA.length - 1, Math.max(0, i + dir))], dir);
+}
+function prepararEstadoFicha() {
+  const caja = document.getElementById('dh-estado'), chip = document.getElementById('dh-est'), lab = document.getElementById('dh-est-lab');
+  if (!caja || !chip || !lab) return;
+  pintarEstadoFicha(document.getElementById('e-estado')?.value);
+  caja.querySelectorAll('.dh-est-ar').forEach(b => b.addEventListener('click', () => moverEstadoFicha(Number(b.dataset.dir))));
+  const abrir = () => {
+    const sel = document.getElementById('e-estado');
+    if (sel && !sel.disabled) abrirEstadoLeadSheet({ estado: sel.value }, nuevo => cambiarEstadoFicha(nuevo));
+  };
+  chip.addEventListener('keydown', e => { if (e.key === 'ArrowRight') moverEstadoFicha(1); if (e.key === 'ArrowLeft') moverEstadoFicha(-1); });
+  // Más de 40 px de lado cambia de etapa (izquierda avanza); menos de 8 px es un toque y abre la lista.
+  let x0 = null, dx = 0, porPuntero = false;
+  const volver = () => { x0 = null; lab.style.transform = ''; lab.style.opacity = ''; chip.classList.remove('arrastre'); };
+  chip.addEventListener('touchstart', e => e.stopPropagation(), { passive: true }); // ni cerrar la hoja ni el menú
+  chip.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    x0 = e.clientX; dx = 0; porPuntero = true;
+    chip.setPointerCapture?.(e.pointerId); chip.classList.add('arrastre');
+  });
+  chip.addEventListener('pointermove', e => {
+    if (x0 === null) return;
+    dx = (e.clientX - x0) / zoomFactor();
+    lab.style.transform = `translateX(${Math.max(-60, Math.min(60, dx))}px)`;
+    lab.style.opacity = String(1 - Math.min(Math.abs(dx), 60) / 120);
+  });
+  chip.addEventListener('pointerup', () => {
+    if (x0 === null) return;
+    const d = dx; volver();
+    setTimeout(() => { porPuntero = false; }, 400); // un arrastre no dispara click: que no se trague el próximo Enter
+    if (Math.abs(d) > 40) moverEstadoFicha(d < 0 ? 1 : -1);
+    else if (Math.abs(d) < 8) abrir();
+  });
+  chip.addEventListener('pointercancel', volver);
+  // Teclado (Enter/Espacio) dispara click sin puntero; el toque ya se resolvió en pointerup.
+  chip.addEventListener('click', () => { if (porPuntero) { porPuntero = false; return; } abrir(); });
 }
 function alturaFichaLead(completa) { document.getElementById('drawer').classList.toggle('d-completa', completa); }
 function tabFichaLead(tab) {
