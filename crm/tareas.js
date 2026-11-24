@@ -1170,7 +1170,8 @@ export function crearTareas({ sb, esc, rol, miId, irA, abrirLead, abrirReserva, 
       if (datos) recargarPronto();
       if (tabSucio) tableroPronto();
     });
-    gestoBorde();
+    // gestoBorde() ya no se instala (dueño, 24-nov): en el teléfono chocaba con el carrusel de
+    // «Por atender». Tareas se abre desde el menú. Solo actuaba en móvil: el escritorio no cambia.
     conectar();
     cargar();
     cargarTablero();

@@ -4,7 +4,39 @@ const dato = v => v === '' || v == null ? null : v;
 const local = s => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?$/.test(s || '') ? s.replace(/(?:Z|[+-]\d{2}:\d{2})$/, '') : null;
 const CAMPOS = ['tipo', 'descripcion', 'fecha_inicio', 'fecha_fin', 'hora', 'localizador', 'pax_adultos', 'pax_ninos', 'destino_id', 'estado', 'precio', 'precio_moneda', 'precio_tasa', 'time_limit'];
 const DETALLE = { boleto_aereo: ['aerolinea', 'ruta', 'ida_vuelta'], traslado_terrestre: ['origen', 'destino', 'hora_regreso', 'vehiculo'], traslado_maritimo: ['embarcadero', 'embarcacion', 'ida_vuelta'], full_day: ['punto_encuentro', 'incluye', 'no_incluye', 'excursion'], hospedaje: ['hotel', 'habitacion', 'plan', 'noches', 'voucher'], seguro: ['aseguradora', 'cobertura', 'poliza'], otro: ['nota'] };
-export function prepararGuardadoImportacion({ datos, base, reservaId, servicio, operacionId, documentos = [], seleccion = {}, precios = {}, aerolineas = [], reemplazarTramos = false }) {
+const IDENTIDAD = ['id', 'updated_at', 'nombre', 'apellido', 'tipo_documento', 'numero_documento', 'fecha_nacimiento', 'nacionalidad'];
+const TICKET = ['id', 'servicio_id', 'pasajero_id', 'numero_ticket', 'emitido_en'];
+const proyeccion = (fila, campos) => Object.fromEntries(campos.map(k => [k, fila[k] ?? null]));
+export function planificarReemplazos(payload, { servicio, pasajerosActuales = [], boletosActuales = [] } = {}) {
+  if (!servicio || !payload.servicio_id || payload.servicios[0]?.datos.tipo !== 'boleto_aereo') return [];
+  const s = payload.servicios[0], plan = [];
+  for (const p of s.pasajeros) {
+    if (p.crear_nuevo || !p.tipo_documento || !p.numero_documento) continue;
+    const candidatos = pasajerosActuales.filter(q => q.tipo_documento === p.tipo_documento && q.numero_documento === p.numero_documento);
+    if (candidatos.length > 1) throw new Error('Hay más de un pasajero con ese documento. Revisa la identidad antes de reemplazar.');
+    const actual = candidatos[0];
+    if (!actual) continue;
+    if (p.pasajero_id && Number(p.pasajero_id) !== Number(actual.id)) throw new Error('El pasajero elegido no coincide con el documento. Revisa la identidad.');
+    if (Object.entries(p).some(([k, v]) => {
+      const campo = k === 'nacimiento' ? 'fecha_nacimiento' : k;
+      return IDENTIDAD.includes(campo) && !['id', 'updated_at'].includes(campo) && v != null && v !== '' && actual[campo] != null && actual[campo] !== v;
+    })) {
+      if (!actual.updated_at) throw new Error('Falta la versión del pasajero. Vuelve a abrir la reserva antes de corregirlo.');
+      plan.push({ tipo: 'pasajero', servicio_clave: s.clave, pasajero_clave: p.clave, anterior: proyeccion(actual, IDENTIDAD) });
+    }
+    const nuevos = s.boletos.filter(b => b.pasajero_clave === p.clave), previos = boletosActuales.filter(b => Number(b.servicio_id) === Number(servicio.id) && Number(b.pasajero_id) === Number(actual.id));
+    if (previos.length > 1) throw new Error('Hay varios tickets asociados al pasajero. Revisa el servicio.');
+    if (nuevos.length === 1 && previos.length === 1 && previos[0].numero_ticket.toUpperCase() !== nuevos[0].numero_ticket.toUpperCase()) {
+      plan.push({ tipo: 'boleto', servicio_clave: s.clave, pasajero_clave: p.clave, anterior: proyeccion(previos[0], TICKET) });
+    }
+  }
+  if (!plan.length) return plan;
+  if (!servicio.localizador?.trim() || servicio.localizador.trim().toUpperCase() !== s.datos.localizador?.trim().toUpperCase()) throw new Error('El reemplazo requiere el mismo localizador del servicio original.');
+  const docs = payload.documentos;
+  if (docs.length !== 1 || docs[0].tipo !== 'boleto' || docs[0].servicio_clave !== s.clave || !/^[a-f0-9]{64}$/.test(docs[0].sha256)) throw new Error('Para reemplazar datos existentes usa un solo boleto claramente asociado a este servicio.');
+  return plan.map(r => ({ ...r, fuente_sha256: docs[0].sha256 }));
+}
+export function prepararGuardadoImportacion({ datos, base, reservaId, servicio, operacionId, documentos = [], seleccion = {}, precios = {}, aerolineas = [], reemplazarTramos = false, pasajerosActuales = [], boletosActuales = [] }) {
   const revision = revisarImportacion(datos);
   if (!revision.valido) throw new Error([...revision.errores, ...revision.conflictos.map(c => `Conflicto pendiente: ${c.campo}`)].join('\n'));
   if (!datos.servicio.descripcion?.trim()) throw new Error('Completa la descripción del servicio.');
@@ -69,6 +101,8 @@ export function prepararGuardadoImportacion({ datos, base, reservaId, servicio, 
   }
   documentos = documentos.map(d => ({ ...d, servicio_clave: sg.get(d.servicio_clave) || d.servicio_clave }));
   const payload = { operacion_id: operacionId, reserva_id: Number(reservaId), ...(servicio ? { servicio_id: servicio.id, version_servicio: servicio.updated_at } : {}), servicios, documentos };
+  const reemplazos = planificarReemplazos(payload, { servicio, pasajerosActuales, boletosActuales });
+  if (reemplazos.length) payload.reemplazos = reemplazos;
   if (peso(payload) > 4194304) throw new Error('La operación supera 4 MiB. Divide los documentos; no se ha truncado.');
   return payload;
 }

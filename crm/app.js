@@ -9419,6 +9419,9 @@ function setupFilters() {
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refresh, 300); });
   initDateRangePicker('f');
   leadsView = initViewSwitcher('leads-view-switch', 'leads', 'tarjetas', v => { leadsView = v; applyLeadsView(); });
+  // Clave propia del teléfono (view_leads_movil): el escritorio no la usa. Por defecto, la ficha F.
+  const aplicarVistaMovil = v => document.getElementById('sec-leads')?.classList.toggle('vista-compacta', v === 'compacta');
+  aplicarVistaMovil(initViewSwitcher('leads-movil-switch', 'leads_movil', 'etiquetas', aplicarVistaMovil, ['etiquetas', 'compacta']));
 }
 
 /* ---------- Selector de rango de fechas (Leads + Reasignaciones) ---------- */
@@ -9470,6 +9473,9 @@ const VISTAS_BTN = {
   // Solo Stop Sales: "qué pasa tal día" vs "cómo está tal hotel".
   calendario: ['fa-calendar-days', 'Vista de calendario'],
   hoteles: ['fa-hotel', 'Vista por hotel'],
+  // Solo Leads en el teléfono: ficha F (etiquetas) vs la fila compacta de antes.
+  etiquetas: ['fa-tags', 'Fichas con etiquetas'],
+  compacta: ['fa-bars', 'Filas compactas'],
 };
 // `vistas` permite que cada sección ofrezca solo las que tienen sentido para
 // ella (Postulaciones no tiene vista de fichas, por ejemplo).
@@ -10006,6 +10012,7 @@ function leadCardHtml(l) {
       </div>
     </div>
     <div class="ec-context">${contexto}</div>
+    ${lfViajeHtml(l, pc, l.destino)}${lfGestionHtml(l)}
     ${pc.resumen ? `<div class="lc-consulta${fichas ? ' larga' : ''}" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
     ${pc.avisos.length || chipsFichas ? `<div class="lc-chips">${pc.avisos.map(a => `<span class="lc-chip aviso"><i class="fas fa-triangle-exclamation"></i>${esc(a)}</span>`).join('')}${chipsFichas}</div>` : ''}
     ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-hotel"></i><span>IA recomendó: ${esc(pc.oferta)}</span></div>` : ''}
@@ -10287,10 +10294,17 @@ function actualizarMascaraCola() {
   const grid = document.getElementById('inbox-grid');
   if (!grid) return;
   grid.classList.toggle('hay-mas', grid.scrollWidth - grid.scrollLeft - grid.clientWidth > 8);
+  // Carrusel del teléfono (ficha F): «1 de 3» según la ficha más cerca del borde izquierdo. El CSS lo oculta en escritorio.
+  const pos = document.getElementById('inbox-pos'), cards = grid.children;
+  if (!pos) return;
+  const paso = cards[1] ? cards[1].offsetLeft - cards[0].offsetLeft : 0;
+  const i = paso > 0 ? Math.max(0, Math.min(cards.length - 1, Math.round(grid.scrollLeft / paso))) : 0;
+  pos.textContent = cards.length > 1 ? `${i + 1} de ${cards.length}` : '';
 }
-// Móvil: primer toque en una fila de la cola la abre en el sitio (botones a la vista); el segundo abre la ficha.
+// Móvil, vista compacta: primer toque en una fila de la cola la abre en el sitio (botones a la vista); el segundo abre la ficha.
+// Con la ficha F (sin .vista-compacta) cada consulta ya muestra sus botones: tocarla abre la ficha.
 function abrirFilaMovil(card) {
-  if (!matchMedia('(max-width:760px)').matches || card.classList.contains('es-siguiente') || card.classList.contains('abierta')) return false;
+  if (!matchMedia('(max-width:760px)').matches || !document.getElementById('sec-leads')?.classList.contains('vista-compacta') || card.classList.contains('es-siguiente') || card.classList.contains('abierta')) return false;
   card.parentElement.querySelectorAll('.inbox-card.abierta').forEach(c => c.classList.remove('abierta'));
   card.classList.add('abierta');
   card.scrollIntoView({ block: 'nearest' });
@@ -10363,6 +10377,23 @@ function consultaReingreso(l) {
 const textoReingreso = l => { const n = consultaReingreso(l); return `Volvió a escribir${n?.canal ? ` por ${n.canal}` : ''} · sigue en ${l.estado || 'su etapa'}${l._reingreso?.contactos > 1 ? ` · ${l._reingreso.contactos} contactos` : ''}`; };
 // Una consulta nueva del mismo cliente cambia el contenido: la tarjeta se rehace, no se repinta.
 const versionTarjetaInbox = l => String(l._reingreso?.ultimo || '');
+// Ficha F · Etiquetas (móvil, 2026-11-24): el viaje en etiquetas. Fuera de @media(max-width:760px)
+// el CSS oculta .lf-*, así el escritorio no cambia.
+function lfViajeHtml(l, pc, destino) {
+  const fecha = pc.etiquetas['Fecha estimada'] || pc.etiquetas.Fechas || l.fecha_estimada;
+  const pers = String(l.personas || pc.etiquetas.Viajeros || '').trim(), presu = pc.etiquetas.Presupuesto;
+  const chip = (icono, texto, sin) => `<span class="lc-chip${sin ? ' sin' : ''}"><i class="fas ${icono}" aria-hidden="true"></i>${texto}</span>`;
+  return `<div class="lf-viaje">${chip('fa-location-dot', esc(destino) || 'Sin destino', !destino)}${pers ? chip('fa-users', esc(pers) + (/^\d+$/.test(pers) ? ' pers.' : '')) : ''}${fecha ? chip('fa-calendar-days', esc(fecha)) : ''}${chip('fa-wallet', presu ? esc(presu) : 'Sin presupuesto', !presu)}</div>`;
+}
+// Gestión de un cliente atendido: próximo paso (o su falta), saldo pendiente y la última nota.
+function lfGestionHtml(l) {
+  const seg = seguimientoActivo(l), resta = Number(l.restante_pago) > 0;
+  const paso = seg
+    ? `<span class="lc-chip paso${new Date(l.proxima_accion_at) < new Date() ? ' vence' : ''}"><i class="fas fa-calendar-check" aria-hidden="true"></i><span><b>${esc(tiempoSeguimiento(l.proxima_accion_at))}</b>${l.proxima_accion_nota ? ' · ' + esc(l.proxima_accion_nota) : ''}</span></span>`
+    : ESTADOS_SIN_SEGUIMIENTO.includes(l.estado) ? '' : `<span class="lc-chip paso sin-seg"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span><b>Sin seguimiento</b> · agenda el próximo paso</span></span>`;
+  const nota = String(l.notas || '').trim().split(/\n+/).pop();
+  return `${paso || resta ? `<div class="lf-gestion">${paso}${resta ? `<span class="lc-chip resta">Resta ${fmt(Number(l.restante_pago))}</span>` : ''}</div>` : ''}${nota ? `<p class="lf-nota"><i class="fas fa-note-sticky" aria-hidden="true"></i><span>${esc(nota)}</span></p>` : ''}`;
+}
 function inboxCardHtml(l) {
   const av = clientAvatar(l), nueva = l._reingreso ? consultaReingreso(l) : null;
   const pc = partesConsulta(nueva ? nueva.consulta : l.destino_consulta), destino = nueva?.destino || l.destino;
@@ -10372,6 +10403,7 @@ function inboxCardHtml(l) {
     ${l._reingreso ? `<div class="ec-row inbox-reingreso"><i class="fas fa-rotate-left" aria-hidden="true"></i> <span>${esc(textoReingreso(l))}</span></div>` : ''}
     <div class="ec-row"><i class="fas fa-phone"></i> <span class="inbox-tel">${esc(l.telefono) || 'Sin teléfono'}</span></div>
     <div class="ec-row inbox-destino"><i class="fas fa-location-dot"></i> ${esc(destino) || '—'}${antes}</div>
+    ${lfViajeHtml(l, pc, destino)}
     ${pc.resumen ? `<div class="lc-consulta" title="${esc(pc.resumen)}">${esc(pc.resumen)}</div>` : ''}
     ${pc.oferta ? `<div class="lc-oferta" title="${esc(pc.oferta)}"><i class="fas fa-tag"></i><span>${esc(pc.oferta)}</span></div>` : ''}
     <div class="ec-row inbox-meta">
@@ -40474,6 +40506,7 @@ function setupNav() {
 const MENU_MQ = matchMedia('(max-width:760px)');
 const MENU_OFF = 80;     // px que el panel flotante queda fuera de pantalla (margen izq + sombra), debe coincidir con el translateX de cierre en index.html
 const MENU_ASOMA = 20;   // al abrir arrastrando el borde del panel arranca acá (y no en MENU_OFF): así sigue al dedo sin 60px muertos de sombra
+const enScrollX = el => { for (; el && el !== document.body; el = el.parentElement) if (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true; return false; };
 const MENU_BORDE = 150;  // px de zona sensible desde el borde izquierdo: ancha a propósito para poder empezar el arrastre bien hacia el centro y esquivar el gesto de "atrás" del sistema en el borde exacto
 const MENU_MIN = 55;     // px reales para confirmar por distancia
 const MENU_VEL = 0.35;   // px reales/ms para confirmar por velocidad
@@ -40673,7 +40706,8 @@ function setupMenuMovil() {
       if (!e.target.closest('.sidebar')) return;   // el fondo ya cierra con click
       abriendo = false;
     } else {
-      if (t.clientX > MENU_BORDE) return;
+      // Sobre un carrusel (cola de Leads, fotos…) el dedo lo desplaza: no abre el menú.
+      if (t.clientX > MENU_BORDE || enScrollX(e.target)) return;
       abriendo = true;
     }
     ancho = aside.getBoundingClientRect().width || 280;
