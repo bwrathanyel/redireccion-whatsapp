@@ -4710,6 +4710,12 @@ body.en-cotizar #lyra-fab,body.en-cotizar #chat-fab{display:none!important}
 .cb-cal-dia[aria-current="date"]{text-decoration:underline;text-underline-offset:4px}
 .cb-cal-dia.rango{border-radius:0;background:var(--accent-soft)}
 .cb-cal-dia.inicio,.cb-cal-dia.fin{background:var(--accent);color:var(--on-accent)}
+.cb-cal-dia.pasado{opacity:.35;cursor:not-allowed}.cb-cal-dia.pasado:hover{box-shadow:none;background:transparent}
+.cb-cal-dia small{display:block;margin-top:1px;font-size:9px;font-weight:800;letter-spacing:.06em;line-height:1;text-transform:uppercase;color:var(--accent-txt)}.cb-cal-dia.inicio small,.cb-cal-dia.fin small{color:inherit}
+.cb-cal-cab button:disabled{opacity:.35;cursor:default}.cb-cal-cab button:disabled:hover{background:transparent;border-color:var(--line2)}
+.cb-cal-dias.sube{overflow:clip;overflow-clip-margin:4px}.cb-cal-dias.sube .cb-cal-dia{animation:cb-cal-sube .28s ease-out}
+@keyframes cb-cal-sube{from{transform:translateY(calc(var(--cb-cal-filas,1) * (var(--tap,44px) + 2px)));opacity:.4}}
+@media(prefers-reduced-motion:reduce){.cb-cal-dias.sube .cb-cal-dia{animation:none}}
 .cb-cal-pie{border-top:1px solid var(--line2);margin-top:10px;padding-top:10px;font-size:12px;color:var(--muted);text-align:center}
 @media(max-width:480px){.cb-cal{padding:8px}.cb-cal-meses{gap:0}}
 @media(max-width:359px){.cb-cal{padding:4px}}

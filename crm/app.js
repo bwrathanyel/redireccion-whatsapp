@@ -36680,6 +36680,7 @@ const cbTasasCompletas = (items, tasas) => Object.values(cbTasasDe(items, tasas)
 const cbTextoTasas = t => [t?.USD ? `dólar Bs ${cbMontoBs(t.USD).slice(3)} por $1` : '', t?.EUR ? `euro Bs ${cbMontoBs(t.EUR).slice(3)} por €1` : ''].filter(Boolean).join(' y ');
 const cbTotalDoc = c => c?.moneda_pago === 'VES' && c.total_bs != null ? cbMontoBs(c.total_bs) : '$' + cbMonto(c?.total);
 const cbMontoBs = n => 'Bs ' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+window.cbCambiarMoneda = cbCambiarMoneda; window.cbProgramarBorrador = cbProgramarBorrador; // app.js es módulo: los onclick de #cb-moneda no los veían
 async function cbCambiarMoneda(m) {
   if (m === 'VES') {
     const { data } = await sb.rpc('tasas_del_dia', { p_fecha: null });
