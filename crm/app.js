@@ -37577,10 +37577,10 @@ function cbSugeridoHtml(it, i) {
     }
     const t = cbExcListas.get(p.id)?.[0]; if (!t) return '';
     const foto = ordenarFotos(p.producto_fotos || [])[0];
-    return `<div class="cb-sugerido cb-full">
-      ${foto ? `<img class="cb-sugerido-foto" src="${esc(fotoMini(foto.storage_path, 384))}" alt="Foto de ${esc(p.nombre)}" width="132" height="132" loading="lazy" decoding="async" onerror="this.hidden=true">` : ''}
-      <div class="cb-sugerido-cuerpo"><span class="cb-sugerido-etq">Para completar su estadía</span><b>${esc(p.nombre)}</b><small>${esc(s.texto)}</small>
-        <span class="cb-sugerido-precio">${esc(tarMontoFmt(t.precios.adulto, t.moneda))}<small> por persona</small></span></div>
+    return `<div class="cb-sugerido cb-full" role="group" aria-label="Oferta: ${esc(p.nombre)}">
+      ${foto ? `<img class="cb-sugerido-foto" src="${esc(fotoMini(foto.storage_path, 384))}" alt="Foto de ${esc(p.nombre)}" width="88" height="88" loading="lazy" decoding="async" onerror="this.hidden=true">` : ''}
+      <div class="cb-sugerido-cuerpo"><span class="cb-sugerido-etq">Para completar su estadía</span><strong class="cb-sugerido-titulo">${esc(p.nombre)}</strong><span class="cb-sugerido-texto">${esc(s.texto)}</span>
+        <span class="cb-sugerido-precio">${esc(tarMontoFmt(t.precios.adulto, t.moneda))}<small>por persona</small></span></div>
       <button type="button" class="btn-sm cb-sugerido-btn" data-cb-sugerido="${p.id}"><i class="fas fa-plus" aria-hidden="true"></i> Agregar a la cotización</button>
     </div>`;
   }).join('');
