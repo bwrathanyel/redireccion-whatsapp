@@ -39928,6 +39928,9 @@ const NAV_ITEMS = [
 const NAV_PADRES = [
   // Primera: es el trabajo principal del modo Boletería (fuera de ese modo no se ve).
   { sec: 'bol-solicitudes', hoja: true },
+  // Correo (2026-11-23): sección propia con su menú (correo.js) debajo; se ve junto con Bandeja.
+  // Arriba de todo desde 2026-11-24 (pedido del dueño).
+  { sec: 'correo', hoja: true },
   { sec: 'grp-inicio', icon: 'fas fa-chart-pie', label: 'Inicio' },
   { sec: 'tareas', hoja: true },
   { sec: 'grp-leads', icon: 'fas fa-users', label: 'Leads', badge: 'nav-lead-count', badgeDefault: '—', badgeVisible: true },
@@ -39936,8 +39939,6 @@ const NAV_PADRES = [
   { sec: 'boletos-emitidos', hoja: true },
   // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
   { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja' },
-  // Correo (2026-11-23): sección propia con su menú (correo.js) debajo; se ve junto con Bandeja.
-  { sec: 'correo', hoja: true },
   { sec: 'mensajes', hoja: true },
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },
