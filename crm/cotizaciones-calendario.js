@@ -36,12 +36,12 @@ export function crearCalendarioRango({ raiz, obtener, aplicar, esc }) {
     if (foco) origen?.focus({ preventScroll: true });
   }
   function escala() { return parseFloat(win.getComputedStyle(doc.body).zoom) || 1; }
-  function cantidad() { return win.innerWidth >= 760 && (win.innerWidth - 16) / escala() >= 740 ? 2 : 1; }
+  // Un solo panel también en escritorio: dos meses lado a lado confundían la vista (dueño 2026-11-24).
   function colocar() {
     if (!vigente()) { cerrar(); return; }
     const z = escala(), b = campo(estado.origen).getBoundingClientRect();
     const margen = win.innerWidth < 360 ? 0 : 8, ancho = (win.innerWidth - margen * 2) / z;
-    panel.style.width = `${Math.min(cantidad() === 2 ? 760 : 380, ancho)}px`;
+    panel.style.width = `${Math.min(380, ancho)}px`;
     const r = panel.getBoundingClientRect();
     const x = Math.max(margen, Math.min(b.left, win.innerWidth - r.width - margen));
     const abajo = b.bottom + 6, arriba = b.top - r.height - 6;
@@ -78,8 +78,8 @@ export function crearCalendarioRango({ raiz, obtener, aplicar, esc }) {
     const cont = continuo(), sube = estado.sube || 0; estado.sube = 0;
     if (cont && !estado.semana) estado.semana = lunes(it.ida);
     const alInicio = cont ? estado.semana <= lunes(hoy()) : estado.mes <= mesDe(hoy());
-    const meses = Array.from({ length: cantidad() }, (_, j) => cont ? ventanaHtml(sumarDias(estado.semana, j * SEMANAS * 7), sube) : mesHtml(moverMes(estado.mes, j))).join('');
-    panel.innerHTML = `<div class="cb-cal-cab"><button type="button" data-cb-mes="-1" aria-label="${cont ? 'Semana anterior' : 'Mes anterior'}"${alInicio ? ' disabled' : ''}><span aria-hidden="true">‹</span></button><strong aria-live="polite">${estado.extremo === 'ida' ? 'Elige entrada' : 'Elige salida'}</strong><button type="button" data-cb-mes="1" aria-label="${cont ? 'Semana siguiente' : 'Mes siguiente'}"><span aria-hidden="true">›</span></button><button type="button" data-cb-cerrar aria-label="Cerrar calendario"><span aria-hidden="true">×</span></button></div><div class="cb-cal-extremos">${[['ida', 'Check-in'], ['vuelta', 'Check-out']].map(([k, s]) => `<button type="button" data-cb-extremo="${k}" aria-pressed="${estado.extremo === k}"><small>${s}</small><span>${esc(corto(it[k]))}</span></button>`).join('')}</div><div class="cb-cal-meses" style="--cb-meses:${cantidad()}">${meses}</div><div class="cb-cal-pie" aria-live="polite">${n > 0 ? `${n} ${n === 1 ? 'noche' : 'noches'}` : it.ida ? 'Selecciona una salida posterior a la entrada' : 'Selecciona el día de llegada'}</div>`;
+    const meses = cont ? ventanaHtml(estado.semana, sube) : mesHtml(estado.mes);
+    panel.innerHTML = `<div class="cb-cal-cab"><button type="button" data-cb-mes="-1" aria-label="${cont ? 'Semana anterior' : 'Mes anterior'}"${alInicio ? ' disabled' : ''}><span aria-hidden="true">‹</span></button><strong aria-live="polite">${estado.extremo === 'ida' ? 'Elige entrada' : 'Elige salida'}</strong><button type="button" data-cb-mes="1" aria-label="${cont ? 'Semana siguiente' : 'Mes siguiente'}"><span aria-hidden="true">›</span></button><button type="button" data-cb-cerrar aria-label="Cerrar calendario"><span aria-hidden="true">×</span></button></div><div class="cb-cal-extremos">${[['ida', 'Check-in'], ['vuelta', 'Check-out']].map(([k, s]) => `<button type="button" data-cb-extremo="${k}" aria-pressed="${estado.extremo === k}"><small>${s}</small><span>${esc(corto(it[k]))}</span></button>`).join('')}</div><div class="cb-cal-meses">${meses}</div><div class="cb-cal-pie" aria-live="polite">${n > 0 ? `${n} ${n === 1 ? 'noche' : 'noches'}` : it.ida ? 'Selecciona una salida posterior a la entrada' : 'Selecciona el día de llegada'}</div>`;
     colocar();
     if (enfocar) panel.querySelector(`[data-cb-dia="${estado.foco}"]`)?.focus({ preventScroll: true });
   }
@@ -90,7 +90,7 @@ export function crearCalendarioRango({ raiz, obtener, aplicar, esc }) {
     cerrar();
     const foco = it[extremo] || it.ida || hoy();
     const s = it.ida ? lunes(it.ida) : null;
-    estado = { i, it, extremo, origen: boton.dataset.cbFecha, mes: mesDe(foco), foco, semana: s && foco >= sumarDias(s, SEMANAS * 7 * cantidad()) ? lunes(foco) : s };
+    estado = { i, it, extremo, origen: boton.dataset.cbFecha, mes: mesDe(foco), foco, semana: s && foco >= sumarDias(s, SEMANAS * 7) ? lunes(foco) : s };
     boton.setAttribute('aria-expanded', 'true');
     panel.hidden = false;
     if (panel.showPopover) panel.showPopover();
@@ -135,10 +135,10 @@ export function crearCalendarioRango({ raiz, obtener, aplicar, esc }) {
     else return;
     e.preventDefault(); estado.foco = siguiente;
     if (continuo()) {
-      const fin = sumarDias(estado.semana, SEMANAS * 7 * cantidad());
+      const fin = sumarDias(estado.semana, SEMANAS * 7);
       if (siguiente < estado.semana) { estado.semana = lunes(siguiente); estado.sube = -1; }
-      else if (siguiente >= fin) { estado.semana = sumarDias(lunes(siguiente), -7 * (SEMANAS * cantidad() - 1)); estado.sube = 1; }
-    } else if (siguiente < estado.mes || siguiente >= moverMes(estado.mes, cantidad())) estado.mes = mesDe(siguiente);
+      else if (siguiente >= fin) { estado.semana = sumarDias(lunes(siguiente), -7 * (SEMANAS - 1)); estado.sube = 1; }
+    } else if (siguiente < estado.mes || siguiente >= moverMes(estado.mes, 1)) estado.mes = mesDe(siguiente);
     pintar();
   });
   doc.addEventListener('pointerdown', e => { if (estado && !panel.contains(e.target) && !e.target.closest('[data-cb-fecha]')) cerrar(); });
