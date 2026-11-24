@@ -11374,13 +11374,19 @@ let CONV_CACHE = null, CONV_HIST = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CAC
    iframe (sin él el correo quedaba en una ventana fija con scroll propio);
    es inocuo mientras allow-scripts siga ausente -- NO sumar ambos flags. */
 const CORREOS_DATA = new Map();
-const CORREO_IFRAME_BASE = '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff}body{margin:0;padding:8px 12px;color:#202124;font:14px/1.6 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-wrap:break-word}img{max-width:100%!important;height:auto!important}table{max-width:100%}a{color:#1a73e8}pre{white-space:pre-wrap}blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #dadce0;color:#5f6368}</style>';
+// La letra del remitente (Times de Outlook, <font face>) se reemplaza por la del CRM; colores y tamaños quedan.
+const CORREO_IFRAME_BASE = '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff}body{margin:0;padding:14px 18px;color:#202124;font:14px/1.6 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-wrap:break-word}body :not(pre,code,kbd,tt,samp){font-family:inherit!important}p{margin:0 0 10px}img{max-width:100%!important;height:auto!important}table{max-width:100%}a{color:#1a73e8}pre{white-space:pre-wrap}blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #dadce0;color:#5f6368}</style>';
 window.ajustarIframeCorreo = (f) => {
   try {
     const d = f.contentDocument;
     const medir = () => { f.style.height = Math.max(80, Math.ceil(d.documentElement.getBoundingClientRect().height)) + 'px'; };
     medir();
-    d.querySelectorAll('img').forEach(i => { if (!i.complete) i.addEventListener('load', medir, { once: true }); });
+    // Imágenes incrustadas (cid:) o caídas: fuera, en vez del ícono de imagen rota.
+    d.querySelectorAll('img').forEach(i => {
+      if (/^cid:/i.test(i.getAttribute('src') || '') || (i.complete && !i.naturalWidth)) { i.remove(); return; }
+      if (!i.complete) { i.addEventListener('load', medir, { once: true }); i.addEventListener('error', () => { i.remove(); medir(); }, { once: true }); }
+    });
+    medir();
     if (window.ResizeObserver) new ResizeObserver(medir).observe(d.documentElement);
   } catch { /* sin acceso al documento: queda el alto base */ }
 };
@@ -11391,9 +11397,18 @@ function textoConEnlaces(s) {
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${fin}`;
   });
 }
+// Tema oscuro: un correo de texto (sin fondos de color ni imágenes de fondo) se pinta con los
+// colores del CRM, como hace Gmail; uno diseñado (boletín, factura) queda sobre blanco.
+const CORREO_IFRAME_OSCURO = '<meta name="color-scheme" content="dark"><style>html,body{background:transparent!important;color-scheme:dark}body,body *{color:#d7dbe6!important;background-color:transparent!important;border-color:#2c3550!important}body a,body a *{color:#8ab4f8!important}blockquote{border-left-color:#3a4566!important}</style>';
+const FONDOS_NEUTROS = new Set(['#fff', '#ffffff', 'white', 'transparent', 'none', 'inherit', 'initial', 'window']);
+function correoEsDisenado(html) {
+  if (/background-image|background\s*:\s*url|background\s*=/i.test(html)) return true;
+  return [...html.matchAll(/(?:bgcolor\s*=\s*["']?|background(?:-color)?\s*:\s*)(#[0-9a-f]{3,6}|[a-z]+|rgba?\([^)]*\))/gi)].some(m => !FONDOS_NEUTROS.has(m[1].toLowerCase().replace(/\s/g, '')));
+}
 function renderCuerpoCorreo(correo) {
   if (correo.cuerpo_html) {
-    return `<iframe class="correo-msg-iframe" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload="ajustarIframeCorreo(this)" srcdoc="${esc(CORREO_IFRAME_BASE + correo.cuerpo_html)}"></iframe>`;
+    const oscuro = document.documentElement.dataset.theme !== 'light' && !correoEsDisenado(correo.cuerpo_html);
+    return `<iframe class="correo-msg-iframe${oscuro ? ' oscuro' : ''}" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload="ajustarIframeCorreo(this)" srcdoc="${esc(CORREO_IFRAME_BASE + correo.cuerpo_html + (oscuro ? CORREO_IFRAME_OSCURO : ''))}"></iframe>`;
   }
   return `<div class="correo-msg-texto">${textoConEnlaces(correo.cuerpo_texto || '(sin contenido)')}</div>`;
 }
@@ -39694,7 +39709,7 @@ const NAV_ITEMS = [
   { sec: 'whatsapp', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp', padre: 'grp-bandeja', roles: '', sub: 'Chats de WhatsApp por número', badge: 'nav-wa-count', badgeDefault: '0' },
   { sec: 'dms', icon: 'fa-brands fa-meta', label: 'Meta DM', padre: 'grp-bandeja', roles: '', sub: 'Chats del bot en Instagram, Facebook y WhatsApp, en vivo y con la ficha del cliente' },
   { sec: 'wa-bandeja', icon: 'fa-brands fa-whatsapp', label: 'WhatsApp empresa', padre: 'grp-bandeja', roles: '', sub: 'Clientes que respondieron al número de la empresa', badge: 'nav-wab-count', badgeDefault: '0' },
-  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', padre: 'grp-bandeja', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
+  { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
@@ -39760,7 +39775,9 @@ const NAV_PADRES = [
   { sec: 'disponibilidad', hoja: true },
   { sec: 'boletos-emitidos', hoja: true },
   // Bandeja (2026-10-16): Meta DM y Correo como pestañas. El chat interno se abre por la burbuja #chat-fab.
-  { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja', badge: 'nav-bandeja-count', badgeDefault: '0' },
+  { sec: 'grp-bandeja', icon: 'fas fa-inbox', label: 'Bandeja' },
+  // Correo (2026-11-23): sección propia con su menú (correo.js) debajo; se ve junto con Bandeja.
+  { sec: 'correo', hoja: true },
   { sec: 'mensajes', hoja: true },
   { sec: 'grp-tarifario', icon: 'fas fa-book-open', label: 'Tarifario' },
   { sec: 'stop-sales', hoja: true },

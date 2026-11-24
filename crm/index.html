@@ -3760,6 +3760,7 @@ body.bi-on .correo-deshacer{bottom:calc(var(--bi-h) + var(--safe-b) + 12px)}
 .correo-msg-body{display:none;padding:0 6px 6px}
 .correo-msg.abierto .correo-msg-body{display:block}
 .correo-msg-iframe{display:block;width:100%;height:320px;border:0;border-radius:8px;background:#fff}
+.correo-msg-iframe.oscuro{background:transparent;border-radius:0}
 .correo-msg-texto{margin:0;padding:6px 8px 8px;font:inherit;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:break-word}
 .correo-msg-texto a{color:var(--accent-ink)}
 .correo-msg-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -4729,7 +4730,7 @@ body:not(.nav-sondeo) #sidebar-nav > .nav-item[data-sec="mensajes"]{display:none
 /* Entradas opcionales: ocultas hasta que el usuario las active en Mi Perfil (body.nav-ver-<sec>,
    ver aplicarPreferencias). Fuera del sondeo de roles y del buscador del menú, que las siguen viendo. */
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-inicio) #sidebar-nav > [data-sec="grp-inicio"],
-body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-bandeja) #sidebar-nav > [data-sec="grp-bandeja"],
+body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-bandeja) #sidebar-nav > :is([data-sec="grp-bandeja"],[data-sec="correo"]:not(.active)),
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-ia) #sidebar-nav > [data-sec="grp-ia"],
 body:not(.nav-sondeo):not(.nav-buscando):not(.nav-ver-grp-marketing) #sidebar-nav > [data-sec="grp-marketing"]{display:none}
 /* Asesor integral: en Bandeja solo sus chats por número. Vale también en sondeo y buscador

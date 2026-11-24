@@ -195,14 +195,8 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
   }
   function actualizarBadgeCorreo() {
     const n = CORREO_CUENTAS.filter(c => !c.revocado).reduce((a, c) => a + (c.no_leidos || 0), 0);
-    // Correo es pestaña de Bandeja: el número también se muestra en el padre.
-    ['nav-correo-count', 'nav-bandeja-count'].forEach(id => {
-      const b = document.getElementById(id);
-      if (!b) return;
-      b.textContent = n > 99 ? '99+' : String(n);
-      b.style.display = n ? '' : 'none';
-    });
-    biBadge('bi-badge-bandeja', n);
+    const b = document.getElementById('nav-correo-count');
+    if (b) { b.textContent = n > 99 ? '99+' : String(n); b.style.display = n ? '' : 'none'; }
   }
   async function cargarContadoresCorreo() {
     if (!credsVista().filter(Boolean).length) return;
@@ -226,7 +220,7 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
 
   /* ---------- Menú del Correo dentro de la barra lateral del CRM ----------
      Decisión del dueño 23-nov: un solo menú. Con Correo activo, debajo de
-     «Bandeja» se despliega Redactar, las cuentas, las vistas y «Más»; al salir
+     su propia entrada («Correo», sección aparte de Bandeja) se despliega Redactar, las cuentas, las vistas y «Más»; al salir
      se pliega. En el teléfono (≤760) la barra lateral es un cajón: ahí manda
      la barra de arriba de la sección (#correo-movil-bar). */
   let CORREO_NAV_ON = false;
@@ -237,7 +231,7 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
   }
   function pintarNavCorreo() {
     if (!CORREO_NAV_ON) return;
-    const padre = document.querySelector('#sidebar-nav > .nav-padre[data-sec="grp-bandeja"]') || document.querySelector('#sidebar-nav > .nav-item[data-sec="correo"]');
+    const padre = document.querySelector('#sidebar-nav > .nav-item[data-sec="correo"]');
     if (!padre) return;
     let nav = document.getElementById('correo-nav');
     if (!nav) {
