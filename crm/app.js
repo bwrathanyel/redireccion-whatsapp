@@ -28138,13 +28138,14 @@ function _agregarHotelCalc(x) {
   // "Desde" de una tarifa ya vencida cotizaba un precio que no se puede dar. Cada
   // precio viaja con SU moneda: mezclar EUR y USD en un mínimo daría un número sin sentido.
   const precios = promos.filter(tarVendibleHoy)
-    .map(p => ({ v: p.precios ? tarPrecioPorPersona(p) : (p.origen === 'flyer' ? p.precio_desde_usd : null), moneda: String(p.moneda || 'USD').toUpperCase() }))
+    .map(p => ({ v: p.precios ? tarPrecioPorPersona(p) : (p.origen === 'flyer' ? p.precio_desde_usd : null), moneda: String(p.moneda || 'USD').toUpperCase(), t: p }))
     .filter(e => e.v != null);
   const menor = precios.reduce((m, e) => (!m || e.v < m.v ? e : m), null);
   return {
     tags: [...new Set(promos.flatMap(p => p.incluye_tags || []))],
     precioMin: menor ? Math.round(menor.v * 100) / 100 : null,
     precioMinMoneda: menor ? menor.moneda : null,
+    precioMinTarifa: menor ? menor.t : null,
     ninosMax: tarNinoGratisHotel(x)?.cantidad || 0,
     // "Vendible hoy" en vez de las fechas de la promo vieja: mismo criterio que
     // `tarifa_destacada()` en SQL (venta abierta + disfrute no vencido).
@@ -28573,6 +28574,8 @@ function tarWireItem(el, x) {
     if (iaBtn) iaBtn.onclick = e => { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? 'quitar' : 'poner', iaBtn); };
     const hotelChip = el.querySelector('[data-abrir-hotel]');
     if (hotelChip) hotelChip.onclick = e => { e.stopPropagation(); abrirDesdeBusquedaIA('producto', Number(hotelChip.dataset.abrirHotel)); };
+    const cotBtn = el.querySelector('[data-cotizar-producto]');
+    if (cotBtn) cotBtn.onclick = e => { e.stopPropagation(); cbDesdeFicha(Number(cotBtn.dataset.cotizarProducto)); };
     const retBtn = el.querySelector('[data-retirar-tarifa]');
     if (retBtn) retBtn.onclick = e => { e.stopPropagation(); retirarTarifaVieja(Number(retBtn.dataset.retirarTarifa), retBtn); };
     // El carrusel táctil se engancha cuando la tarjeta se acerca a la pantalla,
@@ -28799,6 +28802,18 @@ function tarCardThumbHtml(foto, esPromo, destino, precio, acciones) {
 // queda protegido por la misma RLS de admin ya probada.
 const tcHideBtnHtml = (id, tabla, campo) =>
   `<button class="tc-hide admin-only" data-id="${id}" data-tabla="${tabla}" data-campo="${campo}" title="Ocultar del catálogo"><i class="fas fa-eye-slash"></i></button>`;
+// De dónde sale el precio de la pastilla (dueño 2026-11-24). Las líneas del PDF
+// (BT Travel y demás) entran tal cual: desde 20261127100000 ni el IVA de Los Roques
+// se suma. Flyers y tarifas manuales ya se cargan como precio final (con el recargo
+// de margenes_producto cuando el proveedor da neto). `iva_roques_aplicado` no sirve
+// de señal: quedó en true en 16 filas con el precio ya devuelto al neto.
+function tcPrecioTagHtml(t) {
+  if (!t) return '';
+  if (t.origen === 'pdf') return '<span class="tc-precio-tag is-pdf" title="Precio tal cual viene en el PDF del proveedor: no se le sumó fee ni recargo"><i class="fas fa-file-pdf"></i>Precio PDF</span>';
+  return '<span class="tc-precio-tag" title="Precio final para el cliente: ya incluye el fee o recargo de Lotus"><i class="fas fa-circle-check"></i>Precio cliente</span>';
+}
+const tcCotizarBtnHtml = productoId => productoId && usuarioPuedeAbrirSeccion('cotizacion-boletos')
+  ? `<button type="button" class="tcm-cotizar" data-cotizar-producto="${productoId}" title="Abrir Cotizaciones con este hotel ya elegido"><i class="fas fa-file-invoice-dollar"></i>Cotizar</button>` : '';
 
 /* vigencia_texto es prosa cargada a mano ("Fecha de venta 4 de Junio al 15 de
    Septiembre; Fecha de disfrute 1 Agosto al 15 de Septiembre") y en la tarjeta
@@ -28863,15 +28878,16 @@ function tarCardHtml(x) {
     const nino = tarNinoGratis(x);
     const hotel = x.producto_id ? `<button type="button" class="tc-hotel" data-abrir-hotel="${x.producto_id}"><i class="fas fa-hotel"></i><span>${esc(x.productos?.nombre || '')}</span></button>` : '';
     const retirar = tarPuedeRetirar(x, x.productos?.nombre, destinoDe(x)) ? `<button type="button" class="promo-retirar" data-retirar-tarifa="${x.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button>` : '';
+    const precio = tarPrecioCorto(x);
     return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}${tarTab === 'hotsale' ? ' tc-en-hs' : ''}" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), tarPrecioCorto(x), tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x) + tcHideBtnHtml(x.id, 'tarifas', 'vigente'))}
+      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), precio, (precio ? tcPrecioTagHtml(x) : '') + tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x) + tcHideBtnHtml(x.id, 'tarifas', 'vigente'))}
       ${tarNinosHtml(nino, 'tc-ninos')}
       <div class="tc-body">
         ${hotel}
         <div class="tc-nombre">${esc(tarTituloSinHotel(x))}</div>
         ${x.resumen_ia ? `<div class="tc-desc">${esc(x.resumen_ia)}</div>` : ''}
         ${tarChipsPromo(x)}
-        ${tarMetaHtml(tarFechaCorta(x), 0, tarIconosIncluye(x.incluye_tags, `${tarTituloSinHotel(x)}. ${x.resumen_ia || ''}`), tarVendibleHoy(x))}
+        ${tarMetaHtml(tarFechaCorta(x), 0, tarIconosIncluye(x.incluye_tags, `${tarTituloSinHotel(x)}. ${x.resumen_ia || ''}`), tarVendibleHoy(x), tcCotizarBtnHtml(x.producto_id))}
         ${retirar}
       </div></div>`;
   }
@@ -28884,18 +28900,20 @@ function tarCardHtml(x) {
   const ag = agregarHotel(x);
   const bullets = resumenBullets(x.descripcion);
   const nino = tarNinoGratisHotel(x);
+  const precio = tarPrecioCorto(tarifa, ag);
+  const tag = precio ? tcPrecioTagHtml(ag.precioMin != null ? ag.precioMinTarifa : tarifa) : '';
   return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), tarPrecioCorto(tarifa, ag), tcHideBtnHtml(x.id, 'productos', 'activo'))}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), precio, tag + tcHideBtnHtml(x.id, 'productos', 'activo'))}
     ${tarNinosHtml(nino, 'tc-ninos')}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
       ${bullets.length ? `<div class="tc-desc">${esc(bullets[0])}</div>` : ''}
-      ${tarMetaHtml(tarFechaCorta(tarifa), nTarifas, tarIconosIncluye(ag.tags, x.descripcion), (x.tarifas || []).some(tarVendibleHoy))}
+      ${tarMetaHtml(tarFechaCorta(tarifa), nTarifas, tarIconosIncluye(ag.tags, x.descripcion), (x.tarifas || []).some(tarVendibleHoy), tcCotizarBtnHtml(x.id))}
     </div></div>`;
 }
 // Última línea de la tarjeta: hasta cuándo se vende · cuántas promos (hotel) · íconos de lo incluido.
 // Sin fecha de cierre pero vendible hoy: pastilla neutra en vez de dejar el pie vacío.
-function tarMetaHtml(fecha, nPromos, iconos, vendible) {
+function tarMetaHtml(fecha, nPromos, iconos, vendible, cotizar = '') {
   const partes = [];
   if (!fecha && vendible) fecha = { txt: 'Sin fecha de cierre', cls: 'is-abierta', title: 'Vendible hoy; la tarifa no tiene fecha de cierre cargada' };
   if (fecha) {
@@ -28903,8 +28921,8 @@ function tarMetaHtml(fecha, nPromos, iconos, vendible) {
     partes.push(`<span class="tcm-fecha${fecha.cls ? ' ' + fecha.cls : ''}"${fecha.title ? ` title="${esc(fecha.title)}"` : ''}><i class="fas fa-${ic}"></i>${esc(fecha.txt)}</span>`);
   }
   if (nPromos > 1) partes.push(`<span class="tcm-promos"><i class="fas fa-layer-group"></i> ${nPromos} promos</span>`);
-  if (!partes.length && !iconos) return '';
-  return `<div class="tc-meta">${partes.join('<span class="tcm-sep">·</span>')}${iconos}</div>`;
+  if (!partes.length && !iconos && !cotizar) return '';
+  return `<div class="tc-meta">${partes.join('<span class="tcm-sep">·</span>')}${cotizar}${iconos}</div>`;
 }
 // Hasta cuándo se vende, corto: «Hasta 15 sep». Ámbar si faltan ≤7 días, «Vencida»
 // si ya pasó. Sin fecha no se muestra nada (no se cae a vigencia_texto: es prosa).
@@ -43246,6 +43264,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-24', emoji: '🏷️', titulo: 'Tarifario: origen del precio y botón Cotizar', texto: 'Cada tarjeta del Tarifario indica si el precio ya es «Precio cliente» (verde, listo para ofrecer) o «Precio PDF» (ámbar, tal cual viene del proveedor, sin fee). El botón Cotizar abre Cotizaciones con ese hotel ya elegido.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-22', emoji: '📅', titulo: 'Calendario de estancia y asesor en boletos', texto: 'En Cotizaciones puedes elegir entrada y salida desde un calendario de rango, con dos meses en escritorio y uno en móvil. Boletos emitidos permite añadir un asesor opcional: en la previa y el PDF aparece solo su nombre, sin teléfono.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-11-22', emoji: '🏨', titulo: 'Menú de asesores más simple', texto: 'El Tarifario abre en Hoteles y lo muestra primero; Hot Sales sigue disponible. Para asesores se retiraron la pestaña IA del Tarifario y los accesos a Pausa de turno y Corporativo. Los demás roles conservan su navegación.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-21', emoji: '📎', titulo: 'PDF y fotos desde Crear reserva del lead', texto: 'En el paso 1 Viaje puedes leer PDF o fotos, revisar viajeros e itinerarios e incorporar sus servicios al borrador. Completa los precios en Servicios. Los documentos privados se adjuntan solo al crear la reserva; cancelar antes no guarda nada. Se corrigió el error de lectura del proveedor y, si falla un adjunto después de crear, puedes reintentarlo sin repetir la reserva ni el pago.', roles: ['admin', 'asesor', 'asesor_prueba'] },
