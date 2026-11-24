@@ -9208,7 +9208,7 @@ function repartoRefrescar() {
     slider.value = num.value = f.pausa ? 0 : f.peso;
     slider.disabled = num.disabled = f.fijo || !!f.pausa;
     const extra = el.querySelector('.rep-extra'), mas = (ef.get(f.nombre) || 0) - f.peso;
-    if (extra) { extra.hidden = !(mas >= 0.05); extra.textContent = `+${mas.toFixed(1)} por pausas`; }
+    if (extra) { extra.style.display = mas >= 0.05 ? 'block' : 'none'; extra.textContent = `+${mas.toFixed(1)} por pausas`; }
     fijo.classList.toggle('on', f.fijo);
     fijo.title = f.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)';
     fijo.setAttribute('aria-label', fijo.title);
@@ -9464,7 +9464,7 @@ function chartPreview(type, key, label, icon, count) {
 }
 function repintarSel() { if (!STATS) return; renderTrend(); renderCanal(); renderDest(); renderPipe('pipe'); }
 function enterDrill(type, key) { previewSel = null; document.getElementById('preview-pill').classList.remove('show'); ({ month: drillMonth, canal: drillCanal, estado: drillEstado, asesor: drillAsesor, destino: drillDestino }[type])(key); }
-function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-sin-telefono', 'f-seguimiento'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
+function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-sin-telefono', 'f-seguimiento', 'f-historico'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
 function drillTo(apply) { clearFiltersQuiet(); apply(); activateSection('leads'); page = 1; loadTable(); renderChips(); }
 const drillMonth = m => drillTo(() => { activeMonth = m; });
 const drillCanal = c => drillTo(() => { document.getElementById('f-canal').value = c; });
@@ -9482,7 +9482,7 @@ function setupFilters() {
   fill('f-asesor', ACTIVOS.concat(['Sin asignar']));
   fill('f-servicio', SERVICIOS);
   fill('f-anio', Object.keys(STATS.by_anio || {}).sort().reverse());
-  ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta', 'f-sin-telefono', 'f-seguimiento'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
+  ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-desde', 'f-hasta', 'f-sin-telefono', 'f-seguimiento', 'f-historico'].forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', () => { page = 1; loadTable(); renderChips(); }); });
   let deb; document.getElementById('global-search').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(refresh, 300); });
   initDateRangePicker('f');
   leadsView = initViewSwitcher('leads-view-switch', 'leads', 'tarjetas', v => { leadsView = v; applyLeadsView(); });
@@ -9567,6 +9567,7 @@ function renderChips() {
   const chips = [];
   const push = (label, clr) => chips.push([label, clr]);
   if (val('f-seguimiento')) push('Seguimiento: ' + ({ pendiente: 'vencidos y de hoy', vencidos: 'vencidos', hoy: 'hoy', proximos: 'próximos', para_cerrar: 'para cerrar' }[val('f-seguimiento')] || ''), () => setDrop('f-seguimiento', ''));
+  if (val('f-historico') === '1') push('Histórico archivado', () => setDrop('f-historico', ''));
   if (val('f-canal')) push('Canal: ' + val('f-canal'), () => setDrop('f-canal', ''));
   if (val('f-estado')) push('Estado: ' + niceEstado(val('f-estado')), () => setDrop('f-estado', ''));
   if (val('f-asesor')) push('Asesor: ' + val('f-asesor'), () => setDrop('f-asesor', ''));
@@ -9580,7 +9581,7 @@ function renderChips() {
   // En móvil el botón de filtros es solo un ícono: sin este puntito no habría
   // forma de saber que hay filtros puestos sin abrir la hoja.
   document.getElementById('leads-mfs-trigger')?.classList.toggle('con-filtros', chips.length > 0);
-  const nSel = ['f-sin-telefono', 'f-seguimiento', 'f-canal', 'f-estado', 'f-asesor', 'f-servicio', 'f-anio'].filter(id => val(id)).length;
+  const nSel = ['f-sin-telefono', 'f-seguimiento', 'f-historico', 'f-canal', 'f-estado', 'f-asesor', 'f-servicio', 'f-anio'].filter(id => val(id)).length;
   const lfN = document.getElementById('leads-filtros-n'); if (lfN) lfN.textContent = nSel || '';
   document.getElementById('leads-filtros-btn')?.classList.toggle('con-filtros', nSel > 0);
   // Aviso de que los contactos directos viven aparte -- solo texto, sin lógica
@@ -9600,7 +9601,7 @@ function refresh() { page = 1; loadTable(); renderChips(); if (ROL === 'asesor')
   btn?.addEventListener('click', e => { e.stopPropagation(); abrir(!pop.classList.contains('lf-abierto')); });
   document.getElementById('leads-filtros-listo')?.addEventListener('click', () => abrir(false));
   document.getElementById('leads-filtros-limpiar')?.addEventListener('click', () => {
-    ['f-sin-telefono', 'f-seguimiento', 'f-canal', 'f-estado', 'f-asesor', 'f-servicio', 'f-anio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['f-sin-telefono', 'f-seguimiento', 'f-historico', 'f-canal', 'f-estado', 'f-asesor', 'f-servicio', 'f-anio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     page = 1; loadTable(); renderChips();
   });
   document.addEventListener('click', e => { if (pop?.classList.contains('lf-abierto') && !e.target.closest('.lf-dd')) abrir(false); });
@@ -9648,6 +9649,10 @@ function buildQuery(forCount) {
   if (!qs && !CANALES_VOUCHER.includes(fc)) q = q.or(`canal.is.null,canal.not.in.(${CANALES_VOUCHER.map(c => `"${c}"`).join(',')})`);
   if (fst === 'sin') q = q.is('telefono', null);
   else if (fst === 'con') q = q.not('telefono', 'is', null);
+  // Histórico: los Atendidos sin movimiento en 90 días quedan archivados (marca aparte, no estado).
+  // Salen de la lista salvo con «Ver histórico» o al buscar por nombre/teléfono.
+  if (val('f-historico') === '1') q = q.not('archivado_at', 'is', null);
+  else if (!qs) q = q.is('archivado_at', null);
   const fseg = val('f-seguimiento');
   if (fseg === 'para_cerrar') {
     // Abiertos y quietos: ATENDIDO/CONTACTADO >14 días o cotizados >21, sin
