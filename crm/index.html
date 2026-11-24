@@ -3447,6 +3447,9 @@ body:not(:has(#sec-whatsapp.active)) .wa-avisa .badge,.wa-badge-grp{background:v
 .correo-redactar-btn{display:flex;align-items:center;gap:7px;flex-shrink:0;border:0;border-radius:9px;padding:9px 14px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}
 .correo-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .correo-search{flex:1;min-width:140px}
+/* Los filtros viven dentro de la barra: en teléfono bajan a su propia fila
+   (order + 100 %), en escritorio quedan al lado del buscador. */
+.correo-toolbar>.correo-chips{order:1;flex-basis:100%;margin-bottom:0}
 .correo-layout{position:relative;overflow:hidden;height:calc(100vh - 140px);min-height:420px}
 .correo-col{display:flex;flex-direction:column;height:100%;min-height:0}
 .correo-lista{flex:1;min-height:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
@@ -3590,6 +3593,15 @@ body.bi-on .correo-deshacer{bottom:calc(var(--bi-h) + var(--safe-b) + 12px)}
 @media(min-width:761px){
   #sec-correo>.card{padding:12px 14px}
   .main.en-correo .foot-note{display:none}
+  /* 2026-11-24: el alto ya no sale de calc(100vh - Npx) -- con body{zoom}
+     los vh quedaban cortos y sobraba una franja abajo. Ahora .main mide
+     la ventana (dividida por --zoom) y la bandeja llena lo que sobra. */
+  .main.en-correo{display:flex;flex-direction:column;height:calc(100vh / var(--zoom,1));height:calc(100dvh / var(--zoom,1));padding:8px 10px}
+  .main.en-correo>#sec-correo.active{flex:1;min-height:0;display:flex;flex-direction:column}
+  .main.en-correo #sec-correo>.card{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 10px 8px}
+  .main.en-correo .correo-wrap{flex:1;min-height:0}
+  .main.en-correo .correo-layout{height:100%;min-height:0}
+  .correo-toolbar>.correo-chips{order:0;flex:0 0 auto;flex-wrap:nowrap}
 }
 
 /* Facturación aprovecha la ventana como Correo: cabecera compacta, sin tope de
@@ -13182,9 +13194,6 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
         <div class="correo-toolbar">
           <button type="button" class="correo-redactar-btn" id="correo-redactar-btn"><i class="fas fa-pen"></i> Redactar</button>
           <input class="flt correo-search" id="correo-search" type="text" placeholder="Buscar por asunto, remitente...">
-          <button type="button" class="correo-sync-btn correo-sync-ico" id="correo-sync-btn" style="display:none" title="Sincronizar ahora" aria-label="Sincronizar ahora"><i class="fas fa-rotate"></i></button>
-          <button type="button" class="correo-atajos" id="correo-atajos-btn" aria-label="Atajos de teclado" title="Atajos de teclado (?)"><i class="fas fa-keyboard"></i></button>
-        </div>
         <div class="correo-chips">
           <div class="correo-filtros" id="correo-filtros">
             <button type="button" class="seg" data-f="no_leidos">Sin leer</button>
@@ -13199,6 +13208,9 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
             <option value="social" data-t="Social">Social</option>
           </select>
           <span class="correo-sync-time" id="correo-sync-time" style="display:none"></span>
+        </div>
+          <button type="button" class="correo-sync-btn correo-sync-ico" id="correo-sync-btn" style="display:none" title="Sincronizar ahora" aria-label="Sincronizar ahora"><i class="fas fa-rotate"></i></button>
+          <button type="button" class="correo-atajos" id="correo-atajos-btn" aria-label="Atajos de teclado" title="Atajos de teclado (?)"><i class="fas fa-keyboard"></i></button>
         </div>
         <div class="correo-wrap">
         <div class="correo-layout" id="correo-layout">
