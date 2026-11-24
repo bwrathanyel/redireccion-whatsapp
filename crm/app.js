@@ -23077,6 +23077,25 @@ function renderVentas() {
    mano (guardar_gasto) y el de IA entra solo desde las tablas *_ia_gasto. */
 const BAL_CATS = [['nomina', 'Nómina'], ['publicidad', 'Publicidad'], ['alquiler', 'Alquiler'], ['servicios', 'Servicios'], ['software', 'Software'], ['impuestos', 'Impuestos'], ['comisiones_bancarias', 'Comisiones bancarias'], ['otros', 'Otros']];
 const BAL_CAT_LBL = { ...Object.fromEntries(BAL_CATS), ia: 'Inteligencia artificial' };
+const BAL_PARA_QUE = [
+  { re: /claude/i, n: 'Claude (programación)', q: 'Programar y mantener el CRM, la página web y los bots.', p: 'Sin esto no se arreglan errores ni salen mejoras: el sistema queda congelado.' },
+  { re: /supabase/i, n: 'Supabase', q: 'Base de datos y servidor de todo el CRM: clientes, leads, reservas y el bot.', p: 'Si se corta, el CRM, la web y el bot dejan de funcionar.' },
+  { re: /zernio/i, n: 'Zernio', q: 'Publicar y programar en redes sociales, y el centro de llamadas.', p: 'Mantiene la presencia en redes y permite llamar a los clientes.' },
+  { re: /chatgpt/i, n: 'ChatGPT (Marketing)', q: 'Textos y piezas del equipo de marketing.', p: 'Acelera el contenido de redes y campañas sin sumar personal.' },
+  { re: /google one/i, n: 'Google One 2 TB (Marketing)', q: 'Almacenamiento de fotos y videos del equipo de marketing.', p: 'Sin espacio no se guarda el material que se publica.' },
+  { re: /cloudflare/i, n: 'Cloudflare', q: 'Hosting del CRM, de la web y de las fotos.', p: 'Es lo que hace que las páginas abran rápido y estén siempre en línea.' },
+  { re: /manychat/i, n: 'ManyChat', q: 'Entrada de mensajes de Instagram y Facebook hacia el CRM.', p: 'Es por donde llegan los clientes que escriben por redes.' },
+];
+const BAL_PARA_QUE_IA = [
+  { n: 'DeepSeek', q: 'Cerebro del bot de ventas que responde Instagram y Facebook las 24 horas.', p: 'Atiende clientes de madrugada y fines de semana sin pagar a una persona.' },
+  { n: 'OpenRouter', q: 'IA de respaldo y lectura automática de los PDF de tarifas.', p: 'Mantiene el tarifario al día sin cargar precios a mano.' },
+];
+function balParaQue(gs, hayIA) {
+  const vistos = new Set(), it = [];
+  if (hayIA) it.push(...BAL_PARA_QUE_IA);
+  for (const g of gs) { const m = BAL_PARA_QUE.find(x => x.re.test(g.concepto || '')); if (m && !vistos.has(m.n)) { vistos.add(m.n); it.push(m); } }
+  return it.length ? `<details class="bal-queson"><summary><i class="fas fa-circle-question"></i> ¿Para qué sirve cada gasto?</summary>${it.map(x => `<div class="bal-queson-it"><b>${esc(x.n)}</b><span>${esc(x.q)}</span><small>Por qué importa: ${esc(x.p)}</small></div>`).join('')}</details>` : '';
+}
 const BAL_ERR = { fecha_invalida: 'La fecha no es válida', categoria_invalida: 'Elige una categoría', falta_concepto: 'Falta el concepto', moneda_invalida: 'Moneda inválida', monto_invalido: 'El monto tiene que ser mayor que 0', falta_tasa: 'En bolívares hace falta la tasa', tasa_invalida: 'La tasa no es válida', falta_motivo: 'Falta el motivo', gasto_no_encontrado: 'Ese gasto ya no existe' };
 const BAL = { tipo: 'mes', off: 0, rango: null, gen: 0, data: null, prev: null, p: null };
 const balMoney = n => { const v = Number(n) || 0; return (v < 0 ? '−' : '') + '$' + nf('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(v)); };
@@ -23186,6 +23205,7 @@ function renderBalance() {
       + (admin ? `<button class="btn-sm" type="button" data-bal="gasto-editar" data-id="${g.id}" title="Editar gasto" aria-label="Editar gasto"><i class="fas fa-pen"></i></button><button class="btn-sm" type="button" data-bal="gasto-anular" data-id="${g.id}" title="Anular gasto" aria-label="Anular gasto"><i class="fas fa-ban"></i></button>` : '')
       + '</div>').join('')
     || (t.gastos_ia > 0 ? '' : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin gastos en el periodo</div>');
+  document.getElementById('bal-gastos').insertAdjacentHTML('beforeend', balParaQue(gs, t.gastos_ia > 0));
 }
 async function pintarGraficoBalance(serie, bucket) {
   await ensureChart();
