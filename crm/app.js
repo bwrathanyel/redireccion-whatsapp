@@ -8933,8 +8933,12 @@ function repartoHayCambios() { return repartoDirty || repartoSemilla; }
 function repartoNumero(n) { return Number(n || 0).toLocaleString('es-VE'); }
 const repartoSumaMapa = m => [...m.values()].reduce((s, p) => s + p, 0);
 const repartoPct = v => (v > 0 && v < 1 ? '<1' : Math.round(v)) + '%';
-const REP_DIAS = [1, 2, 3, 5, 7, 15];
-const repartoFecha = t => new Date(t).toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', timeZone: 'America/Caracas' });
+const REP_PAUSAS = [{ h: 1, t: '1 hora' }, { h: 2, t: '2 horas' }, { h: 4, t: '4 horas' }, { h: 8, t: '8 horas' }, ...[1, 2, 3, 5, 7, 15].map(d => ({ d, t: d + (d === 1 ? ' día' : ' días') }))];
+const repartoFecha = t => {
+  const d = new Date(t), f = o => d.toLocaleString('es-VE', { timeZone: 'America/Caracas', hour12: false, ...o });
+  const dia = f({ day: '2-digit', month: '2-digit' }), hora = f({ hour: '2-digit', minute: '2-digit' });
+  return /^(24|00):00$/.test(hora) ? dia : `${dia} ${hora}`;
+};
 const repartoMarcados = f => new Set(Object.keys(f.mezcla).filter(k => f.mezcla[k] > 0));
 
 // Columna de cada lead con el mismo ruteo del motor: su grupo; sin grupo,
@@ -9173,7 +9177,7 @@ function renderReparto() {
       <span class="rep-est"></span>
       <button type="button" class="rep-abrir" data-rep-abrir aria-expanded="${abierto}" title="De qué destinos salen sus leads"><span class="rep-abrir-txt"></span><i class="fas fa-chevron-down"></i></button>
     </div>
-    <div class="rep-pausa" hidden><span>Sacar a ${esc(f.nombre)} del reparto por</span>${REP_DIAS.map(d => `<button type="button" class="btn-sec" data-rep-dias="${d}">${d} ${d === 1 ? 'día' : 'días'}</button>`).join('')}</div>
+    <div class="rep-pausa" hidden><span>Sacar a ${esc(f.nombre)} del reparto por</span>${REP_PAUSAS.map(o => `<button type="button" class="btn-sec" data-rep-pausar-por="${o.h ? o.h + 'h' : o.d + 'd'}">${o.t}</button>`).join('')}</div>
     <div class="rep-mez"${abierto ? '' : ' hidden'}>
       <div class="rep-mez-cab"><span>De dónde salen los leads de ${esc(f.nombre)}</span><button type="button" class="btn-sec" data-rep-parejo title="Cada destino que atiende pesa lo que trae de leads">Parejo</button></div>
       ${cols.map(c => `<div class="rep-mez-fila" data-clave="${esc(c.clave)}">
@@ -9288,7 +9292,7 @@ function setupReparto() {
         if (repartoFilas[i]?.pausa) pausarReparto(i, 0);
         else { const p = b.closest('.rep-ase').querySelector('.rep-pausa'); p.hidden = !p.hidden; }
       }
-      else if (b.matches('[data-rep-dias]')) pausarReparto(i, Number(b.dataset.repDias));
+      else if (b.matches('[data-rep-pausar-por]')) { const v = b.dataset.repPausarPor; pausarReparto(i, parseInt(v, 10), v.endsWith('h')); }
       else if (b.matches('[data-rep-parejo]')) repartoParejoFila(i);
       else if (b.matches('[data-rep-fijo]')) { repartoFilas[i].fijo = !repartoFilas[i].fijo; repartoRefrescar(); }
       else if (b.matches('[data-rep-quitar]')) repartoQuitar(i);
@@ -9324,17 +9328,18 @@ async function guardarReparto() {
 }
 // Pausa: rige al toque, aparte del borrador. Mientras dura, su parte de cada
 // destino se reparte entre los demás que lo atienden; al vencer vuelve solo.
-async function pausarReparto(i, dias) {
+async function pausarReparto(i, n, horas = false) {
   const f = repartoFilas[i];
   if (!f) return;
   if (repartoHayCambios()) { errToast(repartoSemilla ? 'Guardá el reparto antes de pausar a alguien' : 'Guardá o descartá los cambios del reparto antes de pausar'); return; }
+  const dias = n, cuanto = horas ? `${n} ${n === 1 ? 'hora' : 'horas'}` : `${n} ${n === 1 ? 'día' : 'días'}`;
   const ok = await confirmarSheet(dias
-    ? { titulo: `¿Pausar a ${f.nombre} ${dias} ${dias === 1 ? 'día' : 'días'}?`, detalle: 'No recibe leads nuevos hasta que venza; su parte se reparte entre los demás y vuelve solo. Sus leads y chats actuales no cambian.', textoOk: 'Pausar' }
+    ? { titulo: `¿Pausar a ${f.nombre} ${cuanto}?`, detalle: 'No recibe leads nuevos hasta que venza; su parte se reparte entre los demás y vuelve solo. Sus leads y chats actuales no cambian.', textoOk: 'Pausar' }
     : { titulo: `¿Reanudar a ${f.nombre}?`, detalle: 'Vuelve a recibir leads desde ahora con su % de siempre.', textoOk: 'Reanudar' });
   if (!ok) return;
-  const { data, error } = await sb.rpc('admin_pausar_reparto', { p_nombre: f.nombre, p_dias: dias });
+  const { data, error } = await (horas ? sb.rpc('admin_pausar_reparto_horas', { p_nombre: f.nombre, p_horas: n }) : sb.rpc('admin_pausar_reparto', { p_nombre: f.nombre, p_dias: n }));
   if (error || !data?.ok) {
-    const msgs = { todos_pausados: 'No puede quedar todo el equipo en pausa', no_esta: 'Ese asesor ya no está en el reparto', dias_invalidos: 'Días inválidos' };
+    const msgs = { todos_pausados: 'No puede quedar todo el equipo en pausa', no_esta: 'Ese asesor ya no está en el reparto', dias_invalidos: 'Días inválidos', horas_invalidas: 'Horas inválidas' };
     errToast('No se pudo: ' + (msgs[data?.error] || data?.error || error?.message || ''));
     return;
   }
@@ -37555,6 +37560,35 @@ window.cbQuedarseOpcion = n => {
   cbComparar = false; cbRenderItems(); cbProgramarBorrador();
   okToast('Quedó solo esa opción. Genera el PDF para mandarle la cotización final.');
 };
+// Oferta junto al hospedaje (2026-11-24, dueño): al elegir una posada de Los Roques sale el Traslado a Cayo de Agua con
+// su foto y precio, y un clic lo suma como servicio de la cotización (cbAplicarProducto: excursión → «Full day»).
+// El producto se busca por nombre entre las excursiones del catálogo; si no está o no tiene tarifa, no se ofrece.
+const CB_SUGERIDOS = [{ destino: 'los roques', nombre: 'Traslado a Cayo de Agua', texto: 'El banco de arena con el mar turquesa a ambos lados' }];
+let cbSugeridoPidiendo = false;
+function cbSugeridoHtml(it, i) {
+  if (it.tipo !== 'hotel' || !it.producto_id) return '';
+  const destino = cbTarNorm(cbHoteles.get(Number(it.producto_id))?.destino);
+  return CB_SUGERIDOS.filter(s => s.destino === destino).map(s => {
+    const p = [...cbHoteles.values()].find(x => x.tipo === 'excursion' && cbTarNorm(x.nombre) === cbTarNorm(s.nombre));
+    if (!p || cbItems.some(x => x.tipo === 'fullday' && (Number(x.producto_id) === p.id || cbTarNorm(x.nombre) === cbTarNorm(p.nombre)))) return '';
+    if (!cbExcListas) {
+      if (!cbSugeridoPidiendo) { cbSugeridoPidiendo = true; cbExcPrecargar().then(() => cbRenderItems()).catch(e => console.error('cbSugerido', e)); }
+      return '';
+    }
+    const t = cbExcListas.get(p.id)?.[0]; if (!t) return '';
+    const foto = ordenarFotos(p.producto_fotos || [])[0];
+    return `<div class="cb-sugerido cb-full">
+      ${foto ? `<img class="cb-sugerido-foto" src="${esc(fotoMini(foto.storage_path, 384))}" alt="Foto de ${esc(p.nombre)}" width="132" height="132" loading="lazy" decoding="async" onerror="this.hidden=true">` : ''}
+      <div class="cb-sugerido-cuerpo"><span class="cb-sugerido-etq">Para completar su estadía</span><b>${esc(p.nombre)}</b><small>${esc(s.texto)}</small>
+        <span class="cb-sugerido-precio">${esc(tarMontoFmt(t.precios.adulto, t.moneda))}<small> por persona</small></span></div>
+      <button type="button" class="btn-sm cb-sugerido-btn" data-cb-sugerido="${p.id}"><i class="fas fa-plus" aria-hidden="true"></i> Agregar a la cotización</button>
+    </div>`;
+  }).join('');
+}
+async function cbSugeridoAgregar(id) {
+  try { await cbAplicarProducto(id); okToast('Agregado a la cotización'); }
+  catch (e) { console.error('cbSugeridoAgregar', e); errToast('No se pudo agregar'); }
+}
 function cbItemHtml(it, i) {
   const tipo = CB_TIPOS[it.tipo] ? it.tipo : 'boleto', hotel = tipo === 'hotel', porHab = cbPorHabitacion(it);
   // Fechas: nunca antes de hoy; la vuelta tampoco antes de la ida (cbMinFecha).
@@ -37571,7 +37605,7 @@ function cbItemHtml(it, i) {
     ? cbHotelHtml(it, i) + cbHotelSelectorHtml(it, i, 'plan', 'Plan') + cbHotelSelectorHtml(it, i, 'hab', 'Habitación') + cbFechasHtml(it, i, f)
       + pax.cuentas + CB_SEP + chipUnidad + selUnidad
       + (porHab ? cbHotelVariantesHtml(it, i) + (it.tramos?.length > 1 ? '' : f('tarifa', 'Habitación por noche (USD)', 'type="number" inputmode="decimal" min="0" step="0.01"', ' cb-dos')) : '')
-      + pax.precios + cbHotelPrecioHtml(it, i) + cbDesgloseHtml(it)
+      + pax.precios + cbHotelPrecioHtml(it, i) + cbDesgloseHtml(it) + cbSugeridoHtml(it, i)
       + (porHab ? '<small class="cb-full cb-condicion">Precio por habitación: niños y adultos adicionales se suman aparte según el tarifario.</small>' : '')
     : (boleto ? cbRutaHtml(it) + (it.ruta_libre ? f('ruta', 'Ruta anterior (se reemplaza al elegir origen y destino)', 'placeholder="CCS-PTY-MIA"', ' cb-full') : '') : '')
       + campos.map((c, j) => j === 0 && cbEsExc({ tipo }) ? cbExcPickerHtml(it, i) : j === 0 && CB_CON_PRODUCTO.includes(tipo) ? f(c[0], c[1], c[2] + ` list="cb-productos-${i}" autocomplete="off"`) + `<datalist id="cb-productos-${i}">${cbOpcionesProducto(it)}</datalist>` : boleto ? f(...c, { vuelta: ' cb-vuelta cb-col2', vuelta_hora: ' cb-vuelta' }[c[0]] || '') : f(...c)).join('')
@@ -38867,6 +38901,7 @@ async function cbCargarSeccion() {
       if (e.target.closest('[data-cb-fotos-reintentar]')) { cbTraerHabitaciones(it.producto_id).then(() => { if (cbItems.includes(it)) cbRenderItems(); }); return; }
       if (e.target.closest('[data-cb-reintentar]')) { cbHotelElegir(card, it.producto_id); return; }
       if (e.target.closest('[data-cb-ss]')) { cbVerStopSales(it); return; }
+      const sug = e.target.closest('[data-cb-sugerido]'); if (sug) { cbSugeridoAgregar(Number(sug.dataset.cbSugerido)); return; }
       const btPdf = e.target.closest('[data-cb-bt-pdf]'); if (btPdf) { abrirPdfBtTravel(btPdf, Number(it.producto_id), cbHoteles.get(Number(it.producto_id))?.nombre || it.nombre); return; }
       if (e.target.closest('[data-cb-plegar]')) { it._plegado = !it._plegado; cbRenderItems(); document.querySelector(`#cb-items .cb-item[data-i="${card.dataset.i}"] [data-cb-plegar]`).focus({ preventScroll: true }); return; }
       if (e.target.closest('[data-cb-unidad-cambiar]')) { it._unidadEditar = true; cbRenderItems(); document.getElementById(`cb-unidad-${card.dataset.i}`)?.focus(); return; }
