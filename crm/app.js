@@ -26770,7 +26770,7 @@ async function ivImportar() {
 }
 
 /* ---------- Tarifario ---------- */
-let tarTab = 'hotsale', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
+let tarTab = 'hotel', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 // Contexto de la última animación de entrada de la grilla del Tarifario. Se
 // re-anima solo al cambiar de pestaña o tras cargar datos, no por tecla/filtro.
 let tarEntradaContexto = null;
@@ -26823,10 +26823,9 @@ const tarTabPermitidaPorRol = tab => ROL !== 'asesor' || tab !== 'ia';
 function aplicarTarifarioPorRol() {
   const grupo = document.getElementById('tar-tabs');
   if (!grupo) return;
-  const orden = TAR_TAB_META.map(t => t.key);
-  if (ROL === 'asesor') orden.unshift(...orden.splice(orden.indexOf('hotel'), 1));
-  orden.forEach(tab => { const b = grupo.querySelector(`[data-tab="${tab}"]`); if (b) grupo.append(b); });
-  tarTab = ROL === 'asesor' ? 'hotel' : 'hotsale';
+  // Hoteles primero y por defecto para todos los roles (dueño 2026-11-24).
+  TAR_TAB_META.forEach(({ key }) => { const b = grupo.querySelector(`[data-tab="${key}"]`); if (b) grupo.append(b); });
+  tarTab = 'hotel';
   grupo.querySelectorAll('.seg').forEach(b => b.classList.toggle('on', b.dataset.tab === tarTab));
   aplicarTabsOcultas();
   actualizarVisibilidadFiltrosTarifario();
@@ -27373,11 +27372,11 @@ async function iaMover(id, delta, btn) {
 
 /* ---------- Configuración de visibilidad de Tarifario (solo admin) ---------- */
 const TAR_TAB_META = [
+  { key: 'hotel', label: 'Hoteles' },
   { key: 'hotsale', label: 'Hot Sales' },
   { key: 'ia', label: 'IA (curación)' },
   { key: 'excursion', label: 'Excursiones' },
   { key: 'traslado', label: 'Traslados' },
-  { key: 'hotel', label: 'Hoteles' },
 ];
 // Lo oculto (pestañas, productos apagados, hoteles sin foto, promos retiradas) no se ve
 // ni para la oficina hasta que toca el ojo; arranca apagado en cada carga (dueño 2026-11-20).
