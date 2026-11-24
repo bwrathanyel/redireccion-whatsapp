@@ -668,12 +668,15 @@ body.menu-arrastrando .side-scrim{transition:none}
 
 /* pipeline */
 .pipe{display:flex;flex-direction:column;gap:9px;margin-top:6px}
-.pstep{display:flex;align-items:center;gap:12px;cursor:pointer;border-radius:8px;transition:background .12s;padding:3px 4px;margin:0 -4px}
-.pstep:hover{background:rgba(255,255,255,.03)}
-.pstep .pl{font-size:12.5px;width:140px;color:var(--muted);font-weight:500}
-.pstep .pbar{flex:1;height:26px;background:rgba(255,255,255,.04);border-radius:8px;overflow:hidden;position:relative}
-.pstep .pfill{height:100%;border-radius:8px;display:flex;align-items:center;padding-left:10px;font-size:11.5px;font-weight:700;color:#0a0a0a;min-width:30px;transition:width .8s cubic-bezier(.3,1,.4,1)}
-.pstep .pv{width:52px;text-align:right;font-size:13px;font-weight:700}
+.pstep{display:flex;align-items:center;gap:12px;cursor:pointer;border-radius:10px;transition:background var(--dur-rapida);padding:5px 6px;margin:0 -6px;width:calc(100% + 12px);font:inherit;color:inherit;text-align:left;background:none;border:0}
+.pstep:hover,.pstep.on{background:rgba(var(--ink-rgb),.05)}
+.pstep.on{box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.45)}
+.pstep .pl{font-size:12.5px;width:140px;color:var(--muted);font-weight:500;display:flex;align-items:center;gap:8px;min-width:0}
+.pstep .pl::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--c,var(--muted2));flex-shrink:0}
+.pstep .pbar{flex:1;height:10px;background:rgba(var(--ink-rgb),.05);border-radius:999px;overflow:hidden;position:relative}
+.pstep .pfill{height:100%;border-radius:999px;min-width:4px;background:var(--c,var(--muted2));transition:width .6s var(--ease-salida)}
+.pstep .pv{width:56px;text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.pstep .pp{width:44px;text-align:right;font-size:11.5px;color:var(--muted2);font-variant-numeric:tabular-nums}
 
 /* advisors */
 .adv{display:flex;flex-direction:column;gap:13px;margin-top:6px}
@@ -9423,6 +9426,59 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
   .section .tit-repetido~.csub:not(.abierta){display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;cursor:pointer}
 }
 
+/* ============ DASHBOARD: gráficos en HTML (2026-11-23) ============
+   Antes eran <canvas> de Chart.js: con body{zoom} el puntero caía sobre otra
+   barra. Cada barra es ahora su propio botón, así el toque es exacto. */
+.dbx-resumen{font-size:12px;color:var(--muted);margin:2px 0 14px;min-height:16px}
+.dbx-resumen b{color:var(--txt);font-weight:700}
+.dbx-resumen .sube{color:var(--green);font-weight:700}
+.dbx-resumen .baja{color:var(--danger);font-weight:700}
+.kpi .kd b.baja{color:var(--danger)}
+.dbx-trend{display:flex;gap:8px;height:230px}
+.dbx-ejes{position:relative;width:34px;flex-shrink:0;margin-bottom:22px;font-size:10.5px;color:var(--muted2);font-variant-numeric:tabular-nums}
+.dbx-ejes span{position:absolute;right:0;transform:translateY(50%)}
+.dbx-cols{flex:1;min-width:0;display:flex;gap:3px;position:relative}
+.dbx-cols::before{content:'';position:absolute;inset:0 0 22px;pointer-events:none;background:linear-gradient(var(--line),var(--line)) 0 0/100% 1px no-repeat,linear-gradient(var(--line),var(--line)) 0 50%/100% 1px no-repeat,linear-gradient(var(--line2),var(--line2)) 0 100%/100% 1px no-repeat}
+.dbx-col{flex:1;min-width:0;display:flex;flex-direction:column;padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer;border-radius:8px}
+.dbx-area{flex:1;position:relative;border-radius:8px;transition:background var(--dur-rapida)}
+.dbx-barra{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:min(72%,28px);height:var(--h);min-height:2px;border-radius:6px 6px 2px 2px;background:var(--accent);opacity:.55;transition:opacity var(--dur-rapida),height .5s var(--ease-salida)}
+.dbx-col.hoy .dbx-barra{opacity:.9;background:repeating-linear-gradient(135deg,var(--accent) 0 6px,rgba(var(--accent-rgb),.6) 6px 10px)}
+.dbx-col.on .dbx-barra{opacity:1;background:var(--accent);box-shadow:0 0 0 2px rgba(var(--accent-rgb),.35)}
+.dbx-x{height:22px;line-height:24px;font-size:10.5px;color:var(--muted2);text-align:center;white-space:nowrap;overflow:visible}
+.dbx-x.oculto{visibility:hidden}
+.dbx-col.on .dbx-x,.dbx-col.hoy .dbx-x{color:var(--txt);font-weight:700;visibility:visible}
+.dbx-tip{position:absolute;bottom:calc(var(--h) + 6px);left:50%;transform:translateX(-50%);background:var(--panel-solid);border:1px solid var(--line2);border-radius:8px;padding:4px 8px;font-size:11px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity var(--dur-rapida);z-index:2;box-shadow:0 8px 20px rgba(0,0,0,.25)}
+.dbx-tip b{font-size:12.5px}
+.dbx-col.izq .dbx-tip{left:0;transform:none}
+.dbx-col.der .dbx-tip{left:auto;right:0;transform:none}
+.dbx-col.on .dbx-tip,.dbx-col:focus-visible .dbx-tip{opacity:1}
+.dbx-col:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(hover:hover){.dbx-col:hover .dbx-area{background:rgba(var(--ink-rgb),.04)}.dbx-col:hover .dbx-barra{opacity:1}.dbx-col:hover .dbx-tip{opacity:1}.dbx-cols:hover .dbx-col.on:not(:hover) .dbx-tip{opacity:0}}
+.dbx-mezcla{display:flex;height:12px;border-radius:999px;overflow:hidden;gap:2px;margin-bottom:14px;background:rgba(var(--ink-rgb),.05)}
+.dbx-mezcla span{background:var(--c);min-width:3px}
+.dbx-lista{display:flex;flex-direction:column;gap:2px}
+.dbx-fila{display:grid;grid-template-columns:minmax(0,150px) 1fr 64px 44px;align-items:center;gap:12px;padding:7px 6px;margin:0 -6px;border-radius:10px;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:background var(--dur-rapida)}
+.dbx-fila:hover,.dbx-fila.on{background:rgba(var(--ink-rgb),.05)}
+.dbx-fila.on{box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.45)}
+.dbx-fila:disabled{cursor:default;background:none}
+.dbx-fila:focus-visible,.pstep:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.dbx-n{font-size:12.5px;display:flex;align-items:center;gap:8px;min-width:0}
+.dbx-n span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dbx-n::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--c);flex-shrink:0}
+.dbx-n i{font-style:normal;font-size:11px;color:var(--muted2);width:16px;flex-shrink:0;font-variant-numeric:tabular-nums}
+.dbx-lista.rank .dbx-n::before{display:none}
+.dbx-pista{height:10px;border-radius:999px;background:rgba(var(--ink-rgb),.05);overflow:hidden}
+.dbx-rell{display:block;height:100%;border-radius:999px;background:var(--c);min-width:4px;transition:width .6s var(--ease-salida)}
+.dbx-v{text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.dbx-p{text-align:right;font-size:11.5px;color:var(--muted2);font-variant-numeric:tabular-nums}
+.dbx-vacio{font-size:12.5px;color:var(--muted);padding:18px 0;text-align:center}
+@media(max-width:760px){
+  .dbx-trend{height:200px}
+  .dbx-fila{grid-template-columns:minmax(0,1fr) 72px 56px 38px;gap:8px;padding:0 6px;min-height:var(--tap)}
+  .dbx-pista{height:8px}
+  .pstep{padding:0 6px;min-height:var(--tap)}
+}
+
 /* ============ MODO LIVIANO (html[data-lite]) ============
    Compus viejas (Core 2, i3/i5 1ª-2ª gen) y celulares básicos (Redmi 9A). Se prende
    en el script del <head>. Fuera: desenfoques (backdrop-filter repinta todo lo de
@@ -9872,24 +9928,30 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
         <span class="ria-db-m"><b id="ria-db-incidentes">—</b>Alertas</span>
       </button>
       <div class="grid g-2" style="margin-bottom:12px">
-        <div class="card">
-          <h2><i class="fas fa-chart-line"></i> Leads por mes</h2>
-          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un mes para ver el número · toca "Ver leads" para entrar</div>
-          <div class="chart-wrap"><canvas id="chTrend"></canvas></div>
+        <div class="card dbx-card">
+          <div class="chead-row">
+            <h2><i class="fas fa-chart-column"></i> Leads por mes</h2>
+            <div class="seg-group seg-group-sm" id="trend-rango">
+              <button class="seg" type="button" data-r="12">12 meses</button>
+              <button class="seg" type="button" data-r="24">24 meses</button>
+            </div>
+          </div>
+          <div class="dbx-resumen" id="dbTrendResumen"></div>
+          <div class="dbx-trend" id="dbTrend"></div>
         </div>
-        <div class="card">
+        <div class="card dbx-card">
           <h2><i class="fas fa-share-nodes"></i> Origen del lead</h2>
-          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un canal para ver su número</div>
-          <div class="chart-sm"><canvas id="chCanal"></canvas></div>
+          <div class="dbx-resumen" id="dbCanalResumen"></div>
+          <div id="dbCanal"></div>
         </div>
       </div>
       <div class="grid g-2b">
-        <div class="card">
+        <div class="card dbx-card">
           <h2><i class="fas fa-diagram-project"></i> Embudo del pipeline</h2>
-          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca una etapa para ver su número</div>
+          <div class="dbx-resumen">Toca una etapa y luego «Ver leads» para abrirla</div>
           <div class="pipe" id="pipe"></div>
         </div>
-        <div class="card">
+        <div class="card dbx-card">
           <div class="chead-row">
             <h2><i class="fas fa-location-dot"></i> Destinos más solicitados</h2>
             <div class="seg-group seg-group-sm" id="dest-periodo">
@@ -9900,8 +9962,8 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
               <button class="seg" data-p="historico">Histórico</button>
             </div>
           </div>
-          <div class="csub"><i class="fas fa-hand-pointer" style="font-size:9px"></i> Toca un destino para ver su número</div>
-          <div class="chart-wrap chart-wrap-lg"><canvas id="chDest"></canvas></div>
+          <div class="dbx-resumen" id="dbDestResumen"></div>
+          <div id="dbDest"></div>
           <div class="eb-title" style="margin-top:14px"><i class="fas fa-percent"></i> Conversión a venta por destino</div>
           <div id="destConversion"><div class="muted" style="font-size:12.5px">Cargando...</div></div>
         </div>

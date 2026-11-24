@@ -3926,7 +3926,7 @@ async function startApp() {
     subscribeRealtime,
   );
 }
-async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); await ensureChart(); renderTrend(); renderCanal(); }
+async function renderAll() { renderKPIs(); renderPipe('pipe'); renderPipe('pipe2'); renderAdvisors(); renderTrend(); renderCanal(); }
 
 async function loadStats() {
   const { data, error } = await sb.rpc('dashboard_stats');
@@ -4027,7 +4027,7 @@ function renderKPIs() {
   const thisMonth = new Date().toISOString().slice(0, 7);
   const cards = [
     { t: 'Leads totales', v: fmt(STATS.total), d: 'Histórico 2022–2026', i: 'fa-users', c: 'var(--accent)', go: () => drillClear() },
-    { t: 'Leads en 2026', v: fmt(STATS.anio_actual), d: `<b>+${fmt(STATS.by_canal?.Facebook || 0)}</b> por Facebook`, i: 'fa-calendar-day', c: 'var(--blue)', go: () => drillAnio('2026') },
+    { t: 'Leads en ' + thisMonth.slice(0, 4), v: fmt(STATS.anio_actual), d: comparativoAnio(), i: 'fa-calendar-day', c: 'var(--blue)', go: () => drillAnio(thisMonth.slice(0, 4)) },
     { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), d: fullMonth(thisMonth), i: 'fa-bolt', c: 'var(--green)', go: () => drillMonth(thisMonth) },
     { t: 'Por atender', v: fmt(STATS.por_atender), d: 'Requieren primer contacto', i: 'fa-bell', c: 'var(--amber)', go: () => drillEstado('POR ATENDER') },
     { t: 'Vouchers este mes', v: fmt(STATS.vouchers_mes || 0), d: 'Generados por todo el equipo', i: 'fa-file-invoice', c: 'var(--purple)', go: () => activateSection('voucher') },
@@ -4078,40 +4078,106 @@ function mk(id, cfg) {
 }
 const pointer = (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; };
 
+/* Gráficos del Dashboard en HTML: cada barra es un botón propio. Con <canvas>
+   el body{zoom} descuadraba las coordenadas del puntero y el toque caía en
+   otra barra. Primer toque = vista previa (pill), segundo = ir a los leads. */
+let trendRango = matchMedia('(max-width:760px)').matches ? 12 : 24;
+const fmtCorto = n => n >= 1000 ? (Math.round(n / 100) / 10).toLocaleString('es-VE') + 'k' : String(Math.round(n));
+const topeEje = max => { const p = Math.pow(10, Math.floor(Math.log10(max))), m = max / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
+const pctDbx = (v, tot) => { const p = v / (tot || 1) * 100; return p >= 10 || p === 0 ? Math.round(p) + '%' : p < 0.1 ? '&lt;0,1%' : p.toFixed(1).replace('.', ',') + '%'; };
+const colorTema = c => document.documentElement.dataset.theme === 'light' ? tonoChart(c) : c;
+const selPreview = type => previewSel && previewSel.type === type ? previewSel.key : null;
+function comparativoAnio() {
+  const ahora = new Date(), y = ahora.getFullYear(), m = ahora.getMonth() + 1, t = STATS.trend || [];
+  if (m === 1) return 'En lo que va del año';
+  const suma = yy => t.filter(x => +x.mes.slice(0, 4) === yy && +x.mes.slice(5, 7) < m);
+  const prev = suma(y - 1), act = suma(y);
+  if (prev.length < m - 1 || !act.length) return 'En lo que va del año';
+  const p = prev.reduce((s, x) => s + x.total, 0), a = act.reduce((s, x) => s + x.total, 0);
+  if (!p) return 'En lo que va del año';
+  const d = Math.round((a - p) / p * 100), rango = m === 2 ? 'ene' : 'ene–' + MES3[m - 2];
+  return `<b class="${d < 0 ? 'baja' : ''}">${d >= 0 ? '+' : ''}${d}%</b> ${rango} vs ${y - 1}`;
+}
 function renderTrend() {
+  const box = document.getElementById('dbTrend'); if (!box) return;
   const t = (STATS.trend || []).slice().sort((a, b) => a.mes.localeCompare(b.mes));
   trendKeys = t.map(x => x.mes);
-  const labels = t.map(x => { const [y, m] = x.mes.split('-'); return MES3[+m - 1] + " '" + y.slice(2); });
-  mk('chTrend', {
-    type: 'bar', data: { labels, datasets: [{ data: t.map(x => x.total), backgroundColor: t.map(x => x.mes === activeMonth ? '#ffc266' : `rgba(${accentRgb()},.72)`), hoverBackgroundColor: '#ffc266', borderRadius: 5, maxBarThickness: 30 }] },
-    options: { responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = trendKeys[el[0].index]; chartPreview('month', k, fullMonth(k), 'fa-calendar-day', trendMap[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => fullMonth(trendKeys[it[0].dataIndex]), label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { grid: { color: gridColor() }, beginAtZero: true } } }
+  document.querySelectorAll('#trend-rango .seg').forEach(b => b.classList.toggle('on', +b.dataset.r === trendRango));
+  const v = t.slice(-trendRango), hoy = new Date().toISOString().slice(0, 7);
+  if (!v.length) { box.innerHTML = '<div class="dbx-vacio">Sin datos</div>'; return; }
+  const tope = topeEje(Math.max(...v.map(x => x.total), 1)), sel = selPreview('month') || activeMonth;
+  const paso = Math.ceil(v.length / ((box.clientWidth || 600) < 520 ? 6 : 12));
+  box.innerHTML = `<div class="dbx-ejes">${[1, .5, 0].map(f => `<span style="bottom:${f * 100}%">${fmtCorto(tope * f)}</span>`).join('')}</div><div class="dbx-cols">${v.map((x, i) => {
+    const [y, m] = x.mes.split('-'), lado = i < 2 ? ' izq' : i > v.length - 3 ? ' der' : '';
+    const etiqueta = MES3[+m - 1] + (m === '01' || i === 0 ? " '" + y.slice(2) : '');
+    return `<button type="button" class="dbx-col${lado}${x.mes === hoy ? ' hoy' : ''}${x.mes === sel ? ' on' : ''}" data-mes="${x.mes}" style="--h:${x.total / tope * 100}%" aria-label="${fullMonth(x.mes)}: ${fmt(x.total)} leads"><span class="dbx-area"><span class="dbx-barra"></span><span class="dbx-tip">${MES3[+m - 1]} '${y.slice(2)}${x.mes === hoy ? ' (en curso)' : ''} · <b>${fmt(x.total)}</b></span></span><span class="dbx-x${(v.length - 1 - i) % paso ? ' oculto' : ''}">${etiqueta}</span></button>`;
+  }).join('')}</div>`;
+  box.onclick = e => { const b = e.target.closest('.dbx-col'); if (b) chartPreview('month', b.dataset.mes, fullMonth(b.dataset.mes), 'fa-calendar-day', trendMap[b.dataset.mes]); };
+  const tot = v.reduce((s, x) => s + x.total, 0), cerrados = v.filter(x => x.mes !== hoy), prom = cerrados.length ? Math.round(cerrados.reduce((s, x) => s + x.total, 0) / cerrados.length) : 0;
+  const mejor = v.reduce((a, b) => b.total > a.total ? b : a);
+  const res = document.getElementById('dbTrendResumen');
+  if (res) res.innerHTML = `<b>${fmt(tot)}</b> leads en ${v.length} meses · promedio <b>${fmt(prom)}</b>/mes · mejor mes ${fullMonth(mejor.mes)} (<b>${fmt(mejor.total)}</b>)`;
+}
+const CANAL_COLOR = { instagram: '--pink', facebook: '--blue', 'página web': '--green', 'pagina web': '--green', 'chat web': '--purple', tiktok: '--accent', whatsapp: '--green' };
+function canalesAgrupados() {
+  const m = new Map();
+  Object.entries(STATS.by_canal || {}).forEach(([k, n]) => {
+    const limpio = String(k ?? '').trim(), basura = !limpio || /^(null|undefined|__\w*)$/i.test(limpio);
+    const id = basura ? '' : limpio.toLowerCase();
+    const r = m.get(id) || { key: null, label: basura ? 'Sin origen' : limpio, total: 0, mayor: -1 };
+    r.total += n || 0;
+    if (!basura && n > r.mayor) { r.mayor = n; r.key = k; r.label = limpio; }
+    m.set(id, r);
   });
+  return [...m.values()].sort((a, b) => b.total - a.total);
+}
+function filaDbx({ key, label, total, max, tot, color, rank, on }) {
+  const ancho = Math.max(total / (max || 1) * 100, 1.5);
+  return `<button type="button" class="dbx-fila${on ? ' on' : ''}" ${key == null ? 'disabled' : `data-k="${esc(key)}"`} style="--c:${color}" aria-label="${esc(label)}: ${fmt(total)} leads (${pctDbx(total, tot)})"><span class="dbx-n">${rank ? `<i>${rank}</i>` : ''}<span title="${esc(label)}">${esc(label)}</span></span><span class="dbx-pista"><span class="dbx-rell" style="width:${ancho}%"></span></span><span class="dbx-v">${fmt(total)}</span><span class="dbx-p">${pctDbx(total, tot)}</span></button>`;
 }
 function renderCanal() {
-  const e = sortEntries(STATS.by_canal); canalKeys = e.map(x => x[0]);
-  const tot = e.reduce((s, x) => s + x[1], 0) || 1, cols = ['#ff5c8a', '#a06bff', '#4a9eff', '#5f677f'];
-  // Barras con número y % en la etiqueta: la dona no dejaba leer las porciones chicas.
-  mk('chCanal', { type: 'bar', data: { labels: e.map(x => `${x[0]} · ${fmt(x[1])} (${Math.round(x[1] / tot * 100)}%)`), datasets: [{ data: e.map(x => x[1]), backgroundColor: e.map((x, i) => cols[i % cols.length]), borderRadius: 6, barThickness: 18 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (ev, el) => { if (el.length) { const k = canalKeys[el[0].index]; chartPreview('canal', k, k, 'fa-share-nodes', STATS.by_canal[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { title: it => canalKeys[it[0].dataIndex], label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true, ticks: { maxTicksLimit: 4 } }, y: { grid: { display: false }, ticks: { callback(v) { const s = this.getLabelForValue(v); const i = s.lastIndexOf(' · '); return innerWidth <= 760 && i > 14 ? s.slice(0, 13) + '…' + s.slice(i) : s; } } } } } });
+  const box = document.getElementById('dbCanal'); if (!box) return;
+  const g = canalesAgrupados(), tot = g.reduce((s, x) => s + x.total, 0);
+  canalKeys = g.map(x => x.key).filter(Boolean);
+  if (!tot) { box.innerHTML = '<div class="dbx-vacio">Sin datos</div>'; return; }
+  const visibles = g.filter((x, i) => i < 5 && x.total / tot >= 0.002), resto = g.filter(x => !visibles.includes(x));
+  const filas = visibles.map(x => ({ ...x, color: `var(${CANAL_COLOR[x.label.toLowerCase()] || '--muted2'})` }));
+  if (resto.length) filas.push({ key: null, label: `Otros (${resto.length})`, total: resto.reduce((s, x) => s + x.total, 0), color: 'var(--muted2)', titulo: resto.map(x => `${x.label}: ${fmt(x.total)}`).join(' · ') });
+  const max = Math.max(...filas.map(x => x.total)), sel = selPreview('canal');
+  box.innerHTML = `<div class="dbx-mezcla" aria-hidden="true">${filas.map(x => `<span style="--c:${x.color};flex:${x.total}" title="${esc(x.label)} · ${pctDbx(x.total, tot)}"></span>`).join('')}</div><div class="dbx-lista">${filas.map(x => filaDbx({ ...x, max, tot, on: x.key != null && x.key === sel })).join('')}</div>`;
+  const otros = box.querySelector('.dbx-fila:disabled'); if (otros && resto.length) otros.title = filas[filas.length - 1].titulo;
+  box.onclick = e => { const b = e.target.closest('.dbx-fila[data-k]'); if (!b) return; const k = b.dataset.k; chartPreview('canal', k, k, 'fa-share-nodes', (g.find(x => x.key === k) || {}).total || 0); };
+  const res = document.getElementById('dbCanalResumen');
+  if (res) res.innerHTML = `<b>${fmt(tot)}</b> leads históricos · <b>${esc(filas[0].label)}</b> trae ${pctDbx(filas[0].total, tot)}`;
 }
+let destDatos = null;
 function renderDest(datosPeriodo) {
-  const src = datosPeriodo || STATS.top_destinos;
-  const e = sortEntries(src).slice(0, 8); destKeys = e.map(x => x[0]);
-  mk('chDest', { type: 'bar', data: { labels: destKeys, datasets: [{ data: e.map(x => x[1]), backgroundColor: 'rgba(74,158,255,.75)', hoverBackgroundColor: '#4a9eff', borderRadius: 6, barThickness: 16 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, onClick: (e, el) => { if (el.length) { const k = destKeys[el[0].index]; chartPreview('destino', k, k, 'fa-location-dot', src[k]); } }, onHover: pointer, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.raw) + ' leads' } } }, scales: { x: { grid: { color: gridColor() }, beginAtZero: true }, y: { grid: { display: false } } } } });
+  const box = document.getElementById('dbDest'); if (!box) return;
+  if (datosPeriodo !== undefined) destDatos = datosPeriodo;
+  const src = destDatos || STATS.top_destinos || {}, todos = sortEntries(src), tot = todos.reduce((s, x) => s + x[1], 0);
+  const e = todos.slice(0, 8); destKeys = e.map(x => x[0]);
+  const res = document.getElementById('dbDestResumen');
+  const nombre = { dia: 'hoy', semana: 'esta semana', mes: 'este mes', anio: 'este año', historico: 'en total' }[destPeriodo] || '';
+  if (res) res.innerHTML = tot ? `<b>${fmt(tot)}</b> leads con destino ${nombre} · ${todos.length} destinos distintos` : '';
+  if (!e.length) { box.innerHTML = '<div class="dbx-vacio">Sin leads con destino en este periodo</div>'; return; }
+  const max = e[0][1], sel = selPreview('destino'), color = 'var(--blue)';
+  box.innerHTML = `<div class="dbx-lista rank">${e.map(([k, n], i) => filaDbx({ key: k, label: k, total: n, max, tot, color, rank: i + 1, on: k === sel })).join('')}</div>`;
+  box.onclick = ev => { const b = ev.target.closest('.dbx-fila[data-k]'); if (!b) return; const k = b.dataset.k; chartPreview('destino', k, k, 'fa-location-dot', src[k]); };
 }
 
 /* ---------- Filtro de periodo en Destinos más solicitados ---------- */
 let destPeriodo = 'mes';
 function setupDestPeriodo() {
+  document.querySelectorAll('#trend-rango .seg').forEach(b => b.onclick = () => { trendRango = +b.dataset.r; renderTrend(); });
   document.querySelectorAll('#dest-periodo .seg').forEach(b => b.onclick = () => {
     document.querySelectorAll('#dest-periodo .seg').forEach(x => x.classList.remove('on'));
     b.classList.add('on'); destPeriodo = b.dataset.p; loadDestPeriodo();
   });
 }
 async function loadDestPeriodo() {
-  await ensureChart();
   let desde = null, hasta = null;
   if (destPeriodo !== 'historico') { const [d, h] = periodo(destPeriodo === 'dia' ? 'hoy' : destPeriodo); desde = iso(d); hasta = iso(h); }
-  if (destPeriodo === 'historico') { renderDest(); }
+  if (destPeriodo === 'historico') { renderDest(null); }
   else {
     const { data, error } = await sb.rpc('top_destinos_periodo', { p_desde: desde, p_hasta: hasta });
     if (error) { console.error(error); errToast('No se pudieron cargar los destinos del periodo'); }
@@ -4140,10 +4206,12 @@ async function cargarConversionDestino(desde, hasta) {
 }
 function renderPipe(id) {
   const be = STATS.by_estado || {}; const shown = ESTADOS.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO', 'VENTA COMPLETA'].includes(k));
-  const max = Math.max(...shown.map(k => be[k] || 0), 1);
-  document.getElementById(id).innerHTML = shown.map(k => {
+  const box = document.getElementById(id); if (!box) return;
+  // Raíz cuadrada: ATENDIDO (histórico masivo) aplastaba las etapas chicas a 0 px.
+  const max = Math.max(...shown.map(k => be[k] || 0), 1), tot = shown.reduce((s, k) => s + (be[k] || 0), 0), sel = selPreview('estado');
+  box.innerHTML = shown.map(k => {
     const v = be[k] || 0, w = Math.max(Math.sqrt(v / max) * 100, 2);
-    return `<div class="pstep" data-est="${k}"><div class="pl">${niceEstado(k)}</div><div class="pbar"><div class="pfill" style="width:${w}%;background:${ESTADO_COLORS[k] || '#5f677f'}">${w > 22 ? fmt(v) : ''}</div></div><div class="pv">${fmt(v)}</div></div>`;
+    return `<button type="button" class="pstep${k === sel ? ' on' : ''}" data-est="${k}" style="--c:${colorTema(ESTADO_COLORS[k] || '#5f677f')}" aria-label="${niceEstado(k)}: ${fmt(v)} leads"><span class="pl">${niceEstado(k)}</span><span class="pbar"><span class="pfill" style="display:block;width:${w}%"></span></span><span class="pv">${fmt(v)}</span><span class="pp">${pctDbx(v, tot)}</span></button>`;
   }).join('');
   document.querySelectorAll('#' + id + ' .pstep').forEach(el => el.onclick = () => { const k = el.dataset.est; chartPreview('estado', k, niceEstado(k), 'fa-diagram-project', be[k] || 0); });
 }
@@ -9324,9 +9392,10 @@ function chartPreview(type, key, label, icon, count) {
   p.innerHTML = `<div class="pp-info"><i class="fas ${icon}"></i><div><div class="pp-label">${esc(label)}</div><div class="pp-count">${fmt(count)} leads</div></div></div><button class="pp-btn">Ver leads <i class="fas fa-arrow-right"></i></button><button class="pp-close"><i class="fas fa-times"></i></button>`;
   p.classList.add('show');
   p.querySelector('.pp-btn').onclick = () => enterDrill(type, key);
-  p.querySelector('.pp-close').onclick = () => { previewSel = null; p.classList.remove('show'); if (type === 'month') renderTrend(); };
-  if (type === 'month') renderTrend();
+  p.querySelector('.pp-close').onclick = () => { previewSel = null; p.classList.remove('show'); repintarSel(); };
+  repintarSel();
 }
+function repintarSel() { if (!STATS) return; renderTrend(); renderCanal(); renderDest(); renderPipe('pipe'); }
 function enterDrill(type, key) { previewSel = null; document.getElementById('preview-pill').classList.remove('show'); ({ month: drillMonth, canal: drillCanal, estado: drillEstado, asesor: drillAsesor, destino: drillDestino }[type])(key); }
 function clearFiltersQuiet() { ['f-canal', 'f-estado', 'f-asesor', 'f-anio', 'f-servicio', 'f-sin-telefono', 'f-seguimiento'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); document.getElementById('global-search').value = ''; activeMonth = null; activeDestino = null; }
 function drillTo(apply) { clearFiltersQuiet(); apply(); activateSection('leads'); page = 1; loadTable(); renderChips(); }
