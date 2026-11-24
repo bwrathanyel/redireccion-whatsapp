@@ -28807,8 +28807,10 @@ const tcHideBtnHtml = (id, tabla, campo) =>
 // se suma. Flyers y tarifas manuales ya se cargan como precio final (con el recargo
 // de margenes_producto cuando el proveedor da neto). `iva_roques_aplicado` no sirve
 // de señal: quedó en true en 16 filas con el precio ya devuelto al neto.
+// Apagada por el dueño 2026-11-24 hasta tener los % de BT Travel; volver a true para mostrarla.
+const TC_PRECIO_TAG_ON = false;
 function tcPrecioTagHtml(t) {
-  if (!t) return '';
+  if (!TC_PRECIO_TAG_ON || !t) return '';
   if (t.origen === 'pdf') return '<span class="tc-precio-tag is-pdf" title="Precio tal cual viene en el PDF del proveedor: no se le sumó fee ni recargo"><i class="fas fa-file-pdf"></i>Precio PDF</span>';
   return '<span class="tc-precio-tag" title="Precio final para el cliente: ya incluye el fee o recargo de Lotus"><i class="fas fa-circle-check"></i>Precio cliente</span>';
 }
@@ -43264,7 +43266,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-11-24', emoji: '🏷️', titulo: 'Tarifario: origen del precio y botón Cotizar', texto: 'Cada tarjeta del Tarifario indica si el precio ya es «Precio cliente» (verde, listo para ofrecer) o «Precio PDF» (ámbar, tal cual viene del proveedor, sin fee). El botón Cotizar abre Cotizaciones con ese hotel ya elegido.', roles: ['admin', 'administrativo', 'asesor'] },
+  { fecha: '2026-11-24', emoji: '🏷️', titulo: 'Tarifario: botón Cotizar en la tarjeta', texto: 'El botón Cotizar de cada tarjeta del Tarifario abre Cotizaciones con ese hotel ya elegido.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-22', emoji: '📅', titulo: 'Calendario de estancia y asesor en boletos', texto: 'En Cotizaciones puedes elegir entrada y salida desde un calendario de rango, con dos meses en escritorio y uno en móvil. Boletos emitidos permite añadir un asesor opcional: en la previa y el PDF aparece solo su nombre, sin teléfono.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-11-22', emoji: '🏨', titulo: 'Menú de asesores más simple', texto: 'El Tarifario abre en Hoteles y lo muestra primero; Hot Sales sigue disponible. Para asesores se retiraron la pestaña IA del Tarifario y los accesos a Pausa de turno y Corporativo. Los demás roles conservan su navegación.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-21', emoji: '📎', titulo: 'PDF y fotos desde Crear reserva del lead', texto: 'En el paso 1 Viaje puedes leer PDF o fotos, revisar viajeros e itinerarios e incorporar sus servicios al borrador. Completa los precios en Servicios. Los documentos privados se adjuntan solo al crear la reserva; cancelar antes no guarda nada. Se corrigió el error de lectura del proveedor y, si falla un adjunto después de crear, puedes reintentarlo sin repetir la reserva ni el pago.', roles: ['admin', 'asesor', 'asesor_prueba'] },
