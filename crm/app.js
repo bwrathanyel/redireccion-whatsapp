@@ -23134,7 +23134,7 @@ const balTs = ymd => ymd + 'T00:00:00-04:00';
 async function loadBalance() {
   if (!esOficina()) return;
   const gen = ++BAL.gen, p = periodoBalance(BAL.tipo, BAL.off, BAL.rango);
-  if (!BAL.data) document.getElementById('bal-kpis').innerHTML = '<div class="tbl-state skel show" style="grid-column:1/-1"><div class="skel-bar"></div></div>';
+  if (!BAL.data) document.getElementById('bal-resumen').innerHTML = '<div class="tbl-state skel show"><div class="skel-bar"></div></div>';
   const args = (r, det) => ({ p_desde: balTs(r.desde), p_hasta: balTs(r.hasta), p_bucket: p.bucket, p_detalle: det });
   const [act, ant] = await Promise.all([sb.rpc('balance_agencia', args(p, true)), sb.rpc('balance_agencia', args(p.prev, false))]);
   if (gen !== BAL.gen) return;
@@ -23145,19 +23145,49 @@ async function loadBalance() {
 function balFila(n, v, pct, cls = '') {
   return `<div class="bal-fila ${cls}"><span class="bal-n">${n}</span><span class="bal-v">${v}</span><span class="bal-p">${pct}</span></div>`;
 }
+const BAL_IA_LBL = { bot_ventas: ['Bot de ventas', 'DeepSeek · responde Instagram y Facebook'], tarifario: ['Lectura del tarifario', 'Lee los PDF de tarifas'], habitaciones: ['Fotos de habitaciones', 'Ordena las fotos de cada hotel'], tareas: ['Tareas del equipo', 'Revisa evidencias y arma el parte diario'], pruebas: ['Clientes de prueba', 'Simulador para entrenar al bot'] };
+const balPunto = c => `<i class="bal-punto" style="--c:${c}" aria-hidden="true"></i>`;
+function balResumen(t, prev, delta) {
+  const egr = [['Proveedores', t.costo, 'var(--amber)'], ['Comisiones', t.comisiones, 'var(--purple)'], ['Gastos', t.gastos, 'var(--pink)']];
+  const util = Number(t.utilidad) || 0, vend = Number(t.vendido) || 0;
+  const base = Math.max(vend, egr.reduce((s, e) => s + (Number(e[1]) || 0), 0));
+  const seg = [...egr, ['Utilidad', util, 'var(--green)']].filter(e => Number(e[1]) > 0 && base > 0);
+  const margen = vend > 0 ? Math.round(util / vend * 100) : null;
+  const pct = v => vend > 0 ? Math.round(v / vend * 100) + '%' : '';
+  return `<div class="bal-res-izq">
+      <span class="bal-lbl">Utilidad neta</span>
+      <b class="bal-util ${util >= 0 ? 'bal-pos' : 'bal-neg'}">${balMoney0(util)}</b>
+      <small class="bal-util-sub">${margen != null ? `${margen}% de lo vendido` : 'Sin ventas en el periodo'}${prev ? delta(util, prev.utilidad) : ''}</small>
+      ${seg.length ? `<div class="bal-reparto" role="img" aria-label="Reparto de lo vendido: ${seg.map(e => `${e[0]} ${pct(e[1])}`).join(', ')}">${seg.map(e => `<i style="width:${(Number(e[1]) / base * 100).toFixed(2)}%;--c:${e[2]}" title="${e[0]}: ${balMoney(e[1])}"></i>`).join('')}</div>
+      <div class="bal-leyenda">${seg.map(e => `<span>${balPunto(e[2])}${e[0]} ${pct(e[1])}</span>`).join('')}</div>` : ''}
+    </div>
+    <div class="bal-cuenta">
+      ${balFila(`${balPunto('var(--blue)')}Vendido<small>${fmt(t.ventas)} ${t.ventas === 1 ? 'venta' : 'ventas'}${prev ? delta(vend, prev.vendido) : ''}</small>`, balMoney(vend), vend ? '100%' : '', 'tot')}
+      ${egr.map(e => balFila(`${balPunto(e[2])}− ${e[0]}${e[0] === 'Comisiones' && t.comisiones_estimadas > 0 ? '<small>Parte estimada</small>' : e[0] === 'Gastos' && t.gastos_ia > 0 ? `<small>Incluye IA ${balMoney(t.gastos_ia)}</small>` : e[0] === 'Proveedores' ? `<small>Margen bruto ${balMoney(t.margen_bruto)}</small>` : ''}`, balMoney(e[1]), pct(e[1]))).join('')}
+      ${balFila(`${balPunto('var(--green)')}= Utilidad neta`, `<span class="${util >= 0 ? 'bal-pos' : 'bal-neg'}">${balMoney(util)}</span>`, pct(util), 'tot')}
+      <div class="bal-cobro"><span>Cobrado <b>${balMoney(t.cobrado)}</b></span><span>Por cobrar <b>${balMoney(t.por_cobrar)}</b></span></div>
+    </div>`;
+}
+function balGastos(t, d, admin) {
+  const gs = d.gastos || [], grupos = [];
+  const fila = (n, s, v, acc = '') => `<div class="bal-gasto"><span class="bal-n"><b>${n}</b><small>${s}</small></span><span class="bal-v">${v}</span>${acc}</div>`;
+  if (t.gastos_ia > 0) grupos.push({ n: 'Inteligencia artificial', s: 'Se carga sola según el uso', m: Number(t.gastos_ia), h: (d.gastos_ia_detalle || []).filter(x => Number(x.monto) >= .01).map(x => { const l = BAL_IA_LBL[x.fuente] || [x.fuente, 'Automático']; return fila(esc(l[0]), esc(l[1]), balMoney(x.monto)); }).join('') });
+  const porCat = {};
+  for (const g of gs) (porCat[g.categoria] ||= []).push(g);
+  for (const [c, l] of Object.entries(porCat)) grupos.push({ n: esc(BAL_CAT_LBL[c] || c), m: l.reduce((s, g) => s + (Number(g.monto_usd) || 0), 0), h: l.map(g => fila(esc(g.concepto), `${balFecha(g.fecha, { day: 'numeric', month: 'short' })}${g.moneda === 'VES' ? ` · Bs ${fmt(Number(g.monto))} a ${fmt(Number(g.tasa))}` : ''}`, balMoney(g.monto_usd),
+    admin ? `<span class="bal-acc"><button class="btn-sm" type="button" data-bal="gasto-editar" data-id="${g.id}" title="Editar gasto" aria-label="Editar gasto"><i class="fas fa-pen"></i></button><button class="btn-sm" type="button" data-bal="gasto-anular" data-id="${g.id}" title="Anular gasto" aria-label="Anular gasto"><i class="fas fa-ban"></i></button></span>` : '')).join('') });
+  if (!grupos.length) return '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin gastos en el periodo</div>';
+  grupos.sort((a, b) => b.m - a.m);
+  return `<div class="bal-gtot"><span>Total de gastos<small>${fmt(gs.length)} ${gs.length === 1 ? 'cargado a mano' : 'cargados a mano'}${t.gastos_ia > 0 ? ' + IA automática' : ''}</small></span><b>${balMoney(t.gastos)}</b></div>`
+    + grupos.map(g => `<div class="bal-grupo"><div class="bal-grupo-cab"><span><b>${g.n}</b>${g.s ? `<small>${g.s}</small>` : ''}</span><span class="bal-v">${balMoney(g.m)}</span></div>${g.h}</div>`).join('')
+    + balParaQue(gs, t.gastos_ia > 0);
+}
 function renderBalance() {
   const { data: d, prev, p } = BAL, t = d.totales || {}, esDia = BAL.tipo === 'dia';
   document.getElementById('bal-etiqueta').textContent = p.etiqueta;
   document.getElementById('bal-next').disabled = BAL.tipo !== 'rango' && BAL.off >= 0;
   const delta = (a, b) => b > 0 ? ` · ${a >= b ? '+' : '−'}${Math.round(Math.abs(a - b) / b * 100)}% vs anterior` : '';
-  const margenNeto = t.vendido > 0 ? Math.round(t.utilidad / t.vendido * 100) : null;
-  pintarKPIs('bal-kpis', [
-    { t: 'Vendido', v: money(t.vendido), d: `${fmt(t.ventas)} ${t.ventas === 1 ? 'venta' : 'ventas'}${prev ? delta(t.vendido, prev.vendido) : ''}`, i: 'fa-sack-dollar', c: 'var(--green)' },
-    { t: 'Costo proveedores', v: money(t.costo), d: `Margen bruto ${money(t.margen_bruto)}`, i: 'fa-building', c: 'var(--amber)' },
-    { t: 'Comisiones', v: money(t.comisiones), d: t.comisiones_estimadas > 0 ? `${money(t.comisiones_estimadas)} estimadas` : '', i: 'fa-percent', c: 'var(--purple)' },
-    { t: 'Gastos', v: money(t.gastos), d: `IA ${balMoney(t.gastos_ia)}`, i: 'fa-receipt', c: 'var(--pink)' },
-    { t: 'Utilidad', v: balMoney0(t.utilidad), d: margenNeto != null ? `${margenNeto}% margen neto` : '', i: 'fa-scale-balanced', c: t.utilidad >= 0 ? 'var(--green)' : 'var(--danger)' },
-  ]);
+  document.getElementById('bal-resumen').innerHTML = balResumen(t, prev, delta);
   const av = document.getElementById('bal-aviso');
   av.hidden = !(t.sin_costo_n > 0 || t.sin_comision_n > 0);
   if (!av.hidden) av.innerHTML = `<i class="fas fa-triangle-exclamation"></i><span>${t.sin_costo_n > 0 ? `<b>${fmt(t.sin_costo_n)}</b> ${t.sin_costo_n === 1 ? 'venta' : 'ventas'} (${money(t.sin_costo_vendido)}) sin costo neto` : ''}${t.sin_costo_n > 0 && t.sin_comision_n > 0 ? ' y ' : ''}${t.sin_comision_n > 0 ? `<b>${fmt(t.sin_comision_n)}</b> sin comisión cargada` : ''}: la utilidad está inflada.</span>${t.sin_costo_n > 0 ? '<button class="btn-sm" type="button" data-bal="sin-costo"><i class="fas fa-arrow-right"></i> Ver ventas</button>' : ''}`;
@@ -23171,21 +23201,9 @@ function renderBalance() {
     charts.chBalance?.destroy(); delete charts.chBalance;
     const vs = d.ventas || [];
     lista.innerHTML = vs.length ? `<div class="bal-ase cab"><span>Cliente</span><span class="bal-v">Venta</span><span class="bal-v">Costo</span><span class="bal-v">Comisión</span></div>` + vs.map(v =>
-      `<div class="bal-ase"><span class="bal-n">${esc(v.cliente || '—')}<small>#${fmt(v.numero_factura)} · ${esc(v.asesor || 'Sin asesor')}${v.proveedor ? ' · ' + esc(v.proveedor) : ''}</small></span><span class="bal-v">${balMoney(v.precio)}</span><span class="bal-v">${v.costo == null ? '<span style="color:var(--amber)">sin costo</span>' : balMoney(v.costo)}</span><span class="bal-v">${balMoney(v.comision)}</span></div>`).join('')
+      `<div class="bal-ase"><span class="bal-n">${esc(v.cliente || '—')}<small>#${fmt(v.numero_factura)} · ${esc(v.asesor || 'Sin asesor')}${v.proveedor ? ' · ' + esc(v.proveedor) : ''}</small></span><span class="bal-v" data-l="Venta">${balMoney(v.precio)}</span><span class="bal-v" data-l="Costo">${v.costo == null ? '<span style="color:var(--amber)">sin costo</span>' : balMoney(v.costo)}</span><span class="bal-v" data-l="Comisión">${balMoney(v.comision)}</span></div>`).join('')
       : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin ventas este día</div>';
   } else pintarGraficoBalance(d.serie || [], p.bucket);
-
-  const base = t.vendido > 0 ? t.vendido : 0, pct = v => base ? Math.round(v / base * 100) + '%' : '';
-  const cats = (d.gastos_por_categoria || []).filter(c => Number(c.monto) > 0);
-  document.getElementById('bal-er').innerHTML =
-    balFila('Ventas', balMoney(t.vendido), base ? '100%' : '', 'tot') +
-    balFila(`Cobrado ${balMoney(t.cobrado)} · por cobrar ${balMoney(t.por_cobrar)}`, '', '', 'sub') +
-    balFila('− Costo de proveedores', balMoney(t.costo), pct(t.costo)) +
-    balFila('= Margen bruto', balMoney(t.margen_bruto), pct(t.margen_bruto), 'tot') +
-    balFila('− Comisiones' + (t.comisiones_estimadas > 0 ? ' <small>(parte estimada)</small>' : ''), balMoney(t.comisiones), pct(t.comisiones)) +
-    balFila('− Gastos', balMoney(t.gastos), pct(t.gastos)) +
-    cats.map(c => balFila(esc(BAL_CAT_LBL[c.categoria] || c.categoria), balMoney(c.monto), pct(c.monto), 'sub')).join('') +
-    balFila('= Utilidad neta', `<span class="${t.utilidad >= 0 ? 'bal-pos' : 'bal-neg'}">${balMoney(t.utilidad)}</span>`, pct(t.utilidad), 'tot');
 
   const s = d.saldos || {};
   document.getElementById('bal-saldos').innerHTML =
@@ -23195,17 +23213,10 @@ function renderBalance() {
 
   const ases = [...(d.por_asesor || [])].sort((a, b) => (b.vendido || 0) - (a.vendido || 0));
   document.getElementById('bal-asesores').innerHTML = ases.length ? `<div class="bal-ase cab"><span>Asesor</span><span class="bal-v">Vendido</span><span class="bal-v">Margen</span><span class="bal-v">Comisión</span></div>` + ases.map(a =>
-    `<div class="bal-ase"><span class="bal-n">${esc(a.asesor || 'Sin asesor')}<small>${fmt(a.ventas)} ${a.ventas === 1 ? 'venta' : 'ventas'}${a.sin_costo > 0 ? ` · <span style="color:var(--amber)">${fmt(a.sin_costo)} sin costo</span>` : ''}</small></span><span class="bal-v">${balMoney0(a.vendido)}</span><span class="bal-v">${balMoney0(a.margen)}</span><span class="bal-v">${balMoney0(a.comision)}</span></div>`).join('')
+    `<div class="bal-ase"><span class="bal-n">${esc(a.asesor || 'Sin asesor')}<small>${fmt(a.ventas)} ${a.ventas === 1 ? 'venta' : 'ventas'}${a.sin_costo > 0 ? ` · <span style="color:var(--amber)">${fmt(a.sin_costo)} sin costo</span>` : ''}</small></span><span class="bal-v" data-l="Vendido">${balMoney0(a.vendido)}</span><span class="bal-v" data-l="Margen">${balMoney0(a.margen)}</span><span class="bal-v" data-l="Comisión">${balMoney0(a.comision)}</span></div>`).join('')
     : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin ventas en el periodo</div>';
 
-  const admin = ROL === 'admin', gs = d.gastos || [];
-  document.getElementById('bal-gastos').innerHTML =
-    (t.gastos_ia > 0 ? `<div class="bal-gasto"><span class="bal-n"><b>Inteligencia artificial</b><small>Automático · bots y asistentes</small></span><span class="bal-v">${balMoney(t.gastos_ia)}</span></div>` : '') +
-    gs.map(g => `<div class="bal-gasto"><span class="bal-n"><b>${esc(g.concepto)}</b><small>${esc(BAL_CAT_LBL[g.categoria] || g.categoria)} · ${balFecha(g.fecha, { day: 'numeric', month: 'short' })}${g.moneda === 'VES' ? ` · Bs ${fmt(Number(g.monto))} a ${fmt(Number(g.tasa))}` : ''}</small></span><span class="bal-v">${balMoney(g.monto_usd)}</span>`
-      + (admin ? `<button class="btn-sm" type="button" data-bal="gasto-editar" data-id="${g.id}" title="Editar gasto" aria-label="Editar gasto"><i class="fas fa-pen"></i></button><button class="btn-sm" type="button" data-bal="gasto-anular" data-id="${g.id}" title="Anular gasto" aria-label="Anular gasto"><i class="fas fa-ban"></i></button>` : '')
-      + '</div>').join('')
-    || (t.gastos_ia > 0 ? '' : '<div class="lt-vacio"><i class="fas fa-inbox"></i> Sin gastos en el periodo</div>');
-  document.getElementById('bal-gastos').insertAdjacentHTML('beforeend', balParaQue(gs, t.gastos_ia > 0));
+  document.getElementById('bal-gastos').innerHTML = balGastos(t, d, ROL === 'admin');
 }
 async function pintarGraficoBalance(serie, bucket) {
   await ensureChart();

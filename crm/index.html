@@ -3669,7 +3669,46 @@ body.bi-on .correo-deshacer{bottom:calc(var(--bi-h) + var(--safe-b) + 12px)}
 .bal-queson summary{cursor:pointer;font-weight:600;color:var(--muted);padding:8px 0}
 .bal-queson-it{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-top:1px solid var(--line)}
 .bal-queson-it small{color:var(--muted);font-size:11.5px}
+.bal-resumen{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:28px;align-items:start;margin-bottom:16px}
+.bal-resumen>.tbl-state{grid-column:1/-1}
+.bal-res-izq{display:flex;flex-direction:column;gap:4px;min-width:0}
+.bal-lbl{font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted2)}
+.bal-util{font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums}
+.bal-util-sub{color:var(--muted);font-size:12.5px}
+.bal-reparto{display:flex;gap:2px;height:12px;margin-top:14px;border-radius:999px;overflow:hidden;background:var(--bg2)}
+.bal-reparto i{display:block;height:100%;min-width:3px;background:var(--c)}
+.bal-leyenda{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:9px;font-size:11.5px;color:var(--muted)}
+.bal-leyenda span{display:inline-flex;align-items:center;gap:6px}
+.bal-punto{display:inline-block;flex:none;width:8px;height:8px;border-radius:999px;background:var(--c)}
+.bal-cuenta .bal-fila{align-items:center}
+.bal-cuenta .bal-fila:first-child{border-top:0;padding-top:0}
+.bal-cuenta .bal-n{display:grid;grid-template-columns:8px minmax(0,1fr);column-gap:9px;align-items:center}
+.bal-cuenta .bal-n small{grid-column:2;font-size:11.5px;font-weight:400;color:var(--muted)}
+.bal-cobro{display:flex;flex-wrap:wrap;gap:4px 18px;padding-top:9px;font-size:12px;color:var(--muted)}
+.bal-cobro b{color:var(--txt);font-variant-numeric:tabular-nums}
+.bal-gtot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 4px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg2)}
+.bal-gtot span{font-size:13px;font-weight:700}
+.bal-gtot small{display:block;font-size:11.5px;font-weight:400;color:var(--muted)}
+.bal-gtot b{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.bal-grupo{padding-top:7px}
+.bal-grupo-cab{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:7px 0 4px;border-bottom:1px solid var(--line2)}
+.bal-grupo-cab b{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.bal-grupo-cab small{display:block;font-size:11px;color:var(--muted)}
+.bal-grupo-cab .bal-v{font-weight:800;font-variant-numeric:tabular-nums}
+.bal-grupo .bal-gasto{padding-left:11px}
+.bal-acc{display:inline-flex;gap:4px}
+.bal-saldos-card{margin-top:16px}
+.bal-saldos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 @media(max-width:760px){
+  .bal-resumen{grid-template-columns:1fr;gap:22px}
+  .bal-util{font-size:30px}
+  .bal-saldos{grid-template-columns:1fr;gap:0}
+  .bal-ase{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:4px;padding:11px 0}
+  .bal-ase.cab{display:none}
+  .bal-ase .bal-n{grid-column:1/-1;white-space:normal}
+  .bal-ase .bal-v{text-align:left}
+  .bal-ase .bal-v::before{content:attr(data-l);display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
+  .bal-grupo .bal-gasto{padding-left:0}
   .bal-barra{gap:8px}
   .bal-nav{flex:1 1 100%;justify-content:space-between}
   .bal-etiqueta{flex:1}
@@ -11019,7 +11058,7 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
         </div>
       </div>
 
-      <div class="kpis kpis-5" id="bal-kpis"></div>
+      <div class="card bal-resumen" id="bal-resumen"></div>
       <div class="bal-aviso" id="bal-aviso" hidden></div>
 
       <div class="card">
@@ -11030,13 +11069,10 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
       </div>
 
       <div class="grid g-2b">
-        <div class="card"><h2><i class="fas fa-scale-balanced"></i> Estado de resultados</h2><div id="bal-er"></div></div>
-        <div class="card"><h2><i class="fas fa-hourglass-half"></i> Saldos hoy</h2><div class="csub">Lo pendiente ahora, sin importar el periodo elegido</div><div id="bal-saldos"></div></div>
-      </div>
-      <div class="grid g-2b">
-        <div class="card"><h2><i class="fas fa-user-tie"></i> Por asesor</h2><div id="bal-asesores"></div></div>
         <div class="card"><h2><i class="fas fa-receipt"></i> Gastos del periodo</h2><div id="bal-gastos"></div></div>
+        <div class="card"><h2><i class="fas fa-user-tie"></i> Por asesor</h2><div id="bal-asesores"></div></div>
       </div>
+      <div class="card bal-saldos-card"><h2><i class="fas fa-hourglass-half"></i> Saldos hoy</h2><div class="csub">Lo pendiente ahora, sin importar el periodo elegido</div><div class="bal-saldos" id="bal-saldos"></div></div>
     </section>
 
     <!-- FACTURACIÓN -->
