@@ -8946,6 +8946,17 @@ function repartoColumnas() {
   return claves.map(clave => ({ clave, corto: REP_CORTO[clave] || clave, vol: vol[clave] || 0, pct: total ? 100 * (vol[clave] || 0) / total : 0 }));
 }
 
+// Pausa = 0 %: el % de los pausados va 75 % a la mitad de menor % (a partes iguales)
+// y 25 % a la mitad de mayor % (a prorrata). Misma regla que reparto_derivar().
+function repartoEfectivo(filas) {
+  const ef = new Map(filas.map(f => [f.nombre, 0]));
+  const act = filas.filter(f => f.peso > 0 && !f.pausa).sort((a, b) => a.peso - b.peso || (a.nombre < b.nombre ? -1 : a.nombre > b.nombre ? 1 : 0));
+  const pausado = filas.reduce((s, f) => s + (f.peso > 0 && f.pausa ? f.peso : 0), 0);
+  const baja = Math.ceil(act.length / 2), alta = act.slice(baja), sAlta = alta.reduce((s, f) => s + f.peso, 0);
+  act.forEach((f, i) => ef.set(f.nombre, f.peso + (i < baja ? (alta.length ? 0.75 : 1) * pausado / baja : 0.25 * pausado * f.peso / sAlta)));
+  return ef;
+}
+
 // Configuración = pesos por grupo propio + pool Nacional (sin destino) e Internacional.
 function repartoConfigHoy() {
   const cfg = { grupos: {}, nac: new Map(), intl: new Map() };
@@ -8957,12 +8968,13 @@ function repartoConfigHoy() {
   return cfg;
 }
 function repartoConfigBorrador() {
-  const cfg = { grupos: {}, nac: new Map(), intl: new Map() };
+  const cfg = { grupos: {}, nac: new Map(), intl: new Map() }, ef = repartoEfectivo(repartoFilas);
   repartoFilas.forEach(f => {
-    if (!(f.peso > 0)) return;
+    const peso = ef.get(f.nombre);
+    if (!(peso > 0)) return;
     Object.entries(f.mezcla).forEach(([clave, s]) => {
       if (!(s > 0)) return;
-      const w = f.peso * s;
+      const w = peso * s;
       if (clave === REP_SIN) { cfg.nac.set(f.nombre, w); return; }
       (cfg.grupos[clave] ||= new Map()).set(f.nombre, w);
       if (clave === 'Internacional') cfg.intl.set(f.nombre, w);
@@ -9056,10 +9068,10 @@ function repartoDescartar() {
 // editado, redondeando por mayor residuo para que la suma quede exacta en 100.
 function rebalancear(filas, indice, nuevoValor) {
   const fila = filas[indice];
-  const sumaFijos = filas.reduce((s, a, i) => s + (i !== indice && a.fijo ? a.peso : 0), 0);
+  const sumaFijos = filas.reduce((s, a, i) => s + (i !== indice && (a.fijo || a.pausa) ? a.peso : 0), 0);
   const libre = Math.max(0, 100 - sumaFijos);
   const valor = Math.max(0, Math.min(nuevoValor, libre));
-  const ajustables = filas.map((a, i) => i).filter(i => i !== indice && !filas[i].fijo);
+  const ajustables = filas.map((a, i) => i).filter(i => i !== indice && !filas[i].fijo && !filas[i].pausa);
   const restante = libre - valor;
 
   if (!ajustables.length) { fila.peso = libre; return; }
@@ -9112,7 +9124,7 @@ function repartoQuitar(i) {
   if (repartoFilas.length <= 1) { errToast('El reparto no puede quedar vacío'); return; }
   const liberado = repartoFilas[i].peso;
   repartoFilas.splice(i, 1);
-  const destino = repartoFilas.findIndex(a => !a.fijo);
+  const destino = repartoFilas.findIndex(a => !a.fijo && !a.pausa);
   if (liberado > 0 && destino !== -1) rebalancear(repartoFilas, destino, repartoFilas[destino].peso + liberado);
   repartoDirty = true;
   renderReparto();
@@ -9142,7 +9154,7 @@ function renderReparto() {
     <div class="rep-fila">
       <span class="rep-quien">
         <span class="rep-dot" style="background:${ADV_COLORS[i % ADV_COLORS.length]}"></span>
-        <span class="rep-nombre" title="${esc(f.nombre)}">${esc(f.nombre)}${f.pausa ? `<small class="rep-pausa-tag">Pausado · vuelve el ${repartoFecha(f.pausa)}</small>` : ''}</span>
+        <span class="rep-nombre" title="${esc(f.nombre)}">${esc(f.nombre)}${f.pausa ? `<small class="rep-pausa-tag">Pausado · vuelve el ${repartoFecha(f.pausa)} · tenía ${f.peso}%</small>` : '<small class="rep-pausa-tag rep-extra" hidden></small>'}</span>
         <button type="button" class="rep-ico rep-pausar${f.pausa ? ' on' : ''}" data-rep-pausa title="${f.pausa ? 'Reanudar ya' : 'Pausar unos días'}" aria-label="${f.pausa ? 'Reanudar' : 'Pausar'} a ${esc(f.nombre)}"><i class="fas fa-${f.pausa ? 'play' : 'pause'}"></i></button>
         <button type="button" class="rep-ico rep-quitar" data-rep-quitar title="Quitar del reparto" aria-label="Quitar a ${esc(f.nombre)} del reparto"><i class="fas fa-xmark"></i></button>
       </span>
@@ -9175,7 +9187,7 @@ function renderReparto() {
 function repartoRefrescar() {
   const box = document.getElementById('repRows');
   if (!box) return;
-  const cfg = repartoConfigBorrador(), cols = repartoColumnas(), vol = repartoVolumenes();
+  const cfg = repartoConfigBorrador(), cols = repartoColumnas(), vol = repartoVolumenes(), ef = repartoEfectivo(repartoFilas);
   const total = Number(repartoDatos?.total_90d) || 0;
   const despues = repartoLeads(cfg), antes = repartoLeads(repartoConfigHoy());
   const pct = (m, n) => total ? 100 * (m.get(n) || 0) / total : 0;
@@ -9186,8 +9198,10 @@ function repartoRefrescar() {
     const f = repartoFilas[Number(el.dataset.i)];
     if (!f) return;
     const slider = el.querySelector('[data-rep-slider]'), num = el.querySelector('[data-rep-num]'), fijo = el.querySelector('[data-rep-fijo]');
-    slider.value = f.peso; num.value = f.peso;
-    slider.disabled = num.disabled = f.fijo;
+    slider.value = num.value = f.pausa ? 0 : f.peso;
+    slider.disabled = num.disabled = f.fijo || !!f.pausa;
+    const extra = el.querySelector('.rep-extra'), mas = (ef.get(f.nombre) || 0) - f.peso;
+    if (extra) { extra.hidden = !(mas >= 0.05); extra.textContent = `+${mas.toFixed(1)} por pausas`; }
     fijo.classList.toggle('on', f.fijo);
     fijo.title = f.fijo ? 'Desbloquear' : 'Fijar (no se mueve al reajustar)';
     fijo.setAttribute('aria-label', fijo.title);
@@ -9197,23 +9211,23 @@ function repartoRefrescar() {
     el.querySelectorAll('.rep-mez-fila').forEach(r => {
       const clave = r.dataset.clave, s = f.mezcla[clave] || 0;
       const suma = repartoSumaMapa(repartoMapaColumna(cfg, clave));
-      const parte = s > 0 && f.peso > 0 && suma ? f.peso * s / suma : 0;
+      const parte = s > 0 && ef.get(f.nombre) > 0 && suma ? ef.get(f.nombre) * s / suma : 0;
       r.querySelector('[data-rep-mez]').value = Math.round(s);
       r.querySelector('.rep-mez-val').textContent = s > 0 ? repartoPct(s) : '—';
       r.querySelector('.rep-mez-info').textContent = !(s > 0) ? 'No lo atiende'
-        : !(f.peso > 0) ? 'Sin % del total'
+        : !(ef.get(f.nombre) > 0) ? (f.pausa ? 'En pausa' : 'Sin % del total')
         : `≈ ${repartoNumero(Math.round((vol[clave] || 0) * parte))} leads · ${repartoPct(100 * parte)} de ${REP_CORTO[clave] || clave}`;
       r.classList.toggle('off', !(s > 0));
       r.classList.toggle('falta', sinNadie.has(clave));
     });
     const est = pct(despues, f.nombre), hoy = pct(antes, f.nombre), d = est - hoy;
     if (Math.abs(d) >= 3) grandes.push(f.nombre);
-    if (total && Math.abs(est - f.peso) >= 1.5) cortos.push(`<b>${esc(f.nombre)}</b> pide ${f.peso}% y recibiría ${est.toFixed(1)}%`);
+    if (total && !f.pausa && Math.abs(est - ef.get(f.nombre)) >= 1.5) cortos.push(`<b>${esc(f.nombre)}</b> pide ${ef.get(f.nombre).toFixed(0)}% y recibiría ${est.toFixed(1)}%`);
     const mov = Math.abs(d) < 0.05 ? '' : `<span class="${d > 0 ? 'sube' : 'baja'}">${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)}</span>`;
     el.querySelector('.rep-est').innerHTML = `<b>${est.toFixed(1)}%</b>${mov}<small>hoy ${hoy.toFixed(1)}%</small>`;
   });
 
-  document.getElementById('repBar').innerHTML = repartoFilas.map((f, i) => `<span style="flex-grow:${Math.max(f.peso, 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(f.nombre)}: ${f.peso}% del total"></span>`).join('');
+  document.getElementById('repBar').innerHTML = repartoFilas.map((f, i) => `<span style="flex-grow:${Math.max(ef.get(f.nombre), 0.01)};background:${ADV_COLORS[i % ADV_COLORS.length]}" title="${esc(f.nombre)}: ${+ef.get(f.nombre).toFixed(1)}% del total${f.pausa ? ' (pausado)' : ''}"></span>`).join('');
   const suma = repartoFilas.reduce((s, f) => s + f.peso, 0);
   const chip = document.getElementById('repTotal');
   chip.textContent = 'suma ' + suma;
@@ -9222,7 +9236,7 @@ function repartoRefrescar() {
   // Leads que se piden de cada destino contra los que entran: arriba de 10 %
   // de más, el sorteo los reparte a prorrata y alguien recibe menos de su %.
   const llenos = cols.filter(c => c.vol >= 20).map(c => {
-    const pedido = repartoFilas.reduce((s, f) => s + total * f.peso * (f.mezcla[c.clave] || 0) / 10000, 0);
+    const pedido = repartoFilas.reduce((s, f) => s + total * ef.get(f.nombre) * (f.mezcla[c.clave] || 0) / 10000, 0);
     return { ...c, pedido };
   }).filter(c => c.pedido > 1.1 * c.vol);
   const enTabla = new Set(repartoFilas.map(f => f.nombre));
