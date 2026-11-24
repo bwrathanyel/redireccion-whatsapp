@@ -129,7 +129,7 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
       correoFiltro = prender ? b.dataset.f : 'todos';
       cargarBandejaCorreo();
     });
-    document.getElementById('correo-vistas-movil').addEventListener('click', e => { const b = e.target.closest('[data-carpeta]'); if (b) elegirCarpetaCorreo(b.dataset.carpeta); });
+    ['correo-vistas-movil', 'correo-vista-seg'].forEach(id => document.getElementById(id).addEventListener('click', e => { const b = e.target.closest('[data-carpeta]'); if (b) elegirCarpetaCorreo(b.dataset.carpeta); }));
     document.getElementById('correo-categoria').addEventListener('change', e => {
       CORREO_CATEGORIA = e.target.value;
       cerrarHiloCorreo();
@@ -802,7 +802,7 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
      abrir uno se pide el hilo completo. */
   function elegirCarpetaCorreo(carpeta) {
     CORREO_CARPETA = carpeta;
-    document.querySelectorAll('#correo-vistas-movil [data-carpeta]').forEach(b => b.classList.toggle('on', b.dataset.carpeta === carpeta));
+    document.querySelectorAll('#correo-vistas-movil [data-carpeta], #correo-vista-seg [data-carpeta]').forEach(b => b.classList.toggle('on', b.dataset.carpeta === carpeta));
     document.getElementById('correo-categoria').hidden = carpeta !== 'recibidos';
     document.getElementById('correo-filtros').hidden = carpeta === 'contactos';
     pintarNavCorreo();
