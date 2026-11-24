@@ -17,7 +17,7 @@ function campo(path, label, value, type = 'text') {
 }
 export function crearImportacionServicio(c) {
   if (!document.querySelector('link[data-rvi-css]')) { const link = document.createElement('link'); link.rel = 'stylesheet'; link.href = new URL('./reservas-importacion.css', import.meta.url).href; link.dataset.rviCss = ''; document.head.append(link); }
-  let datos = null, archivos = [], conflictos = [], seleccion = {}, precios = {}, reemplazar = false, ocupado = '', pendiente = null, vivo = true;
+  let datos = null, archivos = [], conflictos = [], seleccion = {}, precios = {}, reemplazar = false, aceptado = false, ocupado = '', pendiente = null, vivo = true;
   let tipo = c.tipo(), aborto = new AbortController();
   const vida = new AbortController();
   const urls = new Set(), subidas = new Map(), invalidos = new Set();
@@ -25,7 +25,7 @@ export function crearImportacionServicio(c) {
   const mensaje = (s, error = false) => { if (!vigente()) return; const el = c.root.querySelector('[data-rvi-mensaje]'); if (el) { el.textContent = s; el.setAttribute('role', error ? 'alert' : 'status'); el.classList.toggle('rvi-error', error); } };
   const boton = (accion, texto, extra = '') => `<button type="button" class="dbtn" data-rvi-accion="${accion}" ${extra}>${texto}</button>`;
   const bloqueo = valor => { ocupado = valor; c.alOcupado?.(!!valor || !!pendiente); const fs = c.root.querySelector('fieldset'); if (fs) fs.disabled = !!valor || !!pendiente; };
-  const cambiar = () => { if (!pendiente) operacionId = crypto.randomUUID(); };
+  const cambiar = () => { aceptado = false; if (!pendiente) operacionId = crypto.randomUUID(); const ch = c.root.querySelector('[data-rvi-aceptado]'); if (ch) ch.checked = false; };
   let operacionId = crypto.randomUUID();
   function detalleConflicto(campo) {
     if (campo.startsWith('servicio.detalle.')) return ['servicio', 'detalle', campo.slice(17)];
@@ -39,13 +39,13 @@ export function crearImportacionServicio(c) {
       const actual = base[k], nuevo = datos.servicio[k];
       if (vacio(nuevo)) { if (!vacio(actual)) datos.servicio[k] = actual; continue; }
       const defecto = !c.servicio && ['pax_adultos', 'pax_ninos'].includes(k) && Number(actual) === 0;
-      if (!vacio(actual) && !defecto && String(actual).slice(0, k === 'hora' ? 5 : undefined) !== String(nuevo)) { conflictos.push({ campo: `servicio.${k}`, path: ['servicio', k], valores: [actual, nuevo], origen: 'actual', resuelto: false }); datos.servicio[k] = actual; }
+      if (!vacio(actual) && !defecto && String(actual).slice(0, k === 'hora' ? 5 : undefined) !== String(nuevo)) { conflictos.push({ campo: `servicio.${k}`, path: ['servicio', k], valores: [actual, nuevo], resuelto: false }); datos.servicio[k] = actual; }
     }
     for (const [k, actual] of Object.entries(base.detalle || {})) {
       if (k === 'importacion') continue;
       const nuevo = datos.servicio.detalle[k];
       if (vacio(nuevo)) datos.servicio.detalle[k] = actual;
-      else if (!vacio(actual) && JSON.stringify(actual) !== JSON.stringify(nuevo)) { conflictos.push({ campo: `servicio.detalle.${k}`, path: ['servicio', 'detalle', k], valores: [actual, nuevo], origen: 'actual', resuelto: false }); datos.servicio.detalle[k] = actual; }
+      else if (!vacio(actual) && JSON.stringify(actual) !== JSON.stringify(nuevo)) { conflictos.push({ campo: `servicio.detalle.${k}`, path: ['servicio', 'detalle', k], valores: [actual, nuevo], resuelto: false }); datos.servicio.detalle[k] = actual; }
     }
     for (const aviso of datos.advertencias.filter(x => x.startsWith('Conflicto'))) if (!conflictos.some(x => aviso.startsWith(`Conflicto en ${x.campo}:`))) conflictos.push({ campo: aviso, valores: [], path: null, aviso, resuelto: false });
   }
@@ -64,10 +64,10 @@ export function crearImportacionServicio(c) {
       ${g.tramos.map((t, j) => `<details class="rvi-tramo" open><summary>Tramo ${j + 1} · ${esc(t.origen_iata || t.origen_nombre || '?')} → ${esc(t.destino_iata || t.destino_nombre || '?')}</summary><div class="rvi-grid">${TRAMO.map(([k, l]) => campo(['grupos', i, 'tramos', j, k], l, t[k])).join('')}</div>${boton('quitar-tramo', 'Retirar tramo', `data-grupo="${i}" data-indice="${j}"`)}</details>`).join('')}${boton('agregar-tramo', 'Añadir conexión', `data-grupo="${i}"`)}
       <h5>Boletos asociados a este itinerario</h5>${g.boletos.map((b, j) => `<div class="rvi-boleto"><label class="rvi-campo">Pasajero<select class="ei" data-rvi-campo="${esc(JSON.stringify(['grupos', i, 'boletos', j, 'pasajero_clave']))}"><option value="">Elige pasajero</option>${datos.pasajeros.map(p => `<option value="${esc(p.clave)}" ${b.pasajero_clave === p.clave ? 'selected' : ''}>${esc(p.nombre + ' ' + p.apellido)}</option>`).join('')}</select></label>${campo(['grupos', i, 'boletos', j, 'numero_ticket'], 'N.º de ticket', b.numero_ticket)}${boton('quitar-boleto', 'Retirar', `data-grupo="${i}" data-indice="${j}"`)}</div>`).join('')}${boton('agregar-boleto', 'Añadir boleto', `data-grupo="${i}"`)}${boton('quitar-grupo', 'Retirar servicio e itinerario', `data-grupo="${i}"`)}</details>`).join('')}${tipo === 'boleto_aereo' ? boton('agregar-grupo', 'Añadir servicio / localizador') : ''}</section>
       ${revision.advertencias.length || revision.errores.length ? `<details class="rvi-avisos" open><summary>Datos pendientes y observaciones (${revision.advertencias.length + revision.errores.length})</summary><ul>${[...revision.errores, ...revision.advertencias].map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}
-      ${c.servicio && tipo === 'boleto_aereo' ? '<p class="csub">El itinerario del documento reemplazará el actual al guardar. Una identidad o un ticket incompatible queda pendiente de corrección.</p>' : ''}
+      ${c.servicio && tipo === 'boleto_aereo' ? `<label class="rvi-check"><input type="checkbox" data-rvi-reemplazar ${reemplazar ? 'checked' : ''}> Confirmo reemplazar el itinerario actual (${c.tramos?.length || 0} tramos) con el revisado. Los boletos existentes no se sobrescriben.</label>` : ''}
       <p class="csub">Precio, moneda y estado comercial se revisan en el formulario inferior: no se extraen del documento. El precio principal no se repite en servicios adicionales; nacen cotizados, sin pagos.</p>
-      <p class="csub">${c.alBorrador ? 'Incorporar solo prepara el borrador; los archivos se adjuntan al crear la reserva.' : 'Guardar creará o actualizará estos registros y adjuntará los archivos.'}</p>
-      <div class="rvi-pie">${boton('reintentar', c.alBorrador ? 'Incorporar correcciones al borrador' : 'Guardar correcciones')}${boton('descartar', 'Descartar importación y volver al formulario')}</div>` : '<p class="rvi-nota">Los datos claros se cargan automáticamente al terminar la lectura. Si falta información o hay contradicciones, podrás corregirlas aquí. Desde un lead, la reserva se crea al finalizar el asistente.</p>'}</fieldset>
+      <label class="rvi-check"><input type="checkbox" data-rvi-aceptado ${aceptado ? 'checked' : ''}> Revisé los datos, las relaciones de los boletos y los avisos. ${c.alBorrador ? 'Incorporar solo prepara el borrador; los archivos se adjuntan al crear la reserva.' : 'Guardar creará o actualizará estos registros y adjuntará los archivos.'}</label>
+      <div class="rvi-pie">${c.alBorrador ? boton('reintentar', 'Incorporar al borrador') : ''}${boton('descartar', 'Descartar importación y volver al formulario')}</div>` : '<p class="rvi-nota">Primero leerás y corregirás los datos. No se crea ningún pasajero, boleto ni servicio hasta que confirmes Guardar.</p>'}</fieldset>
       <p class="rvi-mensaje" data-rvi-mensaje role="status" aria-live="polite"></p>${pendiente ? boton('reintentar', 'Reintentar el mismo guardado de forma segura') : ''}`;
     c.alActivar?.(!!datos);
   }
@@ -93,7 +93,7 @@ export function crearImportacionServicio(c) {
   }
   function limpiar() {
     aborto.abort(); aborto = new AbortController(); urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
-    datos = null; archivos = []; conflictos = []; seleccion = {}; precios = {}; reemplazar = false; invalidos.clear(); operacionId = crypto.randomUUID(); bloqueo(''); render();
+    datos = null; archivos = []; conflictos = []; seleccion = {}; precios = {}; aceptado = false; reemplazar = false; invalidos.clear(); operacionId = crypto.randomUUID(); bloqueo(''); render();
   }
   async function leer(files) {
     if (ocupado || pendiente || !files.length) return;
@@ -119,30 +119,9 @@ export function crearImportacionServicio(c) {
       }
       else { datos = r.datos; marcarConflictos(base); }
       for (const a of nuevos) { a.url = URL.createObjectURL(a.file); urls.add(a.url); a.grupo = datos.grupos[0]?.clave || 'servicio'; archivos.push(a); }
-      cambiar(); render(); mensaje('Lectura completa. Comprobando los datos para cargarlos…');
-      if (vigente()) { bloqueo(''); if (await autoGuardar()) return; }
+      cambiar(); render(); mensaje('Lectura completa. Revisa y corrige antes de guardar.');
     } catch (e) { if (vigente() && !aborto.signal.aborted) mensaje(e.message || 'No se pudo leer el documento; no se guardó nada.', true); }
     finally { if (vigente()) bloqueo(''); }
-  }
-  const AVISO_GRAVE = /revisar nombre y apellido|sin tramos|ruta incompleta|documento repetido|identidad|documento ausente|falta aerolínea o localizador|no tiene fecha\/hora completa|llegada local anterior|número de ticket incompleto|baja confianza|ambigu|ilegible/i;
-  async function autoGuardar() {
-    if (!datos || ocupado || pendiente || invalidos.size) return false;
-    const rev = revisarImportacion(datos);
-    const pendientes = conflictos.filter(x => !x.resuelto);
-    const motivo = !rev.valido ? 'Hay datos inválidos o documentos que se contradicen.' : rev.advertencias.find(a => AVISO_GRAVE.test(a));
-    if (motivo || pendientes.some(x => x.origen !== 'actual' || !x.path || x.valores.length !== 2)) { mensaje(`${motivo || 'Hay diferencias sin una fuente inequívoca.'} Corrige los datos; no se guardó automáticamente.`, true); return false; }
-    const localizador = String(c.servicio?.localizador || '').trim().toUpperCase();
-    if (localizador && datos.grupos.some(g => g.localizador && g.localizador.trim().toUpperCase() !== localizador)) { mensaje('El localizador del documento es de otra reserva aérea. Revisa el servicio elegido; no se guardó automáticamente.', true); return false; }
-    const previo = reemplazar;
-    for (const [i, x] of conflictos.entries()) if (!x.resuelto) resolver(i, '1');
-    const comprobacion = revisarImportacion(datos);
-    if (!comprobacion.valido) { mensaje('Los datos del documento necesitan corrección. No se guardó automáticamente.', true); return false; }
-    const avisos = [...comprobacion.advertencias, ...pendientes.map(x => `Conflicto en ${x.campo}: se usó el dato explícito del documento.`)];
-    datos.servicio.detalle.cargado_por_ia = { fecha: new Date().toISOString(), automatico: true, avisos };
-    const ok = await guardar();
-    if (ok) mensaje(`Cargado por IA${avisos.length ? ` con ${avisos.length} aviso(s)` : ''}. Revisa y edita si algo no cuadra.`);
-    else { reemplazar = previo; if (!pendiente) delete datos?.servicio?.detalle?.cargado_por_ia; }
-    return ok;
   }
   async function guardar() {
     if (!datos) return false;
@@ -150,9 +129,9 @@ export function crearImportacionServicio(c) {
     const reintento = !!pendiente;
     try {
       if (!pendiente) {
+        if (!aceptado) throw new Error('Marca que revisaste los datos y los avisos antes de guardar.');
         if (invalidos.size || conflictos.some(x => !x.resuelto)) throw new Error('Resuelve las diferencias y corrige los campos marcados antes de guardar.');
-        reemplazar = !!(c.servicio && tipo === 'boleto_aereo' && datos.grupos.some(g => g.tramos.length));
-        const preparar = documentos => prepararGuardadoImportacion({ datos, base: c.leerBase(), reservaId: c.reservaId, servicio: c.servicio, operacionId, documentos, seleccion, precios, aerolineas: c.aerolineas?.() || [], reemplazarTramos: reemplazar, pasajerosActuales: c.pasajeros || [], boletosActuales: c.boletos || [] });
+        const preparar = documentos => prepararGuardadoImportacion({ datos, base: c.leerBase(), reservaId: c.reservaId, servicio: c.servicio, operacionId, documentos, seleccion, precios, aerolineas: c.aerolineas?.() || [], reemplazarTramos: reemplazar });
         if (c.alBorrador) {
           const lote = preparar([]);
           bloqueo('guardando');
@@ -211,6 +190,8 @@ export function crearImportacionServicio(c) {
       seleccion[clave] = valor; cambiar();
     }
     else if (t.hasAttribute('data-rvi-doc')) { archivos[Number(t.dataset.rviDoc)].grupo = t.value; cambiar(); }
+    else if (t.hasAttribute('data-rvi-reemplazar')) { reemplazar = t.checked; cambiar(); }
+    else if (t.hasAttribute('data-rvi-aceptado')) aceptado = t.checked;
   }, { signal: vida.signal });
   c.root.addEventListener('keydown', e => { if (e.target.matches('.rvi-archivo') && ['Enter', ' '].includes(e.key)) { e.preventDefault(); e.target.querySelector('input').click(); } }, { signal: vida.signal });
   c.root.addEventListener('dragover', e => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); }, { signal: vida.signal });
