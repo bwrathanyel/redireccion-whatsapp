@@ -11452,21 +11452,60 @@ let CONV_CACHE = null, CONV_HIST = null, ACTIVIDAD_CACHE = null, CORREO_LEAD_CAC
    es inocuo mientras allow-scripts siga ausente -- NO sumar ambos flags. */
 const CORREOS_DATA = new Map();
 // La letra del remitente (Times de Outlook, <font face>) se reemplaza por la del CRM; colores y tamaños quedan.
-const CORREO_IFRAME_BASE = '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff}body{margin:0;padding:14px 18px;color:#202124;font:14px/1.6 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;overflow-wrap:break-word}body :not(pre,code,kbd,tt,samp){font-family:inherit!important}p{margin:0 0 10px}img{max-width:100%!important;height:auto!important}table{max-width:100%}a{color:#1a73e8}pre{white-space:pre-wrap}blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #dadce0;color:#5f6368}</style>';
+// Inter (la del CRM) se carga dentro del iframe: un srcdoc no hereda las @font-face del padre.
+const CORREO_IFRAME_BASE = '<base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"><style>html{background:#fff;-webkit-text-size-adjust:100%}body{margin:0;padding:18px 22px;color:#1f2430;font:14.5px/1.7 Inter,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-feature-settings:"cv11","ss03";letter-spacing:-.003em;overflow-wrap:break-word;-webkit-font-smoothing:antialiased}body :not(pre,code,kbd,tt,samp){font-family:inherit!important}p{margin:0 0 10px}b,strong{font-weight:600}img{max-width:100%!important;height:auto!important}img.cid-cargando{min-height:60px;min-width:120px;border-radius:8px;background:linear-gradient(90deg,rgba(128,128,128,.08),rgba(128,128,128,.18),rgba(128,128,128,.08));background-size:200% 100%;animation:cid 1.2s linear infinite}@keyframes cid{to{background-position:-200% 0}}table{max-width:100%}a[href]{color:#1a73e8;text-decoration-thickness:1px;text-underline-offset:2px}a:not([href]){color:inherit!important;text-decoration:none}pre{white-space:pre-wrap}blockquote{margin:8px 0;padding-left:12px;border-left:3px solid #dadce0;color:#5f6368}hr{border:0;border-top:1px solid #e3e6ec}</style>';
 window.ajustarIframeCorreo = (f) => {
   try {
     const d = f.contentDocument;
     const medir = () => { f.style.height = Math.max(80, Math.ceil(d.documentElement.getBoundingClientRect().height)) + 'px'; };
     medir();
-    // Imágenes incrustadas (cid:) o caídas: fuera, en vez del ícono de imagen rota.
+    // Imágenes incrustadas (cid:) se traen del adjunto; las que no aparecen o caídas: fuera.
+    const correo = CORREOS_DATA.get(Number(f.dataset.correo));
     d.querySelectorAll('img').forEach(i => {
-      if (/^cid:/i.test(i.getAttribute('src') || '') || (i.complete && !i.naturalWidth)) { i.remove(); return; }
+      const src = i.getAttribute('src') || '';
+      if (/^cid:/i.test(src)) {
+        const adj = adjuntoDeCid(correo, src);
+        if (!adj) { i.remove(); return; }
+        i.classList.add('cid-cargando'); i.removeAttribute('src');
+        blobAdjuntoCorreo(correo.id, adj.id).then(u => { i.classList.remove('cid-cargando'); if (u) { i.addEventListener('load', medir, { once: true }); i.src = u; } else { i.remove(); } medir(); });
+        return;
+      }
+      if (i.complete && !i.naturalWidth) { i.remove(); return; }
       if (!i.complete) { i.addEventListener('load', medir, { once: true }); i.addEventListener('error', () => { i.remove(); medir(); }, { once: true }); }
     });
     medir();
     if (window.ResizeObserver) new ResizeObserver(medir).observe(d.documentElement);
   } catch { /* sin acceso al documento: queda el alto base */ }
 };
+// gmail_correo_adjuntos no guarda el Content-ID: Outlook lo arma «image001.png@01DD…» (= filename);
+// si no calza por nombre y hay tantas imágenes cid como adjuntos de imagen, se empareja por orden.
+const cidsDeHtml = html => [...(html || '').matchAll(/src\s*=\s*["']?cid:([^"'\s>]+)/gi)].map(m => m[1].toLowerCase());
+function adjuntoDeCid(correo, src) {
+  const adjs = correo?.gmail_correo_adjuntos || [];
+  const cid = src.slice(4).toLowerCase(), base = cid.split('@')[0];
+  const porNombre = adjs.find(a => (a.filename || '').toLowerCase() === base);
+  if (porNombre) return porNombre;
+  const imgs = adjs.filter(a => /^image\//i.test(a.mime_type || '')), cids = [...new Set(cidsDeHtml(correo?.cuerpo_html))];
+  return imgs.length === cids.length ? imgs[cids.indexOf(cid)] : null;
+}
+const esAdjuntoEnLinea = (correo, a) => {
+  if (!/^image\//i.test(a.mime_type || '')) return false;
+  const cids = cidsDeHtml(correo?.cuerpo_html);
+  return cids.length > 0 && cids.some(c => adjuntoDeCid(correo, 'cid:' + c)?.id === a.id);
+};
+const CORREO_BLOBS = new Map();
+function blobAdjuntoCorreo(correoId, adjuntoId) {
+  const k = correoId + ':' + adjuntoId;
+  if (!CORREO_BLOBS.has(k)) CORREO_BLOBS.set(k, (async () => {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session?.access_token) return null;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/gmail-adjunto-descargar?correo_id=${correoId}&adjunto_id=${adjuntoId}`, { headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_KEY } });
+      return res.ok ? URL.createObjectURL(await res.blob()) : null;
+    } catch { return null; }
+  })().then(u => { if (!u) CORREO_BLOBS.delete(k); return u; }));
+  return CORREO_BLOBS.get(k);
+}
 function textoConEnlaces(s) {
   return esc(s).replace(/https?:\/\/(?:(?!&quot;|&gt;|&#39;)[^\s<])+/g, u => {
     const fin = (u.match(/[.,;:!?)]+$/) || [''])[0];
@@ -11476,7 +11515,7 @@ function textoConEnlaces(s) {
 }
 // Tema oscuro: un correo de texto (sin fondos de color ni imágenes de fondo) se pinta con los
 // colores del CRM, como hace Gmail; uno diseñado (boletín, factura) queda sobre blanco.
-const CORREO_IFRAME_OSCURO = '<meta name="color-scheme" content="dark"><style>html,body{background:transparent!important;color-scheme:dark}body,body *{color:#d7dbe6!important;background-color:transparent!important;border-color:#2c3550!important}body a,body a *{color:#8ab4f8!important}blockquote{border-left-color:#3a4566!important}</style>';
+const CORREO_IFRAME_OSCURO = '<meta name="color-scheme" content="dark"><style>html,body{background:transparent!important;color-scheme:dark}body{padding:2px 2px 6px!important}body,body *{color:#d3d8e2!important;background-color:transparent!important;border-color:#2c3550!important}body a[href],body a[href] *{color:#8ab4f8!important}b,strong,h1,h2,h3,h4{color:#f1f3f8!important}blockquote{border-left-color:#3a4566!important}hr{border-top-color:#2c3550!important}</style>';
 const FONDOS_NEUTROS = new Set(['#fff', '#ffffff', 'white', 'transparent', 'none', 'inherit', 'initial', 'window']);
 function correoEsDisenado(html) {
   if (/background-image|background\s*:\s*url|background\s*=/i.test(html)) return true;
@@ -11485,7 +11524,7 @@ function correoEsDisenado(html) {
 function renderCuerpoCorreo(correo) {
   if (correo.cuerpo_html) {
     const oscuro = document.documentElement.dataset.theme !== 'light' && !correoEsDisenado(correo.cuerpo_html);
-    return `<iframe class="correo-msg-iframe${oscuro ? ' oscuro' : ''}" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload="ajustarIframeCorreo(this)" srcdoc="${esc(CORREO_IFRAME_BASE + correo.cuerpo_html + (oscuro ? CORREO_IFRAME_OSCURO : ''))}"></iframe>`;
+    return `<iframe class="correo-msg-iframe${oscuro ? ' oscuro' : ''}" data-correo="${Number(correo.id) || ''}" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload="ajustarIframeCorreo(this)" srcdoc="${esc(CORREO_IFRAME_BASE + correo.cuerpo_html + (oscuro ? CORREO_IFRAME_OSCURO : ''))}"></iframe>`;
   }
   return `<div class="correo-msg-texto">${textoConEnlaces(correo.cuerpo_texto || '(sin contenido)')}</div>`;
 }
@@ -11662,11 +11701,24 @@ function fmtTamano(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+const iconoAdjunto = a => {
+  const m = (a.mime_type || '').toLowerCase(), n = (a.filename || '').toLowerCase();
+  if (m.includes('pdf') || n.endsWith('.pdf')) return ['fa-file-pdf', 'pdf'];
+  if (m.startsWith('image/')) return ['fa-file-image', 'img'];
+  if (/sheet|excel|csv/.test(m) || /\.(xlsx?|csv)$/.test(n)) return ['fa-file-excel', 'xls'];
+  if (/word|document/.test(m) || /\.docx?$/.test(n)) return ['fa-file-word', 'doc'];
+  if (/zip|rar|7z/.test(m)) return ['fa-file-zipper', 'zip'];
+  return ['fa-file', 'otro'];
+};
+// Las imágenes pegadas en el cuerpo (cid:) ya se ven dentro del correo: como Gmail, no se repiten como adjunto.
 function renderAdjuntosCorreo(correoId, adjuntos) {
-  return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${adjuntos.map(a => `
-    <button type="button" onclick="descargarAdjuntoCorreo(${correoId},${a.id},'${esc(a.filename || 'adjunto').replace(/'/g, '')}')" style="display:flex;align-items:center;gap:5px;background:rgba(var(--ink-rgb),.04);border:1px solid var(--line2,#2a3150);border-radius:8px;padding:5px 10px;font-size:9.5px;color:var(--txt);cursor:pointer">
-      <i class="fas fa-paperclip"></i> ${esc(a.filename || 'adjunto')} <span class="muted">${fmtTamano(a.tamano_bytes)}</span>
-    </button>`).join('')}</div>`;
+  const correo = CORREOS_DATA.get(Number(correoId));
+  const visibles = adjuntos.filter(a => !esAdjuntoEnLinea(correo, a));
+  if (!visibles.length) return '';
+  return `<div class="correo-adjs">${visibles.map(a => { const [ico, tipo] = iconoAdjunto(a); return `
+    <button type="button" class="correo-adj" data-tipo="${tipo}" title="Descargar ${esc(a.filename || 'adjunto')}" onclick="descargarAdjuntoCorreo(${correoId},${a.id},'${esc(a.filename || 'adjunto').replace(/'/g, '')}')">
+      <i class="fas ${ico}"></i><span class="correo-adj-n">${esc(a.filename || 'adjunto')}</span><span class="correo-adj-t">${fmtTamano(a.tamano_bytes)}</span><i class="fas fa-download correo-adj-d"></i>
+    </button>`; }).join('')}</div>`;
 }
 // Streaming directo desde gmail-adjunto-descargar -- nunca se cachea en
 // Storage (ver migración de gmail_correo_adjuntos). El JWT de sesión viaja a
