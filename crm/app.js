@@ -287,6 +287,22 @@ function heredarReservaLead(lead) {
 }
 // Navegar a otra sección solo cuando el drawer terminó de cerrar (su popstate):
 // si se navega antes, el history.back del drawer deshace la navegación.
+// «Ver reserva» de la tarjeta (2026-11-24): lleva a Reservas con la reserva principal abierta y la
+// ficha brilla 2 s. Sin reserva activa sigue abriendo la sección Reservas de la ficha del lead.
+async function verReservaDeLead(l) {
+  const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
+  const rs = (!error && data?.ok ? data.reservas || [] : []).filter(r => r.activo);
+  const r = rs.find(x => x.principal) || rs[0];
+  if (!r) { openDrawer(l, { seccion: 'reservas' }); return; }
+  trasCerrarDrawer(async () => {
+    activateSection('postventa');
+    await abrirReservaDeLead(r.id, r.codigo);
+    const d = document.getElementById('drawer');
+    if (!d?.classList.contains('open')) return;
+    d.classList.remove('rv-brillo'); void d.offsetWidth; d.classList.add('rv-brillo');
+    setTimeout(() => d.classList.remove('rv-brillo'), 2000);
+  });
+}
 function trasCerrarDrawer(fn) {
   if (!document.getElementById('drawer')?.classList.contains('open')) { fn(); return; }
   let hecho = false;
@@ -300,7 +316,7 @@ function ejecutarAccionLead(l, key) {
     case 'atender': return atenderInboxLead(l);
     case 'cotizar': return trasCerrarDrawer(() => cbDesdeLead(l));
     case 'reserva': return abrirEnviarFacturacionSheet(l);
-    case 'reservas': return openDrawer(l, { seccion: 'reservas' });
+    case 'reservas': return verReservaDeLead(l);
     case 'ficha': return openDrawer(l);
   }
 }

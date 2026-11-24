@@ -1018,6 +1018,10 @@ td.td-wa .wa-msg{margin-left:4px}
 .drawer-bg.open{opacity:1;pointer-events:auto}
 .drawer{position:fixed;top:0;right:0;height:100vh;width:410px;max-width:92vw;background:var(--bg2);border-left:1px solid var(--line2);transform:translateX(100%);transition:transform .3s cubic-bezier(.3,1,.4,1);z-index:61;padding:24px;overflow-y:auto}
 .drawer.open{transform:translateX(0)}
+/* «Ver reserva» desde la tarjeta del lead: la ficha de la reserva brilla 2 s al abrir. */
+.drawer.rv-brillo{animation:rvBrillo 2s ease-out}
+@keyframes rvBrillo{0%,55%{box-shadow:0 0 0 2px var(--accent),0 0 32px 6px rgba(var(--accent-rgb),.55),inset 0 0 0 2px var(--accent)}100%{box-shadow:0 0 0 0 transparent,0 0 0 0 transparent,inset 0 0 0 0 transparent}}
+@media (prefers-reduced-motion:reduce){.drawer.rv-brillo{animation:none;box-shadow:inset 0 0 0 2px var(--accent)}}
 .drawer .dclose{position:absolute;top:18px;right:18px;width:36px;height:36px;border-radius:9px;border:1px solid var(--line2);background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
 .drawer .dclose:hover{color:var(--txt);border-color:var(--txt)}
 /* Fase 3 (registro de lead con pestañas). Al principio solo mobile; el
