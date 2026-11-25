@@ -736,6 +736,7 @@ export function crearBoletosEmitidos(c) {
       <datalist id="be-aeropuertos"></datalist><datalist id="be-equipajes"><option value="23K">1 maleta 23 kg</option><option value="1P">1 pieza</option><option value="2P">2 piezas</option><option value="46K">46 kg</option><option value="0P">Sin equipaje</option></datalist>
     </div>`;
     raiz.addEventListener('click', alClic);
+    raiz.addEventListener('keydown', alTecla);
     raiz.addEventListener('input', alEscribir);
     raiz.addEventListener('change', alEscribir);
     const drop = $('#be-drop');
@@ -990,12 +991,16 @@ export function crearBoletosEmitidos(c) {
   }
 
   async function alClic(e) {
-    const b = e.target.closest('[data-acc],[data-vista],[data-modo]');
+    const b = e.target.closest('[data-acc],[data-vista],[data-modo],[data-dia],[data-cal-mes]');
     if (!b || !raiz.contains(b)) return;
+    if (b.dataset.dia !== undefined && cal) { elegirFecha(b.dataset.dia); return; }
+    if (b.dataset.calMes !== undefined && cal) { cal.mes = mesSum(cal.mes, +b.dataset.calMes); pintarCal(false); return; }
     if (b.dataset.vista) { mostrarVista(b.dataset.vista); return; }
     if (b.dataset.modo) { cambiarModo(b.dataset.modo); return; }
     const acc = b.dataset.acc, i = +b.closest('.be-item')?.dataset.i;
-    if (acc === 'tramo') { d.tramos.push(tramoVacio(d.tramos[d.tramos.length - 1])); pintarTramos(); pintarPasajeros(); pintarPrevia(); }
+    if (acc === 'fecha') { if (cal?.i === i) cerrarCal(true); else abrirCal(i); }
+    else if (acc === 'cal-cerrar') cerrarCal(true);
+    else if (acc === 'tramo') { d.tramos.push(tramoVacio(d.tramos[d.tramos.length - 1])); pintarTramos(); pintarPasajeros(); pintarPrevia(); }
     else if (acc === 'pax') { d.pasajeros.push(paxVacio()); pintarPasajeros(); pintarPrevia(); }
     else if (acc === 'quitar-tramo') { d.tramos.splice(i, 1); pintarTramos(); pintarPasajeros(); pintarPrevia(); }
     else if (acc === 'quitar-pax') { d.pasajeros.splice(i, 1); pintarPasajeros(); pintarPrevia(); }
