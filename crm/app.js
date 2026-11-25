@@ -4103,7 +4103,7 @@ function pintarKPIs(box, cards) {
 function renderKPIs() {
   const thisMonth = new Date().toISOString().slice(0, 7);
   const cards = [
-    { t: 'Leads totales', v: fmt(STATS.total), d: 'Histórico 2022–2026', i: 'fa-users', c: 'var(--accent)', go: () => drillClear() },
+    { t: 'Leads totales', v: fmt(STATS.total), d: STATS.estadisticas_desde ? 'Desde el ' + fechaCorta(STATS.estadisticas_desde) : 'Histórico 2022–2026', i: 'fa-users', c: 'var(--accent)', go: () => drillClear() },
     { t: 'Leads en ' + thisMonth.slice(0, 4), v: fmt(STATS.anio_actual), d: comparativoAnio(), i: 'fa-calendar-day', c: 'var(--blue)', go: () => drillAnio(thisMonth.slice(0, 4)) },
     { t: 'Nuevos este mes', v: fmt(STATS.mes_actual), d: fullMonth(thisMonth), i: 'fa-bolt', c: 'var(--green)', go: () => drillMonth(thisMonth) },
     { t: 'Por atender', v: fmt(STATS.por_atender), d: 'Requieren primer contacto', i: 'fa-bell', c: 'var(--amber)', go: () => drillEstado('POR ATENDER') },
@@ -4225,7 +4225,7 @@ function renderCanal() {
   const otros = box.querySelector('.dbx-fila:disabled'); if (otros && resto.length) otros.title = filas[filas.length - 1].titulo;
   box.onclick = e => { const b = e.target.closest('.dbx-fila[data-k]'); if (!b) return; const k = b.dataset.k; chartPreview('canal', k, k, 'fa-share-nodes', (g.find(x => x.key === k) || {}).total || 0); };
   const res = document.getElementById('dbCanalResumen');
-  if (res) res.innerHTML = `<b>${fmt(tot)}</b> leads históricos · <b>${esc(filas[0].label)}</b> trae ${pctDbx(filas[0].total, tot)}`;
+  if (res) res.innerHTML = `<b>${fmt(tot)}</b> leads ${STATS.estadisticas_desde ? 'desde el ' + fechaCorta(STATS.estadisticas_desde) : 'históricos'} · <b>${esc(filas[0].label)}</b> trae ${pctDbx(filas[0].total, tot)}`;
 }
 let destDatos = null;
 function renderDest(datosPeriodo) {
@@ -4281,6 +4281,14 @@ async function cargarConversionDestino(desde, hasta) {
     return `<div class="dc-row"><span class="dn" title="${esc(destino)}">${esc(destino)}</span><div class="track"><div class="fill" style="width:${Math.min(v.pct, 100)}%;background:${c}"></div></div><span class="dv">${v.pct}%</span></div>`;
   }).join('');
 }
+// Los Atendidos archivados (leads.archivado_at) ya no vienen en by_estado: se nombran aparte con sus fechas reales.
+function notaPipeArchivo() {
+  const a = STATS.archivo, desde = STATS.estadisticas_desde;
+  if (!desde && !a?.total) return '';
+  const rango = a?.creados_desde ? `, creados del ${fechaCorta(a.creados_desde)} al ${fechaCorta(a.creados_hasta)}` : '';
+  const hist = a?.total ? ` Fuera del embudo: <b>${fmt(a.total)}</b> Atendidos en histórico (${a.dias_sin_movimiento} días sin movimiento${a.ultimo_movimiento_hasta ? `; último movimiento hasta el ${fechaCorta(a.ultimo_movimiento_hasta)}` : ''}${rango}).` : '';
+  return `<div class="pipe-nota"><i class="fas fa-box-archive"></i><span>${desde ? `Leads desde el <b>${fechaCorta(desde)}</b>.` : ''}${hist}</span></div>`;
+}
 function renderPipe(id) {
   const be = STATS.by_estado || {}; const shown = ESTADOS.filter(k => (be[k] || 0) > 0 || ['POR ATENDER', 'PAGO REALIZADO', 'VENTA COMPLETA'].includes(k));
   const box = document.getElementById(id); if (!box) return;
@@ -4289,7 +4297,7 @@ function renderPipe(id) {
   box.innerHTML = shown.map(k => {
     const v = be[k] || 0, w = Math.max(Math.sqrt(v / max) * 100, 2);
     return `<button type="button" class="pstep${k === sel ? ' on' : ''}" data-est="${k}" style="--c:${colorTema(ESTADO_COLORS[k] || '#5f677f')}" aria-label="${niceEstado(k)}: ${fmt(v)} leads"><span class="pl">${niceEstado(k)}</span><span class="pbar"><span class="pfill" style="display:block;width:${w}%"></span></span><span class="pv">${fmt(v)}</span><span class="pp">${pctDbx(v, tot)}</span></button>`;
-  }).join('');
+  }).join('') + notaPipeArchivo();
   document.querySelectorAll('#' + id + ' .pstep').forEach(el => el.onclick = () => { const k = el.dataset.est; chartPreview('estado', k, niceEstado(k), 'fa-diagram-project', be[k] || 0); });
 }
 
