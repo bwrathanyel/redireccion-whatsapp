@@ -14,6 +14,7 @@ import { crearMetodosPago } from './metodos-pago.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearFinanzasVenta } from './finanzas-venta.js';
+import { crearPanelUniversal } from './panel-universal.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearCalendarioRango } from './cotizaciones-calendario.js';
 import { crearImportacionServicio } from './reservas-importacion.js';
@@ -4429,24 +4430,53 @@ const finanzasPorPagar = () => FINANZAS_POR_PAGAR ||= crearFinanzasPorPagar({ sb
   raiz: document.getElementById('finanzas-por-pagar-root'), hoja: document.getElementById('pp-sheet-root'),
   abrirSheet: openSheet, cerrarSheet: closeSheet, hoy: hoyCaracas, uid: () => MI_USUARIO_ID,
   irTarifario: id => window.abrirProductoTarifario(id),
-  verVenta: (reservaId, codigo) => { const f = FACT_VENTAS_CACHE.find(x => Number(x.reserva_id) === reservaId); f ? finanzasVenta().abrir(f) : abrirReservaDeLead(reservaId, codigo); },
-  alCambiar: () => loadCuentasPorPagar(true).then(() => { if (FACT_VENTAS_CACHE.length) loadFacturas().then(() => FINANZAS_VENTA?.refrescar()); }),
+  verVenta: (reservaId, codigo) => { const f = FACT_VENTAS_CACHE.find(x => Number(x.reserva_id) === reservaId); f ? panelU().nuevaVenta(f) : abrirReservaDeLead(reservaId, codigo); },
+  alCambiar: () => loadCuentasPorPagar(true).then(() => FACT_VENTAS_CACHE.length ? loadFacturas() : null).then(() => PANEL_U?.refrescar()),
   leerComprobante: async file => { const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } }); return error || !data?.ok ? null : data.datos; } });
 // Drawer de una venta (Finanzas › Ventas): cobro al cliente + pago a proveedores; «Pagar» usa la hoja de arriba.
 let FINANZAS_VENTA = null;
 const finanzasVenta = () => FINANZAS_VENTA ||= crearFinanzasVenta({ sb, esc, money, rol: ROL, error: errToast,
-  drawer: () => document.getElementById('drawerContent'),
+  drawer: () => panelU().cuerpo(),
   abierto: () => document.getElementById('drawer')?.classList.contains('open'),
-  abrirDrawer: () => { const d = document.getElementById('drawer'), ya = d.classList.contains('open'); d.classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!ya) navPush({ type: 'drawer' }); },
+  abrirDrawer: () => abrirDrawerPanel(),
   viaje: (ini, fin) => ini ? pvViaje({ fecha_viaje_inicio: ini, fecha_viaje_fin: fin }) : null,
   buscar: id => FACT_VENTAS_CACHE.find(f => f.id === id),
   pagar: (proveedorId, cxpIds) => finanzasPorPagar().abrirPago({ proveedorId, preCxp: cxpIds }),
-  irCuenta: id => trasCerrarDrawer(() => ventaIrACxp(id)),
+  irCuenta: id => panelU().proveedor(id),
+  verProveedor: (id, nombre) => panelU().proveedor(id, nombre),
+  verPago: (provId, pagoId, nombre) => panelU().pago(provId, pagoId, nombre),
+  verCobro: (a, f) => panelU().cobro(a, f),
+  verFactura: f => panelU().factura(f),
+  verEmpresa: id => panelU().empresa(id),
+  empresaDe: reservaId => panelU().empresaDeReserva(reservaId),
   verReserva: (id, codigo) => abrirReservaDeLead(id, codigo),
   verCliente: id => trasCerrarDrawer(() => abrirClienteDesdeFacturacion(id)),
   pdf: id => exportarVentaPdf(id),
   anular: id => anularFacturaUI(id) });
-window.abrirVentaDrawer = id => { const f = FACT_VENTAS_CACHE.find(x => x.id === id); if (f) finanzasVenta().abrir(f); };
+function abrirDrawerPanel() { const d = document.getElementById('drawer'), ya = d.classList.contains('open'); d.classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!ya) navPush({ type: 'drawer' }); }
+// Panel lateral universal: la venta es la primera hoja; desde ahí proveedor, pago, cobro, factura y empresa.
+let PANEL_U = null;
+const panelU = () => PANEL_U ||= crearPanelUniversal({ sb, esc, money, rol: ROL, error: errToast, oficina: () => esOficina(),
+  drawer: () => document.getElementById('drawerContent'),
+  abierto: () => document.getElementById('drawer')?.classList.contains('open'),
+  abrirDrawer: abrirDrawerPanel, cerrar: () => window.closeDrawer(),
+  pintarVenta: f => finanzasVenta().abrir(f),
+  ventaPorReserva: id => FACT_VENTAS_CACHE.find(f => Number(f.reserva_id) === id),
+  ventaPorCodigo: cod => cod ? FACT_VENTAS_CACHE.find(f => f.reserva_codigo === cod) : null,
+  nombreProveedor: id => CXP_CACHE.find(x => x.proveedor_id === id)?.proveedor,
+  pagar: (proveedorId, cxpIds) => finanzasPorPagar().abrirPago({ proveedorId, preCxp: cxpIds }),
+  irCuenta: id => trasCerrarDrawer(() => ventaIrACxp(id)),
+  verReserva: (id, codigo) => abrirReservaDeLead(id, codigo),
+  verComprobante: async (path, btn) => {
+    if (btn) btn.disabled = true;
+    const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(path, 300);
+    if (btn) btn.disabled = false;
+    if (error || !data?.signedUrl) { errToast('No se pudo abrir el comprobante'); return; }
+    if (esRutaPdf(path)) verPdf(data.signedUrl, 'Comprobante.pdf'); else window.open(data.signedUrl, '_blank', 'noopener');
+  },
+  pdf: id => exportarVentaPdf(id),
+  anular: id => anularFacturaUI(id) });
+window.abrirVentaDrawer = id => { const f = FACT_VENTAS_CACHE.find(x => x.id === id); if (f) panelU().nuevaVenta(f); };
 let METODOS_PAGO = null;
 const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
@@ -40148,7 +40178,7 @@ window.addEventListener('popstate', () => {
   if (navPendienteMovil) { navQuitar(navPendienteMovil); navPendienteMovil = null; navProcesarMovil(); return; }
   if (!NAV_STACK.length) return; // pantalla raíz: se deja que el SO cierre la PWA
   const top = NAV_STACK.pop();
-  if (top.type === 'drawer') window.closeDrawer(true);
+  if (top.type === 'drawer') { if (PANEL_U?.atras()) navPush({ type: 'drawer' }); else window.closeDrawer(true); }
   else if (top.type === 'lightbox') closeLightbox(true);
   else if (top.type === 'tg-mapa') tgMapaCerrar(true);
   else if (top.type === 'chat-doc') chatDocCerrar(true);

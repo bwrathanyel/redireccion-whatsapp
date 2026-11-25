@@ -7713,6 +7713,39 @@ button.vt-pill:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
 .vd-pie{display:flex;flex-wrap:wrap;gap:7px;padding-top:12px;border-top:1px solid var(--line)}
 .vd-anular{margin-left:auto}
 .pp-venta{font:inherit;font-weight:700;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+/* Panel lateral universal (panel-universal.js, 2026-11-25): migas + Volver + Cerrar, misma hoja para todo */
+@media(min-width:761px){.drawer:has(.pl){width:900px;height:calc(100vh / var(--zoom));height:calc(100dvh / var(--zoom))}}
+.drawer:has(.pl) .dclose{display:none}
+.pl{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pl .vd-cab{padding-right:0}
+.pl-barra{position:sticky;top:-24px;z-index:3;display:flex;align-items:center;gap:8px;margin:-24px -24px 0;padding:12px 24px;background:var(--bg2);border-bottom:1px solid var(--line)}
+.pl-volver,.pl-cerrar{flex-shrink:0;display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 13px;border-radius:10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;color:var(--txt);background:transparent;border:1px solid var(--line2,var(--line));transition:background var(--dur-rapida)}
+.pl-volver:hover,.pl-cerrar:hover{background:var(--accent-soft)}
+.pl-cerrar{margin-left:auto}
+.pl-migas{flex:1;min-width:0;overflow:hidden}
+.pl-migas ol{display:flex;align-items:center;gap:4px;margin:0;padding:0;list-style:none;min-width:0}
+.pl-migas li{display:flex;align-items:center;gap:4px;min-width:0;font-size:12.5px;color:var(--muted)}
+.pl-migas li+li::before{content:'›';color:var(--muted);font-weight:700}
+.pl-migas li:last-child{flex:1}
+.pl-migas button{font:inherit;color:var(--accent);font-weight:600;background:none;border:0;padding:4px 2px;cursor:pointer;white-space:nowrap;max-width:16ch;overflow:hidden;text-overflow:ellipsis}
+.pl-migas [aria-current]{font-weight:800;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-hoja{display:flex;flex-direction:column;gap:16px;min-width:0}
+.pl-cab{display:flex;align-items:flex-start;gap:12px}
+.pl-ic{flex-shrink:0;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--accent);background:var(--accent-soft);font-size:16px}
+.pl-hoja .vd-mini>div{display:flex;flex-direction:column;gap:1px}
+.pl-hoja .vd-mini span{font-size:11px;color:var(--muted)}
+.pl-ir{cursor:pointer;border-radius:8px;transition:background var(--dur-rapida)}
+.pl-ir:hover{background:var(--accent-soft)}
+.pl-ir:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.pl-flecha{color:var(--muted);font-size:11px}
+.vd-cab .pp-venta,.vd-sec-cab h4 .pp-venta{font-size:inherit}
+@media(max-width:760px){
+  .pl-barra{top:-22px;margin:-22px -15px 0;padding:20px 15px 10px;border-radius:22px 22px 0 0}
+  .drawer:has(.pl)::before{z-index:4}
+  .drawer:has(.pl){height:90vh;height:90dvh}
+  .pl-volver,.pl-cerrar{min-height:44px;padding:0 11px}
+  .pl-migas button{max-width:10ch}
+}
 @media(max-width:899px){.vd-cols{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){
   .vd-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}

@@ -11,6 +11,8 @@ export function crearFinanzasVenta(c) {
   const barra = (p, col, lbl) => `<div class="lt-barra" style="--c:${col}" role="progressbar" aria-label="${lbl}" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><i style="width:${p}%"></i></div>`;
   const chip = (t, col, ic) => `<span class="vt-chip" style="--c:${col}">${ic ? `<i class="fas ${ic}"></i> ` : ''}${esc(t)}</span>`;
   const btn = (acc, ic, t, extra = '', cls = '') => `<button type="button" class="vt-accion${cls}" data-vd="${acc}"${extra}><i class="fas ${ic}"></i> ${esc(t)}</button>`;
+  // Panel universal (panel-universal.js): filas que abren su propia hoja, solo si app.js pasó el callback.
+  const ir = (cb, acc, extra = '') => c[cb] ? { cls: ' pl-ir', at: ` role="button" tabindex="0" data-vd="${acc}"${extra}` } : { cls: '', at: '' };
 
   function cabecera(f, d) {
     const cli = d?.cliente || f.cliente || 'Venta', viaje = c.viaje(d?.viaje_inicio ?? f.viaje_inicio, d?.viaje_fin ?? f.viaje_fin);
@@ -21,7 +23,7 @@ export function crearFinanzasVenta(c) {
       <span class="vt-avatar" aria-hidden="true" style="--vc:var(--accent)">${esc(ini)}</span>
       <div class="vd-quien">
         <h2 id="vd-titulo">${esc(cli)}</h2>
-        <div class="vt-meta">${f.reserva_codigo ? `<span>${esc(f.reserva_codigo)}</span>` : ''}<span><i class="fas fa-receipt"></i> Factura #${esc(String(f.numero_factura ?? ''))}</span><span><i class="fas fa-user-tie"></i> ${esc(d?.asesor || f.asesor || 'Sin asesor')}</span>${fechas.length ? `<span><i class="fas fa-calendar-days"></i> ${esc([...new Set(fechas)].join(' → '))}</span>` : ''}</div>
+        <div class="vt-meta">${f.reserva_codigo ? `<span>${esc(f.reserva_codigo)}</span>` : ''}${c.verFactura ? `<button type="button" class="pp-venta" data-vd="factura"><i class="fas fa-receipt"></i> Factura #${esc(String(f.numero_factura ?? ''))}</button>` : `<span><i class="fas fa-receipt"></i> Factura #${esc(String(f.numero_factura ?? ''))}</span>`}<span><i class="fas fa-user-tie"></i> ${esc(d?.asesor || f.asesor || 'Sin asesor')}</span>${fechas.length ? `<span><i class="fas fa-calendar-days"></i> ${esc([...new Set(fechas)].join(' → '))}</span>` : ''}</div>
         <div class="vd-chips">${anulada ? chip('Factura anulada', 'var(--muted)', 'fa-ban') : ''}${viaje?.t ? chip(viaje.t, viaje.col, viaje.ic) : ''}</div>
       </div>
     </div>`;
@@ -46,11 +48,12 @@ export function crearFinanzasVenta(c) {
     const abonos = ab.abonos || [], vivos = abonos.filter(a => !a.anulado_en);
     const porConciliar = vivos.filter(a => a.por_conciliar).reduce((s, a) => s + n(a.monto_usd), 0);
     const col = saldo > 0.005 ? 'var(--amber)' : 'var(--green)';
-    const fila = a => {
+    const fila = (a, i) => {
+      const x = ir('verCobro', 'cobro', ` data-i="${i}"`);
       const chips = [a.saldo_anterior ? chip('Inicial reserva', 'var(--blue)') : '', a.anulado_en ? chip('Anulado', 'var(--muted)') : '',
         !a.anulado_en && a.por_conciliar ? chip('Por conciliar', 'var(--amber)') : '', !a.anulado_en && a.estado === 'por_verificar' ? chip('Por verificar', 'var(--amber)') : '',
         !a.anulado_en && a.estado === 'rechazado' ? chip('Rechazado', 'var(--danger)') : ''].join('');
-      return `<li class="vd-fila${a.anulado_en || a.estado === 'rechazado' ? ' vd-tachada' : ''}">
+      return `<li class="vd-fila${a.anulado_en || a.estado === 'rechazado' ? ' vd-tachada' : ''}${x.cls}"${x.at}>
         <div class="vd-fila-txt"><b>${esc(fecha(a.fecha))} · ${esc(a.metodo || 'Abono')}</b><small>${esc(a.referencia || 'sin referencia')}</small>${chips ? `<div class="vd-chips">${chips}</div>` : ''}</div>
         <b class="vd-monto">${money(n(a.monto_usd))}</b></li>`;
     };
@@ -95,14 +98,14 @@ export function crearFinanzasVenta(c) {
           <div class="vd-fila-num"><span>Neto <b>${neto == null ? '—' : money(n(neto))}</b></span>${cxp ? `<span>Pagado <b>${money(n(cxp.abonado))}</b></span><span>Saldo <b class="${n(cxp.saldo) > 0.005 ? 'lt-debe' : ''}">${money(Math.max(0, n(cxp.saldo)))}</b></span>` : ''}</div>
         </li>`;
       }).join('');
-      const pagosHtml = pagos.length ? `<h4>Pagos aplicados</h4><ul class="vd-lista">${pagos.map(p => `<li class="vd-fila">
+      const pagosHtml = pagos.length ? `<h4>Pagos aplicados</h4><ul class="vd-lista">${pagos.map(p => { const x = gr.id && p.pago_id ? ir('verPago', 'pago', ` data-pago="${p.pago_id}" data-prov="${gr.id}"`) : ir('', ''); return `<li class="vd-fila${x.cls}"${x.at}>
           <div class="vd-fila-txt"><b>${esc(fecha(p.fecha))}${p.cuenta ? ' · ' + esc(p.cuenta) : ''}</b><small>${esc(p.referencia || 'sin referencia')}${p.es_historico ? ' · histórico' : ''}</small></div>
           <span class="vd-fila-ic" title="${p.comprobante ? 'Con comprobante' : 'Sin comprobante'}"><i class="fas ${p.comprobante ? 'fa-paperclip' : 'fa-circle-minus'}"></i></span>
-          <b class="vd-monto">${money(n(p.monto_usd))}</b></li>`).join('')}</ul>` : '';
+          <b class="vd-monto">${money(n(p.monto_usd))}</b></li>`; }).join('')}</ul>` : '';
       const acc = gr.id ? `<div class="vd-acc">${saldo > 0.005 ? btn('pagar', 'fa-money-bill-transfer', `Pagar ${money(saldo)}`, ` data-prov="${gr.id}"`, ' vt-pagar') : ''}${btn('cuenta', 'fa-file-invoice-dollar', 'Estado de cuenta', ` data-prov="${gr.id}"`)}</div>`
         : conCosto.length ? `<div class="vt-aviso" style="--c:var(--pink)"><i class="fas fa-triangle-exclamation"></i> Neto sin proveedor: no hay a quién pagarle. ${btn('reserva', 'fa-pen', 'Cargar en la reserva')}</div>` : '';
       return `<div class="vd-prov">
-        <div class="vd-sec-cab"><h4>${esc(gr.nombre || 'Sin proveedor')}</h4>${estado}</div>
+        <div class="vd-sec-cab"><h4>${gr.id && c.verProveedor ? `<button type="button" class="pp-venta" data-vd="proveedor" data-prov="${gr.id}" title="Ver todo lo de este proveedor">${esc(gr.nombre || 'Proveedor')}</button>` : esc(gr.nombre || 'Sin proveedor')}</h4>${estado}</div>
         ${cxps.length ? `${barra(pct(pagado, monto), saldo <= 0.005 ? 'var(--green)' : 'var(--amber)', 'Pagado al proveedor')}
         <div class="vd-mini"><div><span>Neto</span><b>${money(monto)}</b></div><div><span>Pagado</span><b>${money(pagado)}</b></div><div><span>Debemos</span><b class="${saldo > 0.005 ? 'lt-debe' : ''}">${money(saldo)}</b></div></div>` : ''}
         <ul class="vd-lista">${serv}</ul>${pagosHtml}${acc}
@@ -118,6 +121,7 @@ export function crearFinanzasVenta(c) {
     return `<div class="vd-pie">
       ${f.reserva_id ? btn('reserva', 'fa-suitcase', 'Ver reserva') : ''}
       ${f.lead_id ? btn('cliente', 'fa-user', 'Ver cliente') : ''}
+      ${(() => { const e = c.empresaDe?.(f.reserva_id); return e ? btn('empresa', 'fa-building', e.nombre || 'Empresa', ` data-emp="${e.id}"`) : ''; })()}
       ${btn('pdf', 'fa-file-pdf', 'PDF')}
       ${anulable ? btn('anular', 'fa-ban', 'Anular', ' style="--c:var(--danger)"', ' vd-anular') : ''}
     </div>`;
@@ -131,10 +135,10 @@ export function crearFinanzasVenta(c) {
         : d?.ok === false || !d ? `<div class="vt-aviso" style="--c:var(--danger)"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el detalle de esta venta.</div>`
         : `${resumen(d, ab)}<div class="vd-cols">${cobro(d, ab)}${proveedores(d)}</div>`}
       ${pie(f, d)}</div>`;
-    raiz.querySelector('.vd').onclick = e => accion(e.target.closest('[data-vd]'), f, d);
+    raiz.querySelector('.vd').onclick = e => accion(e.target.closest('[data-vd]'), f, d, ab);
   }
 
-  function accion(b, f, d) {
+  function accion(b, f, d, ab) {
     if (!b) return;
     const prov = Number(b.dataset.prov) || null;
     switch (b.dataset.vd) {
@@ -147,6 +151,11 @@ export function crearFinanzasVenta(c) {
       case 'cliente': return c.verCliente(f.lead_id);
       case 'pdf': return c.pdf(f.id);
       case 'anular': return Promise.resolve(c.anular(f.id)).then(refrescar);
+      case 'factura': return c.verFactura?.(f);
+      case 'proveedor': return c.verProveedor?.(prov, grupos(d).find(g => g.id === prov)?.nombre);
+      case 'pago': return c.verPago?.(prov, Number(b.dataset.pago), grupos(d).find(g => g.id === prov)?.nombre);
+      case 'cobro': { const a = ab?.abonos?.[Number(b.dataset.i)]; return a && c.verCobro?.(a, f); }
+      case 'empresa': return c.verEmpresa?.(Number(b.dataset.emp));
     }
   }
 
