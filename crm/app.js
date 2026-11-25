@@ -40135,7 +40135,7 @@ function setupMisNotas() {
 // Clientes Asignados y Llamadas, igual (dueño, 2026-11-23).
 const NAV_ITEMS = [
   { sec: 'dashboard', icon: 'fas fa-chart-pie', label: 'Dashboard', padre: 'grp-inicio', roles: 'nav-asesor-hide' },
-  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
+  { sec: 'mis-ventas', icon: 'fas fa-chart-column', label: 'Mis Ventas', padre: 'grp-inicio', padreAdmin: 'grp-herramientas', roles: '', sub: 'Tus ventas, cobros pendientes y tu rendimiento' },
   { sec: 'informe-diario', icon: 'fas fa-file-lines', label: 'Informe Diario', padre: 'grp-inicio', roles: 'nav-admin-only solo-informe-diario', id: 'nav-informe-diario' },
   { sec: 'leads', icon: 'fas fa-users', label: 'Leads', padre: 'grp-leads', roles: 'nav-administrativo-no' },
   { sec: 'pipeline', icon: 'fas fa-diagram-project', label: 'Pipeline', padre: 'grp-leads', roles: 'nav-administrativo-no' },
@@ -40151,7 +40151,7 @@ const NAV_ITEMS = [
   { sec: 'correo', icon: 'fas fa-envelope', label: 'Correo', roles: '', sub: 'Bandeja de Gmail vinculada a tus leads', badge: 'nav-correo-count', badgeDefault: '0' },
   { sec: 'tarifario', icon: 'fas fa-book-open', label: 'Tarifario', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
   { sec: 'galeria', icon: 'fas fa-images', label: 'Galería', padre: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok' },
-  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
+  { sec: 'stop-sales', icon: 'fas fa-ban', label: 'Stop Sales', padreAdmin: 'grp-tarifario', roles: 'nav-marketing-ok nav-boleteria-ok', sub: 'Disponibilidad de hoteles (BT Travel)' },
   { sec: 'apartamentos', icon: 'fas fa-house-chimney', label: 'Apartamentos', padre: 'grp-tarifario', roles: '', sub: 'Casas y posadas con apartamentos: disponibilidad, unidades y fotos' },
   { sec: 'postventa', icon: 'fas fa-handshake-angle', label: 'Clientes', padre: 'grp-reservas', roles: '', sub: 'Servicios, pasajeros, documentos y cobros' },
   { sec: 'historicos', icon: 'fas fa-box-archive', label: 'Históricos', padre: 'grp-reservas', roles: '', sub: 'Reservas con viaje hasta el 30/09/2026' },
@@ -40162,17 +40162,17 @@ const NAV_ITEMS = [
   { sec: 'bol-solicitudes', icon: 'fas fa-list-ol', label: 'Solicitudes', roles: 'nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo', sub: 'Vuelos que piden los asesores, repartidos entre agentes', badge: 'nav-bol-sol-count', badgeDefault: '0' },
   // Fuera del modo Boletería es la cotización del asesor para su cliente (cbModo 'ventas', 2026-10-15).
   // Ya no es pestaña de Leads (2026-10-17): entrada propia del menú en todos los modos (también la ficha del lead la abre con cbDesdeLead).
-  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
+  { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', padreAdmin: 'grp-herramientas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   // Disponibilidad (2026-11-18, disponibilidad.js): asesor/administrativo piden, admins atienden. Boletería y marketing no.
-  { sec: 'disponibilidad', icon: 'fas fa-hotel', label: 'Disponibilidad', roles: '', sub: 'Pide disponibilidad de hoteles y posadas; un admin consulta al proveedor y responde', badge: 'nav-disp-count', badgeDefault: '0' },
+  { sec: 'disponibilidad', icon: 'fas fa-hotel', label: 'Disponibilidad', padreAdmin: 'grp-tarifario', roles: '', sub: 'Pide disponibilidad de hoteles y posadas; un admin consulta al proveedor y responde', badge: 'nav-disp-count', badgeDefault: '0' },
   // Boletos emitidos (2026-11-04): solo admin y rol boletería (dueño); asesor+boletería y administrativo no.
   { sec: 'boletos-emitidos', icon: 'fas fa-ticket', label: 'Boletos emitidos', roles: 'nav-admin-only nav-administrativo-no nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Recibo de itinerario con el logo de la aerolínea; se llena solo con el PDF del consolidador' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Carga vouchers PDF como venta' },
   { sec: 'balance', icon: 'fas fa-scale-balanced', label: 'Balance', padre: 'grp-cobros', roles: 'nav-admin-only nav-administrativo-no', sub: 'Ventas, costos, gastos y utilidad por periodo' },
   { sec: 'facturacion', icon: 'fas fa-file-invoice-dollar', label: 'Facturación', padre: 'grp-cobros', roles: 'nav-admin-only' },
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
-  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
-  { sec: 'metodos-pago', icon: 'fas fa-building-columns', label: 'Métodos de pago', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Cuentas de la agencia para copiar o enviar al cliente en texto o foto' },
+  { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padreAdmin: 'grp-cobros', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
+  { sec: 'metodos-pago', icon: 'fas fa-building-columns', label: 'Métodos de pago', padreAdmin: 'grp-herramientas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Cuentas de la agencia para copiar o enviar al cliente en texto o foto' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   // Finanzas Fase 1 (2026-11-14): las facturas a empresas son dinero, salen de Corporativo.
   { sec: 'facturas-empresa', icon: 'fas fa-file-invoice', label: 'Facturas a empresas', padre: 'grp-cobros', roles: 'nav-admin-only', sub: 'Facturas a empresas: emitir, PDF y cobro' },
@@ -40236,7 +40236,25 @@ const NAV_PADRES = [
   { divisor: '' },
   { sec: 'grp-ayuda', icon: 'fas fa-circle-question', label: 'Ayuda' },
 ];
-const PADRE_DE = Object.fromEntries(NAV_ITEMS.filter(it => it.padre).map(it => [it.sec, it.padre]));
+// Admin (2026-11-25, plan menu-crm-bloques-y-panel.md): bloques plegables en el orden que pidió
+// el usuario (Negocio, Gestión, Ventas, luego el resto). Las hojas sueltas que el admin casi no
+// abre pasan a pestañas de su área vía `padreAdmin`; asesores y demás roles no cambian.
+const NAV_HERRAMIENTAS = { sec: 'grp-herramientas', icon: 'fas fa-toolbox', label: 'Herramientas' };
+const NAV_BLOQUES_ADMIN = [
+  ['negocio', 'Negocio', ['grp-reservas', 'grp-cobros', 'grp-directorio', 'boletos-emitidos']],
+  ['gestion', 'Gestión', ['grp-equipo', 'grp-ia', 'grp-marketing']],
+  ['ventas', 'Ventas', ['grp-leads', 'grp-tarifario']],
+  ['hoy', 'Hoy', ['grp-inicio', 'tareas', 'correo', 'grp-bandeja', 'mensajes']],
+  ['mas', 'Más', ['grp-herramientas', 'grp-ayuda']],
+];
+const navLayoutAdmin = () => ROL === 'admin';
+function navPadresActivos() {
+  if (!navLayoutAdmin()) return NAV_PADRES;
+  const p = sec => sec === NAV_HERRAMIENTAS.sec ? NAV_HERRAMIENTAS : NAV_PADRES.find(x => x.sec === sec);
+  return [p('bol-solicitudes'), ...NAV_BLOQUES_ADMIN.flatMap(([id, label, secs]) => [{ divisor: label, bloque: id }, ...secs.map(p)])];
+}
+const navPadreDe = () => Object.fromEntries(NAV_ITEMS.filter(it => it.padre).map(it => [it.sec, it.padre]));
+let PADRE_DE = navPadreDe();
 // Clases de rol que HABILITAN un item (marketing/boletería solo ven lo que
 // las lleva): el padre hereda la unión de las de sus hijas. Las que ocultan
 // (nav-admin-only, solo-voucher...) no se heredan; eso lo resuelve
@@ -40252,20 +40270,31 @@ function renderNavItems() {
     const padreAttr = padre ? ` data-padre="${padre}"` : '';
     const ordenAttr = orden != null ? ` data-orden="${orden}"` : '';
     const titleAttr = it.sub ? ` title="${esc(it.sub)}"` : '';
+    const bloqueAttr = it.bloque ? ` data-bloque="${it.bloque}"` : '';
     const fav = orden != null ? ` <span class="nav-fav" role="button" tabindex="0" data-fav="${it.sec}" aria-label="Fijar ${esc(it.label)} en Favoritos" title="Fijar en Favoritos"><i class="far fa-star"></i></span>` : '';
     const badge = it.badge ? ` <span class="badge" id="${it.badge}"${it.badgeVisible ? '' : ' style="display:none"'}>${esc(it.badgeDefault || '0')}</span>` : '';
-    return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${padreAttr}${ordenAttr}${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${fav}${badge}</a>`;
+    return `<a class="${cls}"${idAttr} data-sec="${it.sec}"${padreAttr}${ordenAttr}${bloqueAttr}${titleAttr}><i class="${it.icon}"></i> ${esc(it.label)}${fav}${badge}</a>`;
   };
+  const admin = navLayoutAdmin();
+  if (admin) { NAV_ITEMS.forEach(it => { if (it.padreAdmin) it.padre = it.padreAdmin; }); PADRE_DE = navPadreDe(); }
   const ancoraDesktop = document.getElementById('nav-items-anchor');
   if (ancoraDesktop) {
-    const bloque = '<div class="nav-label" data-label="secciones">Secciones</div>' + NAV_PADRES.map((p, i) => {
+    let bloqueId = null;
+    const bloque = '<div class="nav-label" data-label="secciones">Secciones</div>' + navPadresActivos().map((p, i) => {
+      if (p.bloque) { bloqueId = p.bloque; return `<div class="nav-label nav-bloque" data-label="${p.bloque}" data-bloque-h="${p.bloque}" data-orden="${i}" role="button" tabindex="0" aria-expanded="true"><span>${esc(p.divisor)}</span><span class="badge" hidden></span><i class="fas fa-chevron-down" aria-hidden="true"></i></div>`; }
       if (p.divisor != null) return p.divisor ? `<div class="nav-label" data-label="${esc(p.divisor.toLowerCase())}" data-orden="${i}">${esc(p.divisor)}</div>` : `<div class="nav-label nav-sep" data-label="sep" data-orden="${i}"></div>`;
-      if (p.hoja) return htmlDesktop(NAV_ITEMS.find(it => it.sec === p.sec), 'nav-top', null, i);
+      const b = bloqueId ? { bloque: bloqueId } : {};
+      if (p.hoja) return htmlDesktop({ ...NAV_ITEMS.find(it => it.sec === p.sec), ...b }, 'nav-top', null, i);
       const hijas = NAV_ITEMS.filter(it => it.padre === p.sec);
       const roles = [...new Set(hijas.flatMap(h => h.roles.split(' ')))].filter(c => NAV_ROLES_HABILITAN.includes(c) && !(p.noHereda || []).includes(c)).join(' ');
-      return htmlDesktop({ ...p, ...(p.sec === 'grp-bandeja' && MI_ASESOR_INTEGRAL ? { icon: 'fa-brands fa-whatsapp', label: 'WhatsApp' } : {}), roles }, 'nav-top nav-padre', null, i) + hijas.map(h => htmlDesktop(h, 'nav-hijo', p.sec)).join('');
+      // Admin: si una sola hija trae badge (Pagos en Finanzas, Disponibilidad en Tarifario), sube al padre: la hija está oculta.
+      const conBadge = admin && !p.badge ? hijas.filter(h => h.badge) : [];
+      const sube = conBadge.length === 1 ? conBadge[0] : null;
+      const badgeP = sube ? { badge: sube.badge, badgeDefault: sube.badgeDefault } : {};
+      return htmlDesktop({ ...p, ...badgeP, ...(p.sec === 'grp-bandeja' && MI_ASESOR_INTEGRAL ? { icon: 'fa-brands fa-whatsapp', label: 'WhatsApp' } : {}), roles, ...b }, 'nav-top nav-padre', null, i) + hijas.map(h => htmlDesktop(h === sube ? { ...h, badge: null } : h, 'nav-hijo', p.sec)).join('');
     }).join('');
     ancoraDesktop.insertAdjacentHTML('beforebegin', bloque);
+    if (admin) montarBloquesNav();
   }
 
   // nav-admin-only/nav-asesor-only etc. ya filtran por CSS (.rol-asesor) --
@@ -40490,13 +40519,56 @@ function alternarFavorito(sec) {
    decide CSS después, en el navegador. Sin este paso, un grupo donde el rol
    actual no puede ver ningún item (ej. "Marketing" para un asesor) deja el
    header flotando vacío. */
+/* ---------- Bloques plegables del menú admin (2026-11-25) ----------
+   Plegar = clase .nav-plegada en las entradas del bloque; el CSS la ignora con
+   nav-sondeo/nav-buscando, así el sondeo por rol y el buscador siguen viéndolas.
+   Por persona en MI_PREFERENCIAS.nav_bloques_plegados; «Más» nace plegado. */
+const navBloquesPlegados = () => Array.isArray(MI_PREFERENCIAS.nav_bloques_plegados) ? MI_PREFERENCIAS.nav_bloques_plegados : ['mas'];
+function aplicarBloquesNav() {
+  const pleg = navBloquesPlegados();
+  document.querySelectorAll('#sidebar-nav > .nav-bloque').forEach(h => { const p = pleg.includes(h.dataset.bloqueH); h.classList.toggle('plegado', p); h.setAttribute('aria-expanded', String(!p)); });
+  document.querySelectorAll('#sidebar-nav > .nav-top[data-bloque]').forEach(el => el.classList.toggle('nav-plegada', pleg.includes(el.dataset.bloque)));
+  pintarBadgesBloques();
+}
+function alternarBloqueNav(id) {
+  const pleg = navBloquesPlegados();
+  guardarPreferencia('nav_bloques_plegados', pleg.includes(id) ? pleg.filter(b => b !== id) : [...pleg, id], 'nav-bloques');
+  aplicarBloquesNav();
+}
+// Bloque plegado: su header suma los badges de lo que esconde, para no perder avisos.
+function pintarBadgesBloques() {
+  document.querySelectorAll('#sidebar-nav > .nav-bloque').forEach(h => {
+    let n = 0;
+    if (h.classList.contains('plegado')) document.querySelectorAll(`#sidebar-nav > .nav-plegada:not(.nav-favorito)[data-bloque="${h.dataset.bloqueH}"]`).forEach(el => {
+      if (!navVisiblePorRol(el)) return;
+      el.querySelectorAll(':scope > .badge').forEach(b => { if (b.style.display !== 'none' && !b.hidden) n += parseInt(b.textContent, 10) || 0; });
+    });
+    const b = h.querySelector('.badge'), t = n > 99 ? '99+' : String(n);
+    if (b.textContent !== t) b.textContent = t;
+    b.hidden = !n;
+  });
+}
+function montarBloquesNav() {
+  const nav = document.getElementById('sidebar-nav');
+  const alternar = e => { const h = e.target.closest('.nav-bloque'); if (!h) return; e.preventDefault(); alternarBloqueNav(h.dataset.bloqueH); };
+  nav.addEventListener('click', alternar);
+  nav.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') alternar(e); });
+  aplicarBloquesNav();
+  const enHeader = m => (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest('.nav-bloque');
+  let pend = false;
+  new MutationObserver(muts => {
+    if (pend || muts.every(enHeader)) return;
+    pend = true; requestAnimationFrame(() => { pend = false; pintarBadgesBloques(); });
+  }).observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'hidden'] });
+}
 function ocultarHeadersVacios(contId, itemSel, labelSel) {
   const cont = document.getElementById(contId);
   if (!cont) return;
   cont.querySelectorAll(labelSel).forEach(label => {
     let sib = label.nextElementSibling, tieneVisible = false;
     while (sib && !sib.matches(labelSel)) {
-      if (sib.matches(itemSel) && getComputedStyle(sib).display !== 'none') tieneVisible = true;
+      // Plegada cuenta como visible si el rol la deja ver: si no, el header del bloque desaparece y no se puede desplegar.
+      if (sib.matches(itemSel) && (sib.classList.contains('nav-plegada') ? navVisiblePorRol(sib) : getComputedStyle(sib).display !== 'none')) tieneVisible = true;
       sib = sib.nextElementSibling;
     }
     label.style.display = tieneVisible ? '' : 'none';
@@ -41273,7 +41345,7 @@ function fijarSolicitudesArriba() {
 // Pagos por verificar: mismo aviso que Solicitudes, pero en reposo es una entrada
 // común; solo crece y late cuando hay pagos declarados esperando (dueño 2026-10-22).
 function setupAvisoPagos() {
-  const item = navItemDe('pagos');
+  const item = navItemDe(PADRE_DE.pagos || 'pagos');
   if (!item || !esOficina()) return;
   item.classList.add('nav-pagos');
   item.insertAdjacentHTML('beforeend', '<span class="nav-pagos-aviso" id="nav-pagos-aviso"></span>');
@@ -41291,7 +41363,7 @@ async function contarPagosPendientes() {
 function pintarAvisoPagos(n) {
   const badge = document.getElementById('nav-pagos-count'), aviso = document.getElementById('nav-pagos-aviso');
   if (badge) { badge.textContent = n; badge.style.display = n ? '' : 'none'; }
-  navItemDe('pagos')?.classList.toggle('pendientes', n > 0);
+  navItemDe(PADRE_DE.pagos || 'pagos')?.classList.toggle('pendientes', n > 0);
   if (aviso) aviso.textContent = n === 1 ? '1 pago por verificar' : `${n} pagos por verificar`;
 }
 

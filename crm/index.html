@@ -4857,6 +4857,16 @@ body.en-cotizar #lyra-fab,body.en-cotizar #chat-fab{display:none!important}
    sondeo de permisos por rol (body.nav-sondeo, ver conSondeoNav en app.js). */
 body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-hijo{display:none}
 #sidebar-nav > .nav-sep{padding:0;margin:8px 10px;height:1px;background:var(--line)}
+/* Menú admin en bloques plegables (2026-11-25, montarBloquesNav en app.js). La entrada
+   activa y las favoritas se ven aunque su bloque esté plegado. */
+body:not(.nav-buscando):not(.nav-sondeo) #sidebar-nav > .nav-plegada:not(.nav-favorito):not(.active){display:none}
+#sidebar-nav > .nav-bloque{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;border-radius:6px;transition:color .15s}
+#sidebar-nav > .nav-bloque:hover{color:var(--txt)}
+#sidebar-nav > .nav-bloque:focus-visible{outline:2px solid currentColor;outline-offset:1px}
+#sidebar-nav > .nav-bloque > i{margin-left:auto;font-size:9px;opacity:.7;transition:transform .15s}
+#sidebar-nav > .nav-bloque.plegado > i{transform:rotate(-90deg)}
+#sidebar-nav > .nav-bloque > .badge{margin-left:2px;letter-spacing:0;text-transform:none}
+body.nav-buscando #sidebar-nav > .nav-bloque > i{visibility:hidden}
 /* Mensajes se abre por la burbuja #chat-fab; el ítem sigue en el DOM para que el
    sondeo por rol (chatActualizarVisibilidad) y ?ir=mensajes funcionen. */
 body:not(.nav-sondeo) #sidebar-nav > .nav-item[data-sec="mensajes"]{display:none}
