@@ -289,19 +289,34 @@ function heredarReservaLead(lead) {
 // si se navega antes, el history.back del drawer deshace la navegación.
 // «Ver reserva» de la tarjeta (2026-11-24): lleva a Reservas con la reserva principal abierta y la
 // ficha brilla 2 s. Sin reserva activa sigue abriendo la sección Reservas de la ficha del lead.
+// Una sola consulta (la bandeja busca por teléfono y trae lead_id/principal) y lanzada antes de
+// cambiar de sección: antes eran reservas_de_lead + bandeja por código en fila, con la pantalla quieta.
 async function verReservaDeLead(l) {
+  const tel = String(l.telefono || '').trim();
+  if (!tel) return verReservaDeLeadSinTelefono(l);
+  const pedido = sb.rpc('postventa_bandeja', { p_etapa: null, p_busqueda: tel });
+  trasCerrarDrawer(async () => {
+    activateSection('postventa');
+    const { data, error } = await pedido;
+    const rs = (data || []).filter(x => x.lead_id === l.id);
+    const c = rs.find(x => x.principal) || rs[0];
+    if (error || !c) { errToast(error ? 'No se pudo abrir la reserva' : 'La reserva no está activa en Postventa'); return; }
+    abrirPostventa(c);
+    brilloFichaReserva();
+  });
+}
+async function verReservaDeLeadSinTelefono(l) {
   const { data, error } = await sb.rpc('reservas_de_lead', { p_lead_id: l.id });
   const rs = (!error && data?.ok ? data.reservas || [] : []).filter(r => r.activo);
   const r = rs.find(x => x.principal) || rs[0];
   if (!r) { openDrawer(l, { seccion: 'reservas' }); return; }
-  trasCerrarDrawer(async () => {
-    activateSection('postventa');
-    await abrirReservaDeLead(r.id, r.codigo);
-    const d = document.getElementById('drawer');
-    if (!d?.classList.contains('open')) return;
-    d.classList.remove('rv-brillo'); void d.offsetWidth; d.classList.add('rv-brillo');
-    setTimeout(() => d.classList.remove('rv-brillo'), 2000);
-  });
+  trasCerrarDrawer(async () => { activateSection('postventa'); await abrirReservaDeLead(r.id, r.codigo); brilloFichaReserva(); });
+}
+function brilloFichaReserva() {
+  const d = document.getElementById('drawer');
+  if (!d?.classList.contains('open')) return;
+  d.classList.remove('rv-brillo'); void d.offsetWidth; d.classList.add('rv-brillo');
+  setTimeout(() => d.classList.remove('rv-brillo'), 2000);
 }
 function trasCerrarDrawer(fn) {
   if (!document.getElementById('drawer')?.classList.contains('open')) { fn(); return; }
