@@ -1556,7 +1556,7 @@ td.td-wa .wa-msg{margin-left:4px}
 .pp-close{background:transparent;border:none;color:var(--muted2);cursor:pointer;font-size:15px;padding:6px}
 
 /* toasts */
-#toasts{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:10px;z-index:62}
+#toasts{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:10px;z-index:1300}
 /* Confirmación táctil del long-press: la tarjeta se hunde mientras se sostiene
    y el pulso remata al dispararse la selección. */
 .entity-card.lp-press{transform:scale(.975);transition:transform .18s var(--ease-salida)}
@@ -9371,7 +9371,7 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
   /* Avisos: visibles sobre hojas y sin comerse toques */
   #toasts{pointer-events:none}
   .toast{pointer-events:auto}
-  body.con-sheet #toasts{z-index:80;bottom:auto;top:calc(10px + env(safe-area-inset-top,0px))}
+  body.con-sheet #toasts{z-index:1300;bottom:auto;top:calc(10px + env(safe-area-inset-top,0px))}
   body.ver-chat-on #toasts{bottom:auto;top:calc(8px + env(safe-area-inset-top,0px))}
   .toast-undo{min-height:40px;padding:0 14px;font-size:13px}
 
