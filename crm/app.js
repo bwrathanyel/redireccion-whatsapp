@@ -26963,7 +26963,7 @@ function aplicarTarifarioPorRol() {
   actualizarVisibilidadFiltrosTarifario();
 }
 function setupTarifarioTabs() {
-  fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo']);
+  fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Tucacas', 'Chichiriviche', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo']);
   const mesSel = document.getElementById('tar-f-mes');
   const mesActual = new Date().getMonth() + 1;
   mesSel.innerHTML = '<option value="">Cualquier mes</option>'
@@ -27872,7 +27872,7 @@ async function loadTarifario() {
     const bIds = ids('bloque_id'), pIds = ids('producto_id');
     const [rb, rpr] = await Promise.all([
       bIds.length ? sb.from('tarifario_bloques').select('*').in('id', bIds) : { data: [] },
-      pIds.length ? sb.from('productos').select('id,nombre,destino,oculto_sin_foto,producto_fotos(storage_path,orden,es_principal,activo)').in('id', pIds) : { data: [] },
+      pIds.length ? sb.from('productos').select('id,nombre,destino,localidad,oculto_sin_foto,producto_fotos(storage_path,orden,es_principal,activo)').in('id', pIds) : { data: [] },
     ]);
     const err = rb.error || rpr.error;
     if (err) return err;
@@ -27977,7 +27977,7 @@ async function loadTarifario() {
   if (tarTab === 'paquete') {
     const hotelIds = [...new Set(data.filter(x => x.hotel_id).map(x => x.hotel_id))];
     if (hotelIds.length) {
-      const { data: hoteles } = await sb.from('productos').select('id, destino, producto_fotos(storage_path,orden,es_principal,activo)').in('id', hotelIds);
+      const { data: hoteles } = await sb.from('productos').select('id, destino, localidad, producto_fotos(storage_path,orden,es_principal,activo)').in('id', hotelIds);
       const porId = Object.fromEntries((hoteles || []).map(h => [h.id, h]));
       data.forEach(x => { if (x.hotel_id) x.hotel = porId[x.hotel_id]; });
     }
@@ -28352,7 +28352,10 @@ function attachHoverCarousel(cardEl, mediaEl, fotos, setFoto, dotsEl) {
     crossfade(0);
   });
 }
-const DESTINO_ORDEN = ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo'];
+const DESTINO_ORDEN = ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Tucacas', 'Chichiriviche', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo'];
+// Pueblo real para agrupar y filtrar (productos.localidad: Tucacas / Chichiriviche en
+// vez de «Morrocoy»). Solo pantalla: `destino` no se toca porque el bot arma el FOCO con él.
+const tarLugar = x => x?.localidad || x?.destino || null;
 // Divide un párrafo de descripción en oraciones para mostrarlo como lista —
 // parte en los espacios que siguen a . ! ? (nunca dentro de un número como
 // "$150.000" porque ahí no hay espacio después del punto), así ningún
@@ -28365,9 +28368,9 @@ function resumenBullets(texto) {
 // paquete/promo lo heredan del hotel vinculado (producto_id/hotel_id) cuando
 // no tienen uno propio -- misma resolución para filtrar y para agrupar.
 function destinoDe(x) {
-  if (tarTab === 'promo' || tarTab === 'hotsale') return x.productos?.destino || null;
-  if (tarTab === 'paquete') return x.destino || x.hotel?.destino || null;
-  return x.destino || null;
+  if (tarTab === 'promo' || tarTab === 'hotsale') return tarLugar(x.productos);
+  if (tarTab === 'paquete') return tarLugar(x) || tarLugar(x.hotel);
+  return tarLugar(x);
 }
 // Nombre de hotel para agrupar Promociones -- si la promo está vinculada a
 // un producto (hotel), usa su nombre; si no, cae al título de la propia
@@ -28501,7 +28504,7 @@ const tarRankDestino = k => { const i = DESTINO_ORDEN.indexOf(k.split(' · ')[0]
 // La etiqueta (Cubagua) abre su propio grupo dentro del destino: "Margarita · Cubagua".
 function tarGruposDestino(items, etiqueta = () => null) {
   const grupos = {};
-  items.forEach(x => { const d = x.destino || 'Otros', e = etiqueta(x); (grupos[e ? `${d} · ${e}` : d] ??= []).push(x); });
+  items.forEach(x => { const d = tarLugar(x) || 'Otros', e = etiqueta(x); (grupos[e ? `${d} · ${e}` : d] ??= []).push(x); });
   return Object.entries(grupos).sort(([a], [b]) => tarRankDestino(a) - tarRankDestino(b) || a.localeCompare(b, 'es'));
 }
 // Ficha de excursión (2026-11-19, antes era una fila de tabla): una tarjeta por producto
@@ -28542,7 +28545,7 @@ function excCardHtml(x) {
   const resumen = excResumen(x);
   if (nota && resumen.toLowerCase().includes(nota.replace(/^.*?:\s*/, '').replace(/\.$/, '').toLowerCase())) nota = '';
   return `<div class="tar-item tar-card exc-card${ts.length ? '' : ' exc-sin-tarifa'}" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 384)[0], false, x.destino, precio, tcHideBtnHtml(x.id, 'productos', 'activo'))}
+    ${tarCardThumbHtml(fotosDe(x, 384)[0], false, tarLugar(x), precio, tcHideBtnHtml(x.id, 'productos', 'activo'))}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
       ${resumen ? `<div class="tc-desc">${esc(resumen)}</div>` : ''}
@@ -28670,9 +28673,9 @@ function renderTarifario() {
 
   let filtered = data.filter(x => {
     if (!fOcultas && tarTab !== 'promo' && tarTab !== 'hotsale' && x.activo === false) return false;
-    if (q &&!(x.nombre || x.titulo || '').toLowerCase().includes(q) && !(x.destino || '').toLowerCase().includes(q)) return false;
+    if (q &&!(x.nombre || x.titulo || '').toLowerCase().includes(q) && !`${x.destino || ''} ${x.localidad || ''} ${x.ubicacion || ''}`.toLowerCase().includes(q)) return false;
     if (tarTab === 'hotel') {
-      if (fDestino && x.destino !== fDestino) return false;
+      if (fDestino && tarLugar(x) !== fDestino) return false;
       const ag = agregarHotel(x);
       if (fTipo && !ag.tags.includes(fTipo)) return false;
       if (fPrecio != null && ag.precioMin != null && ag.precioMinMoneda === 'USD' && ag.precioMin > fPrecio) return false;
@@ -28708,7 +28711,7 @@ function renderTarifario() {
         if (tarSuperaPrecioMax(td?.precio_desde_usd, td?.moneda, fPrecio)) return false;
       }
     } else if (tarTab === 'excursion' || tarTab === 'traslado') {
-      if (fDestino && x.destino !== fDestino) return false;
+      if (fDestino && tarLugar(x) !== fDestino) return false;
       if (fPrecio != null && tarTab === 'excursion' && !tarTarifasVivas(x).some(t => Number(t.precios.adulto) <= fPrecio)) return false;
     } else if (fPrecio != null) {
       const td = tarifaDestacada(x);
@@ -29273,7 +29276,7 @@ function tarFichaHtml(x) {
     <div class="tf-body">
       <div class="tc-nombre">${esc(nombre)}</div>
       ${tarNinosHtml(esPromo ? tarNinoGratis(x) : tarNinoGratisHotel(x), 'tc-ninos tf-ninos')}
-      ${x.destino ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(x.destino)}</div>` : ''}
+      ${tarLugar(x) ? `<div class="tc-destino"><i class="fas fa-location-dot"></i> ${esc(tarLugar(x))}</div>` : ''}
       ${!esPromo && x.descripcion ? `<ul class="tc-resumen tc-resumen-ficha">${resumenBullets(x.descripcion).map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
       ${precio ? `<div class="tc-precio">${esc(precio)}</div>` : ''}
       ${vigenciaHtml(vigencia)}
@@ -30966,7 +30969,7 @@ function tgCabeceraHtml(x, nombre, fotos, n) {
     precioChip ? chip('fa-coins', precioChip) : '',
     x.tipo === 'hotel' && vivas.some(tarDeBtTravel) && ROL !== 'marketing' ? '<button type="button" class="tg-dato tg-pdf" data-tar-pdf><i class="fas fa-file-pdf"></i>Ver en tarifario BT Travel</button>' : ''].filter(Boolean).join('');
   const foto = (src, i, alt) => `<div class="tg-foto" style="--bg:url('${esc(src.replace(/'/g, '%27'))}')"><img src="${esc(src)}" alt="${esc(alt)}"${i ? ' loading="lazy"' : ''} data-drawer-foto="${i}"></div>`;
-  const sub = [x.destino, TAR_TAB_LABEL[x.tipo] || TAR_TAB_LABEL[tarTab], vivas.length ? `${vivas.length} tarifa${vivas.length > 1 ? 's' : ''} vigente${vivas.length > 1 ? 's' : ''}` : 'Sin tarifas vigentes'].filter(Boolean).join(' · ');
+  const sub = [tarLugar(x), TAR_TAB_LABEL[x.tipo] || TAR_TAB_LABEL[tarTab], vivas.length ? `${vivas.length} tarifa${vivas.length > 1 ? 's' : ''} vigente${vivas.length > 1 ? 's' : ''}` : 'Sin tarifas vigentes'].filter(Boolean).join(' · ');
   return `<div class="tg-cab">
     ${fotos.length ? `<div class="tg-mosaico${fotos.length > 1 ? '' : ' tg-mosaico-1'}">
       ${foto(fotos[0], 0, nombre)}
@@ -30978,8 +30981,20 @@ function tgCabeceraHtml(x, nombre, fotos, n) {
       <div class="tg-titular-txt"><h2 class="tg-nombre">${esc(nombre)}</h2><div class="tg-lugar"><i class="fas fa-location-dot"></i>${esc(sub)}</div></div>
       ${hero ? `<div class="tg-desde"><span class="tg-desde-k">Desde</span><span class="tg-desde-v">${esc(tgMonto(d, 'dbl'))}</span><span class="tg-desde-n">${desdeNota}</span></div>` : ''}
     </div>
+    ${tgUbicacionHtml(x)}
     ${datos ? `<div class="tg-datos">${datos}</div>` : ''}
   </div>`;
+}
+// Dónde queda exactamente y qué playas tiene cerca, arriba de todo en la ficha
+// (pedido del dueño 2026-11-25: que no haya que meterse en la ficha para verlo).
+function tgUbicacionHtml(x) {
+  const playas = (x?.playas_cercanas || []).filter(Boolean);
+  if (!x?.ubicacion && !playas.length) return '';
+  const mapa = /^https:\/\//.test(x.ubicacion_mapa || '') ? `<a class="tg-ubic-mapa" href="${esc(x.ubicacion_mapa)}" target="_blank" rel="noopener"><i class="fas fa-map-location-dot"></i>Ver en el mapa</a>` : '';
+  return `<section class="tg-ubic" aria-label="Ubicación">
+    ${x.ubicacion ? `<div class="tg-ubic-dir"><i class="fas fa-location-crosshairs"></i><p>${esc(x.ubicacion)}</p>${mapa}</div>` : ''}
+    ${playas.length ? `<div class="tg-ubic-playas"><span class="tg-ubic-k"><i class="fas fa-umbrella-beach"></i>Playas cerca</span>${playas.map(p => `<span class="tg-ubic-playa">${esc(p)}</span>`).join('')}</div>` : ''}
+  </section>`;
 }
 /* La ficha normal muestra solo tarifas vendibles, para todos los roles.
    El histórico se conserva en la base y nunca se construye en este drawer. */
