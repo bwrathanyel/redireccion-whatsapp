@@ -9297,6 +9297,90 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
   :is(.mfs,.sheet):not(.open),:root[data-theme="light"] :is(.mfs,.sheet):not(.open){box-shadow:none}
 }
 
+/* ============ Correo en el teléfono (2026-11-24) ============
+   Lista: buscador arriba, cuenta + carpetas, filtros; «Redactar» flota sobre el
+   botón del chat. Lector a pantalla completa (fixed, tapa barra superior e
+   inferior) con barra propia: atrás + acciones arriba, responder abajo. La
+   .correo-wrap deja de ser container en el teléfono: un container es bloque
+   contenedor de los fixed. Todo acá adentro: escritorio no cambia. */
+@media(max-width:760px){
+  #sec-correo>.card{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0;border:0;background:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+  #sec-correo .correo-movil-bar,#sec-correo .correo-toolbar{display:contents}
+  #sec-correo .correo-backfill{order:0;flex:1 1 100%;margin:0}
+  #sec-correo .correo-search{order:1;flex:1 1 calc(100% - 52px);min-width:0;height:44px;box-sizing:border-box;padding:0 14px 0 40px;border-radius:999px;font-size:16px;background:var(--panel-solid) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b93a7' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E") no-repeat 14px 50%/17px}
+  #sec-correo .correo-sync-ico{order:2;width:44px;height:44px;border-radius:50%;font-size:15px}
+  #sec-correo .correo-cuenta-selector{order:3;flex:0 0 auto}
+  #sec-correo .correo-movil-bar .correo-cuenta-btn{height:36px;max-width:128px;box-sizing:border-box;border-radius:999px;padding:0 12px;font-size:12px}
+  #sec-correo .correo-vistas-movil{order:4;flex:1 1 0;min-width:0;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 22px),transparent)}
+  #sec-correo .correo-vistas-movil::-webkit-scrollbar,#sec-correo .correo-chips::-webkit-scrollbar{display:none}
+  #sec-correo .correo-vistas-movil .seg{height:36px;padding:0 14px;font-size:13px}
+  #sec-correo .correo-vistas-movil .seg:last-child{margin-right:18px}
+  #sec-correo .correo-chips{order:5;flex:1 1 100%;flex-wrap:nowrap;gap:6px;margin:0;overflow-x:auto;scrollbar-width:none}
+  #sec-correo .correo-filtros .seg{height:32px;padding:0 12px;font-size:12.5px}
+  #sec-correo .correo-categoria{height:32px;flex-shrink:0;font-size:12.5px}
+  #sec-correo .correo-sync-time{font-size:11px}
+  #sec-correo .correo-wrap{order:6;flex:1 1 100%;min-width:0;container-type:normal}
+  #sec-correo>.card:has(.correo-layout.sin-cuenta) :is(.correo-search,.correo-chips,.correo-vistas-movil,.correo-redactar-btn,.correo-sync-ico){display:none}
+
+  #sec-correo .correo-redactar-btn{position:fixed;right:16px;bottom:calc(18px + var(--safe-b,0px) + var(--bi-h,0px));z-index:54;height:52px;padding:0 20px;gap:9px;border-radius:16px;font-size:14px;box-shadow:0 10px 26px -6px rgba(var(--accent-rgb),.6)}
+  body.chat-on #sec-correo .correo-redactar-btn{bottom:calc(86px + var(--safe-b,0px) + var(--bi-h,0px))}
+  body.teclado #sec-correo .correo-redactar-btn{display:none}
+
+  #sec-correo .correo-layout{height:calc(100dvh / var(--zoom,1) - var(--appbar-h) - var(--bi-h,0px) - var(--safe-b,0px) - 150px);min-height:300px}
+  #sec-correo .correo-lista{gap:0;padding-bottom:84px;overflow-x:hidden;overscroll-behavior:contain}
+  #sec-correo .correo-row{gap:12px;padding:12px 4px;border:0;border-bottom:1px solid var(--line);border-radius:0}
+  #sec-correo .correo-row:active{background:rgba(var(--ink-rgb),.05)}
+  #sec-correo .correo-row-avatar{width:40px;height:40px;font-size:15px}
+  #sec-correo .correo-row-top b{font-size:15px}
+  #sec-correo .correo-row-top time{font-size:12px}
+  #sec-correo .correo-row.no-leido .correo-row-top time{color:var(--accent-ink);font-weight:700}
+  #sec-correo .correo-row-asunto{margin-top:3px;font-size:14px}
+  #sec-correo .correo-row-snippet{font-size:13px}
+  #sec-correo .correo-row:not(.correo-contacto) :is(.correo-row-asunto,.correo-row-snippet){padding-right:34px}
+  #sec-correo .correo-row:not(.correo-contacto) .correo-row-meta{position:absolute;top:34px;right:0}
+  #sec-correo .correo-row-star{display:grid;place-items:center;width:40px;height:40px;font-size:16px}
+  #sec-correo .correo-unread-badge{display:none}
+  #sec-correo .correo-contacto-acc .correo-accion{width:40px;height:40px;justify-content:center;padding:0}
+  #sec-correo .correo-row[data-thread]::after{content:'\f187';position:absolute;top:0;bottom:0;left:100%;width:100%;display:flex;align-items:center;padding-left:24px;box-sizing:border-box;background:var(--accent-soft);color:var(--accent-ink);font:900 18px 'Font Awesome 6 Free'}
+
+  #sec-correo .correo-detalle{position:fixed;inset:0;z-index:56;display:flex;flex-direction:column;padding:0;border-radius:0;background:var(--bg);visibility:hidden;transition:transform var(--dur-hoja,.32s) var(--ease-salida,ease),visibility 0s linear var(--dur-hoja,.32s)}
+  #sec-correo .correo-detalle.open{visibility:visible;transition:transform var(--dur-hoja,.32s) var(--ease-salida,ease)}
+  body:has(#sec-correo.active #correo-detalle.open) .chat-fab{display:none}
+  #sec-correo .correo-detalle::before{content:'';flex:0 0 auto;height:calc(56px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:var(--panel-solid)}
+  #sec-correo .correo-detalle-back{position:absolute;top:calc(6px + env(safe-area-inset-top,0px));left:6px;z-index:3;width:44px;height:44px;margin:0;border:0;border-radius:50%;background:transparent;font-size:18px}
+  #sec-correo .correo-detalle-body{padding:0 16px;overscroll-behavior:contain}
+  #sec-correo .correo-detalle-head{order:-1;padding:18px 0 14px;border-bottom:0}
+  #sec-correo .correo-head-fila{display:block}
+  #sec-correo .correo-detalle-head h3{font-size:21px;line-height:1.28}
+  #sec-correo .correo-head-fila2{margin-top:10px}
+  #sec-correo .correo-hilo-acciones{position:absolute;top:calc(6px + env(safe-area-inset-top,0px));right:4px;z-index:3;flex-wrap:nowrap;gap:0}
+  #sec-correo .correo-hilo-acciones .correo-accion{width:44px;height:44px;justify-content:center;padding:0;border:0;border-radius:50%;background:transparent;color:var(--txt);font-size:17px}
+  #sec-correo .correo-hilo-acciones .correo-accion:active{background:rgba(var(--ink-rgb),.08)}
+  #sec-correo .correo-hilo-acciones .correo-accion.on{color:var(--amber)}
+  #sec-correo .correo-franja{margin:0 0 14px;padding:10px 12px;gap:8px 10px}
+  #sec-correo .correo-franja-ic{width:32px;height:32px}
+  #sec-correo .correo-franja[data-tipo="proveedor"]{flex-wrap:nowrap}
+  #sec-correo .correo-franja[data-tipo="proveedor"] .correo-franja-txt{flex:1 1 0}
+  #sec-correo .correo-franja[data-tipo="proveedor"] .correo-franja-acc{width:auto;flex:0 0 auto}
+  #sec-correo .correo-franja[data-tipo="lead"] .correo-franja-btn:not(.ico){flex:1;justify-content:center}
+  #sec-correo .correo-franja-btn{min-height:40px;font-size:12px}
+  #sec-correo .correo-franja .correo-lead-input{height:40px;font-size:16px}
+  #sec-correo .correo-detalle-log{gap:0;margin-top:0;border-top:1px solid var(--line)}
+  #sec-correo .correo-msg{border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
+  #sec-correo .correo-msg-head{gap:12px;padding:14px 0}
+  #sec-correo .correo-msg-quien{font-size:14px}
+  #sec-correo .correo-msg-quien .em{display:none}
+  #sec-correo .correo-msg.abierto .correo-msg-quien .em{display:block;margin:1px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #sec-correo .correo-msg-body{padding:0 0 16px}
+  #sec-correo .correo-msg-texto{font-size:15px}
+  #sec-correo .correo-adjs{grid-template-columns:minmax(0,1fr)}
+  #sec-correo .correo-adj{min-height:48px}
+  #sec-correo .correo-adj-d{opacity:1}
+  body #sec-correo .correo-detalle .correo-responder-bar{position:sticky;bottom:0;flex-wrap:nowrap;gap:8px;margin:auto -16px 0;padding:10px 16px calc(10px + var(--safe-b,0px));border-top:1px solid var(--line);background:var(--panel-solid)}
+  #sec-correo .correo-responder-bar .correo-sync-btn{min-height:46px;border-radius:12px;font-size:13.5px}
+  #sec-correo .correo-responder-bar .correo-sync-btn:first-child{border-color:transparent;background:var(--accent);color:var(--on-accent)}
+}
+
 /* ============ Ficha del lead en móvil (2026-11-10) ============
    Hoja de 2 alturas (.d-completa la pone app.js), cabecera fija con nombre +
    estado + pestañas, barra de acciones abajo. Pestañas = data-dtab en cada

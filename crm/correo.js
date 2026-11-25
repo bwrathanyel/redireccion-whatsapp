@@ -3,7 +3,7 @@
 // lead (CORREOS_DATA, renderCuerpoCorreo, cargarCorreoLead) sigue en app.js y llega por deps.
 // Clases .correo-* en index.html; lo del teléfono va en su media query.
 
-export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, seedHash, esc, val, fmtFechaHoraCaracas, openDrawer, CORREOS_DATA, renderCuerpoCorreo, fileABase64, extraerEmailDeCabecera, fmtTamano, renderAdjuntosCorreo, okToast, errToast, biBadge, openSheet, closeSheet, popoverASheet, confirmarSheet, pedirTexto, hojaAbierta, crearTareaLead, abrirProveedor, crearLead }) {
+export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, seedHash, esc, val, fmtFechaHoraCaracas, openDrawer, CORREOS_DATA, renderCuerpoCorreo, fileABase64, extraerEmailDeCabecera, fmtTamano, renderAdjuntosCorreo, okToast, errToast, biBadge, openSheet, closeSheet, popoverASheet, confirmarSheet, pedirTexto, hojaAbierta, crearTareaLead, abrirProveedor, crearLead, navPush, navConsume }) {
   /* ---------- Correo (Gmail vinculado a leads) ----------
      OAuth por asesor (cada uno conecta su propia cuenta) -- gmail_iniciar_conexion()
      solo devuelve el token de "state" (uuid de un solo uso, 10 min), la URL de
@@ -988,6 +988,8 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
     document.querySelectorAll('#correo-lista .correo-row').forEach(r => r.classList.toggle('active', r.dataset.thread === threadId));
     document.getElementById('correo-detalle-body').innerHTML = '<div class="correo-detalle-empty"><i class="fas fa-circle-notch fa-spin"></i></div>';
     document.getElementById('correo-detalle').classList.add('open');
+    // Teléfono: el lector es pantalla completa; el «atrás» del sistema lo cierra.
+    if (esTelefono() && !NAV_HILO && navPush) NAV_HILO = navPush({ type: 'tk-panel', cerrar: () => { NAV_HILO = null; cerrarHiloCorreo(true); } });
     const { data, error } = await sb.from('gmail_correos').select(CORREO_SELECT_HILO).eq('credencial_id', (HILOS_DATA.get(threadId) || [])[0]?.credencial_id ?? credDeTrabajo()).eq('gmail_thread_id', threadId).is('eliminado_en', null).order('enviado_en');
     if (CORREO_HILO_ABIERTO !== threadId) return;
     if (error || !data?.length) {
@@ -999,7 +1001,9 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
     pintarHiloCorreo(threadId);
     if (data.some(m => !m.leido && m.direccion === 'entrante')) accionCorreo(threadId, 'leido', { silencioso: true });
   };
-  window.cerrarHiloCorreo = () => {
+  let NAV_HILO = null;
+  window.cerrarHiloCorreo = (desdeNav) => {
+    if (NAV_HILO && desdeNav !== true) { const e = NAV_HILO; NAV_HILO = null; navConsume(e); }
     CORREO_HILO_ABIERTO = null;
     document.querySelectorAll('#correo-lista .correo-row.active').forEach(r => r.classList.remove('active'));
     document.getElementById('correo-detalle').classList.remove('open');

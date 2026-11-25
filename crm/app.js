@@ -18220,7 +18220,7 @@ document.getElementById('post-cv-input')?.addEventListener('change', e => {
 let CORREO = null;
 const correoMod = () => CORREO ||= crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, seedHash, esc, val, fmtFechaHoraCaracas, openDrawer, CORREOS_DATA, renderCuerpoCorreo, fileABase64, extraerEmailDeCabecera, fmtTamano, renderAdjuntosCorreo, okToast, errToast, biBadge, openSheet, closeSheet, popoverASheet, confirmarSheet, pedirTexto, hojaAbierta: () => sheetAbierta,
   crearTareaLead: l => ['admin', 'administrativo'].includes(ROL) ? tareasV2().crearTarea({ lead: l }) : tareasV2().nuevoRecordatorio({ leadId: l.id, leadNombre: l.nombre }),
-  abrirProveedor: id => abrirProveedorSheet(id),
+  abrirProveedor: id => abrirProveedorSheet(id), navPush, navConsume,
   crearLead: async ({ nombre }, alCrear) => { await abrirNuevoLead(); document.getElementById('nl-nombre').value = nombre || ''; NL_TRAS_CREAR = alCrear; } });
 function setupCorreo() { correoMod().setupCorreo(); }
 function cargarCorreoSeccion() { correoMod().cargarCorreoSeccion(); }
