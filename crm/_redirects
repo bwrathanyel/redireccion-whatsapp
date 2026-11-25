@@ -1,3 +1,6 @@
 # Link de conexion de IG para marcas clientes (EF marketing-conectar, plan plataforma-marketing-crm).
 # Vive solo aca: deploy-crm.py no lo copia ni lo borra.
 /conectar/:t https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/marketing-conectar?t=:t 302
+
+# Regreso del OAuth de Gmail: Google muestra este dominio en vez del de Supabase (2026-11-25).
+/oauth/gmail https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/gmail-oauth-callback 302
