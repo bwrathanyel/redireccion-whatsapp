@@ -2130,6 +2130,16 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tc-meta .tcm-cotizar{display:inline-flex;align-items:center;gap:5px;min-height:26px;padding:0 10px;border-radius:999px;border:1px solid rgba(var(--accent-rgb),.35);background:rgba(var(--accent-rgb),.12);color:var(--accent-ink);font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;transition:background .15s}
 .tc-meta .tcm-cotizar:hover{background:rgba(var(--accent-rgb),.24)}
 .tc-meta .tcm-cotizar i{font-size:10.5px}
+.tc-meta .tcm-mapa{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:999px;border:1px solid rgba(var(--accent-rgb),.35);background:rgba(var(--accent-rgb),.12);color:var(--accent-ink);font-size:11.5px;text-decoration:none;transition:background .15s}
+.tc-meta .tcm-mapa:hover{background:rgba(var(--accent-rgb),.24)}
+/* Ubicación en la tarjeta del hotel (2026-11-25): sector + playas como chips. */
+.tc-ubic{display:flex;flex-direction:column;gap:5px;min-width:0;margin-top:2px}
+.tc-ubic-fila{display:flex;min-width:0}
+.tc-chip.is-sector{background:rgba(var(--accent-rgb),.16);border-color:rgba(var(--accent-rgb),.34)}
+.tc-ubic-playas{align-items:center}
+.tc-ubic-playas>i{color:var(--accent-ink);font-size:11px}
+.tc-ubic-playas .tc-chip{font-weight:500;background:transparent;max-width:calc(100% - 20px)}
+.tc-ubic-playas .tc-chip.is-mas{font-weight:700;cursor:help}
 .tc-hide,.tc-hs,.tc-ia{height:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;gap:0;padding:0 9px;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s,border-color .15s}
 .tar-card:hover .tc-hide,.tar-card:hover .tc-hs,.tar-card:hover .tc-ia,.tc-hide:focus-visible,.tc-hs:focus-visible,.tc-ia:focus-visible{opacity:1}
 .tc-hide{padding:0}
@@ -4687,6 +4697,14 @@ body.en-cotizar #lyra-fab,body.en-cotizar #chat-fab{display:none!important}
 .cb-link{border:0;background:none;color:var(--accent-txt);font:inherit;font-size:12px;font-weight:600;padding:7px 9px;border-radius:999px;cursor:pointer;transition:background .16s}
 .cb-link:hover{background:var(--accent-soft)}
 .cb-cuentas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.cb-edades{display:grid;gap:6px;margin-top:2px}.cb-edades-campos{display:flex;flex-wrap:wrap;gap:8px}
+.cb-edad{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:10px;font-size:13px}
+.cb-edad span{color:var(--muted);white-space:nowrap}.cb-edad small{color:var(--muted)}
+.cb-edad input{width:56px;min-height:36px;text-align:center;font-size:16px;padding:4px}
+.cb-edad-mayor{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent)}.cb-edad-mayor span{color:var(--danger);font-weight:600}
+.cb-edad-aviso{display:flex;gap:8px;align-items:flex-start;padding:9px 12px;border:1px solid var(--danger);border-left-width:4px;border-radius:10px;background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);font-size:13px;line-height:1.4}
+.cb-edad-aviso i{margin-top:2px}.cb-edad-aviso b{font-weight:700}
+.cb-edad-nota{display:block;color:var(--muted);font-size:12px}.cb-edad-falta{color:var(--amber)}
 .cb-cuenta .fl,.cb-noches .fl{margin-top:0}
 .cb-step{display:flex;align-items:center;gap:4px}
 .cb-step .ei{flex:1;min-width:28px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;padding-left:2px;padding-right:2px;-moz-appearance:textfield;appearance:textfield}
