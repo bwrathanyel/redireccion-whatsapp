@@ -2140,6 +2140,18 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tc-ubic-playas>i{color:var(--accent-ink);font-size:11px}
 .tc-ubic-playas .tc-chip{font-weight:500;background:transparent;max-width:calc(100% - 20px)}
 .tc-ubic-playas .tc-chip.is-mas{font-weight:700;cursor:help}
+/* Visor de mapa dentro del CRM (2026-11-25): por encima del drawer y del lightbox. */
+.tg-mapa-ov{position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(4,6,12,.72);backdrop-filter:blur(3px)}
+.tg-mapa-box{display:flex;flex-direction:column;width:min(760px,100%);height:min(560px,calc(100% - 32px));background:var(--bg2);border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.tg-mapa-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--line)}
+.tg-mapa-head>div{display:flex;flex-direction:column;min-width:0}
+.tg-mapa-head b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg-mapa-head small{font-size:12px;color:var(--muted)}
+.tg-mapa-x{flex-shrink:0;width:34px;height:34px;border-radius:9px;border:1px solid var(--line2);background:transparent;color:inherit;cursor:pointer;font-size:15px}
+.tg-mapa-frame{flex:1;width:100%;border:0;background:var(--line)}
+.tg-mapa-ext{display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-top:1px solid var(--line);color:var(--accent-ink);font-size:12.5px;font-weight:700;text-decoration:none}
+.tg-mapa-ext:hover{background:rgba(var(--accent-rgb),.08)}
+@media (max-width:640px){.tg-mapa-ov{padding:0;align-items:flex-end}.tg-mapa-box{width:100%;height:85dvh;border-radius:14px 14px 0 0;border-bottom:0}}
 .tc-hide,.tc-hs,.tc-ia{height:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;gap:0;padding:0 9px;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,color .15s,border-color .15s}
 .tar-card:hover .tc-hide,.tar-card:hover .tc-hs,.tar-card:hover .tc-ia,.tc-hide:focus-visible,.tc-hs:focus-visible,.tc-ia:focus-visible{opacity:1}
 .tc-hide{padding:0}
@@ -4015,6 +4027,10 @@ body.asesor-boleteria :is(#btn-entrar-modo-boleteria,#sheet-entrar-modo-boleteri
 #sidebar-nav > .nav-item.nav-pagos.pendientes .badge{font-size:12.5px;min-width:24px;padding:3px 8px}
 .nav-pagos.pendientes .nav-pagos-aviso{display:block}
 @media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item.nav-pagos{transition:none}#sidebar-nav > .nav-item.nav-pagos.pendientes{animation:none;background:rgba(239,68,68,.24)}}
+/* Disponibilidad (admin): late con solicitudes abiertas (disponibilidad.js badge) */
+#sidebar-nav > .nav-item[data-sec="disponibilidad"] .badge{background:#ef4444;color:#fff}
+#sidebar-nav > .nav-item[data-sec="disponibilidad"].pendientes{border:1px solid rgba(255,107,107,.75);border-radius:12px;animation:navBolSolLatido 1.3s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item[data-sec="disponibilidad"].pendientes{animation:none;background:rgba(239,68,68,.24)}}
 body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
 body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .rol-boleteria #btn-entrar-modo-boleteria,.rol-boleteria #btn-salir-modo-boleteria,.rol-boleteria #sheet-entrar-modo-boleteria,.rol-boleteria #sheet-salir-modo-boleteria{display:none}

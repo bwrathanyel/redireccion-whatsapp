@@ -28901,7 +28901,7 @@ function tarWireItem(el, x) {
     const cotBtn = el.querySelector('[data-cotizar-producto]');
     if (cotBtn) cotBtn.onclick = e => { e.stopPropagation(); cbDesdeFicha(Number(cotBtn.dataset.cotizarProducto)); };
     const mapaBtn = el.querySelector('.tcm-mapa');
-    if (mapaBtn) mapaBtn.onclick = e => e.stopPropagation();
+    if (mapaBtn) mapaBtn.onclick = e => { e.stopPropagation(); e.preventDefault(); tgMapaAbrir(x); };
     const retBtn = el.querySelector('[data-retirar-tarifa]');
     if (retBtn) retBtn.onclick = e => { e.stopPropagation(); retirarTarifaVieja(Number(retBtn.dataset.retirarTarifa), retBtn); };
     // El carrusel táctil se engancha cuando la tarjeta se acerca a la pantalla,
@@ -31011,6 +31011,38 @@ function tgUbicacionHtml(x) {
     ${playas.length ? `<div class="tg-ubic-playas"><span class="tg-ubic-k"><i class="fas fa-umbrella-beach"></i>Playas cerca</span>${playas.map(p => `<span class="tg-ubic-playa">${esc(p)}</span>`).join('')}</div>` : ''}
   </section>`;
 }
+// Mapa dentro del CRM (dueño 2026-11-25). El embed sin API key acepta coordenada o texto;
+// los maps.app.goo.gl no se pueden embeber, por eso primero lat/lng y luego el query del enlace.
+function tgMapaQuery(x) {
+  if (x?.lat != null && x?.lng != null) return `${x.lat},${x.lng}`;
+  const m = /[?&]query=([^&]+)/.exec(x?.ubicacion_mapa || '');
+  if (m) return decodeURIComponent(m[1].replace(/\+/g, ' '));
+  return [x?.nombre, x?.localidad || x?.destino, 'Venezuela'].filter(Boolean).join(', ');
+}
+let tgMapaEl = null;
+const tgMapaEsc = e => { if (e.key === 'Escape') { e.stopPropagation(); tgMapaCerrar(); } };
+function tgMapaAbrir(x) {
+  if (!x || tgMapaEl) return;
+  const el = document.createElement('div');
+  el.className = 'tg-mapa-ov';
+  const ext = /^https:\/\//.test(x.ubicacion_mapa || '') ? `<a class="tg-mapa-ext" href="${esc(x.ubicacion_mapa)}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Abrir en Google Maps</a>` : '';
+  el.innerHTML = `<div class="tg-mapa-box" role="dialog" aria-modal="true" aria-label="Mapa de ${esc(x.nombre || '')}">
+    <header class="tg-mapa-head"><div><b>${esc(x.nombre || '')}</b>${x.ubicacion_corta ? `<small>${esc(x.ubicacion_corta)}</small>` : ''}</div><button type="button" class="tg-mapa-x" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></header>
+    <iframe class="tg-mapa-frame" src="https://www.google.com/maps?q=${encodeURIComponent(tgMapaQuery(x))}&z=15&output=embed" referrerpolicy="no-referrer-when-downgrade" title="Mapa"></iframe>
+    ${ext}
+  </div>`;
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('.tg-mapa-x')) tgMapaCerrar(); });
+  document.body.appendChild(el);
+  tgMapaEl = el;
+  window.addEventListener('keydown', tgMapaEsc, true);
+  navPush({ type: 'tg-mapa' });
+}
+function tgMapaCerrar(fromNav) {
+  if (!tgMapaEl) return;
+  tgMapaEl.remove(); tgMapaEl = null;
+  window.removeEventListener('keydown', tgMapaEsc, true);
+  if (!fromNav) navConsume();
+}
 /* La ficha normal muestra solo tarifas vendibles, para todos los roles.
    El histórico se conserva en la base y nunca se construye en este drawer. */
 function tarCarpetaHtml(x) {
@@ -31659,6 +31691,7 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
   document.querySelector('#drawerContent [data-tar-pdf]')?.addEventListener('click', e => abrirPdfBtTravel(e.currentTarget, x.id, x.nombre));
+  document.querySelector('#drawerContent .tg-ubic-mapa')?.addEventListener('click', e => { e.preventDefault(); tgMapaAbrir(x); });
   tarActivarSeleccion();
   tarWireDescClamp();
   // Las habitaciones se piden para todos los roles (la RLS le da al no-admin
@@ -40117,6 +40150,7 @@ window.addEventListener('popstate', () => {
   const top = NAV_STACK.pop();
   if (top.type === 'drawer') window.closeDrawer(true);
   else if (top.type === 'lightbox') closeLightbox(true);
+  else if (top.type === 'tg-mapa') tgMapaCerrar(true);
   else if (top.type === 'chat-doc') chatDocCerrar(true);
   else if (top.type === 'tutorial') cerrarTutorial(true);
   else if (top.type === 'tar-comparar') tarCerrarComparador(true);
@@ -40392,7 +40426,7 @@ const NAV_ITEMS = [
   // Ya no es pestaña de Leads (2026-10-17): entrada propia del menú en todos los modos (también la ficha del lead la abre con cbDesdeLead).
   { sec: 'cotizacion-boletos', icon: 'fas fa-file-invoice-dollar', label: 'Cotizaciones', padreAdmin: 'grp-herramientas', roles: 'nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Hospedaje, paquetes, tours y boletos en un PDF' },
   // Disponibilidad (2026-11-18, disponibilidad.js): asesor/administrativo piden, admins atienden. Boletería y marketing no.
-  { sec: 'disponibilidad', icon: 'fas fa-hotel', label: 'Disponibilidad', padreAdmin: 'grp-tarifario', roles: '', sub: 'Pide disponibilidad de hoteles y posadas; un admin consulta al proveedor y responde', badge: 'nav-disp-count', badgeDefault: '0' },
+  { sec: 'disponibilidad', icon: 'fas fa-hotel', label: 'Disponibilidad', roles: '', sub: 'Pide disponibilidad de hoteles y posadas; un admin consulta al proveedor y responde', badge: 'nav-disp-count', badgeDefault: '0' },
   // Boletos emitidos (2026-11-04): solo admin y rol boletería (dueño); asesor+boletería y administrativo no.
   { sec: 'boletos-emitidos', icon: 'fas fa-ticket', label: 'Boletos emitidos', roles: 'nav-admin-only nav-administrativo-no nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Recibo de itinerario con el logo de la aerolínea; se llena solo con el PDF del consolidador' },
   { sec: 'importar-vouchers', icon: 'fas fa-file-import', label: 'Importar vouchers', padre: 'grp-reservas', roles: '', sub: 'Carga vouchers PDF como venta' },
@@ -40471,7 +40505,7 @@ const NAV_HERRAMIENTAS = { sec: 'grp-herramientas', icon: 'fas fa-toolbox', labe
 const NAV_BLOQUES_ADMIN = [
   ['negocio', 'Negocio', ['grp-reservas', 'grp-cobros', 'grp-directorio', 'boletos-emitidos']],
   ['gestion', 'Gestión', ['grp-equipo', 'grp-ia', 'grp-marketing']],
-  ['ventas', 'Ventas', ['grp-leads', 'grp-tarifario']],
+  ['ventas', 'Ventas', ['grp-leads', 'grp-tarifario', 'disponibilidad']],
   ['hoy', 'Hoy', ['grp-inicio', 'tareas', 'correo', 'grp-bandeja', 'mensajes']],
   ['mas', 'Más', ['grp-herramientas', 'grp-ayuda']],
 ];
@@ -41063,6 +41097,7 @@ function hayOverlayAbierto() {
     || document.getElementById('drawer')?.classList.contains('open')
     || document.getElementById('tour-overlay')?.classList.contains('open')
     || document.body.classList.contains('lb-lock')
+    || !!tgMapaEl
     || !!document.querySelector('.tk-overlay');
 }
 function abrirMenuMovil() {
