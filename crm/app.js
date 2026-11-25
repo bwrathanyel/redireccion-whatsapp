@@ -3922,7 +3922,7 @@ async function startApp() {
   arrancar(
     renderNavItems, renderFavoritos, fijarSolicitudesArriba, setupAvisoPagos, ocultarHeadersVaciosMenu, setupNav, setupMenuMovil, setupAppBar, setupBusquedaGlobal, setupLongPressSeleccion,
     setupTarifarioTabs, setupLightbox, setupMensajes, setupWhatsapp, setupDms, setupCorreo, setupRedes,
-    setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, setupInstalacionPwa, sincronizarSuscripcionPush,
+    setupPostventa, setupTutorial, setupTutoriales, registrarServiceWorkerConAviso, iniciarCentroNovedades, setupInstalacionPwa, sincronizarSuscripcionPush,
     setupDocumentosRevisiones, setupHoy, setupColaInbox, setupPausaAsesor, setupConsultorIA, setupAsistente, setupLyra, setupBoleteriaSeccion, setupMisNotas, setupContactosDirectos, setupRepartir, setupExportes, setupKpisPlegables,
     setupTareasV2, setupLlamadasWa, setupLlamadasApp, setupTecladoMovil, setupCapasMoviles, setupEstadoBody, setupBarraInf, setupSolicitudesDisp,
   );
@@ -29470,6 +29470,7 @@ function tfRenderTarifas() {
     : '<div class="muted" style="font-size:12.5px">Sin tarifas vigentes. Agrega una abajo.</div>';
   box.querySelectorAll('.tf-tarifa').forEach(tfBindFila);
   tfRenderUnidad(box);
+  tgeTablaBtn(box);
 }
 
 // Unidad de precio del hotel (2026-10-26): la misma que lee Cotización. Si el PDF no la declara
@@ -29484,7 +29485,10 @@ function tfRenderUnidad(box) {
   const estado = !actual ? (unicas.length > 1 ? 'Las tarifas no coinciden: unas por persona y otras por habitación.' : 'El tarifario no dice si el precio es por persona o por habitación.')
     : deducida ? 'Deducido de la grilla (doble mayor que sencilla = por habitación). Confírmalo.' : 'Declarado en el tarifario.';
   box.insertAdjacentHTML('beforebegin', `<div id="tf-unidad" class="cb-unidad${actual && !deducida ? '' : ' cb-unidad-deducida'}"><i class="fas fa-tag" aria-hidden="true"></i><span><b>Precios ${actual ? TAR_UNIDAD_TEXTO[actual] || actual : 'sin unidad clara'}</b><small>${esc(estado)}</small></span>
-    <select class="ei" id="tf-unidad-sel" aria-label="Unidad de precio del hotel"><option value="">Fijar unidad…</option><option value="persona_noche">Por persona por noche</option><option value="habitacion_noche">Por habitación por noche</option></select></div>`);
+    ${actual && !deducida ? '<button type="button" class="dbtn gh" id="tf-unidad-cambiar">Cambiar</button>' : ''}
+    <select class="ei" id="tf-unidad-sel" aria-label="Unidad de precio del hotel"${actual && !deducida ? ' style="display:none"' : ''}><option value="">${actual ? 'Cambiar unidad…' : 'Fijar unidad…'}</option><option value="persona_noche">Por persona por noche</option><option value="habitacion_noche">Por habitación por noche</option></select></div>`);
+  const cambiar = document.getElementById('tf-unidad-cambiar');
+  if (cambiar) cambiar.onclick = () => { cambiar.style.display = 'none'; document.getElementById('tf-unidad-sel').style.display = ''; };
   document.getElementById('tf-unidad-sel').onchange = async e => {
     const unidad = e.target.value; if (!unidad) return;
     e.target.disabled = true;
@@ -29498,6 +29502,7 @@ function tfRenderUnidad(box) {
 }
 
 function tfFilaHtml(t) {
+  if (tgeAplica(t)) return t && t.id ? tgeResumenHtml(t) : tgeFormHtml(null);
   const nueva = !t || !t.id;
   const mon = (t && t.moneda) || 'USD';
   return `<div class="tf-tarifa" ${nueva ? 'data-nueva' : `data-id="${t.id}"`}>
@@ -29519,6 +29524,16 @@ function tfFilaHtml(t) {
 }
 
 function tfBindFila(row) {
+  if (row.classList.contains('tge')) { tgeBind(row); return; }
+  if (row.classList.contains('tge-res')) {
+    row.querySelector('.tge-edit').onclick = () => {
+      const t = tfVigentes().find(x => x.id === Number(row.dataset.id)); if (!t) return;
+      const tpl = document.createElement('div'); tpl.innerHTML = tgeFormHtml(t);
+      const f = tpl.firstElementChild; row.replaceWith(f); tgeBind(f); f.querySelector('.tge-v')?.focus();
+    };
+    row.querySelector('.tf-t-del').onclick = () => tfRetirarFila(row);
+    return;
+  }
   const precio = row.querySelector('.tf-t-precio');
   const calc = row.querySelector('.tf-tarifa-calc');
   const upd = () => {
@@ -29539,7 +29554,7 @@ function tfAgregarFilaTarifa() {
   if (vacio) vacio.remove();
   box.insertAdjacentHTML('beforeend', tfFilaHtml(null));
   tfBindFila(box.lastElementChild);
-  box.lastElementChild.querySelector('.tf-t-precio').focus();
+  box.lastElementChild.querySelector('.tf-t-precio, .tge-plan')?.focus();
 }
 
 async function tfGuardarFila(row) {
@@ -29559,6 +29574,273 @@ async function tfGuardarFila(row) {
   btn.disabled = false;
   if (error || !data?.ok) { errToast('No se pudo guardar la tarifa: ' + (error?.message || data?.error || '')); return; }
   okToast(id ? 'Tarifa actualizada — protegida del tarifario automático' : 'Tarifa creada — protegida del tarifario automático');
+  await tfRecargarProducto();
+}
+
+// Editor guiado (2026-11-25, migr. 20261208100000): en hoteles y paquetes la tarifa se edita por campos y
+// guardar_tarifa_guiada escribe precios, ventanas, días y mínimo de noches, que es lo que lee el motor de
+// cotización. El texto para el cliente se arma acá (una sola fuente) y viaja ya armado.
+const TGE_DIAS = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+const TGE_DIA_TXT = { MIERCOLES: 'MIÉRCOLES', SABADO: 'SÁBADO' };
+const TGE_NUEVAS = ['sgl', 'dbl', 'tpl', 'cpl', 'qpl', 'sex', 'pax_adic', 'chd'];
+const TGE_DIAS_RE = '(DOMINGO|LUNES|MARTES|MIERCOLES|JUEVES|VIERNES|SABADO)S?\\s+(?:A|AL|HASTA)\\s+(DOMINGO|LUNES|MARTES|MIERCOLES|JUEVES|VIERNES|SABADO)S?';
+let TGE_N = 0;
+const tgeAplica = t => ['hotel', 'paquete'].includes(TAR_EDIT_PROD?.tipo) && (!t || !t.precios || (typeof t.precios === 'object' && !Array.isArray(t.precios)));
+const tgeNorm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+const tgeDia = d => TGE_DIA_TXT[d] || d;
+const tgeFecha = s => s ? s.split('-').reverse().join('/') : '…';
+const tgeEsNino = k => /(chd|inf|nin|menor)/.test(k);
+const tgeEsAdulto = k => k !== 'base' && !tgeEsNino(k) && !/(adic|extra)/.test(k);
+const tgeMon = (d, n) => d.moneda === 'EUR' ? `${+n} €` : `$${+n}`;
+function tgeEtq(k) {
+  const m = k.match(/^chd_0?(\d+)_(\d+)$/);
+  return m ? `Niños de ${+m[1]} a ${+m[2]} años` : TG_ETQ[k] || (/^inf/.test(k) ? 'Infantes' : k.replace(/_/g, ' '));
+}
+function tgeDiasDe(t) {
+  const m = tgeNorm([...(t?.condiciones || []), t?.vigencia_texto, t?.habitacion].filter(Boolean).join(' / ')).match(new RegExp(`\\b${TGE_DIAS_RE}\\b`));
+  return m ? { desde: m[1], hasta: m[2] } : null;
+}
+function tgeTemporada(t) {
+  return String(t?.vigencia_texto || '')
+    .replace(/\d{1,2}\/\d{1,2}\/\d{2,4}\s*(AL|A|-|HASTA)\s*\d{1,2}\/\d{1,2}\/\d{2,4}/gi, '')
+    .replace(/(DOMINGO|LUNES|MARTES|MI[EÉ]RCOLES|JUEVES|VIERNES|S[AÁ]BADO)S?\s+(A|AL|HASTA)\s+(DOMINGO|LUNES|MARTES|MI[EÉ]RCOLES|JUEVES|VIERNES|S[AÁ]BADO)S?/gi, '')
+    .replace(/(\s*[\/,]\s*|\s+Y\s*)+$/i, '').replace(/^(\s*[\/,]\s*)+/, '').replace(/\s+/g, ' ').trim();
+}
+function tgeBase(t) {
+  if (t?.precios?.base === 'habitacion' || t?.precios?.base === 'persona') return t.precios.base;
+  try { return tarUnidad(t).unidad === 'habitacion_noche' ? 'habitacion' : 'persona'; } catch { return 'persona'; }
+}
+const tgeOpts = (vals, sel, etq = v => v) => vals.map(v => `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(etq(v))}</option>`).join('');
+const tgeVentHtml = w => `<div class="tge-vent"><input class="ei tge-vd" type="date" value="${esc(w.desde || '')}" aria-label="Desde"><span>al</span><input class="ei tge-vh" type="date" value="${esc(w.hasta || '')}" aria-label="Hasta"><button type="button" class="tge-x" aria-label="Quitar período">×</button></div>`;
+function tgePrecioHtml(k, v) {
+  const m = k === 'chd' ? [null, '', ''] : k.match(/^chd_0?(\d+)_(\d+)$/);
+  const etq = m ? `<span>Niños de <input class="ei tge-e1" type="number" min="0" max="17" value="${m[1] === '' ? '' : +m[1]}" aria-label="Edad desde"> a <input class="ei tge-e2" type="number" min="0" max="17" value="${m[2] === '' ? '' : +m[2]}" aria-label="Edad hasta"> años</span>` : `<span>${esc(tgeEtq(k))}</span>`;
+  return `<div class="tge-p" data-k="${m ? 'chd' : esc(k)}">${etq}<input class="ei tge-v" type="number" min="0" step="0.01" inputmode="decimal" value="${v === '' || v == null ? '' : +v}" aria-label="Precio"><button type="button" class="tge-x" aria-label="Quitar precio">×</button></div>`;
+}
+
+function tgeResumenHtml(t) {
+  const cab = [t.habitacion, t.plan].filter(Boolean).join(' · ') || 'Tarifa';
+  return `<div class="tf-tarifa tge-res" data-id="${t.id}">
+    <div class="tge-res-t"><b>${esc(cab)}</b><span>${esc(t.vigencia_texto || '')}</span></div>
+    <div class="tge-res-p">${esc(t.precio_texto || '')}</div>
+    <div class="tf-tarifa-acc"><button type="button" class="dbtn gh tge-edit"><i class="fas fa-pen"></i> Editar</button><button type="button" class="dbtn gh tf-t-del"><i class="fas fa-ban"></i> Retirar</button></div>
+    ${t.protegido ? '' : '<div class="tf-tarifa-src">Viene del tarifario automático — guardar la pasa a manual y protegida.</div>'}<div class="tf-tarifa-src">${esc(t.fuente_archivo || '')}</div>
+  </div>`;
+}
+
+function tgeFormHtml(t) {
+  const vig = tfVigentes(), base = t || vig[vig.length - 1] || null, n = ++TGE_N;
+  const precios = t?.precios || Object.fromEntries(Object.keys(base?.precios || { dbl: '' }).map(k => [k, '']));
+  const dias = t ? tgeDiasDe(t) : base ? tgeDiasDe(base) : null, mon = base?.moneda || 'USD';
+  const vents = (t?.ventanas || []).filter(w => w && (w.desde || w.hasta));
+  const lista = (id, campo) => `<datalist id="${id}">${[...new Set(vig.map(x => x[campo]).filter(Boolean))].map(v => `<option value="${esc(v)}">`).join('')}</datalist>`;
+  return `<div class="tf-tarifa tge" ${t?.id ? `data-id="${t.id}"` : 'data-nueva'}>
+    <div class="tge-g">
+      <label class="tge-c"><span>Plan</span><input class="ei tge-plan" list="tge-pl-${n}" value="${esc(base?.plan || '')}" placeholder="Ej. TODO INCLUIDO">${lista(`tge-pl-${n}`, 'plan')}</label>
+      <label class="tge-c"><span>Habitación</span><input class="ei tge-hab" list="tge-hb-${n}" value="${esc(base?.habitacion || '')}" placeholder="Ej. TRIPLE">${lista(`tge-hb-${n}`, 'habitacion')}</label>
+      <label class="tge-c"><span>Temporada (opcional)</span><input class="ei tge-temp" value="${esc(t ? tgeTemporada(t) : '')}" placeholder="Ej. TEMPORADA ALTA"></label>
+      <label class="tge-c"><span>Precio</span><select class="ei tge-base">${tgeOpts(['persona', 'habitacion'], tgeBase(base), v => v === 'persona' ? 'Por persona por noche' : 'Por habitación por noche')}</select></label>
+    </div>
+    <div class="tge-sec"><b>Fechas en que aplica</b><div class="tge-vents">${(vents.length ? vents : [{}]).map(tgeVentHtml).join('')}</div>
+      <button type="button" class="dbtn gh tge-add-vent"><i class="fas fa-plus"></i> Otro período</button></div>
+    <div class="tge-g">
+      <label class="tge-c"><span>Días</span><select class="ei tge-dias-modo"><option value="">Todos los días</option><option value="r"${dias ? ' selected' : ''}>Solo algunos días</option></select></label>
+      <div class="tge-c tge-dias-r"${dias ? '' : ' hidden'}><span>De … a …</span><div class="tge-dias"><select class="ei tge-d1" aria-label="Desde el día">${tgeOpts(TGE_DIAS, dias?.desde || 'LUNES', tgeDia)}</select><select class="ei tge-d2" aria-label="Hasta el día">${tgeOpts(TGE_DIAS, dias?.hasta || 'JUEVES', tgeDia)}</select></div></div>
+      <label class="tge-c"><span>Mínimo de noches</span><input class="ei tge-min" type="number" min="1" max="30" value="${esc(base?.minimo_noches ?? '')}" placeholder="Sin mínimo"></label>
+      <label class="tge-c"><span>Moneda</span><select class="ei tge-moneda">${tgeOpts(['USD', 'EUR'], mon)}</select></label>
+    </div>
+    <div class="tge-sec"><b>Precios</b><div class="tge-precios">${Object.entries(precios).filter(([k]) => k !== 'base').map(([k, v]) => tgePrecioHtml(k, v)).join('')}</div>
+      <select class="ei tge-nueva" aria-label="Agregar ocupación"><option value="">+ Agregar ocupación…</option>${TGE_NUEVAS.map(k => `<option value="${k}">${k === 'chd' ? 'Niños (edades)' : esc(tgeEtq(k))}</option>`).join('')}</select></div>
+    <label class="tge-c"><span>Detalle extra para el cliente (opcional)</span><textarea class="ei tge-extra" rows="2" placeholder="Ej. Pagando en bolívares rige la tasa BCV."></textarea></label>
+    ${t?.precio_texto ? `<div class="tge-actual">Texto actual: ${esc(t.precio_texto)}</div>` : ''}
+    <div class="tge-vista"><div class="tge-vista-t">Así lo verá el cliente</div><div class="tge-txt"></div><div class="tge-vig"></div><div class="tge-cuenta"></div><ul class="tge-avisos"></ul></div>
+    <div class="tf-tarifa-acc"><button type="button" class="dbtn gh tge-save"><i class="fas fa-floppy-disk"></i> ${t?.id ? 'Guardar' : 'Crear'}</button><button type="button" class="dbtn gh tge-cancel"><i class="fas fa-xmark"></i> Cancelar</button></div>
+  </div>`;
+}
+
+function tgeTextoPrecio(d) {
+  const p = d.precios, adultos = Object.keys(p).filter(tgeEsAdulto), k = p.dbl != null ? 'dbl' : adultos[0];
+  if (k == null || p[k] == null) return '';
+  const cab = [d.habitacion, d.plan && `(${d.plan})`].filter(Boolean).join(' ');
+  let s = `${cab ? `${cab}: ` : ''}${tgeMon(d, p[k])} ${p.base === 'habitacion' ? 'por habitación por noche' : 'por persona por noche'}${k === 'dbl' ? '' : ` en ${tgeEtq(k).toLowerCase()}`}.`;
+  const otros = Object.keys(p).filter(x => x !== 'base' && x !== k && !(tgeEsAdulto(x) && p[x] === p[k]))
+    .sort((a, b) => tgeEsNino(a) - tgeEsNino(b)).map(x => `${tgeEtq(x)} ${tgeMon(d, p[x])}`);
+  if (otros.length) { const t = otros.join('; ').toLowerCase(); s += ` ${t[0].toUpperCase()}${t.slice(1)}.`; }
+  if (d.minimo_noches > 1) s += ` Mínimo ${d.minimo_noches} noches.`;
+  return d.extra ? `${s} ${d.extra}` : s;
+}
+function tgeTextoVig(d) {
+  const per = d.ventanas.map(w => `${tgeFecha(w.desde)} AL ${tgeFecha(w.hasta)}`).join(' Y ');
+  return [d.temporada, per].filter(Boolean).join(' ') + (d.dias ? ` / ${tgeDia(d.dias.desde)} A ${tgeDia(d.dias.hasta)}` : '');
+}
+function tgeCuenta(d) {
+  const p = d.precios, k = p.dbl != null ? 'dbl' : Object.keys(p).find(tgeEsAdulto);
+  if (!k || !(p[k] > 0)) return '';
+  const n = Math.max(2, d.minimo_noches || 0), persona = p.base !== 'habitacion';
+  const total = Math.round((persona ? p[k] * 2 : p[k]) * n * 100) / 100;
+  return `Ejemplo del bot: 2 adultos en ${tgeEtq(k).toLowerCase()}, ${n} noches = ${tgeMon(d, p[k])}${persona ? ' × 2 personas' : ''} × ${n} noches = ${tgeMon(d, total)}`;
+}
+
+function tgeLeer(box) {
+  const q = s => box.querySelector(s), precios = { base: q('.tge-base').value };
+  box.querySelectorAll('.tge-p').forEach(r => {
+    let k = r.dataset.k;
+    if (k === 'chd') { const a = r.querySelector('.tge-e1').value, b = r.querySelector('.tge-e2').value; k = a !== '' && b !== '' && +b >= +a ? `chd_${+a}_${+b}` : ''; }
+    const v = r.querySelector('.tge-v').value.trim();
+    if (k && v !== '' && isFinite(+v)) precios[k] = Math.round(+v * 100) / 100;
+  });
+  const min = q('.tge-min').value.trim();
+  const d = {
+    plan: q('.tge-plan').value.trim(), habitacion: q('.tge-hab').value.trim(), moneda: q('.tge-moneda').value, precios,
+    ventanas: [...box.querySelectorAll('.tge-vent')].map(r => ({ desde: r.querySelector('.tge-vd').value, hasta: r.querySelector('.tge-vh').value })).filter(w => w.desde || w.hasta),
+    dias: q('.tge-dias-modo').value ? { desde: q('.tge-d1').value, hasta: q('.tge-d2').value } : null,
+    minimo_noches: min ? Math.round(+min) : null, temporada: q('.tge-temp').value.trim(), extra: q('.tge-extra').value.trim(),
+  };
+  d.precio_texto = tgeTextoPrecio(d); d.vigencia_texto = tgeTextoVig(d);
+  return d;
+}
+
+function tgeAvisos(d, id) {
+  const a = [], p = d.precios, hoy = new Date().toISOString().slice(0, 10);
+  if (!d.ventanas.length) a.push(['bad', 'Falta al menos un período de fechas.']);
+  d.ventanas.forEach(w => {
+    if (!w.desde || !w.hasta) a.push(['bad', 'Cada período necesita fecha de inicio y de fin.']);
+    else if (w.desde > w.hasta) a.push(['bad', `El período del ${tgeFecha(w.desde)} termina antes de empezar.`]);
+    else if (w.hasta < hoy) a.push(['warn', `El período que termina el ${tgeFecha(w.hasta)} ya pasó.`]);
+  });
+  if (!Object.keys(p).some(k => tgeEsAdulto(k) && p[k] > 0)) a.push(['bad', 'Falta el precio de adulto.']);
+  if (d.minimo_noches != null && !(d.minimo_noches >= 1 && d.minimo_noches <= 30)) a.push(['bad', 'El mínimo de noches va de 1 a 30.']);
+  if (p.sgl != null && p.dbl != null && (p.base === 'habitacion' ? p.dbl < p.sgl : p.sgl < p.dbl))
+    a.push(['warn', p.base === 'habitacion' ? 'La doble sale más barata que la sencilla por habitación.' : 'La sencilla sale más barata que la doble por persona.']);
+  const adulto = p.dbl ?? p[Object.keys(p).find(tgeEsAdulto)];
+  Object.keys(p).filter(tgeEsNino).forEach(k => { if (adulto && p[k] > adulto) a.push(['warn', `El precio de ${tgeEtq(k).toLowerCase()} es mayor que el de un adulto.`]); });
+  if (new RegExp(TGE_DIAS_RE).test(tgeNorm(d.habitacion))) a.push(['warn', 'La habitación menciona días de la semana: muévelos a «Días» para que el bot no los lea dos veces.']);
+  const dk = x => x ? `${x.desde}-${x.hasta}` : '';
+  tfVigentes().filter(t => t.id !== id && tgeNorm(t.plan) === tgeNorm(d.plan) && tgeNorm(t.habitacion) === tgeNorm(d.habitacion) && dk(tgeDiasDe(t)) === dk(d.dias))
+    .forEach(t => {
+      if ((t.ventanas || []).some(w => w?.desde && w?.hasta && d.ventanas.some(v => v.desde && v.hasta && v.desde <= w.hasta && w.desde <= v.hasta)))
+        a.push(['warn', `Se cruza con otra tarifa igual: «${t.vigencia_texto || t.id}».`]);
+    });
+  return a;
+}
+
+function tgeVista(box) {
+  const q = s => box.querySelector(s), d = tgeLeer(box), av = tgeAvisos(d, box.dataset.id ? Number(box.dataset.id) : null);
+  q('.tge-dias-r').hidden = !q('.tge-dias-modo').value;
+  q('.tge-txt').textContent = d.precio_texto || 'Completa los precios para ver el texto.';
+  q('.tge-vig').textContent = d.vigencia_texto;
+  q('.tge-cuenta').textContent = tgeCuenta(d);
+  q('.tge-avisos').innerHTML = av.map(([n, t]) => `<li class="tge-av-${n}">${esc(t)}</li>`).join('');
+  q('.tge-save').disabled = av.some(x => x[0] === 'bad');
+}
+
+function tgeBind(box) {
+  const upd = () => tgeVista(box);
+  box.addEventListener('input', upd); box.addEventListener('change', upd);
+  box.addEventListener('click', e => { const x = e.target.closest('.tge-x'); if (x) { x.parentElement.remove(); upd(); } });
+  box.querySelector('.tge-add-vent').onclick = () => { box.querySelector('.tge-vents').insertAdjacentHTML('beforeend', tgeVentHtml({})); upd(); };
+  box.querySelector('.tge-nueva').onchange = e => {
+    const k = e.target.value; e.target.value = '';
+    if (!k || (k !== 'chd' && box.querySelector(`.tge-p[data-k="${k}"]`))) return;
+    const lista = box.querySelector('.tge-precios');
+    lista.insertAdjacentHTML('beforeend', tgePrecioHtml(k, ''));
+    lista.lastElementChild.querySelector('input').focus(); upd();
+  };
+  box.querySelector('.tge-save').onclick = () => tgeGuardar(box);
+  box.querySelector('.tge-cancel').onclick = () => tfRenderTarifas();
+  upd();
+}
+
+async function tgeGuardar(box) {
+  const id = box.dataset.id ? Number(box.dataset.id) : null, d = tgeLeer(box);
+  if (tgeAvisos(d, id).some(x => x[0] === 'bad')) { errToast('Revisa los avisos en rojo'); return; }
+  const { temporada, extra, ...datos } = d;
+  const btn = box.querySelector('.tge-save'); btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_tarifa_guiada', { p_id: id, p_producto_id: TAR_EDIT_ID, p_datos: datos });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se pudo guardar la tarifa: ' + (error?.message || data?.error || '')); return; }
+  okToast(id ? 'Tarifa actualizada — el bot ya cotiza con estos precios' : 'Tarifa creada — protegida del tarifario automático');
+  cbHotelTarifas.delete(Number(TAR_EDIT_ID));
+  await tfRecargarProducto();
+}
+
+// Tabla del hotel (dirección C): filas = plan × habitación × días, columnas = períodos. Se edita el precio
+// principal (doble, o el primer adulto) y el resto de la fila se ajusta en la misma proporción, así la
+// sencilla +30 % o el niño 50 % se mantienen. Guarda todo junto con guardar_tarifas_hotel_lote.
+const tgePrincipal = p => p && typeof p === 'object' ? (isFinite(+p.dbl) && p.dbl != null ? 'dbl' : Object.keys(p).find(k => tgeEsAdulto(k) && isFinite(+p[k]))) : null;
+const tgePerKey = t => (t.ventanas || []).filter(w => w?.desde && w?.hasta).map(w => `${w.desde}|${w.hasta}`).join(',');
+const tgeGrupo = t => { const d = tgeDiasDe(t); return [t.plan || '', t.habitacion || '', d ? `${tgeDia(d.desde)} A ${tgeDia(d.hasta)}` : ''].join('|'); };
+const tgeTablaFilas = () => tfVigentes().filter(t => tgeAplica(t) && tgePrincipal(t.precios) && tgePerKey(t));
+
+function tgeTablaBtn(box) {
+  document.getElementById('tge-tabla-btn')?.remove();
+  if (tgeTablaFilas().length < 2) return;
+  box.insertAdjacentHTML('beforebegin', '<button type="button" id="tge-tabla-btn" class="dbtn gh"><i class="fas fa-table"></i> Editar todo el hotel</button>');
+  document.getElementById('tge-tabla-btn').onclick = () => tgeTablaAbrir(box);
+}
+
+function tgeEscalar(t, nuevo) {
+  const k = tgePrincipal(t.precios), r = nuevo / +t.precios[k];
+  const precios = Object.fromEntries(Object.entries(t.precios).filter(([x]) => x !== 'base')
+    .map(([x, v]) => [x, x === k ? nuevo : isFinite(+v) && v !== null && v !== '' ? Math.round(+v * r * 100) / 100 : v]));
+  return { base: tgeBase(t), ...precios };
+}
+
+function tgeTablaAbrir(box) {
+  const vig = tgeTablaFilas(), filas = [...new Set(vig.map(tgeGrupo))].sort(), cols = [...new Set(vig.map(tgePerKey))].sort();
+  const celdas = new Map();
+  vig.forEach(t => { const c = `${tgeGrupo(t)}#${tgePerKey(t)}`; celdas.set(c, [...(celdas.get(c) || []), t]); });
+  const colEtq = c => c.split(',').map(x => x.split('|').map(tgeFecha).join(' al ')).join(' y ');
+  const filaEtq = f => { const [plan, hab, dias] = f.split('|'); return `<b>${esc(hab || 'Habitación')}</b><small>${esc([plan, dias].filter(Boolean).join(' · '))}</small>`; };
+  const resto = tfVigentes().length - vig.length;
+  document.getElementById('tge-tabla-btn')?.remove();
+  document.getElementById('tf-unidad')?.remove();
+  box.innerHTML = `<div class="tge-tabla-box">
+    <div class="tge-tabla-ayuda">Cambia el precio de la doble (o del primer adulto). La sencilla, los niños y el resto de la fila se ajustan en la misma proporción.</div>
+    <div class="tge-tabla-w"><table class="tge-tabla"><thead><tr><th class="tge-tf">Habitación</th>${cols.map(c => `<th>${esc(colEtq(c))}</th>`).join('')}</tr></thead><tbody>
+    ${filas.map(f => `<tr><th class="tge-tf">${filaEtq(f)}</th>${cols.map(c => {
+      const ts = celdas.get(`${f}#${c}`) || [];
+      if (!ts.length) return '<td class="muted">—</td>';
+      const t = ts[0], k = tgePrincipal(t.precios);
+      return `<td><input class="ei tge-tc" type="number" min="0" step="0.01" inputmode="decimal" data-id="${t.id}" value="${+t.precios[k]}" aria-label="${esc(`${f.replace(/\|/g, ' ')} ${colEtq(c)}`)}"><small class="tge-tc-d"></small>${ts.length > 1 ? `<small class="tge-av-warn">${ts.length - 1} tarifa más con estas fechas: edítala aparte</small>` : ''}</td>`;
+    }).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    ${resto > 0 ? `<div class="tge-tabla-ayuda">${resto} tarifa${resto === 1 ? '' : 's'} sin precios por ocupación no aparece${resto === 1 ? '' : 'n'} aquí: edítala${resto === 1 ? '' : 's'} una por una.</div>` : ''}
+    <div class="tf-tarifa-acc"><button type="button" class="dbtn gh tge-tabla-save"><i class="fas fa-floppy-disk"></i> Guardar cambios</button><button type="button" class="dbtn gh tge-tabla-volver"><i class="fas fa-arrow-left"></i> Volver</button></div>
+  </div>`;
+  const cont = box.firstElementChild;
+  const detalle = inp => {
+    const t = tfVigentes().find(x => x.id === Number(inp.dataset.id)), v = Math.round(+inp.value * 100) / 100, k = tgePrincipal(t.precios);
+    inp.classList.toggle('tge-tc-cambio', inp.value.trim() !== '' && v !== +t.precios[k]);
+    if (!(v > 0)) { inp.nextElementSibling.textContent = 'Pon un precio'; return; }
+    const p = tgeEscalar(t, v), d = { moneda: t.moneda || 'USD' };
+    inp.nextElementSibling.textContent = Object.keys(p).filter(x => x !== 'base' && x !== k && isFinite(+p[x])).map(x => `${tgeEtq(x)} ${tgeMon(d, p[x])}`).join(' · ');
+  };
+  cont.querySelectorAll('.tge-tc').forEach(inp => { detalle(inp); inp.addEventListener('input', () => detalle(inp)); });
+  cont.querySelector('.tge-tabla-volver').onclick = () => tfRenderTarifas();
+  cont.querySelector('.tge-tabla-save').onclick = () => tgeTablaGuardar(cont);
+}
+
+async function tgeTablaGuardar(cont) {
+  const filas = [];
+  for (const inp of cont.querySelectorAll('.tge-tc')) {
+    const t = tfVigentes().find(x => x.id === Number(inp.dataset.id)), k = tgePrincipal(t.precios), v = Math.round(+inp.value * 100) / 100;
+    if (inp.value.trim() === '' || !(v > 0)) { errToast('Hay una celda vacía o en cero'); inp.focus(); return; }
+    if (v === +t.precios[k]) continue;
+    const d = { plan: t.plan || '', habitacion: t.habitacion || '', moneda: t.moneda || 'USD', precios: tgeEscalar(t, v),
+      ventanas: t.ventanas.filter(w => w?.desde && w?.hasta).map(w => ({ desde: w.desde, hasta: w.hasta })),
+      dias: tgeDiasDe(t), minimo_noches: t.minimo_noches ?? null, temporada: tgeTemporada(t), extra: '' };
+    d.precio_texto = tgeTextoPrecio(d); d.vigencia_texto = tgeTextoVig(d);
+    const { temporada, extra, ...datos } = d;
+    filas.push({ id: t.id, datos });
+  }
+  if (!filas.length) { okToast('No hay cambios para guardar'); return; }
+  const btn = cont.querySelector('.tge-tabla-save'); btn.disabled = true;
+  const { data, error } = await sb.rpc('guardar_tarifas_hotel_lote', { p_producto_id: TAR_EDIT_ID, p_filas: filas });
+  btn.disabled = false;
+  if (error || !data?.ok) { errToast('No se guardó nada: ' + (error?.message || (data?.fila ? `tarifa ${data.fila}: ` : '') + (data?.error || ''))); return; }
+  okToast(`${filas.length} tarifa${filas.length === 1 ? '' : 's'} actualizada${filas.length === 1 ? '' : 's'} — el bot ya cotiza con estos precios`);
+  cbHotelTarifas.delete(Number(TAR_EDIT_ID));
   await tfRecargarProducto();
 }
 
@@ -43908,6 +44190,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { id: '2026-11-25-centro-novedades', fecha: '2026-11-25', emoji: '🔔', titulo: 'Centro de novedades', texto: 'Ahora hay una campana arriba. El número que ves es lo que se agregó desde la última vez que entraste, y al tocarla lees solo eso, con un ejemplo y un botón para ir directo. Después de actualizar el CRM te aparece solita la hoja «Esto es lo nuevo». También te avisa del Tarifario: alojamientos nuevos, precios que bajaron o subieron y tarifas nuevas (con un puntico en la campana). Filtra por Todo, Tarifario o CRM.', ejemplo: 'Hotel X pasó de desde $60 a desde $50: ejemplo $50 × 2 personas × 3 noches = $300.', donde: { sec: 'actualizaciones', label: 'Ver el archivo completo' }, roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'] },
   { fecha: '2026-11-25', emoji: '💵', titulo: 'Ventas: cobro y pago al proveedor de un vistazo', texto: 'Cada venta en Finanzas › Ventas muestra dos estados: cuánto pagó el cliente y cuánto le pagamos al proveedor, con botón Pagar directo. Al tocar la tarjeta se abre el detalle de la venta con los abonos, los pagos a cada proveedor y su estado de cuenta. Desde Pagos a proveedores, el código de la reserva abre esa misma venta.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-24', emoji: '🏷️', titulo: 'Tarifario: botón Cotizar en la tarjeta', texto: 'El botón Cotizar de cada tarjeta del Tarifario abre Cotizaciones con ese hotel ya elegido.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-22', emoji: '📅', titulo: 'Calendario de estancia y asesor en boletos', texto: 'En Cotizaciones puedes elegir entrada y salida desde un calendario de rango, con dos meses en escritorio y uno en móvil. Boletos emitidos permite añadir un asesor opcional: en la previa y el PDF aparece solo su nombre, sin teléfono.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
@@ -44161,22 +44444,158 @@ const ACTUALIZACIONES_LOG = [
   { fecha: '2026-07-08', emoji: '🔐', titulo: 'Login individual por usuario', texto: 'Cada asesor entra con su propia cuenta y rol (admin/asesor/marketing), con autoservicio para configurar su contraseña.', roles: ROLES_TODOS },
   { fecha: '2026-07-07', emoji: '🚀', titulo: 'Nace el CRM Lotus360', texto: 'Primera versión: leads editables, ranking de asesores y métricas -- reemplazando el flujo disperso de ManyChat, Telegram y Google Sheets.', roles: ROLES_TODOS },
 ];
+/* ---------- Centro de novedades (campana + hoja «Esto es lo nuevo») ----------
+   Lo «no visto» se decide contra la preferencia `act_visto_id` (id de la entrada más
+   nueva que el usuario ya vio; cruza dispositivos). Sin cursor, solo cuentan las
+   entradas desde ACT_DESDE_INICIAL: no se le tira el archivo entero a nadie. Entradas
+   viejas sin `id` se identifican por fecha|título. Campos opcionales de una entrada:
+   id, ejemplo, donde:{sec,label}. */
+const ACT_DESDE_INICIAL = '2026-11-25';
+const actId = e => e.id || `${e.fecha}|${e.titulo}`;
+const actDelRol = () => ACTUALIZACIONES_LOG.filter(e => e.roles.includes(ROL));
+function actNoVistas() {
+  const lista = actDelRol(), cursor = MI_PREFERENCIAS.act_visto_id;
+  const idx = cursor ? lista.findIndex(e => actId(e) === cursor) : -1;
+  return idx >= 0 ? lista.slice(0, idx) : lista.filter(e => e.fecha >= ACT_DESDE_INICIAL);
+}
+function actItemHTML(e, nuevo) {
+  return `
+        <div class="act-item">
+          <div class="act-emoji">${e.emoji}</div>
+          <div class="act-body">
+            <div class="act-head"><span class="act-titulo">${esc(e.titulo)}${nuevo ? '<span class="act-nuevo">Nuevo</span>' : ''}</span><span class="act-fecha">${e.fecha.slice(8, 10)}/${e.fecha.slice(5, 7)}</span></div>
+            <div class="act-texto">${esc(e.texto)}</div>
+            ${e.ejemplo ? `<div class="act-ej">${esc(e.ejemplo)}</div>` : ''}
+            ${e.donde ? `<button type="button" class="act-ir" data-act-ir="${esc(e.donde.sec)}">${esc(e.donde.label || 'Llévame ahí')} <i class="fas fa-arrow-right"></i></button>` : ''}
+          </div>
+        </div>`;
+}
+/* Campana: número solo para el changelog del CRM no visto; el tarifario sin ver es un
+   punto (los cambios de precios son frecuentes y un número ahí se volvería ruido). */
+function pintarCampana() {
+  const n = actNoVistas().length, punto = !n && NOV_TAR_N > 0;
+  ['nov-badge', 'nov-badge-m'].forEach(id => { const b = document.getElementById(id); if (!b) return; b.hidden = !n && !punto; b.classList.toggle('punto', punto); b.textContent = punto ? '' : n > 9 ? '9+' : String(n); });
+}
+async function marcarActVistas() {
+  const lista = actDelRol();
+  if (!lista.length) return;
+  const id = actId(lista[0]);
+  if (MI_PREFERENCIAS.act_visto_id === id) { pintarCampana(); return; }
+  const previo = MI_PREFERENCIAS.act_visto_id;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, act_visto_id: id };
+  pintarCampana();
+  const { error } = await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+  if (error) { MI_PREFERENCIAS = { ...MI_PREFERENCIAS, act_visto_id: previo }; pintarCampana(); }
+}
+let NOV_MAX = 30, NOV_NUEVAS = [], NOV_FILTRO = 'todo', NOV_TAR = [], NOV_TAR_N = 0, NOV_TAR_T = 0, NOV_TAR_VISTO = '', NOV_TAR_CARGADO = false;
+const NOV_TIPO = { alojamiento_nuevo: ['🆕', 'Alojamiento nuevo'], ya_disponible: ['✅', 'Ya disponible'], precio_bajo: ['📉', 'Bajó el precio'], precio_subio: ['📈', 'Subió el precio'], tarifas_nuevas: ['🏷️', 'Tarifas nuevas'] };
+const novTarVisto = () => MI_PREFERENCIAS.nov_tar_visto || '1970-01-01T00:00:00Z';
+async function contarNovTarifario(forzar) {
+  if (!forzar && Date.now() - NOV_TAR_T < 60000) return;
+  NOV_TAR_T = Date.now();
+  const { count, error } = await sb.from('novedades_tarifario').select('id', { count: 'exact', head: true }).gt('creado_en', novTarVisto());
+  if (!error) { NOV_TAR_N = count || 0; pintarCampana(); }
+}
+async function cargarNovTarifario() {
+  const { data, error } = await sb.from('novedades_tarifario').select('id,creado_en,tipo,producto_id,nombre,destino,producto_tipo,antes_usd,despues_usd,carga_id').order('creado_en', { ascending: false }).limit(300);
+  NOV_TAR = error ? [] : (data || []); NOV_TAR_CARGADO = !error;
+}
+async function marcarNovTarVisto() {
+  const max = NOV_TAR.reduce((m, e) => e.creado_en > m ? e.creado_en : m, '');
+  if (!max || max <= novTarVisto()) return;
+  const previo = MI_PREFERENCIAS.nov_tar_visto;
+  MI_PREFERENCIAS = { ...MI_PREFERENCIAS, nov_tar_visto: max };
+  NOV_TAR_N = 0; pintarCampana();
+  const { error } = await sb.rpc('actualizar_mi_perfil', { p_preferencias: MI_PREFERENCIAS });
+  if (error) { MI_PREFERENCIAS = { ...MI_PREFERENCIAS, nov_tar_visto: previo }; contarNovTarifario(true); }
+}
+function novTarLinea(ev) {
+  const a = Number(ev.antes_usd), d = Number(ev.despues_usd), u = ev.producto_tipo === 'hotel' ? ' por persona por noche' : '';
+  const t = ev.tipo;
+  if (t === 'precio_bajo') return `Antes desde ${money(a)}, ahora desde ${money(d)}${u}.`;
+  if (t === 'precio_subio') return `Antes desde ${money(a)}, ahora desde ${money(d)}${u}. Si ya lo cotizaste, revisa el precio.`;
+  if (t === 'tarifas_nuevas') return 'Tiene tarifas nuevas cargadas.';
+  if (t === 'ya_disponible') return 'Ya tiene foto y se puede ofrecer.';
+  return d > 0 ? `Desde ${money(d)}${u}.` : 'Ya está en el Tarifario.';
+}
+function novTarTarjeta(evs, nuevo) {
+  const nueva = nuevo ? '<span class="act-nuevo">Nuevo</span>' : '';
+  const fecha = fmtFechaCaracas(evs[0].creado_en).slice(0, 5);
+  const ir = '<button type="button" class="act-ir" data-act-ir="tarifario">Ver en el Tarifario <i class="fas fa-arrow-right"></i></button>';
+  if (evs.length === 1) {
+    const ev = evs[0], [emoji, tit] = NOV_TIPO[ev.tipo] || ['🏨', 'Tarifario'], d = Number(ev.despues_usd);
+    const ej = ev.producto_tipo === 'hotel' && d > 0 && (ev.tipo === 'alojamiento_nuevo' || ev.tipo === 'precio_bajo') ? `<div class="act-ej">Ejemplo: ${money(d)} × 2 personas × 3 noches = ${money(d * 6)}</div>` : '';
+    return `<div class="act-item"><div class="act-emoji">${emoji}</div><div class="act-body"><div class="act-head"><span class="act-titulo">${esc(tit)}: ${esc(ev.nombre || '')}${nueva}</span><span class="act-fecha">${fecha}</span></div><div class="act-texto">${esc([ev.destino, novTarLinea(ev)].filter(Boolean).join(' · '))}</div>${ej}${ir}</div></div>`;
+  }
+  const c = {}; evs.forEach(e => { c[e.tipo] = (c[e.tipo] || 0) + 1; });
+  const nn = (c.alojamiento_nuevo || 0) + (c.ya_disponible || 0);
+  const partes = [nn && `${nn} ${nn === 1 ? 'alojamiento nuevo' : 'alojamientos nuevos'}`, c.precio_bajo && `${c.precio_bajo} bajaron de precio`, c.precio_subio && `${c.precio_subio} subieron de precio`, c.tarifas_nuevas && `${c.tarifas_nuevas} con tarifas nuevas`].filter(Boolean);
+  const filas = evs.map(e => `<li><b>${esc(e.nombre || '')}</b> · ${esc((NOV_TIPO[e.tipo] || ['', ''])[1])}: ${esc(novTarLinea(e))}</li>`).join('');
+  return `<div class="act-item"><div class="act-emoji">🏨</div><div class="act-body"><div class="act-head"><span class="act-titulo">Tarifario actualizado${nueva}</span><span class="act-fecha">${fecha}</span></div><div class="act-texto">${esc(partes.join(', '))}.</div><details class="nov-det"><summary>Ver el detalle (${evs.length})</summary><ul>${filas}</ul></details>${ir}</div></div>`;
+}
+function novTarTarjetas() {
+  const g = new Map();
+  NOV_TAR.forEach(e => { const k = e.carga_id ? 'c' + e.carga_id : 'p' + e.producto_id + e.creado_en.slice(0, 10); (g.get(k) || g.set(k, []).get(k)).push(e); });
+  return [...g.values()].map(evs => ({ k: evs[0].creado_en, nuevo: evs.some(e => e.creado_en > NOV_TAR_VISTO), html: null, evs }));
+}
+function renderNovedadesLista() {
+  const nuevas = new Set(NOV_NUEVAS);
+  const items = [];
+  if (NOV_FILTRO !== 'tarifario') actDelRol().forEach(e => items.push({ k: e.fecha + 'T00:00', nuevo: nuevas.has(actId(e)), html: actItemHTML(e, nuevas.has(actId(e))) }));
+  if (NOV_FILTRO !== 'crm') novTarTarjetas().forEach(c => items.push({ k: c.k, nuevo: c.nuevo, html: novTarTarjeta(c.evs, c.nuevo) }));
+  items.sort((a, b) => (b.nuevo - a.nuevo) || (a.k < b.k ? 1 : -1));
+  const nHay = items.filter(i => i.nuevo).length, visibles = items.slice(0, Math.max(NOV_MAX, nHay));
+  const hay = visibles.filter(i => i.nuevo), resto = visibles.filter(i => !i.nuevo);
+  const cargando = NOV_FILTRO !== 'crm' && !NOV_TAR_CARGADO ? '<div class="nov-sub">Cargando cambios del tarifario…</div>' : '';
+  document.getElementById('nov-lista').innerHTML = cargando + hay.map(i => i.html).join('') + (hay.length && resto.length ? '<div class="nov-sep">Antes</div>' : '') + resto.map(i => i.html).join('') + (!items.length && !cargando ? '<div class="nov-sub">Todavía no hay nada por aquí.</div>' : '');
+  document.getElementById('nov-mas').hidden = items.length <= visibles.length;
+  document.querySelectorAll('#nov-filtros [data-nf]').forEach(b => b.classList.toggle('on', b.dataset.nf === NOV_FILTRO));
+}
+function pintarSubNov() {
+  const nc = NOV_NUEVAS.length, nt = NOV_TAR.filter(e => e.creado_en > NOV_TAR_VISTO).length;
+  const p = [nc && `${nc} ${nc === 1 ? 'novedad' : 'novedades'} del CRM`, nt && `${nt} ${nt === 1 ? 'cambio' : 'cambios'} en el Tarifario`].filter(Boolean);
+  document.getElementById('nov-titulo').textContent = nc ? 'Esto es lo nuevo' : 'Novedades';
+  document.getElementById('nov-sub').textContent = p.length ? p.join(' · ') + ' desde la última vez.' : 'Estás al día.';
+}
+async function abrirNovedades() {
+  const nuevas = actNoVistas();
+  NOV_NUEVAS = nuevas.map(actId); NOV_MAX = 30; NOV_TAR_VISTO = novTarVisto(); NOV_TAR_CARGADO = false;
+  pintarSubNov(); renderNovedadesLista();
+  openSheet('nov-sheet');
+  marcarActVistas();
+  await cargarNovTarifario();
+  pintarSubNov(); renderNovedadesLista();
+  marcarNovTarVisto();
+}
+function iniciarCentroNovedades() {
+  ['nov-btn', 'ab-novedades'].forEach(id => document.getElementById(id)?.addEventListener('click', abrirNovedades));
+  document.getElementById('nov-filtros')?.addEventListener('click', e => { const b = e.target.closest('[data-nf]'); if (!b) return; NOV_FILTRO = b.dataset.nf; NOV_MAX = 30; renderNovedadesLista(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) contarNovTarifario(); });
+  contarNovTarifario(true);
+  document.getElementById('nov-cerrar')?.addEventListener('click', () => closeSheet('nov-sheet'));
+  document.getElementById('nov-mas')?.addEventListener('click', () => { NOV_MAX += 30; renderNovedadesLista(); });
+  document.getElementById('nov-archivo')?.addEventListener('click', () => { closeSheet('nov-sheet'); activateSection('actualizaciones'); });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act-ir]');
+    if (!b) return;
+    if (sheetAbierta === 'nov-sheet') closeSheet('nov-sheet');
+    activateSection(b.dataset.actIr);
+  });
+  pintarCampana();
+  // Solo tras una recarga (el «Actualizar ahora» del aviso, o F5): una entrada normal no se interrumpe.
+  const tipoNav = performance.getEntriesByType?.('navigation')?.[0]?.type;
+  if (tipoNav === 'reload' && actNoVistas().length) setTimeout(() => { if (!sheetAbierta && !document.hidden && !window.LotusBoot?.recargando) abrirNovedades(); }, 2500);
+}
 function renderActualizaciones() {
   const porMes = {};
-  ACTUALIZACIONES_LOG.filter(e => e.roles.includes(ROL)).forEach(e => { const k = e.fecha.slice(0, 7); (porMes[k] ||= []).push(e); });
+  actDelRol().forEach(e => { const k = e.fecha.slice(0, 7); (porMes[k] ||= []).push(e); });
   const meses = Object.keys(porMes).sort().reverse();
   document.getElementById('actualizaciones-list').innerHTML = meses.map(k => `
     <div class="act-mes">
       <div class="act-mes-t">${esc(fullMonth(k))}</div>
-      ${porMes[k].map(e => `
-        <div class="act-item">
-          <div class="act-emoji">${e.emoji}</div>
-          <div class="act-body">
-            <div class="act-head"><span class="act-titulo">${esc(e.titulo)}</span><span class="act-fecha">${e.fecha.slice(8, 10)}/${e.fecha.slice(5, 7)}</span></div>
-            <div class="act-texto">${esc(e.texto)}</div>
-          </div>
-        </div>`).join('')}
+      ${porMes[k].map(e => actItemHTML(e, false)).join('')}
     </div>`).join('');
+  marcarActVistas();
 }
 
 // Avance del Proyecto Constructor de CRM para Empresas (producto de marca
@@ -44302,13 +44721,14 @@ function registrarServiceWorkerConAviso() {
 }
 function mostrarAvisoActualizacion() {
   if (document.getElementById('update-toast')) return;
-  const novedades = ACTUALIZACIONES_LOG.filter(e => e.roles.includes(ROL)).slice(0, 3);
+  // Este código es el VIEJO (el que estaba abierto): no conoce las entradas de la
+  // versión nueva, así que no promete nada. «Esto es lo nuevo» sale tras recargar.
   const toast = document.createElement('div');
   toast.id = 'update-toast';
   toast.className = 'update-toast';
   toast.innerHTML = `
-    <div class="ut-head"><i class="fas fa-arrows-rotate"></i> Hay una actualización del CRM</div>
-    <div class="ut-list">${novedades.length ? novedades.map(n => `<div class="ut-item">${n.emoji} ${esc(n.titulo)}</div>`).join('') : '<div class="ut-item">Se agregaron mejoras nuevas.</div>'}</div>
+    <div class="ut-head"><i class="fas fa-arrows-rotate"></i> Hay una versión nueva del CRM</div>
+    <div class="ut-list"><div class="ut-item">Al actualizar te mostramos qué cambió.</div></div>
     <div class="ut-actions">
       <button type="button" class="ut-despues" id="ut-despues">Después</button>
       <button type="button" class="ut-recargar" id="ut-recargar"><i class="fas fa-rotate"></i> Actualizar ahora</button>
