@@ -177,6 +177,9 @@ export const AEROLINEAS = [
     contrato: 'El servicio de transporte realizado por Rutas Aéreas, C.A. RUTACA, está sujeto a las normas establecidas en la Ley de Aeronáutica Civil, las regulaciones nacionales, las condiciones generales del transporte aéreo y a los acuerdos y convenios internacionales aceptados en el país, en cuanto le sean aplicables.' },
   { id: 'turpial', nombre: 'Turpial Airlines', iata: 'T9', color: '#f2b705', grupo: 'nacional', logo: true,
     razon: 'Turpial Airlines C.A.', fiscal: 'NIT 3404919210-IRS', direccion: 'Av. Final Diego Iribarren, Aeropuerto Int. Arturo Michelena, Zona Industrial Sur, Valencia, Carabobo' },
+  // Sin código IATA (solo OACI CVZ): el lector de PDF la reconoce por el nombre del emisor.
+  { id: 'aerocaribe', nombre: 'Aerocaribe', iata: '', color: '#063a91', grupo: 'nacional', logo: true,
+    razon: 'Aéreo Transportes del Caribe, C.A. (AEROCARIBE)', fiscal: 'RIF J-40149748-9', direccion: 'Terminal Nacional, Aeropuerto Internacional Simón Bolívar, Maiquetía, Venezuela' },
   { id: 'albatros', nombre: 'Albatros Airlines', iata: '', color: '#1d3c8c', grupo: 'nacional', logo: true },
   { id: 'sasca', nombre: 'SASCA Airlines', iata: '', color: '#1f3a93', grupo: 'nacional', logo: true },
   { id: 'venezolana', nombre: 'Venezolana', iata: 'WW', color: '#0f2f6b', grupo: 'nacional', logo: false },
