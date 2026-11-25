@@ -16,7 +16,9 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
      spam) aplicadas también en Gmail, responder a todos / reenviar, contactos
      derivados del correo, firma por cuenta y backfill de días anteriores. */
   const GMAIL_CLIENT_ID = '16841972131-bk0p99ds2ntktd9cdbhdf3cbcnp94rio.apps.googleusercontent.com';
-  const GMAIL_REDIRECT_URI = 'https://begbjhrdbsqftbbleecb.supabase.co/functions/v1/gmail-oauth-callback';
+  // Pasa por el dominio del CRM (_redirects lo reenvía a la función de Supabase) para que Google muestre ese nombre.
+  // Debe ser idéntico al secret GMAIL_REDIRECT_URI de gmail-oauth-callback.
+  const GMAIL_REDIRECT_URI = 'https://crm.destinoyeventoslotus360.com/oauth/gmail';
   // gmail.modify (Fase 5, marcar leído sincronizado) -- los asesores ya
   // conectados con el scope viejo van a ver el consent screen de nuevo la
   // próxima vez que interactúen; no pierden datos, solo reautorizan.
