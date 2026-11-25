@@ -1247,6 +1247,7 @@ td.td-wa .wa-msg{margin-left:4px}
 .tg-nota strong{color:var(--txt);font-weight:700}
 .tg-nota-fuerte{color:var(--amber);font-weight:600}
 @media(min-width:761px){.drawer:has(.tg-cab){width:900px;height:calc(100vh / var(--zoom));height:calc(100dvh / var(--zoom))}}
+@media(min-width:761px){.drawer:has(.vd){width:900px;height:calc(100vh / var(--zoom));height:calc(100dvh / var(--zoom))}}
 @media(max-width:760px){
   .tg-mosaico{height:200px;gap:3px;border-radius:14px}
   .drawer:has(.tg-mosaico) .dclose{top:30px;right:28px;width:44px;height:44px}
@@ -7592,31 +7593,97 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .vt-meta span{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vt-meta i{font-size:10.5px;color:var(--muted2)}
 .vt-estado{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:4px 9px;color:var(--vc);background:color-mix(in srgb,var(--vc) 14%,transparent)}
-.vt-montos{display:flex;flex-direction:column;gap:9px;padding:11px;border-radius:12px;background:color-mix(in srgb,var(--txt) 3.5%,transparent);border:1px solid var(--line)}
-.vt-montos span{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
-.vt-venta{display:flex;align-items:baseline;justify-content:space-between;gap:9px}
-.vt-venta b{font-size:22px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.vt-desglose{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);padding-top:9px}
-.vt-desglose div{display:flex;flex-direction:column;gap:2px;min-width:0}
-.vt-desglose div+div{padding-left:11px;border-left:1px solid var(--line)}
-.vt-desglose b{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vt-desglose b.vt-vacio{color:var(--muted2);font-weight:600}
-.vt-desglose small{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Tarjeta A «Dos semáforos» (2026-11-25): cobro al cliente + pago al proveedor. */
+.vt-card{cursor:pointer}
+.vt-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.vt-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:4px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);white-space:nowrap}
+.vt-sem{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px 11px;padding:9px 11px;border-radius:12px;background:color-mix(in srgb,var(--txt) 3.5%,transparent);border:1px solid var(--line)}
+.vt-lbl{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.vt-pills{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.vt-pill{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:0;white-space:nowrap}
+.vt-pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.vt-pill.suave{background:transparent;border:1px solid color-mix(in srgb,var(--c) 40%,transparent);padding:2px 8px}
+.vt-pill.suave::before{display:none}
+button.vt-pill{cursor:pointer}
+button.vt-pill:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
+.vt-num{font-size:12px;font-weight:600;color:var(--muted);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.vt-num b{color:var(--txt)}
+.vt-cifras{display:flex;align-items:flex-end;justify-content:space-between;gap:9px 14px;flex-wrap:wrap}
+.vt-venta{display:flex;flex-direction:column;gap:1px}
+.vt-venta b{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.vt-mg{display:flex;flex-wrap:wrap;gap:3px 11px;font-size:12px;color:var(--muted)}
+.vt-mg b{color:var(--txt);font-weight:700;font-variant-numeric:tabular-nums}
+.vt-mg b.lt-ok{color:var(--green)} .vt-mg b.lt-debe{color:var(--danger)} .vt-mg b.vt-falta{color:var(--pink)}
+.vt-barras{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:5px 9px;font-size:11px;color:var(--muted)}
+.vt-barras .lt-barra{height:6px}
+.vt-barras .lt-barra i{background:var(--c)}
+.vt-barras .vt-num{font-size:11px;font-weight:700;color:var(--txt)}
+.vt-pie{display:flex;align-items:center;gap:7px;margin-top:auto;padding-top:9px;border-top:1px solid var(--line)}
+.vt-provs{flex:1;min-width:0;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vt-provs b{color:var(--txt);font-weight:600}
 .vt-aviso{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--c);padding:7px 11px;border-radius:10px;background:color-mix(in srgb,var(--c) 11%,transparent);border:1px solid color-mix(in srgb,var(--c) 24%,transparent)}
 .vt-aviso b{font-weight:800}
-.vt-acciones{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto;padding-top:11px;border-top:1px solid var(--line)}
-.vt-accion{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:0 14px;border-radius:10px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent);border:1px solid color-mix(in srgb,var(--c) 30%,transparent);transition:background var(--dur-rapida),border-color var(--dur-rapida),transform var(--dur-rapida)}
-.vt-accion:hover{background:color-mix(in srgb,var(--c) 20%,transparent);border-color:var(--c)}
+.vt-accion{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:34px;padding:0 12px;border-radius:10px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;color:var(--c,var(--txt));background:transparent;border:1px solid var(--line2,var(--line));white-space:nowrap;transition:background var(--dur-rapida),border-color var(--dur-rapida),transform var(--dur-rapida)}
+.vt-accion:hover{background:color-mix(in srgb,var(--c,var(--txt)) 8%,transparent)}
 .vt-accion:active{transform:scale(.97)}
-.vt-accion:focus-visible{outline:2px solid var(--c);outline-offset:2px}
-.vt-anular{margin-left:auto;background:transparent}
+.vt-accion:focus-visible{outline:2px solid var(--c,var(--accent));outline-offset:2px}
+.vt-accion.solo{padding:0;min-width:34px}
+.vt-accion.vt-pagar{--c:#fff;background:var(--accent);border-color:var(--accent)}
+.vt-accion.vt-pagar:hover{background:color-mix(in srgb,var(--accent) 86%,#000)}
+/* Drawer de venta (finanzas-venta.js, 2026-11-25) */
+.vd{display:flex;flex-direction:column;gap:16px;min-width:0}
+.vd-cab{display:flex;align-items:flex-start;gap:12px;padding-right:44px}
+.vd-quien{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.vd-quien h2{margin:0;font-size:19px;font-weight:800;letter-spacing:-.01em;overflow-wrap:anywhere}
+.vd-chips{display:flex;flex-wrap:wrap;gap:5px}
+.vd-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.vd-kpi{display:flex;flex-direction:column;gap:2px;padding:11px 12px;border-radius:12px;background:color-mix(in srgb,var(--txt) 3.5%,transparent);border:1px solid var(--line);min-width:0}
+.vd-kpi span,.vd-mini span{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
+.vd-kpi b{font-size:18px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.vd-kpi small{font-size:11px;color:var(--muted)}
+.vd-kpi b.lt-ok,.vd-mini b.lt-ok{color:var(--green)} .vd-kpi b.lt-debe,.vd-mini b.lt-debe,.vd-fila-num b.lt-debe{color:var(--danger)} .vd-kpi b.vt-falta{color:var(--pink)}
+.vd-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:16px;align-items:start}
+.vd-sec{display:flex;flex-direction:column;gap:10px;min-width:0}
+.vd-sec h3{margin:0;font-size:12px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.vd-sec h4{margin:4px 0 0;font-size:13px;font-weight:700}
+.vd-sec-cab{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.vd-sec .lt-barra{height:6px}
+.vd-sec .lt-barra i{background:var(--c)}
+.vd-mini{display:flex;flex-wrap:wrap;gap:6px 18px}
+.vd-mini div{display:flex;flex-direction:column;gap:1px}
+.vd-mini b{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.vd-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.vd-fila{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);min-width:0}
+.vd-fila-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.vd-fila-txt b{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.vd-fila-txt small{font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.vd-fila-num{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.vd-fila-num b{color:var(--txt);font-variant-numeric:tabular-nums}
+.vd-fila-ic{color:var(--muted2);font-size:12px}
+.vd-monto{font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.vd-tachada .vd-fila-txt b,.vd-tachada .vd-monto{text-decoration:line-through;color:var(--muted)}
+.vd-prov{display:flex;flex-direction:column;gap:9px;padding:12px;border-radius:12px;border:1px solid var(--line);background:color-mix(in srgb,var(--txt) 2%,transparent)}
+.vd-acc{display:flex;flex-wrap:wrap;gap:7px}
+.vd-nota{margin:0;font-size:12.5px;color:var(--muted)}
+.vt-aviso .vt-accion{margin-left:auto;min-height:30px}
+.vd-pie{display:flex;flex-wrap:wrap;gap:7px;padding-top:12px;border-top:1px solid var(--line)}
+.vd-anular{margin-left:auto}
+.pp-venta{font:inherit;font-weight:700;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+@media(max-width:899px){.vd-cols{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){
+  .vd-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .vd-pie .vt-accion,.vd-acc .vt-accion{min-height:44px;flex:1 1 auto}
+  .vt-aviso{flex-wrap:wrap}
+}
 .kpi-plegar{display:none}
 @media(max-width:760px){
   /* 1fr = minmax(auto,1fr): el nombre/asesor en nowrap ensanchaba la tarjeta más allá de la pantalla */
   #sec-facturacion .lt-grid{grid-template-columns:minmax(0,1fr)}
-  .vt-card,.vt-cab,.vt-montos,.vt-acciones{min-width:0;max-width:100%}
+  .vt-card,.vt-cab,.vt-sem,.vt-pie{min-width:0;max-width:100%}
+  .vt-pie{flex-wrap:wrap}
+  .vt-provs{flex:1 1 100%}
   .vt-accion{min-height:44px;flex:1 1 0;min-width:0;padding:0 11px}
-  .vt-anular{flex:0 0 auto}
+  .vt-accion.solo{flex:0 0 44px}
   /* KPIs plegables (2026-10-16): botón "Resumen" arriba de cada bloque, cerrado por defecto */
   .kpi-plegar{display:flex;align-items:center;gap:9px;width:100%;min-height:44px;margin:0 0 9px;padding:0 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg2);color:var(--muted);font:inherit;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;cursor:pointer}
   .kpi-plegar[aria-expanded="false"]{margin-bottom:14px}
@@ -9257,9 +9324,6 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
   .lyra-cta .btn-sm{flex:1 1 100%;min-height:var(--tap,44px)}
   .lt-card-cab{flex-wrap:wrap}
   .lt-card-tit{white-space:normal;flex:1 1 100%}
-  .vt-acciones{gap:9px}
-  .vt-accion{flex:1 1 auto;white-space:nowrap}
-  .vt-accion.anular{flex:0 0 100%}
   #pn-copiar{margin-top:12px}
   .pn-cred{flex-wrap:wrap}
   .pn-cred b{overflow-wrap:anywhere}
@@ -11448,7 +11512,7 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
           <div class="mfs" id="fact-ventas-filtros" style="display:flex;gap:8px;flex-wrap:wrap">
             <select class="flt" id="fact-estado">
               <option value="">Todos los estados</option>
-              <option value="pagada">Pagada</option>
+              <option value="pagada">Emitida</option>
               <option value="anulada">Anulada</option>
             </select>
             <select class="flt" id="fact-mes">

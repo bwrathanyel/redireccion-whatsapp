@@ -13,6 +13,7 @@ import { crearDocumentosEmpresa } from './documentos-empresa.js';
 import { crearMetodosPago } from './metodos-pago.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
+import { crearFinanzasVenta } from './finanzas-venta.js';
 import { crearBoletosEmitidos } from './boletos-emitidos.js';
 import { crearCalendarioRango } from './cotizaciones-calendario.js';
 import { crearImportacionServicio } from './reservas-importacion.js';
@@ -4427,8 +4428,25 @@ let FINANZAS_POR_PAGAR = null;
 const finanzasPorPagar = () => FINANZAS_POR_PAGAR ||= crearFinanzasPorPagar({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('finanzas-por-pagar-root'), hoja: document.getElementById('pp-sheet-root'),
   abrirSheet: openSheet, cerrarSheet: closeSheet, hoy: hoyCaracas, uid: () => MI_USUARIO_ID,
-  irTarifario: id => window.abrirProductoTarifario(id), alCambiar: () => loadCuentasPorPagar(true),
+  irTarifario: id => window.abrirProductoTarifario(id),
+  verVenta: (reservaId, codigo) => { const f = FACT_VENTAS_CACHE.find(x => Number(x.reserva_id) === reservaId); f ? finanzasVenta().abrir(f) : abrirReservaDeLead(reservaId, codigo); },
+  alCambiar: () => loadCuentasPorPagar(true).then(() => { if (FACT_VENTAS_CACHE.length) loadFacturas().then(() => FINANZAS_VENTA?.refrescar()); }),
   leerComprobante: async file => { const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } }); return error || !data?.ok ? null : data.datos; } });
+// Drawer de una venta (Finanzas › Ventas): cobro al cliente + pago a proveedores; «Pagar» usa la hoja de arriba.
+let FINANZAS_VENTA = null;
+const finanzasVenta = () => FINANZAS_VENTA ||= crearFinanzasVenta({ sb, esc, money, rol: ROL, error: errToast,
+  drawer: () => document.getElementById('drawerContent'),
+  abierto: () => document.getElementById('drawer')?.classList.contains('open'),
+  abrirDrawer: () => { const d = document.getElementById('drawer'), ya = d.classList.contains('open'); d.classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!ya) navPush({ type: 'drawer' }); },
+  viaje: (ini, fin) => ini ? pvViaje({ fecha_viaje_inicio: ini, fecha_viaje_fin: fin }) : null,
+  buscar: id => FACT_VENTAS_CACHE.find(f => f.id === id),
+  pagar: (proveedorId, cxpIds) => finanzasPorPagar().abrirPago({ proveedorId, preCxp: cxpIds }),
+  irCuenta: id => trasCerrarDrawer(() => ventaIrACxp(id)),
+  verReserva: (id, codigo) => abrirReservaDeLead(id, codigo),
+  verCliente: id => trasCerrarDrawer(() => abrirClienteDesdeFacturacion(id)),
+  pdf: id => exportarVentaPdf(id),
+  anular: id => anularFacturaUI(id) });
+window.abrirVentaDrawer = id => { const f = FACT_VENTAS_CACHE.find(x => x.id === id); if (f) finanzasVenta().abrir(f); };
 let METODOS_PAGO = null;
 const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
@@ -23327,7 +23345,19 @@ async function loadFacturas() {
     else costo_neto = costoCxp;
     if (netosFaltan) costo_neto = null;
     const proveedor = [...new Set(cxps.map(c => c.proveedor).filter(Boolean))].join(' + ') || null;
-    return { ...f, costo_neto, netos_faltan: netosFaltan, proveedor, proveedor_pagado: cxps.length ? sumar(cxps, 'monto_abonado') : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null };
+    // Semáforo del proveedor: saldo por proveedor (para «Pagar $X») y el neto que no tiene
+    // proveedor (servicio con costo sin CxP: no se le puede pagar a nadie).
+    const provMonto = cxps.length ? sumar(cxps, 'monto_a_transferir') : 0, provs = new Map();
+    cxps.forEach(c => {
+      const k = c.proveedor_id ?? 'x' + cxpClave(c.proveedor), p = provs.get(k) || { id: c.proveedor_id ?? null, nombre: c.proveedor || 'Proveedor', saldo: 0, cxp: [] };
+      const s = Math.max(0, (Number(c.monto_a_transferir) || 0) - (Number(c.monto_abonado) || 0));
+      p.saldo += s; if (s > 0.005) p.cxp.push(c.id);
+      provs.set(k, p);
+    });
+    const prov_saldo = [...provs.values()].reduce((a, p) => a + p.saldo, 0);
+    const neto_sin_proveedor = conServ ? Math.max(0, Number(f.reserva_costo_servicios) - provMonto) : 0;
+    return { ...f, costo_neto, netos_faltan: netosFaltan, proveedor, proveedor_pagado: cxps.length ? sumar(cxps, 'monto_abonado') : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null,
+      prov_monto: provMonto, prov_saldo, proveedores: [...provs.values()], neto_sin_proveedor: neto_sin_proveedor > 0.5 ? neto_sin_proveedor : 0 };
   });
   ULTIMA_CARGA.balance = 0; // el balance se alimenta de estas facturas: que se recargue al volver
   poblarFiltrosVentas();
@@ -23351,33 +23381,84 @@ function poblarFiltrosVentas() {
 // Filtro que ponen los KPIs de Ventas ('' = todas). Igual que en CxP, los
 // KPIs cuentan sobre los demás filtros pero no sobre este.
 let factVentasFiltro = '';
-const FACT_VENTAS_KPI_FILTRO = { con_costo: f => f.costo_neto != null, sin_costo: f => f.estado === 'pagada' && f.costo_neto == null };
+const FACT_VENTAS_KPI_FILTRO = {
+  cliente_debe: f => f.estado === 'pagada' && f.venta_total - f.abonado > 0.005,
+  prov_debe: f => f.estado === 'pagada' && f.prov_saldo > 0.005,
+  con_costo: f => f.costo_neto != null,
+  sin_costo: f => f.estado === 'pagada' && f.costo_neto == null,
+};
 function filtrarVentasKpi(clave) {
   factVentasFiltro = factVentasFiltro === clave ? '' : clave;
   factVentasMostrar = TECHO_LISTA;
   renderVentas();
 }
-// Avisos de la tarjeta: solo salen cuando aplican (falta cobrar, o no hay costo neto).
-function avisosVenta(f) {
-  if (f.estado !== 'pagada') return '';
-  const debe = f.venta_total - f.abonado, avisos = [];
-  if (debe > 0.005) avisos.push(`<div class="vt-aviso" style="--c:var(--amber)"><i class="fas fa-hourglass-half"></i> Falta cobrar <b>${money(debe)}</b></div>`);
-  if (f.netos_faltan) avisos.push(`<div class="vt-aviso" style="--c:var(--pink)"><i class="fas fa-triangle-exclamation"></i> Falta el neto de ${fmt(f.netos_faltan)} servicio${f.netos_faltan === 1 ? '' : 's'} de la reserva: sin eso el margen no es real</div>`);
-  else if (f.costo_neto == null) avisos.push(`<div class="vt-aviso" style="--c:var(--pink)"><i class="fas fa-triangle-exclamation"></i> Falta cargar el costo neto en Postventa</div>`);
-  return avisos.join('');
+// Dos semáforos de la venta (mismo vocabulario que el PDF y Pagos a proveedores): cuánto pagó
+// el cliente y cuánto le pagamos al proveedor. Rojo si ya viaja en ≤7 días (o viajó) y se debe.
+function semaforosVenta(f) {
+  const viaje = pvViaje({ fecha_viaje_inicio: f.viaje_inicio, fecha_viaje_fin: f.viaje_fin });
+  const urg = viaje.bucket === 'en_viaje' || viaje.bucket === 'volvio' || (viaje.dias != null && viaje.dias <= 7);
+  const debe = f.venta_total - f.abonado, cliPct = f.venta_total > 0 ? Math.min(1, f.abonado / f.venta_total) : 0;
+  const cli = debe > 0.005 ? { t: `Abonó ${Math.floor(cliPct * 100)} %`, c: 'var(--amber)', sub: `falta <b>${money(debe)}</b>` }
+    : { t: 'Pagó todo', c: 'var(--green)', sub: `<b>${money(f.abonado)}</b>` };
+  const provPag = f.prov_monto - f.prov_saldo, provPct = f.prov_monto > 0 ? Math.max(0, Math.min(1, provPag / f.prov_monto)) : 0;
+  const sinNeto = f.costo_neto == null;
+  let prov;
+  if (!f.prov_monto && f.neto_sin_proveedor) prov = { t: 'Sin proveedor', c: 'var(--pink)', sub: `neto <b>${money(f.neto_sin_proveedor)}</b>`, reserva: true };
+  else if (!f.prov_monto) prov = sinNeto ? { t: 'Sin neto', c: 'var(--pink)', sub: '', reserva: true } : { t: 'Sin costo', c: 'var(--muted)', sub: '' };
+  else if (f.prov_saldo <= 0.005) prov = { t: 'Pagado', c: 'var(--green)', sub: `<b>${money(f.prov_monto)}</b>` };
+  else if (provPag > 0.005) prov = { t: `Pagado ${Math.floor(provPct * 100)} %`, c: urg ? 'var(--danger)' : 'var(--amber)', sub: `debemos <b>${money(f.prov_saldo)}</b>` };
+  else prov = { t: 'Por pagar', c: urg ? 'var(--danger)' : 'var(--blue)', sub: `debemos <b>${money(f.prov_saldo)}</b>` };
+  const extras = [];
+  if (sinNeto && prov.t !== 'Sin neto') extras.push(f.netos_faltan ? `${fmt(f.netos_faltan)} sin neto` : 'Sin neto');
+  if (f.neto_sin_proveedor && prov.t !== 'Sin proveedor') extras.push('Sin proveedor');
+  return { viaje, cli, cliPct, prov, provPct, extras };
 }
+const vtPill = (e, suave, f) => (e.reserva || suave) && f?.reserva_id
+  ? `<button type="button" class="vt-pill${suave ? ' suave' : ''}" style="--c:${suave ? 'var(--pink)' : e.c}" title="Abrir la reserva para cargarlo" onclick="ventaAbrirReserva(${f.id})">${esc(e.t || e)}</button>`
+  : `<span class="vt-pill${suave ? ' suave' : ''}" style="--c:${suave ? 'var(--pink)' : e.c}">${esc(e.t || e)}</span>`;
+// «Pagar $X» de la tarjeta y del drawer: la hoja de pago de Pagos a proveedores con las CxP
+// de esta reserva ya marcadas. Varios proveedores: primero se elige a cuál.
+function ventaPagarProveedor(facturaId) {
+  const f = FACT_VENTAS_CACHE.find(x => x.id === facturaId);
+  const provs = (f?.proveedores || []).filter(p => p.id && p.saldo > 0.005);
+  const pagar = p => finanzasPorPagar().abrirPago({ proveedorId: p.id, preCxp: p.cxp });
+  if (provs.length === 1) pagar(provs[0]);
+  else if (provs.length > 1) cmMenu('¿A qué proveedor le pagas?', provs.map(p => ({ t: `${p.nombre} · ${money(p.saldo)}`, i: 'fa-money-bill-transfer', go: () => pagar(p) })));
+}
+function ventaIrACxp(proveedorId) {
+  activateSection('facturacion');
+  document.querySelector('#fact-tabs .seg[data-fact-tab="cxp"]')?.click();
+  finanzasPorPagar().abrirProveedor(proveedorId);
+}
+function ventaMenu(facturaId) {
+  const f = FACT_VENTAS_CACHE.find(x => x.id === facturaId);
+  if (!f) return;
+  const ops = [];
+  if (f.lead_id) ops.push({ t: 'Ver cliente', i: 'fa-user', go: () => abrirClienteDesdeFacturacion(f.lead_id) });
+  if (f.reserva_id) ops.push({ t: 'Ver reserva', i: 'fa-suitcase', go: () => abrirReservaDeLead(f.reserva_id, f.reserva_codigo) });
+  (f.proveedores || []).filter(p => p.id).forEach(p => ops.push({ t: `Estado de cuenta · ${p.nombre}`, i: 'fa-file-invoice-dollar', go: () => ventaIrACxp(p.id) }));
+  if (f.estado === 'pagada' && ROL === 'admin') ops.push({ t: 'Anular factura', i: 'fa-ban', go: () => anularFacturaUI(f.id) });
+  cmMenu(`${f.cliente || 'Venta'} · Factura #${fmt(f.numero_factura)}`, ops);
+}
+function ventaAbrirReserva(facturaId) {
+  const f = FACT_VENTAS_CACHE.find(x => x.id === facturaId);
+  if (f?.reserva_id) abrirReservaDeLead(f.reserva_id, f.reserva_codigo);
+}
+window.ventaAbrirReserva = ventaAbrirReserva;
+window.ventaPagarProveedor = ventaPagarProveedor;
+window.ventaMenu = ventaMenu;
 function renderVentas() {
   const mes = val('fact-mes'), asesor = val('fact-asesor');
   let base = FACT_VENTAS_CACHE;
   if (mes) base = base.filter(f => (f.fecha_emision || '').slice(0, 7) === mes);
   if (asesor) base = base.filter(f => f.asesor === asesor);
-  const buscadas = ordenarYFiltrar(base, ['cliente', 'asesor', 'proveedor'], val('fact-ventas-search'), FACT_SORT.ventas);
+  const buscadas = ordenarYFiltrar(base, ['cliente', 'asesor', 'proveedor', 'reserva_codigo'], val('fact-ventas-search'), FACT_SORT.ventas);
   const filas = factVentasFiltro ? buscadas.filter(FACT_VENTAS_KPI_FILTRO[factVentasFiltro]) : buscadas;
   FACT_LAST.ventas = filas;
   // Los totales se calculan sobre TODAS las filas filtradas, no solo las
   // visibles -- si no, "Total facturado" mentiría apenas hubiera más de
   // TECHO_LISTA facturas (mostraría la suma de la página, no la real).
-  let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0, ventaConCosto = 0, nPag = 0, nSinCosto = 0;
+  let sumaVenta = 0, sumaCosto = 0, sumaMargen = 0, ventaConCosto = 0, nPag = 0, nSinCosto = 0, porCobrar = 0, nCobrar = 0, porPagar = 0, nPagar = 0;
   const reservasVistas = new Set(); // por si una reserva trae más de una factura: contarla una vez
   buscadas.forEach(f => {
     if (f.estado !== 'pagada') return;
@@ -23387,44 +23468,56 @@ function renderVentas() {
     reservasVistas.add(clave);
     sumaVenta += f.venta_total;
     if (f.costo_neto != null) { sumaCosto += f.costo_neto; sumaMargen += f.margen; ventaConCosto += f.venta_total; } else nSinCosto++;
+    const debe = f.venta_total - f.abonado;
+    if (debe > 0.005) { porCobrar += debe; nCobrar++; }
+    if (f.prov_saldo > 0.005) { porPagar += f.prov_saldo; nPagar++; }
   });
   const pctMargen = ventaConCosto > 0 ? Math.round(sumaMargen / ventaConCosto * 100) : 0;
   pintarKPIs('fact-ventas-kpis', [
-    { key: '', t: 'Vendido', v: money(sumaVenta), d: `${fmt(nPag)} pagadas · ver todas`, i: 'fa-sack-dollar', c: 'var(--green)', on: factVentasFiltro === '', go: () => filtrarVentasKpi('') },
+    { key: '', t: 'Vendido', v: money(sumaVenta), d: `${fmt(nPag)} ventas · ver todas`, i: 'fa-sack-dollar', c: 'var(--green)', on: factVentasFiltro === '', go: () => filtrarVentasKpi('') },
+    { key: 'cliente_debe', t: 'Por cobrar', v: money(porCobrar), d: `${fmt(nCobrar)} cliente${nCobrar === 1 ? '' : 's'} con saldo`, i: 'fa-hand-holding-dollar', c: nCobrar > 0 ? 'var(--amber)' : 'var(--green)', on: factVentasFiltro === 'cliente_debe', go: () => filtrarVentasKpi('cliente_debe') },
+    { key: 'prov_debe', t: 'Por pagar a proveedores', v: money(porPagar), d: `${fmt(nPagar)} venta${nPagar === 1 ? '' : 's'} con deuda`, i: 'fa-money-bill-transfer', c: nPagar > 0 ? 'var(--blue)' : 'var(--green)', on: factVentasFiltro === 'prov_debe', go: () => filtrarVentasKpi('prov_debe') },
     { key: 'con_costo', t: 'Margen', v: money(sumaMargen), d: `${pctMargen}% · costo neto ${money(sumaCosto)}`, i: 'fa-chart-line', c: 'var(--accent)', on: factVentasFiltro === 'con_costo', go: () => filtrarVentasKpi('con_costo') },
-    { key: 'sin_costo', t: 'Sin costo neto', v: fmt(nSinCosto), d: 'pagadas sin costo cargado en Postventa', i: 'fa-triangle-exclamation', c: nSinCosto > 0 ? 'var(--amber)' : 'var(--green)', on: factVentasFiltro === 'sin_costo', go: () => filtrarVentasKpi('sin_costo') },
+    { key: 'sin_costo', t: 'Sin neto', v: fmt(nSinCosto), d: 'ventas sin costo neto: margen incompleto', i: 'fa-triangle-exclamation', c: nSinCosto > 0 ? 'var(--pink)' : 'var(--green)', on: factVentasFiltro === 'sin_costo', go: () => filtrarVentasKpi('sin_costo') },
   ]);
   const visibles = filas.slice(0, factVentasMostrar);
   const pager = document.getElementById('fact-ventas-pager');
   if (pager) pager.style.display = filas.length > factVentasMostrar ? '' : 'none';
   document.getElementById('fact-tbody').innerHTML = visibles.map((f, i) => {
-    const anulada = f.estado === 'anulada', pagada = f.estado === 'pagada', conCosto = f.costo_neto != null;
-    const pctReal = conCosto && f.venta_total > 0 ? Math.round(f.margen / f.venta_total * 100) : 0, pct = Math.max(0, Math.min(100, pctReal));
+    const anulada = f.estado === 'anulada', conCosto = f.costo_neto != null, s = semaforosVenta(f);
+    const pctReal = conCosto && f.venta_total > 0 ? Math.round(f.margen / f.venta_total * 100) : 0;
     const ini = (f.cliente || '').trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '#';
-    const fecha = f.fecha_emision ? dtf('es-VE', { timeZone: 'America/Caracas', day: 'numeric', month: 'short' }).format(new Date(f.fecha_emision)) : '';
-    return `<article class="lt-card vt-card${anulada ? ' lt-card-hecha' : ''}" style="--i:${Math.min(i, 20)};--vc:${pagada ? 'var(--green)' : 'var(--muted)'}${f.lead_id ? ';cursor:pointer' : ''}"${f.lead_id ? ` onclick="if(!event.target.closest('button,a'))abrirClienteDesdeFacturacion(${f.lead_id})"` : ''}>
+    const provs = (f.proveedores || []).map(p => p.nombre);
+    const aPagar = anulada ? 0 : (f.proveedores || []).filter(p => p.id && p.saldo > 0.005).reduce((a, p) => a + p.saldo, 0);
+    const chip = anulada ? `<span class="vt-chip" style="--c:var(--muted)"><i class="fas fa-ban"></i> Anulada</span>`
+      : s.viaje.t ? `<span class="vt-chip" style="--c:${s.viaje.col}"><i class="fas ${s.viaje.ic}"></i> ${esc(s.viaje.t)}</span>` : '';
+    const barra = (pct, c, lbl) => `<div class="lt-barra" style="--c:${c}" role="progressbar" aria-label="${lbl}" aria-valuenow="${Math.round(pct * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(pct * 100)}%"></i></div>`;
+    return `<article class="lt-card vt-card${anulada ? ' lt-card-hecha' : ''}" tabindex="0" aria-label="Venta factura #${fmt(f.numero_factura)}, ${esc(f.cliente || '')}" style="--i:${Math.min(i, 20)};--vc:${anulada ? 'var(--muted)' : s.cli.c}" onclick="if(!event.target.closest('button,a'))abrirVentaDrawer(${f.id})" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();abrirVentaDrawer(${f.id})}">
       <div class="vt-cab">
         <span class="vt-avatar" aria-hidden="true">${esc(ini)}</span>
         <div class="vt-quien">
           <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
-          <div class="vt-meta"><span title="N° de factura"><i class="fas fa-receipt"></i> #${fmt(f.numero_factura)}</span>${fecha ? `<span title="Fecha de emisión"><i class="fas fa-calendar-day"></i> ${fecha}</span>` : ''}</div>
-          <div class="vt-meta"><span title="Asesor"><i class="fas fa-user-tie"></i> ${esc(f.asesor || 'Sin asesor')}</span></div>
+          <div class="vt-meta">${f.reserva_codigo ? `<span title="Reserva">${esc(f.reserva_codigo)}</span>` : ''}<span title="N° de factura"><i class="fas fa-receipt"></i> #${fmt(f.numero_factura)}</span><span title="Asesor"><i class="fas fa-user-tie"></i> ${esc(f.asesor || 'Sin asesor')}</span></div>
         </div>
-        <span class="vt-estado"><i class="fas ${pagada ? 'fa-circle-check' : anulada ? 'fa-ban' : 'fa-clock'}"></i> ${pagada ? 'Pagada' : anulada ? 'Anulada' : esc(f.estado)}</span>
+        ${chip}
       </div>
-      <div class="vt-montos">
-        <div class="vt-venta"><span>Venta</span><b>${money(f.venta_total)}</b></div>
-        <div class="vt-desglose">
-          <div><span>Costo neto</span><b class="${conCosto ? '' : 'vt-vacio'}">${conCosto ? money(f.costo_neto) : 'Sin cargar'}</b>${f.proveedor ? `<small title="Proveedor">${esc(f.proveedor)}</small>` : ''}</div>
-          <div><span>Margen</span><b class="${!conCosto ? 'vt-vacio' : f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${conCosto ? money(f.margen) : '—'}</b>${conCosto ? `<small>${pctReal}% de la venta</small>` : ''}</div>
-        </div>
-        ${conCosto ? `<div class="lt-barra" role="progressbar" aria-label="Margen sobre la venta" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" title="Margen ${pctReal}% de la venta"><i style="width:${pct}%"></i></div>` : ''}
+      ${anulada ? '' : `<div class="vt-sem">
+        <span class="vt-lbl">Cliente</span><span class="vt-pills">${vtPill(s.cli)}</span><span class="vt-num">${s.cli.sub}</span>
+        <span class="vt-lbl">Proveedor</span><span class="vt-pills">${vtPill(s.prov, false, f)}${s.extras.map(e => vtPill(e, true, f)).join('')}</span><span class="vt-num">${s.prov.sub}</span>
+      </div>`}
+      <div class="vt-cifras">
+        <div class="vt-venta"><span class="vt-lbl">Venta</span><b>${money(f.venta_total)}</b></div>
+        <div class="vt-mg"><span>Neto <b>${conCosto ? money(f.costo_neto) : 'sin cargar'}</b></span><span>Margen ${conCosto ? `<b class="${f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${money(f.margen)}</b> ${pctReal} %` : '<b class="vt-falta">falta neto</b>'}</span></div>
       </div>
-      ${avisosVenta(f)}
-      <div class="vt-acciones">
-        <button class="vt-accion" type="button" style="--c:var(--blue)" title="Descargar el PDF de esta venta" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i> PDF</button>
-        ${f.lead_id ? `<button class="vt-accion" type="button" style="--c:var(--accent-ink)" title="Abrir la ficha del cliente" onclick="abrirClienteDesdeFacturacion(${f.lead_id})"><i class="fas fa-user"></i> Ver cliente</button>` : ''}
-        ${pagada && esOficina() ? `<button class="vt-accion vt-anular" type="button" style="--c:var(--danger)" title="Anular esta factura" onclick="anularFacturaUI(${f.id})"><i class="fas fa-ban"></i> Anular</button>` : ''}
+      ${anulada ? '' : `<div class="vt-barras">
+        <span>Cobrado</span>${barra(s.cliPct, s.cli.c, 'Cobrado al cliente')}<span class="vt-num">${Math.floor(s.cliPct * 100)} %</span>
+        <span>Pagado al proveedor</span>${barra(s.provPct, s.prov.c, 'Pagado al proveedor')}<span class="vt-num">${f.prov_monto ? Math.floor(s.provPct * 100) + ' %' : '—'}</span>
+      </div>`}
+      <div class="vt-pie">
+        <span class="vt-provs" title="${esc(provs.join(' · '))}">${provs.length ? provs.map(p => `<b>${esc(p)}</b>`).join(' · ') : 'Sin proveedor asignado'}</span>
+        ${aPagar > 0.005 ? `<button class="vt-accion vt-pagar" type="button" title="Registrar el pago al proveedor" onclick="ventaPagarProveedor(${f.id})"><i class="fas fa-money-bill-transfer"></i> Pagar ${money(aPagar)}</button>` : ''}
+        <button class="vt-accion" type="button" title="Descargar el PDF de esta venta" aria-label="Descargar PDF de la factura #${fmt(f.numero_factura)}" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i> PDF</button>
+        <button class="vt-accion solo" type="button" title="Más acciones" aria-label="Más acciones" aria-haspopup="dialog" onclick="ventaMenu(${f.id})"><i class="fas fa-ellipsis"></i></button>
       </div>
     </article>`;
   }).join('') || `<div class="lt-vacio"><i class="fas fa-inbox"></i> ${factVentasFiltro || mes || asesor || val('fact-ventas-search') ? 'Nada coincide con el filtro' : 'Sin facturas'}</div>`;
@@ -43615,6 +43708,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-25', emoji: '💵', titulo: 'Ventas: cobro y pago al proveedor de un vistazo', texto: 'Cada venta en Finanzas › Ventas muestra dos estados: cuánto pagó el cliente y cuánto le pagamos al proveedor, con botón Pagar directo. Al tocar la tarjeta se abre el detalle de la venta con los abonos, los pagos a cada proveedor y su estado de cuenta. Desde Pagos a proveedores, el código de la reserva abre esa misma venta.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-24', emoji: '🏷️', titulo: 'Tarifario: botón Cotizar en la tarjeta', texto: 'El botón Cotizar de cada tarjeta del Tarifario abre Cotizaciones con ese hotel ya elegido.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-22', emoji: '📅', titulo: 'Calendario de estancia y asesor en boletos', texto: 'En Cotizaciones puedes elegir entrada y salida desde un calendario de rango, con dos meses en escritorio y uno en móvil. Boletos emitidos permite añadir un asesor opcional: en la previa y el PDF aparece solo su nombre, sin teléfono.', roles: ['admin', 'administrativo', 'asesor', 'boleteria'] },
   { fecha: '2026-11-22', emoji: '🏨', titulo: 'Menú de asesores más simple', texto: 'El Tarifario abre en Hoteles y lo muestra primero; Hot Sales sigue disponible. Para asesores se retiraron la pestaña IA del Tarifario y los accesos a Pausa de turno y Corporativo. Los demás roles conservan su navegación.', roles: ['admin', 'administrativo', 'asesor'] },

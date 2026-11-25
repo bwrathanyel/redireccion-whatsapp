@@ -212,7 +212,7 @@ const ERRORES = {
   proveedor_distinto: 'Esa cuenta es de otro proveedor.'
 };
 
-export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz, hoja, abrirSheet, cerrarSheet, hoy, uid, irTarifario, leerComprobante, alCambiar }) {
+export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz, hoja, abrirSheet, cerrarSheet, hoy, uid, irTarifario, verVenta, leerComprobante, alCambiar }) {
   const admin = rol === 'admin';
   let pedido = 0, provs = null, salidas = [], servicios = [], catalogo = [], cuentas = [], salud = null, sinComp = null;
   let vista = null, filtro = 'deuda', buscar = '', form = null, adjPend = null;
@@ -267,6 +267,7 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
       case 'desclasificar': return desclasificar(id, b);
       case 'asignar': return asignarServicio(id, b);
       case 'tarifario': return irTarifario?.(id);
+      case 'venta': return verVenta?.(id, d.cod);
     }
   });
   raiz.addEventListener('change', e => {
@@ -442,7 +443,7 @@ export function crearFinanzasPorPagar({ sb, esc, ok, error, confirmar, rol, raiz
     const on = sel.has(c.cxp_id), cod = esc(c.codigo || '—');
     return `<div class="pp-cxp${on ? ' on' : ''}${c.sin_migrar ? ' off' : ''}">
       <label class="pp-chk"><input type="checkbox" data-pp-sel="${c.cxp_id}"${on ? ' checked' : ''}${c.sin_migrar ? ' disabled' : ''} aria-label="Elegir ${cod}"></label>
-      <div class="pp-cxp-q"><b>${cod}</b> ${esc(c.cliente || '')}<small>${esc(c.servicio || '')}</small></div>
+      <div class="pp-cxp-q">${verVenta && c.reserva_id ? `<button type="button" class="pp-venta" data-pp="venta" data-id="${c.reserva_id}" data-cod="${esc(c.codigo || '')}" title="Abrir la venta: cobro al cliente y pagos">${cod}</button>` : `<b>${cod}</b>`} ${esc(c.cliente || '')}<small>${esc(c.servicio || '')}</small></div>
       <div class="pp-cxp-f${c.vencida ? ' pp-alerta' : ''}"><small>${c.vencida ? 'Viajó' : 'Viaja'}</small>${dia(c.fecha_inicio)}</div>
       <div class="pp-cxp-m"><small>${Number(c.abonado) > 0 ? `pagado ${usd(c.abonado)} de ${usd(c.monto)}` : 'debo'}</small><b>${usd(c.saldo)}</b></div>
       <div class="pp-cxp-a">${c.sin_migrar ? '<span class="pp-estado alerta" title="Abono cargado con el botón viejo: falta pasarlo a pagos">Abono viejo</span>'
