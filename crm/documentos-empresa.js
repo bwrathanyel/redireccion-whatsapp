@@ -69,10 +69,9 @@ const CSS = `
 .de-info b{color:var(--txt);font-weight:700}
 .de-cuerpo{flex:1;min-height:0;position:relative;background:color-mix(in srgb,var(--bg) 70%,#000)}
 .de-cuerpo iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff}
-.de-img{position:absolute;inset:0;overflow:auto;display:grid;place-items:center;padding:14px}
-.de-img img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;cursor:zoom-in}
-.de-img.zoom{display:block;place-items:unset}
-.de-img.zoom img{max-width:none;max-height:none;cursor:zoom-out}
+.de-img{position:absolute;inset:0;overflow:auto;padding:24px;background:repeating-conic-gradient(#7b828c 0 25%,#8f96a0 0 50%) 0 0/24px 24px}
+.de-img img{display:block;width:100%;height:100%;object-fit:contain;cursor:zoom-in}
+.de-img.zoom img{width:auto;height:auto;max-width:none;margin:auto;cursor:zoom-out}
 .de-msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;color:var(--muted);font-size:13px}
 .de-msg>i{font-size:30px;opacity:.55}
 .de-pdf{position:absolute;inset:0;overflow:auto;padding:14px 0 70px}
