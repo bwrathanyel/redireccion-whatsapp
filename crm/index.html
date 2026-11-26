@@ -3743,10 +3743,37 @@ body.bi-on .correo-deshacer{bottom:calc(var(--bi-h) + var(--safe-b) + 12px)}
    ancho, KPIs globales en una sola fila baja y más columnas de tarjetas. */
 @media(min-width:761px){
   .main.en-facturacion .foot-note{display:none}
-  #sec-facturacion .lt-kpis{gap:10px;margin-bottom:8px}
-  #sec-facturacion .lt-kpis .kpi{padding:10px 14px}
-  #sec-facturacion .lt-kpis .kpi .kv{font-size:22px;margin-top:6px}
+  /* 2026-11-25: tira compacta de una fila (antes 2 filas de tarjetas de ~85px con círculo decorativo). */
+  #sec-facturacion .lt-kpis{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:7px;margin:0 0 9px}
+  #sec-facturacion .lt-kpis .kpi{padding:9px 11px;border-radius:12px;background:var(--bg2);text-align:left;min-width:0}
+  #sec-facturacion .lt-kpis .kpi::after,#sec-facturacion .lt-kpis .kpi .kgo{display:none}
+  #sec-facturacion .lt-kpis .kpi:hover{transform:none;border-color:var(--line2)}
+  #sec-facturacion .lt-kpis .kpi .kt{gap:7px;font-size:10px;font-weight:800;letter-spacing:.11em;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #sec-facturacion .lt-kpis .kpi .kt i{flex:none;width:20px;height:20px;border-radius:7px;font-size:10px;color:var(--kc);background:color-mix(in srgb,var(--kc) 16%,transparent)}
+  #sec-facturacion .lt-kpis .kpi .kv{font-size:19px;letter-spacing:-.02em;line-height:1.15;margin-top:5px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #sec-facturacion .lt-kpis .kpi .kd{font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #sec-facturacion .lt-kpis .kpi.kpi-on{border-color:color-mix(in srgb,var(--kc) 55%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--kc) 55%,transparent);background:color-mix(in srgb,var(--kc) 7%,var(--bg2))}
   #sec-facturacion .lt-grid{grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin-top:10px}
+  /* 2026-11-25: una sola cabecera. Arriba las pestañas de Finanzas (pintarPestanasNav),
+     debajo #fact-tabs como sub-pestañas de texto con subrayado, no una segunda caja. */
+  #sec-facturacion > .nav-tabs-sec{margin-bottom:4px}
+  #fact-tabs{display:flex;gap:22px;width:100%;margin:0 0 11px;padding:0 4px;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0}
+  #fact-tabs .seg{display:inline-flex;align-items:center;margin-bottom:-1px;padding:9px 0;border-radius:0;font-size:12px;font-weight:700;background:none;color:var(--muted);box-shadow:inset 0 -2px 0 transparent;transition:color .16s,box-shadow .16s}
+  #fact-tabs .seg.on{background:none;color:var(--txt);box-shadow:inset 0 -2px 0 var(--accent)}
+  #fact-tabs .seg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  #fact-tabs .lih-count{font-size:10px;padding:0 7px}
+  /* Filtros: selects compactos; el que filtra se marca en accent. */
+  #fact-ventas-filtros{align-items:center;gap:7px!important}
+  #fact-ventas-filtros select.flt{height:34px;padding:0 28px 0 11px;font-size:12px;max-width:190px;transition:border-color .16s,background-color .16s,color .16s}
+  #fact-ventas-filtros select.flt.flt-on{border-color:var(--accent);background-color:var(--accent-soft);color:var(--accent-txt);font-weight:700}
+  .fact-barra .fact-limpiar{color:var(--muted);background:none;border-color:transparent}
+  .fact-barra .fact-limpiar:hover{color:var(--txt);border-color:var(--line2)}
+  /* Toolbar: un solo sistema de botones (34px, radio 10, mismo peso); la acción principal en accent. */
+  .fact-barra .bt-buscar{height:34px;border-radius:10px;font-size:12px}
+  .fact-barra .btn-sm{height:34px;min-height:34px;padding:0 12px;border-radius:10px;font-size:12px;font-weight:700;transition:border-color .16s,background-color .16s,color .16s}
+  .fact-barra .export-dd > .btn-sm{width:34px;padding:0}
+  .fact-barra .btn-sm.lt-primario{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:var(--on-accent);border-color:transparent;box-shadow:0 6px 16px rgba(var(--accent-rgb),.22)}
+  .fact-barra .btn-sm.lt-primario:hover{border-color:transparent;filter:brightness(1.06)}
 }
 
 /* Facturación: una barra por pestaña (buscar · filtros · orden · acción · ⋯).
@@ -3756,6 +3783,7 @@ body.bi-on .correo-deshacer{bottom:calc(var(--bi-h) + var(--safe-b) + 12px)}
 .fact-barra{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px}
 .fact-barra .bt-buscar{flex:0 1 260px}
 .fact-barra .btn-sm{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px}
+.fact-barra .btn-sm[hidden]{display:none}
 .fact-barra .fact-orden-btn{margin-left:auto}
 .fact-barra .fact-orden-btn b{font-weight:700;color:var(--accent-ink)}
 #fact-tabs .lih-count{margin-left:6px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:800;padding:1px 8px;border-radius:20px}
@@ -5029,6 +5057,13 @@ body:not(.gp-ver-reasignaciones) #ase-ver-reasig{display:none}
 .nav-item .nav-fav:hover{color:var(--amber);opacity:1}
 .nav-item.nav-favorito .nav-fav{opacity:.2;color:var(--amber)}
 @media (hover:none){.nav-item .nav-fav{opacity:.08}.nav-item.nav-favorito .nav-fav{opacity:.2}}
+/* 2026-11-25: en escritorio la estrella no ensucia el menú: oculta, legible al pasar el mouse, fija si está marcada. */
+@media (min-width:761px) and (hover:hover){
+  .nav-item .nav-fav{opacity:0}
+  .nav-item:hover .nav-fav,.nav-item .nav-fav:focus-visible{opacity:.55}
+  .nav-item .nav-fav:hover{opacity:1;color:var(--amber)}
+  .nav-item.nav-favorito .nav-fav{opacity:.9;color:var(--amber)}
+}
 
 /* Tarifario: fila de pestañas + botón de configuración (admin) */
 .tar-tabs-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:16px}
@@ -7717,7 +7752,7 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 @media(prefers-reduced-motion:reduce){.prv-card{animation:none}}
 /* Cobros > Ventas: tarjeta de venta (2026-10-16). --vc = color del estado, --c = color de cada acción/aviso. */
 .vt-card{gap:11px}
-.vt-cab{display:flex;align-items:flex-start;gap:11px}
+.vt-cab{display:flex;align-items:center;gap:11px;min-width:0}
 .vt-avatar{flex-shrink:0;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:14px;font-weight:800;letter-spacing:.02em;color:var(--vc);background:color-mix(in srgb,var(--vc) 15%,transparent);border:1px solid color-mix(in srgb,var(--vc) 28%,transparent)}
 .vt-quien{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .vt-quien .lt-card-tit{flex:none;font-size:15px}
@@ -7726,10 +7761,35 @@ a.ia-dato:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
 .vt-meta i{font-size:10.5px;color:var(--muted2)}
 .vt-estado{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:4px 9px;color:var(--vc);background:color-mix(in srgb,var(--vc) 14%,transparent)}
 /* Tarjeta A «Dos semáforos» (2026-11-25): cobro al cliente + pago al proveedor. */
-.vt-card{cursor:pointer}
+.vt-card{cursor:pointer;min-width:0}
+/* Rediseño 2026-11-25: tarjeta de ~220px útiles en 4 columnas. Estado del viaje y códigos en su propia
+   línea (antes le robaban ancho al nombre y al asesor), venta arriba, y cada semáforo = píldora + barra
+   + monto en filas apiladas (antes la píldora se montaba sobre el monto y las barras repetían el %). */
+.vt-top{display:flex;align-items:center;gap:9px;min-height:24px;min-width:0}
+.vt-codigos{margin-left:auto;min-width:0;font-size:11px;font-weight:600;color:var(--muted2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vt-asesor{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vt-asesor i{font-size:10.5px;color:var(--muted2);margin-right:4px}
+.vt-grupo{display:flex;flex-direction:column;gap:5px;min-width:0}
+.vt-fila{display:flex;align-items:center;gap:7px;min-width:0}
+.vt-fila .vt-lbl{flex:0 0 74px}
+.vt-avance{display:flex;align-items:center;gap:9px;min-width:0}
+.vt-avance .lt-barra{flex:1;min-width:28px;height:6px}
+.vt-avance .lt-barra i{background:var(--c)}
+.vt-avance .vt-num{flex:none}
+.vt-sem .vt-provs{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vt-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* 2026-11-25: avatar con el color fijo del asesor (--ac, colAsesor en renderVentas), no el del cobro. */
+.vt-card .vt-avatar{color:var(--ac,var(--vc));background:color-mix(in srgb,var(--ac,var(--vc)) 15%,transparent);border-color:color-mix(in srgb,var(--ac,var(--vc)) 28%,transparent)}
+/* Anulada (renderVentas ya no le pinta semáforo): atenuada y tachada. */
+.vt-card.lt-card-hecha{opacity:.55;background:transparent;box-shadow:none;border-style:dashed}
+.vt-card.lt-card-hecha:hover{opacity:.8}
+.vt-card.lt-card-hecha :is(.lt-card-tit,.vt-venta b){text-decoration:line-through;text-decoration-color:var(--muted2);text-decoration-thickness:1.5px}
+#fact-ventas-pager{display:flex;justify-content:center;margin-top:11px}
+#fact-ventas-pager .vt-accion{--c:var(--accent)}
+/* El FAB del chat (abajo a la derecha) tapaba la última tarjeta. */
+@media(min-width:761px){#sec-facturacion [data-fact-panel]{padding-bottom:88px}}
 .vt-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:4px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);white-space:nowrap}
-.vt-sem{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px 11px;padding:9px 11px;border-radius:12px;background:color-mix(in srgb,var(--txt) 3.5%,transparent);border:1px solid var(--line)}
+.vt-sem{display:flex;flex-direction:column;gap:9px;min-width:0;padding:9px 11px;border-radius:12px;background:color-mix(in srgb,var(--txt) 3.5%,transparent);border:1px solid var(--line)}
 .vt-lbl{font-size:10px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted2)}
 .vt-pills{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
 .vt-pill{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:0;white-space:nowrap}
@@ -7743,16 +7803,11 @@ button.vt-pill:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
 .vt-cifras{display:flex;align-items:flex-end;justify-content:space-between;gap:9px 14px;flex-wrap:wrap}
 .vt-venta{display:flex;flex-direction:column;gap:1px}
 .vt-venta b{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
-.vt-mg{display:flex;flex-wrap:wrap;gap:3px 11px;font-size:12px;color:var(--muted)}
+.vt-mg{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:12px;color:var(--muted);text-align:right;margin-left:auto}
 .vt-mg b{color:var(--txt);font-weight:700;font-variant-numeric:tabular-nums}
 .vt-mg b.lt-ok{color:var(--green)} .vt-mg b.lt-debe{color:var(--danger)} .vt-mg b.vt-falta{color:var(--pink)}
-.vt-barras{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:5px 9px;font-size:11px;color:var(--muted)}
-.vt-barras .lt-barra{height:6px}
-.vt-barras .lt-barra i{background:var(--c)}
-.vt-barras .vt-num{font-size:11px;font-weight:700;color:var(--txt)}
-.vt-pie{display:flex;align-items:center;gap:7px;margin-top:auto;padding-top:9px;border-top:1px solid var(--line)}
-.vt-provs{flex:1;min-width:0;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.vt-provs b{color:var(--txt);font-weight:600}
+.vt-pie{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:auto;padding-top:9px;border-top:1px solid var(--line)}
+.vt-pie .vt-pagar{flex:1;min-width:0}
 .vt-aviso{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--c);padding:7px 11px;border-radius:10px;background:color-mix(in srgb,var(--c) 11%,transparent);border:1px solid color-mix(in srgb,var(--c) 24%,transparent)}
 .vt-aviso b{font-weight:800}
 .vt-accion{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:34px;padding:0 12px;border-radius:10px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;color:var(--c,var(--txt));background:transparent;border:1px solid var(--line2,var(--line));white-space:nowrap;transition:background var(--dur-rapida),border-color var(--dur-rapida),transform var(--dur-rapida)}
@@ -7846,7 +7901,6 @@ button.vt-pill:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
   #sec-facturacion .lt-grid{grid-template-columns:minmax(0,1fr)}
   .vt-card,.vt-cab,.vt-sem,.vt-pie{min-width:0;max-width:100%}
   .vt-pie{flex-wrap:wrap}
-  .vt-provs{flex:1 1 100%}
   .vt-accion{min-height:44px;flex:1 1 0;min-width:0;padding:0 11px}
   .vt-accion.solo{flex:0 0 44px}
   /* KPIs plegables (2026-10-16): botón "Resumen" arriba de cada bloque, cerrado por defecto */
@@ -11693,6 +11747,7 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
             <select class="flt" id="fact-asesor">
               <option value="">Todos los asesores</option>
             </select>
+            <button class="btn-sm fact-limpiar" id="fact-limpiar-filtros" type="button" onclick="factLimpiarFiltros()" hidden><i class="fas fa-xmark"></i> Limpiar</button>
             <button class="mfs-done" data-mfs="fact-ventas-filtros" type="button">Listo</button>
           </div>
           <button class="btn-sm fact-orden-btn" type="button" onclick="abrirOrdenarSheet('ventas')" title="Cambiar el orden"><i class="fas fa-arrow-down-wide-short"></i> <span>Ordenar<b data-orden-lbl="ventas"></b></span></button>
@@ -11723,7 +11778,7 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
           </div>
           <div class="tbl-state skel" id="fact-ventas-loading"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>
           <div class="lt-grid" id="fact-tbody"></div>
-          <div class="pager" id="fact-ventas-pager" style="display:none"><button class="dbtn" type="button" style="width:auto;padding:8px 16px" onclick="cargarMasVentas()">Cargar más</button></div>
+          <div class="pager" id="fact-ventas-pager" style="display:none"><button class="vt-accion" type="button" onclick="cargarMasVentas()"><i class="fas fa-angles-down"></i> Cargar más</button></div>
         </div>
       </div>
 

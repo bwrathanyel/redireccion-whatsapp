@@ -23621,7 +23621,20 @@ function ventaAbrirReserva(facturaId) {
 window.ventaAbrirReserva = ventaAbrirReserva;
 window.ventaPagarProveedor = ventaPagarProveedor;
 window.ventaMenu = ventaMenu;
+const VT_COLORES_ASESOR = ['var(--accent)', 'var(--blue)', 'var(--green)', 'var(--purple)', 'var(--amber)', 'var(--pink)'];
+function factMarcarFiltros() {
+  const sels = ['fact-estado', 'fact-mes', 'fact-asesor'].map(id => document.getElementById(id)).filter(Boolean);
+  sels.forEach(s => s.classList.toggle('flt-on', !!s.value));
+  const b = document.getElementById('fact-limpiar-filtros');
+  if (b) b.hidden = !sels.some(s => s.value);
+}
+function factLimpiarFiltros() {
+  ['fact-estado', 'fact-mes', 'fact-asesor'].forEach(id => { const s = document.getElementById(id); if (s) s.value = ''; });
+  factVentasMostrar = TECHO_LISTA;
+  loadFacturas();
+}
 function renderVentas() {
+  factMarcarFiltros();
   const mes = val('fact-mes'), asesor = val('fact-asesor');
   let base = FACT_VENTAS_CACHE;
   if (mes) base = base.filter(f => (f.fecha_emision || '').slice(0, 7) === mes);
@@ -23654,7 +23667,9 @@ function renderVentas() {
     { key: 'con_costo', t: 'Margen', v: money(sumaMargen), d: `${pctMargen}% · costo neto ${money(sumaCosto)}`, i: 'fa-chart-line', c: 'var(--accent)', on: factVentasFiltro === 'con_costo', go: () => filtrarVentasKpi('con_costo') },
     { key: 'sin_costo', t: 'Sin neto', v: fmt(nSinCosto), d: 'ventas sin costo neto: margen incompleto', i: 'fa-triangle-exclamation', c: nSinCosto > 0 ? 'var(--pink)' : 'var(--green)', on: factVentasFiltro === 'sin_costo', go: () => filtrarVentasKpi('sin_costo') },
   ]);
-  const visibles = filas.slice(0, factVentasMostrar);
+  // Anuladas al final, sin romper el orden elegido dentro de cada grupo.
+  const visibles = [...filas.filter(f => f.estado !== 'anulada'), ...filas.filter(f => f.estado === 'anulada')].slice(0, factVentasMostrar);
+  const colAsesor = n => { if (!n) return 'var(--muted)'; let h = 0; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return VT_COLORES_ASESOR[h % VT_COLORES_ASESOR.length]; };
   const pager = document.getElementById('fact-ventas-pager');
   if (pager) pager.style.display = filas.length > factVentasMostrar ? '' : 'none';
   document.getElementById('fact-tbody').innerHTML = visibles.map((f, i) => {
@@ -23667,28 +23682,30 @@ function renderVentas() {
       : s.viaje.t ? `<span class="vt-chip" style="--c:${s.viaje.col}"><i class="fas ${s.viaje.ic}"></i> ${esc(s.viaje.t)}</span>` : '';
     const barra = (pct, c, lbl) => `<div class="lt-barra" style="--c:${c}" role="progressbar" aria-label="${lbl}" aria-valuenow="${Math.round(pct * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(pct * 100)}%"></i></div>`;
     return `<article class="lt-card vt-card${anulada ? ' lt-card-hecha' : ''}" tabindex="0" aria-label="Venta factura #${fmt(f.numero_factura)}, ${esc(f.cliente || '')}" style="--i:${Math.min(i, 20)};--vc:${anulada ? 'var(--muted)' : s.cli.c}" onclick="if(!event.target.closest('button,a'))abrirVentaDrawer(${f.id})" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();abrirVentaDrawer(${f.id})}">
+      <div class="vt-top">${chip}<span class="vt-codigos" title="Reserva · N° de factura">${[f.reserva_codigo, '#' + fmt(f.numero_factura)].filter(Boolean).map(esc).join(' · ')}</span></div>
       <div class="vt-cab">
-        <span class="vt-avatar" aria-hidden="true">${esc(ini)}</span>
+        <span class="vt-avatar" aria-hidden="true" style="--ac:${anulada ? 'var(--muted)' : colAsesor(f.asesor)}">${esc(ini)}</span>
         <div class="vt-quien">
           <div class="lt-card-tit" title="${esc(f.cliente || '')}">${esc(f.cliente || ('#' + fmt(f.lead_id)))}</div>
-          <div class="vt-meta">${f.reserva_codigo ? `<span title="Reserva">${esc(f.reserva_codigo)}</span>` : ''}<span title="N° de factura"><i class="fas fa-receipt"></i> #${fmt(f.numero_factura)}</span><span title="Asesor"><i class="fas fa-user-tie"></i> ${esc(f.asesor || 'Sin asesor')}</span></div>
+          <div class="vt-asesor" title="Asesor: ${esc(f.asesor || 'Sin asesor')}"><i class="fas fa-user-tie"></i> ${esc(f.asesor || 'Sin asesor')}</div>
         </div>
-        ${chip}
       </div>
-      ${anulada ? '' : `<div class="vt-sem">
-        <span class="vt-lbl">Cliente</span><span class="vt-pills">${vtPill(s.cli)}</span><span class="vt-num">${s.cli.sub}</span>
-        <span class="vt-lbl">Proveedor</span><span class="vt-pills">${vtPill(s.prov, false, f)}${s.extras.map(e => vtPill(e, true, f)).join('')}</span><span class="vt-num">${s.prov.sub}</span>
-      </div>`}
       <div class="vt-cifras">
         <div class="vt-venta"><span class="vt-lbl">Venta</span><b>${money(f.venta_total)}</b></div>
         <div class="vt-mg"><span>Neto <b>${conCosto ? money(f.costo_neto) : 'sin cargar'}</b></span><span>Margen ${conCosto ? `<b class="${f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${money(f.margen)}</b> ${pctReal} %` : '<b class="vt-falta">falta neto</b>'}</span></div>
       </div>
-      ${anulada ? '' : `<div class="vt-barras">
-        <span>Cobrado</span>${barra(s.cliPct, s.cli.c, 'Cobrado al cliente')}<span class="vt-num">${Math.floor(s.cliPct * 100)} %</span>
-        <span>Pagado al proveedor</span>${barra(s.provPct, s.prov.c, 'Pagado al proveedor')}<span class="vt-num">${f.prov_monto ? Math.floor(s.provPct * 100) + ' %' : '—'}</span>
+      ${anulada ? '' : `<div class="vt-sem">
+        <div class="vt-grupo">
+          <div class="vt-fila"><span class="vt-lbl">Cliente</span><span class="vt-pills">${vtPill(s.cli)}</span></div>
+          <div class="vt-avance">${barra(s.cliPct, s.cli.c, 'Cobrado al cliente')}<span class="vt-num">${s.cli.sub}</span></div>
+        </div>
+        <div class="vt-grupo">
+          <div class="vt-fila"><span class="vt-lbl">Proveedor</span><span class="vt-pills">${vtPill(s.prov, false, f)}${s.extras.map(e => vtPill(e, true, f)).join('')}</span></div>
+          <div class="vt-avance">${barra(s.provPct, s.prov.c, 'Pagado al proveedor')}<span class="vt-num">${s.prov.sub || '—'}</span></div>
+          ${provs.length ? `<div class="vt-provs" title="${esc(provs.join(' · '))}">${provs.map(p => esc(p)).join(' · ')}</div>` : ''}
+        </div>
       </div>`}
       <div class="vt-pie">
-        <span class="vt-provs" title="${esc(provs.join(' · '))}">${provs.length ? provs.map(p => `<b>${esc(p)}</b>`).join(' · ') : 'Sin proveedor asignado'}</span>
         ${aPagar > 0.005 ? `<button class="vt-accion vt-pagar" type="button" title="Registrar el pago al proveedor" onclick="ventaPagarProveedor(${f.id})"><i class="fas fa-money-bill-transfer"></i> Pagar ${money(aPagar)}</button>` : ''}
         <button class="vt-accion" type="button" title="Descargar el PDF de esta venta" aria-label="Descargar PDF de la factura #${fmt(f.numero_factura)}" onclick="exportarVentaPdf(${f.id})"><i class="fas fa-file-pdf"></i> PDF</button>
         <button class="vt-accion solo" type="button" title="Más acciones" aria-label="Más acciones" aria-haspopup="dialog" onclick="ventaMenu(${f.id})"><i class="fas fa-ellipsis"></i></button>
