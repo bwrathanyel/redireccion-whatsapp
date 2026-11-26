@@ -2297,6 +2297,74 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tar-destino-caret{margin-left:auto;transition:transform .15s;color:var(--muted)}
 .tar-destino-block[open] .tar-destino-caret{transform:rotate(180deg)}
 .tar-destino-block .tar-grid-sub,.tar-destino-block .tar-hotel-list,.tar-destino-block .tar-fichas-grid{margin-top:10px}
+/* Hoteles 2026-11-26: chips de destino, encabezado con datos, fecha de viaje y comparador. */
+.tar-dest-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+.tar-dest-chips[data-hidden]{display:none}
+.tdc-chip{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:var(--panel-solid);color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:border-color .12s,color .12s,background-color .12s}
+.tdc-chip b{font-size:11px;font-weight:700;color:var(--muted2)}
+.tdc-chip:hover{color:var(--txt);border-color:rgba(var(--accent-rgb),.4)}
+.tdc-chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-txt)}
+.tdc-chip.on b{color:inherit}
+.tdc-chip.vacio{opacity:.55}
+.tdh{flex-wrap:wrap;row-gap:4px}
+.tdh .tdh-meta{font-size:12px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:6px}
+.tdh .tdh-meta b{color:var(--green);font-weight:700}
+.tdh .tdh-fotos{display:flex;margin-left:auto;padding-left:10px}
+.tdh .tdh-fotos img{width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid var(--bg2);margin-left:-8px;background:var(--panel-solid)}
+.tdh .tdh-fotos img:first-child{margin-left:0}
+.tdh .tar-destino-caret{margin-left:12px}
+.tar-f-fecha{display:inline-flex;align-items:center;gap:8px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:10px;padding:0 8px 0 12px;color:var(--muted);font-size:12.5px;white-space:nowrap}
+.tar-f-fecha[data-hidden]{display:none}
+.tar-f-fecha input{background:none;border:0;color:var(--txt);font-family:inherit;font-size:12.5px;padding:8px 0;outline:none}
+.tar-f-fecha:focus-within{border-color:var(--accent)}
+.tc-cmp{height:30px;min-width:30px;display:inline-flex;align-items:center;justify-content:center;padding:0;background:rgba(6,10,18,.84);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:9px;cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s,background .15s,border-color .15s}
+.tar-card:hover .tc-cmp,.tar-ficha:hover .tc-cmp,.tc-cmp:focus-visible,.tc-cmp.on{opacity:1}
+.tc-cmp:hover{border-color:var(--accent)}
+.tc-cmp.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent,#fff)}
+.tf-media .tc-cmp{position:absolute;top:8px;right:8px;z-index:2}
+.tar-hotel-row .tc-cmp{opacity:1;flex-shrink:0;background:transparent;border-color:var(--line2);color:var(--muted)}
+.tar-hotel-row .tc-cmp.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent,#fff)}
+.tar-ia-resultados .tc-cmp{display:none}
+@media (hover:none){.tc-cmp{opacity:1}}
+.tar-cmp-bar{position:sticky;bottom:calc(14px + var(--safe-b));z-index:5;display:flex;align-items:center;gap:10px;width:fit-content;max-width:100%;margin:14px auto 0;padding:7px 8px 7px 10px;background:var(--panel-solid);border:1px solid var(--line2);border-radius:999px;box-shadow:0 12px 30px rgba(0,0,0,.35)}
+.tar-cmp-bar[hidden]{display:none}
+.tcb-fotos{display:flex}
+.tcb-fotos img,.tcb-fotos i{width:30px;height:30px;border-radius:50%;object-fit:cover;border:2px solid var(--panel-solid);margin-left:-9px;background:var(--bg2);display:grid;place-items:center;font-size:12px;color:var(--muted)}
+.tcb-fotos>:first-child{margin-left:0}
+.tcb-ver{display:inline-flex;align-items:center;gap:7px;min-height:34px;padding:0 14px;border-radius:999px;border:0;background:var(--accent);color:var(--on-accent,#fff);font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+.tcb-ver[disabled]{background:var(--line2);color:var(--muted);cursor:default}
+.tcb-x{width:34px;height:34px;border-radius:50%;border:0;background:none;color:var(--muted);cursor:pointer}
+.tcb-x:hover{color:var(--txt);background:rgba(var(--accent-rgb),.08)}
+body.bi-on .main .tar-cmp-bar{bottom:calc(var(--bi-h) + var(--safe-b) + 10px)}
+.tcs-scroll{overflow-x:auto;margin-top:6px}
+.tcs-tabla{width:100%;border-collapse:collapse;font-size:13px;min-width:480px}
+.tcs-tabla th,.tcs-tabla td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;color:var(--txt)}
+.tcs-tabla thead th{border-bottom:0;vertical-align:bottom}
+.tcs-tabla .tcs-lbl{width:118px;color:var(--muted);font-size:11.5px;font-weight:600}
+.tcs-hotel{display:flex;flex-direction:column;gap:7px;min-width:150px}
+.tcs-hotel img,.tcs-sinfoto{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:10px;background:var(--panel-solid)}
+.tcs-sinfoto{display:grid;place-items:center;color:var(--muted2);font-size:20px}
+.tcs-hotel b{font-size:13.5px;line-height:1.3}
+.tcs-acc{display:flex;gap:6px}
+.tcs-precio{color:var(--green)}
+.tcs-precio.mejor::after{content:'Más económico';display:block;margin-top:3px;font-size:10.5px;font-weight:700;color:var(--accent-ink)}
+.tcs-nd{color:var(--muted)}
+.tcs-aviso{margin:12px 0 0;font-size:12px;color:var(--muted)}
+.tcs-aviso i{margin-right:5px}
+.tcs-botones{display:flex;gap:10px;padding:14px 0 0}
+.tcs-botones .dbtn{flex:1}
+@media (min-width:900px){#tar-cmp-sheet.sheet{width:min(980px,96vw)}}
+@media (max-width:760px){
+  .tar-dest-chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .tar-dest-chips::-webkit-scrollbar{display:none}
+  .tdc-chip{min-height:var(--tap);flex-shrink:0}
+  .tdh .tdh-meta{order:5;flex-basis:100%;margin-left:22px}
+  .tdh .tdh-fotos{display:none}
+  .tdh .tar-destino-caret{margin-left:auto}
+  .mfs .tar-f-fecha{flex:1 1 100%;width:100%}
+  .tar-f-fecha input{flex:1;font-size:16px}
+  .tcs-tabla .tcs-lbl{width:84px}
+}
 .tar-grid-sub{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
 /* Excursiones (tabla) y Traslados (tarjetas por modalidad), rework 2026-10-15. */
 /* Ficha de excursión (2026-11-19): tarjeta del tarifario + variantes y tasas. */
@@ -11089,7 +11157,8 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
         <div class="tar-ia-resultados" id="tar-ia-resultados"></div>
       </div>
       <div class="tar-toolbar mfs" id="tar-toolbar">
-        <select class="flt tar-f" id="tar-f-destino" data-tabs="hotel,promo,paquete,hotsale,excursion,traslado"><option value="">Todos los destinos</option></select>
+        <!-- En Hoteles el destino se elige con los chips de #tar-dest-chips (2026-11-26). -->
+        <select class="flt tar-f" id="tar-f-destino" data-tabs="promo,paquete,hotsale,excursion,traslado"><option value="">Todos los destinos</option></select>
         <select class="flt tar-f" id="tar-f-tipo" data-tabs="hotel,promo">
           <option value="">Cualquier plan</option>
           <option value="todo_incluido">Todo incluido</option>
@@ -11104,14 +11173,17 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
         <!-- Fase 4. Solo en Hoteles: la capacidad vendible sale de las claves de
              `precios` de cada tarifa, y las otras pestañas no las tienen. -->
         <input class="flt tar-f" id="tar-f-grupo" data-tabs="hotel" type="number" min="1" step="1" placeholder="Somos... (adultos)">
+        <label class="tar-f-fecha" data-tabs="hotel" title="Día de llegada: solo hoteles con tarifa para esa fecha, y el «Desde» de ese día"><span>Viaja el</span><input type="date" class="tar-f" id="tar-f-fecha"></label>
         <label class="tar-f-check" id="tar-f-ninos-wrap" data-tabs="hotel,promo"><input type="checkbox" class="tar-f" id="tar-f-ninos"> Con niños gratis</label>
         <label class="tar-f-check" id="tar-f-vigente-wrap" data-tabs="hotel,promo,hotsale"><input type="checkbox" class="tar-f" id="tar-f-vigente" checked> Solo vigentes</label>
         <button class="mfs-done" data-mfs="tar-toolbar" type="button">Listo</button>
       </div>
+      <div class="tar-dest-chips" id="tar-dest-chips" data-tabs="hotel" role="group" aria-label="Destino"></div>
       <div id="tar-borrador"></div>
       <div class="cargador-host" id="tar-loading"></div>
       <div class="tbl-state" id="tar-empty"><i class="fas fa-book-open"></i><div class="es-t">Sin resultados</div><div class="es-s">No hay ítems con este filtro</div></div>
       <div class="tar-grid" id="tar-grid"></div>
+      <div class="tar-cmp-bar" id="tar-cmp-bar" hidden></div>
       <details class="tar-info-box" id="tar-info-box" style="display:none">
         <summary><i class="fas fa-circle-info"></i> Normativas y horarios importantes</summary>
         <div id="tar-info-list"></div>
@@ -12525,6 +12597,15 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
       </div>
     </div>
 
+    <div class="sheet" id="tar-cmp-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title"><i class="fas fa-scale-balanced"></i> Comparar hoteles</div>
+      <div id="tar-cmp-cuerpo"></div>
+      <div class="tcs-botones">
+        <button class="dbtn" id="tar-cmp-cerrar" type="button">Cerrar</button>
+        <button class="dbtn save" id="tar-cmp-copiar" type="button"><i class="fab fa-whatsapp"></i> Copiar para WhatsApp</button>
+      </div>
+    </div>
     <div class="sheet" id="tar-ficha-sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="tf-sheet-title"><i class="fas fa-pen"></i> Editar ficha</div>

@@ -27204,6 +27204,15 @@ let tarTab = 'hotel', tarCache = {}, tarInfo = null, tarView = 'tarjetas';
 // re-anima solo al cambiar de pestaña o tras cargar datos, no por tecla/filtro.
 let tarEntradaContexto = null;
 const tarDestinosAbiertos = new Set();
+// Hoteles: los bloques que se abren solos (búsqueda, pocos resultados, destino de 1-2
+// hoteles) y el asesor cerró a mano. Se olvidan cuando cambia la búsqueda o un filtro.
+const tarDestinosCerrados = new Set();
+let tarAutoFirma = '';
+// Chip de destino de Hoteles (reemplaza al desplegable en esa pestaña) y fecha de viaje.
+let tarDestinoChip = '', tarFechaViaje = '';
+// Consultas de los últimos 30 días por texto de destino (RPC tarifario_demanda_destinos).
+let TAR_DEMANDA = null, tarDemandaPedida = false;
+const tarComparar = new Set();
 const tarHotelesAbiertos = new Set();
 const tarExcAbiertos = new Set();
 const TAR_TAB_LABEL = { excursion: 'Excursión', traslado: 'Traslado', hotel: 'Hotel', paquete: 'Paquete', promo: 'Promoción', hotsale: 'Hot Sale', ia: 'IA', boleteria: 'Boletería' };
@@ -27285,6 +27294,7 @@ function setupTarifarioTabs() {
     const inmediato = el.type === 'checkbox' || el.tagName === 'SELECT';
     el.addEventListener(inmediato ? 'change' : 'input', inmediato ? () => renderTarifario() : debRender);
   });
+  setupTarHotelesExtras();
   setupTarVerOcultos();
   tarView = initViewSwitcher('tar-view-switch', 'tarifario', 'tarjetas', v => { tarView = v; renderTarifario(); });
   tabsOcultasListo = cargarTabsOcultas();
@@ -28040,6 +28050,8 @@ function tarChips() {
   const chips = [];
   const push = (label, limpiar) => chips.push([label, limpiar]);
   if (visible('tar-f-destino') && val('tar-f-destino')) push('Destino: ' + val('tar-f-destino'), () => reset('tar-f-destino', ''));
+  if (tarTab === 'hotel' && tarDestinoChip) push('Destino: ' + tarDestinoChip, () => { tarDestinoChip = ''; renderTarifario(); });
+  if (visible('tar-f-fecha') && val('tar-f-fecha')) push('Viaja el ' + fmtFechaCorta(val('tar-f-fecha')), () => reset('tar-f-fecha', ''));
   if (visible('tar-f-tipo') && val('tar-f-tipo')) push('Plan: ' + (TAG_LABEL[val('tar-f-tipo')] || val('tar-f-tipo')), () => reset('tar-f-tipo', ''));
   if (visible('tar-f-mes') && val('tar-f-mes')) push('Mes: ' + (MESL[Number(val('tar-f-mes')) - 1] || val('tar-f-mes')), () => reset('tar-f-mes', ''));
   if (visible('tar-f-precio') && val('tar-f-precio')) push('Hasta $' + val('tar-f-precio'), () => reset('tar-f-precio', ''));
@@ -28055,7 +28067,8 @@ function tarChips() {
     + '<button class="clear-all" id="tar-chips-clear" type="button"><i class="fas fa-times"></i> Limpiar</button>';
   chips.forEach((c, i) => { box.querySelector(`b[data-ci="${i}"]`).onclick = c[1]; });
   g('tar-chips-clear').onclick = () => {
-    ['tar-f-destino', 'tar-f-tipo', 'tar-f-mes', 'tar-f-precio', 'tar-f-grupo'].forEach(id => { const el = g(id); if (el) el.value = ''; });
+    ['tar-f-destino', 'tar-f-tipo', 'tar-f-mes', 'tar-f-precio', 'tar-f-grupo', 'tar-f-fecha'].forEach(id => { const el = g(id); if (el) el.value = ''; });
+    tarDestinoChip = '';
     const n = g('tar-f-ninos'); if (n) n.checked = false;
     const v = g('tar-f-vigente'); if (v) v.checked = true;
     if (tarVerOcultos()) { g('tar-ver-ocultos-btn')?.click(); return; }
@@ -28739,16 +28752,27 @@ function promoDisponibleEnMes(p, mesNum) {
 // Memoizado por ítem (WeakMap): renderTarifario lo llama en el predicado del
 // filtro y de nuevo en tarRowHtml. Depende solo de x.tarifas y de hoy().
 const _agregarHotelCache = new WeakMap();
+// Con «Viaja el» puesto (solo Hoteles) todo lo agregado mira las tarifas que sirven
+// para ESE día: el filtro, el «Desde» de la tarjeta, el encabezado y el comparador.
 function agregarHotel(x) {
+  const f = tarTab === 'hotel' ? tarFechaViaje : '';
   if (x && typeof x === 'object') {
     const c = _agregarHotelCache.get(x);
-    if (c) return c;
+    if (c && c.f === f) return c.r;
   }
-  const r = _agregarHotelCalc(x);
-  if (x && typeof x === 'object') _agregarHotelCache.set(x, r);
+  const r = _agregarHotelCalc(x, f);
+  if (x && typeof x === 'object') _agregarHotelCache.set(x, { f, r });
   return r;
 }
-function _agregarHotelCalc(x) {
+// Sirve para llegar el día `f`: se vende hoy y alguna ventana de disfrute cubre ese
+// día. Sin fechas de disfrute cargadas no se descarta (mismo criterio que la capacidad).
+function tarSirveEn(t, f) {
+  if (!tarVendibleHoy(t)) return false;
+  const v = tarVentanas(t);
+  return !v.length || v.some(([a, b]) => (!a || String(a).slice(0, 10) <= f) && (!b || String(b).slice(0, 10) >= f));
+}
+function _agregarHotelCalc(x, f = '') {
+  const sirve = f ? (t => tarSirveEn(t, f)) : tarVendibleHoy;
   const promos = x.tarifas || [];
   // Con `precios` estructurados gana el precio por persona (mismo criterio que
   // `precio_por_persona()` en SQL); sin ellos, el `precio_desde_usd` legacy.
@@ -28758,7 +28782,7 @@ function _agregarHotelCalc(x) {
   // Solo sobre lo VENDIBLE HOY (mismo criterio que `tarifa_ofrecible()` en SQL): el
   // "Desde" de una tarifa ya vencida cotizaba un precio que no se puede dar. Cada
   // precio viaja con SU moneda: mezclar EUR y USD en un mínimo daría un número sin sentido.
-  const precios = promos.filter(tarVendibleHoy)
+  const precios = promos.filter(sirve)
     .map(p => ({ v: p.precios ? tarPrecioPorPersona(p) : (p.origen === 'flyer' ? p.precio_desde_usd : null), moneda: String(p.moneda || 'USD').toUpperCase(), t: p }))
     .filter(e => e.v != null);
   const menor = precios.reduce((m, e) => (!m || e.v < m.v ? e : m), null);
@@ -28770,11 +28794,11 @@ function _agregarHotelCalc(x) {
     ninosMax: tarNinoGratisHotel(x)?.cantidad || 0,
     // "Vendible hoy" en vez de las fechas de la promo vieja: mismo criterio que
     // `tarifa_destacada()` en SQL (venta abierta + disfrute no vencido).
-    algunaVigente: promos.length ? promos.some(tarVendibleHoy) : true,
+    algunaVigente: promos.length ? promos.some(sirve) : true,
     // Fase 4 -- lo mide solo sobre lo VENDIBLE HOY: una quíntuple que ya no se
     // vende no hace que el hotel entre en el filtro de "somos 5".
     ...(() => {
-      const vend = promos.filter(tarVendibleHoy);
+      const vend = promos.filter(sirve);
       const caps = vend.map(tarCapacidadVendible);
       return {
         capacidadMax: caps.reduce((m, c) => c && c.max > m ? c.max : m, 0),
@@ -28957,7 +28981,7 @@ function renderTarifario() {
   // La pestaña IA no es una grilla de tarjetas: es una lista curada (tri-estado
   // + orden + línea de corte). Rama propia, temprano.
   document.getElementById('tar-grid').style.display = tarTab === 'ia' ? 'block' : 'grid';
-  if (tarTab === 'ia') { renderTarifarioIA(); return; }
+  if (tarTab === 'ia') { tarCmpBarPintar(); renderTarifarioIA(); return; }
   const q = val('tar-search').trim().toLowerCase();
   const data = tarCache[tarTab] || [];
   const fDestino = val('tar-f-destino'), fTipo = val('tar-f-tipo');
@@ -28967,17 +28991,18 @@ function renderTarifario() {
   const fNinos = document.getElementById('tar-f-ninos').checked;
   const fVigente = document.getElementById('tar-f-vigente').checked;
   const fOcultas = tarVerOcultos();
+  tarFechaViaje = tarTab === 'hotel' ? val('tar-f-fecha') : '';
 
   let filtered = data.filter(x => {
     if (!fOcultas && tarTab !== 'promo' && tarTab !== 'hotsale' && x.activo === false) return false;
     if (q &&!(x.nombre || x.titulo || '').toLowerCase().includes(q) && !`${x.destino || ''} ${x.localidad || ''} ${x.ubicacion || ''}`.toLowerCase().includes(q)) return false;
     if (tarTab === 'hotel') {
-      if (fDestino && tarLugar(x) !== fDestino) return false;
+      // El destino (chip) se aplica después: los chips cuentan con todos los demás filtros.
       const ag = agregarHotel(x);
       if (fTipo && !ag.tags.includes(fTipo)) return false;
       if (fPrecio != null && ag.precioMin != null && ag.precioMinMoneda === 'USD' && ag.precioMin > fPrecio) return false;
       if (fNinos && ag.ninosMax < 1) return false;
-      if (fVigente && !ag.algunaVigente) return false;
+      if ((fVigente || tarFechaViaje) && !ag.algunaVigente) return false;
       // Hotel sin foto real (productos.oculto_sin_foto): la web ya lo oculta; acá solo con el ojo.
       if (x.oculto_sin_foto && !fOcultas) return false;
       if (fGrupo && !ag.capacidadDesconocida && ag.capacidadMax < fGrupo) return false;
@@ -29042,6 +29067,8 @@ function renderTarifario() {
       ? filtered.filter(x => HS_POSICION.has(x.id)).sort((a, b) => HS_POSICION.get(a.id) - HS_POSICION.get(b.id))
       : promosHotSales(filtered);
   }
+  const baseHotel = filtered;
+  if (tarTab === 'hotel' && tarDestinoChip) filtered = filtered.filter(x => (destinoDe(x) || 'Otros') === tarDestinoChip);
 
   document.getElementById('tar-count').innerHTML = `${fmt(filtered.length)}<span class="tcount-u"> ítems</span>`;
   tarChips();
@@ -29056,17 +29083,28 @@ function renderTarifario() {
     // se llama de nuevo en cada tecla del buscador/cambio de filtro y
     // reconstruye todo el innerHTML -- sin guardar qué destinos tenía
     // abiertos el usuario, cada re-render los cerraría todos de vuelta.
+    // 2026-11-26: se abren solos los bloques con búsqueda escrita, con pocos resultados
+    // filtrados (≤24), con un solo destino a la vista o con 1-2 hoteles (abrir un
+    // acordeón para ver un hotel era un clic de más). El orden sale de la demanda.
+    tarCargarDemanda();
+    tarDestChipsPintar(baseHotel);
     const porDestino = {};
     filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
-    const destinos = [...new Set([...DESTINO_ORDEN, ...Object.keys(porDestino)])].filter(d => porDestino[d]?.length);
-    grid.innerHTML = destinos.map(d => `<details class="tar-destino-block" data-destino="${esc(d)}"${tarDestinosAbiertos.has(d) ? ' open' : ''}>
-      <summary class="tar-destino-header"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${porDestino[d].length}</span><i class="fas fa-chevron-down tar-destino-caret"></i></summary>
-      ${tarDiferir && !tarDestinosAbiertos.has(d) ? '' : tarItemsWrapHtml(porDestino[d])}
+    const destinos = tarOrdenDestinos(Object.keys(porDestino));
+    const firma = JSON.stringify([q, fTipo, fPrecio, fGrupo, fNinos, fVigente, fOcultas, tarFechaViaje, tarDestinoChip]);
+    if (firma !== tarAutoFirma) { tarAutoFirma = firma; tarDestinosCerrados.clear(); }
+    const filtrando = !!(fTipo || fPrecio != null || fGrupo || fNinos || tarFechaViaje);
+    const auto = d => !!q || destinos.length === 1 || porDestino[d].length <= 2 || (filtrando && filtered.length <= 24);
+    const abierto = d => tarDestinosAbiertos.has(d) || (auto(d) && !tarDestinosCerrados.has(d));
+    grid.innerHTML = destinos.map(d => `<details class="tar-destino-block" data-destino="${esc(d)}" data-auto="${auto(d) ? 1 : 0}"${abierto(d) ? ' open' : ''}>
+      ${tarDestHeaderHtml(d, porDestino[d])}
+      ${tarDiferir && !abierto(d) ? '' : tarItemsWrapHtml(porDestino[d])}
     </details>`).join('');
-    if (tarDiferir) tarDiferirBloques(grid, destinos.map(d => tarDestinosAbiertos.has(d) ? null : porDestino[d]));
+    if (tarDiferir) tarDiferirBloques(grid, destinos.map(d => abierto(d) ? null : porDestino[d]));
     grid.querySelectorAll('.tar-destino-block').forEach(det => det.addEventListener('toggle', () => {
-      const d = det.dataset.destino;
-      if (det.open) tarDestinosAbiertos.add(d); else tarDestinosAbiertos.delete(d);
+      const d = det.dataset.destino, esAuto = det.dataset.auto === '1';
+      if (det.open) { tarDestinosCerrados.delete(d); if (!esAuto) tarDestinosAbiertos.add(d); }
+      else { tarDestinosAbiertos.delete(d); if (esAuto) tarDestinosCerrados.add(d); }
     }));
   } else if (tarTab === 'promo') {
     // Agrupado por hotel (no por destino): varias promos del mismo hotel
@@ -29137,6 +29175,177 @@ function renderTarifario() {
   tarObserver.disconnect();
   grid._tarById = byId;
   [...document.querySelectorAll('#tar-grid .tar-item')].forEach(el => tarWireItem(el, byId.get(el.dataset.id)));
+  tarCmpBarPintar();
+}
+
+/* ---------- Hoteles: chips de destino, encabezado con datos, orden por demanda y
+   comparador (2026-11-26) ---------- */
+// Los leads escriben el destino libre («Isla de Margarita», «Morrocoy», «Margarita y Los
+// Roques»): cada grupo del tarifario suma las filas cuyo texto lo contiene.
+const TAR_DEMANDA_ALIAS = { Tucacas: ['morrocoy'], Chichiriviche: ['morrocoy'], 'Colonia Tovar': ['tovar'], 'Los Roques': ['roques'] };
+async function tarCargarDemanda() {
+  if (tarDemandaPedida) return;
+  tarDemandaPedida = true;
+  try {
+    const { data, error } = await sb.rpc('tarifario_demanda_destinos', { p_dias: 30 });
+    if (error || !Array.isArray(data)) return;
+    const m = new Map();
+    data.forEach(r => { const k = tarNorm(r.destino).trim(); if (k) m.set(k, (m.get(k) || 0) + (Number(r.consultas) || 0)); });
+    TAR_DEMANDA = m;
+    if (tarTab === 'hotel') renderTarifario();
+  } catch { /* sin demanda queda el orden fijo de siempre */ }
+}
+function tarDemandaDe(d) {
+  if (!TAR_DEMANDA || !d || d === 'Otros') return 0;
+  const claves = [tarNorm(d), ...(TAR_DEMANDA_ALIAS[d] || [])];
+  let n = 0;
+  TAR_DEMANDA.forEach((c, txt) => { if (claves.some(k => txt.includes(k))) n += c; });
+  return n;
+}
+function tarOrdenDestinos(nombres) {
+  const fijo = d => DESTINO_ORDEN.indexOf(d) + 1 || 99;
+  const dem = new Map(nombres.map(d => [d, tarDemandaDe(d)]));
+  return nombres.slice().sort((a, b) => (a === 'Otros') - (b === 'Otros') || dem.get(b) - dem.get(a) || fijo(a) - fijo(b) || a.localeCompare(b, 'es'));
+}
+function tarDestChipsPintar(base) {
+  const box = document.getElementById('tar-dest-chips');
+  if (!box) return;
+  const cuenta = {};
+  base.forEach(x => { const d = destinoDe(x) || 'Otros'; cuenta[d] = (cuenta[d] || 0) + 1; });
+  if (tarDestinoChip && !cuenta[tarDestinoChip]) cuenta[tarDestinoChip] = 0;
+  const chip = (d, n) => {
+    const on = d === tarDestinoChip, dem = tarDemandaDe(d);
+    return `<button type="button" class="tdc-chip${on ? ' on' : ''}${n ? '' : ' vacio'}" data-dest="${esc(d)}" aria-pressed="${on}"${dem ? ` title="${fmt(dem)} consultas en los últimos 30 días"` : ''}>${d ? esc(d) : 'Todos'}<b>${fmt(n)}</b></button>`;
+  };
+  box.innerHTML = chip('', base.length) + tarOrdenDestinos(Object.keys(cuenta)).map(d => chip(d, cuenta[d])).join('');
+}
+// «Desde» del destino: el más bajo por persona, en USD si hay alguno (no se mezclan monedas).
+function tarDestResumen(items) {
+  let min = null, ninos = 0, cap = 0;
+  for (const x of items) {
+    const ag = agregarHotel(x);
+    if (ag.precioMin != null) {
+      const e = { v: ag.precioMin, m: ag.precioMinMoneda || 'USD' };
+      if (!min || (e.m === 'USD' && min.m !== 'USD') || (e.m === min.m && e.v < min.v)) min = e;
+    }
+    if (ag.ninosMax > 0) ninos++;
+    if (ag.capacidadMax > cap) cap = ag.capacidadMax;
+  }
+  return { min, ninos, cap };
+}
+function tarDestHeaderHtml(d, items) {
+  const r = tarDestResumen(items);
+  const meta = [
+    r.min ? `desde <b>${esc(tarMonto(r.min.v, r.min.m))}</b> p/p` : '',
+    r.ninos ? `${r.ninos} con niños gratis` : '',
+    r.cap ? `hasta ${r.cap} por habitación` : '',
+  ].filter(Boolean).join(' · ');
+  // Las miniaturas solo en escritorio: en el teléfono serían ~50 fotos más por datos móviles.
+  const fotos = esMovil() ? [] : items.map(x => fotosDe(x, 256)[0]).filter(Boolean).slice(0, 4);
+  return `<summary class="tar-destino-header tdh"><i class="fas fa-location-dot"></i> ${esc(d)} <span>${items.length}</span>
+    ${meta ? `<small class="tdh-meta">${meta}</small>` : ''}
+    <small class="tdh-fotos" aria-hidden="true">${fotos.map(f => `<img src="${esc(f)}" alt="" loading="lazy" decoding="async">`).join('')}</small>
+    <i class="fas fa-chevron-down tar-destino-caret"></i></summary>`;
+}
+const tcCmpBtnHtml = x => {
+  if (tarTab !== 'hotel') return '';
+  const on = tarComparar.has(String(x.id));
+  return `<button type="button" class="tc-cmp${on ? ' on' : ''}" data-cmp="${x.id}" aria-pressed="${on}" title="${on ? 'Quitar de la comparación' : 'Comparar con otros hoteles'}"><i class="fas fa-scale-balanced"></i></button>`;
+};
+const tarCmpHoteles = () => [...tarComparar].map(id => (tarCache.hotel || []).find(x => String(x.id) === id)).filter(Boolean);
+function tarCmpToggle(id) {
+  id = String(id);
+  if (tarComparar.has(id)) tarComparar.delete(id);
+  else if (tarComparar.size >= 3) { errToast('Puedes comparar hasta 3 hoteles a la vez'); return; }
+  else tarComparar.add(id);
+  const on = tarComparar.has(id);
+  document.querySelectorAll(`#tar-grid [data-cmp="${id}"]`).forEach(b => {
+    b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+    b.title = on ? 'Quitar de la comparación' : 'Comparar con otros hoteles';
+  });
+  tarCmpBarPintar();
+}
+function tarCmpLimpiar() {
+  [...tarComparar].forEach(tarCmpToggle);
+}
+function tarCmpBarPintar() {
+  const bar = document.getElementById('tar-cmp-bar');
+  if (!bar) return;
+  const hs = tarTab === 'hotel' ? tarCmpHoteles() : [];
+  bar.hidden = !hs.length;
+  if (!hs.length) return;
+  const listo = hs.length >= 2;
+  bar.innerHTML = `<span class="tcb-fotos">${hs.map(x => { const f = fotosDe(x, 256)[0]; return f ? `<img src="${esc(f)}" alt="" title="${esc(x.nombre)}">` : `<i class="fas fa-hotel" title="${esc(x.nombre)}"></i>`; }).join('')}</span>
+    <button type="button" class="tcb-ver" data-cmp-ver${listo ? '' : ' disabled'}><i class="fas fa-scale-balanced"></i> ${listo ? `Comparar ${hs.length} hoteles` : 'Elige otro hotel'}</button>
+    <button type="button" class="tcb-x" data-cmp-limpiar aria-label="Quitar todos" title="Quitar todos"><i class="fas fa-xmark"></i></button>`;
+}
+const tarCmpPrecio = (x, ag) => { const p = tarPrecioCorto(mejorPrecio(x), ag); return p ? `${p.desde ? 'Desde ' : ''}${p.monto}${p.unidad ? ' ' + p.unidad : ''}` : ''; };
+function tarCmpPintarSheet() {
+  const filas = tarCmpHoteles().map(x => ({ x, ag: agregarHotel(x), t: mejorPrecio(x) }));
+  const usd = filas.filter(f => f.ag.precioMin != null && f.ag.precioMinMoneda === 'USD');
+  const masBarato = usd.length > 1 ? usd.reduce((m, f) => f.ag.precioMin < m.ag.precioMin ? f : m) : null;
+  const campos = [
+    ['Destino', ({ x }) => esc([tarLugar(x), x.ubicacion_corta].filter(Boolean).join(' · ')) || '—'],
+    ['Precio', f => { const p = tarCmpPrecio(f.x, f.ag); return p ? `<b class="tcs-precio${f === masBarato ? ' mejor' : ''}">${esc(p)}</b>` : '<span class="tcs-nd">Consultar</span>'; }],
+    ['Plan', ({ ag }) => ag.tags.length ? ag.tags.map(t => esc(TAG_LABEL[t] || t)).join(', ') : '—'],
+    ['Niños gratis', ({ ag }) => ag.ninosMax ? `Hasta ${ag.ninosMax}` : 'No'],
+    ['Por habitación', ({ ag }) => ag.capacidadMax ? `Hasta ${ag.capacidadMax} personas` : '—'],
+    ['Se vende hasta', ({ t }) => esc(tarFechaCorta(t)?.txt.replace(/^Hasta /, '') || '—')],
+    ['Playas cercanas', ({ x }) => (x.playas_cercanas || []).length ? esc(x.playas_cercanas.slice(0, 3).join(', ')) : '—'],
+  ];
+  const cab = filas.map(({ x }) => {
+    const f = fotosDe(x, 384)[0];
+    return `<th><div class="tcs-hotel">${f ? `<img src="${esc(f)}" alt="" loading="lazy" decoding="async">` : '<div class="tcs-sinfoto"><i class="fas fa-image"></i></div>'}
+      <b>${esc(x.nombre)}</b>
+      <span class="tcs-acc"><button type="button" class="btn-sm" data-cmp-ficha="${x.id}">Ver ficha</button><button type="button" class="btn-sm" data-cmp-quitar="${x.id}" aria-label="Quitar ${esc(x.nombre)}" title="Quitar"><i class="fas fa-xmark"></i></button></span></div></th>`;
+  }).join('');
+  document.getElementById('tar-cmp-cuerpo').innerHTML = `<div class="tcs-scroll"><table class="tcs-tabla">
+    <thead><tr><th class="tcs-lbl"></th>${cab}</tr></thead>
+    <tbody>${campos.map(([lbl, fn]) => `<tr><th class="tcs-lbl">${lbl}</th>${filas.map(f => `<td>${fn(f)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="tcs-aviso"><i class="fas fa-circle-info"></i> Precios «desde» del tarifario${tarFechaViaje ? ` para llegar el ${esc(fmtFechaCorta(tarFechaViaje))}` : ''}. Confirma el total en Cotizar antes de cerrar.</p>`;
+}
+function tarCmpTexto() {
+  const bloques = tarCmpHoteles().map((x, i) => {
+    const ag = agregarHotel(x);
+    const det = [tarCmpPrecio(x, ag) || 'Precio a consultar', ag.tags.map(t => TAG_LABEL[t] || t).join(', '),
+      ag.ninosMax ? `${ag.ninosMax} niño${ag.ninosMax > 1 ? 's' : ''} gratis` : ''].filter(Boolean).join(' · ');
+    return `*${i + 1}. ${x.nombre}*${tarLugar(x) ? ` (${tarLugar(x)})` : ''}\n${det}`;
+  });
+  return `*Opciones de hospedaje*${tarFechaViaje ? ` para el ${fmtFechaCorta(tarFechaViaje)}` : ''}\n\n${bloques.join('\n\n')}`;
+}
+function setupTarHotelesExtras() {
+  const fecha = document.getElementById('tar-f-fecha');
+  if (fecha) fecha.min = hoy();
+  document.getElementById('tar-dest-chips')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-dest]');
+    if (!b) return;
+    tarDestinoChip = b.dataset.dest && b.dataset.dest !== tarDestinoChip ? b.dataset.dest : '';
+    renderTarifario();
+  });
+  document.getElementById('tar-cmp-bar')?.addEventListener('click', e => {
+    if (e.target.closest('[data-cmp-limpiar]')) return tarCmpLimpiar();
+    if (e.target.closest('[data-cmp-ver]') && tarComparar.size >= 2) { tarCmpPintarSheet(); openSheet('tar-cmp-sheet'); }
+  });
+  document.getElementById('tar-cmp-sheet')?.addEventListener('click', async e => {
+    const ficha = e.target.closest('[data-cmp-ficha]');
+    if (ficha) {
+      const x = tarCmpHoteles().find(h => String(h.id) === ficha.dataset.cmpFicha);
+      closeSheet('tar-cmp-sheet');
+      if (x) openProductoDrawer(x);
+      return;
+    }
+    const quitar = e.target.closest('[data-cmp-quitar]');
+    if (quitar) {
+      tarCmpToggle(quitar.dataset.cmpQuitar);
+      if (tarComparar.size < 2) closeSheet('tar-cmp-sheet'); else tarCmpPintarSheet();
+      return;
+    }
+    if (e.target.closest('#tar-cmp-cerrar')) return closeSheet('tar-cmp-sheet');
+    if (e.target.closest('#tar-cmp-copiar')) {
+      try { await navigator.clipboard.writeText(tarCmpTexto()); okToast('Copiado: pégalo en el chat del cliente'); }
+      catch { errToast('No se pudo copiar'); }
+    }
+  });
 }
 // Bloques cerrados de Hoteles/Promociones en el celular: sus tarjetas se arman al abrirlos
 // (el click del summary corre antes de que se abra, no hay cuadro vacío). Eran cientos de
@@ -29195,6 +29404,8 @@ function tarWireItem(el, x) {
     if (iaBtn) iaBtn.onclick = e => { e.stopPropagation(); iaMarcar(Number(iaBtn.dataset.iaToggle), iaBtn.dataset.iaOn === '1' ? 'quitar' : 'poner', iaBtn); };
     const hotelChip = el.querySelector('[data-abrir-hotel]');
     if (hotelChip) hotelChip.onclick = e => { e.stopPropagation(); abrirDesdeBusquedaIA('producto', Number(hotelChip.dataset.abrirHotel)); };
+    const cmpBtn = el.querySelector('[data-cmp]');
+    if (cmpBtn) cmpBtn.onclick = e => { e.stopPropagation(); tarCmpToggle(cmpBtn.dataset.cmp); };
     const cotBtn = el.querySelector('[data-cotizar-producto]');
     if (cotBtn) cotBtn.onclick = e => { e.stopPropagation(); cbDesdeFicha(Number(cotBtn.dataset.cotizarProducto)); };
     const mapaBtn = el.querySelector('.tcm-mapa');
@@ -29402,7 +29613,7 @@ function tarRowHtml(x) {
     ${tags.length ? tagsHtml(tags) : '<span></span>'}
     ${promosCount ? `<div class="tc-promos"><i class="fas fa-tag"></i> ${promosCount} promo${promosCount > 1 ? 's' : ''}</div>` : ''}
     <div class="thr-precio${precioTxt == null ? ' sin-precio' : ''}">${precioTxt != null ? esc(precioTxt) : 'Consultar precio'}</div>
-    ${esPromo ? tcIaBtnHtml(x, 'tar-ia-inline') : ''}
+    ${esPromo ? tcIaBtnHtml(x, 'tar-ia-inline') : tcCmpBtnHtml(x)}
     <i class="fas fa-chevron-right"></i>
   </div>`;
 }
@@ -29541,7 +29752,7 @@ function tarCardHtml(x) {
   const tag = precio ? tcPrecioTagHtml(ag.precioMin != null ? ag.precioMinTarifa : tarifa) : '';
   const ubic = tcUbicHtml(x);
   return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), precio, tag + tcHideBtnHtml(x.id, 'productos', 'activo'))}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), precio, tag + tcCmpBtnHtml(x) + tcHideBtnHtml(x.id, 'productos', 'activo'))}
     ${tarNinosHtml(nino, 'tc-ninos')}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
@@ -29584,7 +29795,7 @@ function tarFichaHtml(x) {
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
   const tags = esPromo ? (x.incluye_tags || []) : agregarHotel(x).tags;
   return `<div class="tar-item tar-ficha" data-id="${x.id}">
-    <div class="tf-media"${foto ? ` style="background-image:url('${esc(foto)}')"` : ''}>${!foto ? `<i class="fas fa-${esPromo ? 'tag' : 'image'}"></i>` : ''}<div class="carrusel-dots"></div></div>
+    <div class="tf-media"${foto ? ` style="background-image:url('${esc(foto)}')"` : ''}>${!foto ? `<i class="fas fa-${esPromo ? 'tag' : 'image'}"></i>` : ''}<div class="carrusel-dots"></div>${esPromo ? '' : tcCmpBtnHtml(x)}</div>
     <div class="tf-body">
       <div class="tc-nombre">${esc(nombre)}</div>
       ${tarNinosHtml(esPromo ? tarNinoGratis(x) : tarNinoGratisHotel(x), 'tc-ninos tf-ninos')}
@@ -30538,7 +30749,7 @@ function tarPrecioCorto(t, ag) {
   };
   if (ag && ag.precioMin != null) {
     const r = arma(ag.precioMin, ag.precioMinMoneda, 'p/p', true);
-    r.title = `Desde ${r.monto} por persona (la tarifa más baja vendible hoy)`;
+    r.title = `Desde ${r.monto} por persona (la tarifa más baja ${tarTab === 'hotel' && tarFechaViaje ? 'para llegar el ' + fmtFechaCorta(tarFechaViaje) : 'vendible hoy'})`;
     return r;
   }
   if (t.precios) {
@@ -44548,6 +44759,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-26', emoji: '🏨', titulo: 'Tarifario › Hoteles más rápido de usar', texto: 'Arriba hay chips por destino, ordenados por lo que más piden los clientes. Cada destino muestra su precio desde, cuántos hoteles tienen niños gratis y cuántas personas caben por habitación. Al buscar o filtrar, los destinos con resultados se abren solos. Nuevo filtro «Viaja el»: muestra solo los hoteles con tarifa para ese día y su precio de esa fecha. Con el botón de balanza puedes comparar hasta 3 hoteles y copiar la comparación para WhatsApp.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-26', emoji: '🪪', titulo: 'Cédula del voucher a Pasajeros', texto: 'En Reservas > Servicios, si al generar el voucher falta la cédula, la ventana ahora pide también el tipo de documento (cédula, pasaporte, RIF u otro) y lo que escribes queda guardado en el pasajero titular, sin volver a cargarlo en Pasajeros. Una cédula que empieza con V- pone «Venezolana» como nacionalidad sola, aquí y en Pasajeros. El voucher sale con el logo en negro puro y pesa mucho menos, así sube rápido aunque la conexión esté lenta.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-25', emoji: '🏨', titulo: 'Disponibilidad más rápida y ordenada', texto: 'Pedir disponibilidad ahora va en tres pasos: alojamiento (con buscador y precio «desde» del Tarifario), fechas con botones de noches y personas. La edad de cada niño es obligatoria. Cliente, notas y urgente quedan en «Más datos». También puedes pedirla desde la ficha de un hotel en el Tarifario. Las tarjetas muestran fechas, personas, estado de cada alojamiento y quién la atiende; Respondidas muestra las 6 más recientes y el resto con «Ver más».', roles: ['admin', 'administrativo', 'asesor'] },
   { id: '2026-11-25-centro-novedades', fecha: '2026-11-25', emoji: '🔔', titulo: 'Centro de novedades', texto: 'Ahora hay una campana arriba. El número que ves es lo que se agregó desde la última vez que entraste, y al tocarla lees solo eso, con un ejemplo y un botón para ir directo. Después de actualizar el CRM te aparece solita la hoja «Esto es lo nuevo». También te avisa del Tarifario: alojamientos nuevos, precios que bajaron o subieron y tarifas nuevas (con un puntico en la campana). Filtra por Todo, Tarifario o CRM.', ejemplo: 'Hotel X pasó de desde $60 a desde $50: ejemplo $50 × 2 personas × 3 noches = $300.', donde: { sec: 'actualizaciones', label: 'Ver el archivo completo' }, roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'] },
