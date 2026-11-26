@@ -175,7 +175,7 @@ export function crearFinanzasVenta(c) {
     const docs = (d.documentos || []).map(x => fila(DOC_IC[x.tipo] || 'fa-file', esc(DOC_TXT[x.tipo] || x.tipo), `${esc(corta(x.creado_en))} · ${esc(x.nombre || '')}`,
       c.verDocumento ? peq('doc', 'fa-arrow-up-right-from-square', 'Abrir', ` data-doc="${x.id}"`) : '')).join('');
     const fac = fila('fa-file-invoice', `Factura #${esc(String(f.numero_factura ?? d.factura?.numero ?? ''))}`, 'PDF de la venta', peq('pdf', 'fa-file-pdf', 'PDF'));
-    return `<section class="vd-sec"><h3>Documentos</h3>${vou}${docs}${fac}</section>`;
+    return `<section class="vd-sec vd-docs"><h3>Documentos</h3><div class="vd-docs-lista">${vou}${docs}${fac}</div></section>`;
   }
 
   // Historia: hechos con fecha en orden; lo pendiente al final con punto hueco.
@@ -220,7 +220,7 @@ export function crearFinanzasVenta(c) {
     raiz.innerHTML = `<div class="vd" role="region" aria-labelledby="vd-titulo" data-rid="${Number(f.reserva_id)}">${cabecera(f, listo ? d : null)}${rapidas(f, listo ? d : null)}
       ${cargando ? '<p class="vd-nota"><i class="fas fa-spinner fa-spin"></i> Cargando la venta…</p>'
         : !listo ? `<div class="vt-aviso" style="--c:var(--danger)"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el detalle de esta venta.</div>`
-        : `${resumen(d, ab)}<div class="vd-cols"><div class="vd-col">${viajeros(d)}${cobro(d, ab)}</div><div class="vd-col">${proveedores(d)}${documentos(f, d, ab)}</div></div>${historia(f, d, ab)}`}
+        : `${resumen(d, ab)}<div class="vd-cols"><div class="vd-col">${viajeros(d)}${cobro(d, ab)}</div><div class="vd-col">${proveedores(d)}</div>${documentos(f, d, ab)}</div>${historia(f, d, ab)}`}
       ${pie(f, d)}</div>`;
     const vd = raiz.querySelector('.vd');
     vd.onclick = e => accion(e.target.closest('[data-vd]'), f, d, ab, vd);

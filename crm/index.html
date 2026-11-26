@@ -7844,6 +7844,9 @@ button.vt-pill:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
 .vd-kpi b.lt-ok,.vd-mini b.lt-ok{color:var(--green)} .vd-kpi b.lt-debe,.vd-mini b.lt-debe,.vd-fila-num b.lt-debe{color:var(--danger)} .vd-kpi b.vt-falta{color:var(--pink)}
 .vd-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:12px;align-items:start}
 .vd-col{display:flex;flex-direction:column;gap:11px;min-width:0}
+/* Documentos a lo ancho bajo las dos columnas, de a dos por fila: antes iba bajo Proveedores y dejaba la izquierda con un hueco */
+.vd-cols>.vd-docs{grid-column:1/-1}
+.vd-docs-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr));gap:5px}
 .vd-sec{display:flex;flex-direction:column;gap:5px;min-width:0}
 .vd-sec h3{margin:0;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
 .vd-sec h4{margin:0;font-size:12.5px;font-weight:700}
@@ -7930,8 +7933,9 @@ button.vt-pill:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
   .pl-volver,.pl-cerrar{min-height:44px;padding:0 11px}
   .pl-migas button{max-width:10ch}
 }
-@media(max-width:899px){.vd-cols{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:899px){.vd-cols{grid-template-columns:minmax(0,1fr)}.vd-cols>.vd-docs{margin-top:-1px}}
 @media(max-width:760px){
+  .vd-docs-lista{grid-template-columns:minmax(0,1fr)}
   .vd-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .vd-kpis .vd-kpi:last-child:nth-child(odd){grid-column:1/-1}
   .vd-rapidas .vt-accion{flex:1 1 calc(50% - 7px);min-height:44px}
