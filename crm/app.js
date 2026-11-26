@@ -40480,6 +40480,61 @@ window.addEventListener('popstate', () => {
   if (esMovil()) navProcesarMovil();
 });
 
+/* ---------- Atrás / adelante entre secciones (escritorio, 2026-11-25) ----------
+   Historial propio y aparte de NAV_STACK: aquel vive del popstate (atrás del
+   SO, sheets que cierran con history.back) y un "adelante" montado sobre el
+   historial del navegador chocaba con eso. Con un drawer/sheet abierto, el
+   atrás se le deja al navegador para que siga cerrando la capa. */
+const HIST = { pila: [], i: -1, moviendo: false };
+const histScroll = () => window.scrollY || document.body.scrollTop || 0;
+function histGuardarScroll() { const e = HIST.pila[HIST.i]; if (e) e.scroll = histScroll(); }
+function histRegistrar(sec) {
+  if (HIST.moviendo || HIST.pila[HIST.i]?.sec === sec) return histPintar();
+  HIST.pila.splice(HIST.i + 1);
+  HIST.pila.push({ sec, scroll: 0 });
+  if (HIST.pila.length > 50) HIST.pila.shift();
+  HIST.i = HIST.pila.length - 1;
+  histPintar();
+}
+function histPintar() {
+  [['nav-atras', -1, 'Atrás', 'Alt+←'], ['nav-adelante', 1, 'Adelante', 'Alt+→']].forEach(([id, d, txt, atajo]) => {
+    const b = document.getElementById(id), e = HIST.pila[HIST.i + d];
+    if (!b) return;
+    b.disabled = !e;
+    b.title = e ? `${txt}: ${tituloSeccion(e.sec)[0]} (${atajo})` : txt;
+  });
+}
+const histCapaAbierta = () => NAV_STACK.length && NAV_STACK.at(-1).type !== 'section';
+function histIr(d) {
+  const j = HIST.i + d, e = HIST.pila[j];
+  if (!e) return false;
+  HIST.moviendo = true;
+  try { activateSection(e.sec); } finally { HIST.moviendo = false; }
+  HIST.i = j;
+  histPintar();
+  const y = e.scroll;
+  if (y) requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'auto' })));
+  return true;
+}
+function setupHistNav() {
+  document.getElementById('nav-atras')?.addEventListener('click', () => histCapaAbierta() ? navConsume() : histIr(-1));
+  document.getElementById('nav-adelante')?.addEventListener('click', () => histIr(1));
+  document.addEventListener('keydown', e => {
+    if (esMovil() || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const d = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+    if (!d || (d < 0 && histCapaAbierta())) return;
+    e.preventDefault();
+    histIr(d);
+  });
+  // Botones laterales del mouse (3 = atrás, 4 = adelante). Chrome navega en el
+  // mouseup; cancelarlo ahí (y en mousedown/auxclick) evita la doble navegación.
+  const lado = e => (e.button === 3 ? -1 : e.button === 4 ? 1 : 0);
+  const cancelar = e => { const d = lado(e); if (d && !esMovil() && !(d < 0 && histCapaAbierta())) { e.preventDefault(); return d; } return 0; };
+  document.addEventListener('mousedown', cancelar);
+  document.addEventListener('auxclick', cancelar);
+  document.addEventListener('mouseup', e => { const d = cancelar(e); if (d) histIr(d); });
+}
+
 /* ---------- Nav ---------- */
 let currentSec = null;
 // Qué secciones pasaron por activateSection() al menos una vez -- el peek
@@ -41240,12 +41295,14 @@ function activateSection(sec, fromNav) {
   // Salto instantáneo, no 'smooth': el scroll suave de ~400ms se pisaba con la
   // entrada de la sección. Va ANTES de mostrar la sección nueva: después forzaba
   // su layout completo en el mismo click (scrollTo/scrollTop esperan layout).
+  histGuardarScroll();
   if (window.scrollY || document.body.scrollTop) { window.scrollTo({ top: 0, behavior: 'auto' }); document.body.scrollTop = 0; }
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   if (currentSec === 'whatsapp' && sec !== 'whatsapp') { waDetenerPoll(); if (waActual) waCerrarChat(true, true); }
   currentSec = sec;
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
+  histRegistrar(sec);
   lyraSeccion(sec);
   chatActualizarVisibilidad();
   document.querySelectorAll('.nav-item[data-sec]').forEach(x => x.classList.toggle('active', x.dataset.sec === sec || x.dataset.sec === PADRE_DE[sec]));
@@ -41381,6 +41438,7 @@ function setupNav() {
     if (fav && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); alternarFavorito(fav.dataset.fav); }
   });
   setupNavBuscador();
+  setupHistNav();
 }
 
 /* ---------- Menú lateral (móvil) ----------
@@ -41964,7 +42022,7 @@ function pintarAvisoPagos(n) {
 function ubicarSolicitudesNav() {
   const item = navItemDe('bol-solicitudes'), buscar = document.getElementById('nav-buscar');
   if (!item || !buscar) return;
-  if (modoBoleteria) buscar.after(item);
+  if (modoBoleteria) (buscar.closest('.nav-hist-fila') || buscar).after(item);
   else document.querySelector('#sidebar-nav > .nav-label[data-label="secciones"]')?.after(item);
 }
 

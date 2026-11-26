@@ -263,6 +263,14 @@ body::before{content:'';position:fixed;inset:0;background:
 .nav-item.nav-favorito{background:rgba(var(--accent-rgb),.05)}
 .nav-buscar{width:100%;box-sizing:border-box;margin:2px 0 6px;padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--txt);font-size:12.5px;font-family:inherit}
 .nav-buscar::placeholder{color:var(--muted2)}
+/* Atrás/adelante entre secciones (2026-11-25): solo escritorio; en móvil la fila queda igual que el input suelto. */
+.nav-hist-fila{display:flex;align-items:center;gap:4px;margin:2px 0 6px}
+.nav-hist-fila .nav-buscar{margin:0;flex:1;min-width:0}
+.nav-hist{flex:0 0 auto;align-self:stretch;width:30px;min-height:30px;display:grid;place-items:center;border-radius:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--txt);font-size:12px;cursor:pointer;transition:background .15s,color .15s}
+.nav-hist:hover:not(:disabled){background:rgba(255,255,255,.08);color:var(--accent)}
+.nav-hist:disabled{opacity:.35;cursor:default}
+.nav-hist:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media(max-width:760px){.nav-hist{display:none}.nav-hist-fila{margin:2px 0 4px}}
 .side-foot{flex-shrink:0;padding:14px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .side-foot-row{display:flex;align-items:center;gap:10px}
 /* Actualizar CRM: hace lo mismo que Ctrl+Shift+R (borra caché + Service Worker
@@ -8324,7 +8332,8 @@ body.lyra-ventana .lyra-orb .lo-arco i{animation-duration:1s}
 :root[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgba(var(--ink-rgb),.12)}
 :root[data-theme="light"] .sidebar{background:linear-gradient(180deg,rgba(var(--surface-rgb),.9),rgba(var(--surface-rgb),.9))}
 :root[data-theme="light"] .nav-item:hover{background:rgba(var(--ink-rgb),.04)}
-:root[data-theme="light"] .nav-buscar{background:rgba(var(--ink-rgb),.03)}
+:root[data-theme="light"] .nav-buscar,:root[data-theme="light"] .nav-hist{background:rgba(var(--ink-rgb),.03)}
+:root[data-theme="light"] .nav-hist:hover:not(:disabled){background:rgba(var(--ink-rgb),.07)}
 :root[data-theme="light"] .jornada-widget{background:rgba(var(--ink-rgb),.03)}
 :root[data-theme="light"] .jornada-dot.on{box-shadow:0 0 0 3px rgba(16,185,129,.072)}
 :root[data-theme="light"] .jornada-btn.on{color:#961d1d}
@@ -10244,7 +10253,11 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
       </div>
     </div>
     <nav class="sidebar-nav" id="sidebar-nav">
-      <input class="nav-buscar" id="nav-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
+      <div class="nav-hist-fila">
+        <button class="nav-hist" id="nav-atras" type="button" disabled aria-label="Atrás" title="Atrás"><i class="fas fa-arrow-left"></i></button>
+        <button class="nav-hist" id="nav-adelante" type="button" disabled aria-label="Adelante" title="Adelante"><i class="fas fa-arrow-right"></i></button>
+        <input class="nav-buscar" id="nav-buscar" type="text" placeholder="Buscar sección..." autocomplete="off">
+      </div>
       <!-- "Hoy" salió del menú móvil (2026-10-16); la sección y renderHoy siguen en el código. -->
       <a class="nav-item nav-pausa-turno nav-modo-boleteria-ok" id="nav-pausa-turno" role="button" tabindex="0"><i class="fas fa-mug-hot"></i> Pausa de turno</a>
       <a class="nav-item nav-boleteria-ok nav-modo-boleteria-ok nav-modo-boleteria-solo" id="nav-boleteria-home" data-sec="boleteria"><i class="fas fa-plane-departure"></i> Boletería</a>
