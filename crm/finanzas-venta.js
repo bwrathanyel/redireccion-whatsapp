@@ -44,18 +44,26 @@ export function crearFinanzasVenta(c) {
       ${f.lead_id && c.verChat ? btn('chat', 'fa-comments', 'Chat del lead') : ''}
       ${f.lead_id ? btn('cliente', 'fa-user', 'Ver cliente') : ''}
       ${f.reserva_id ? btn('reserva', 'fa-suitcase', 'Ver reserva') : ''}
+      ${d ? cifras(d) : ''}
     </div>`;
+  }
+
+  // PC: Venta y Costo neto van junto a las acciones; en el teléfono siguen como KPI (.vd-kpi-movil).
+  function cifras(d) {
+    const falta = sinNeto(d).length > 0;
+    return `<div class="vd-cifras"><span>Venta <b>${money(n(d.total))}</b></span>
+      <span${falta ? ' title="Falta algún neto"' : ''}>Costo neto <b class="${falta ? 'vt-falta' : ''}">${money(n(d.totales?.costo_neto))}</b>${falta ? ' <i class="fas fa-triangle-exclamation vt-falta"></i>' : ''}</span></div>`;
   }
 
   function resumen(d, ab) {
     const venta = n(d.total), neto = n(d.totales?.costo_neto), falta = sinNeto(d).length > 0;
     const cobrado = n(ab?.monto_pagado ?? d.pagado), margen = venta - neto, caja = cobrado - n(d.totales?.prov_abonado);
-    const k = (t, v, sub = '', cls = '', subCol = '') => `<div class="vd-kpi"><span>${t}</span><b class="${cls}">${v}</b>${sub ? `<small${subCol ? ` style="color:${subCol}"` : ''}>${sub}</small>` : ''}</div>`;
+    const k = (t, v, sub = '', cls = '', subCol = '', movil = false) => `<div class="vd-kpi${movil ? ' vd-kpi-movil' : ''}"><span>${t}</span><b class="${cls}">${v}</b>${sub ? `<small${subCol ? ` style="color:${subCol}"` : ''}>${sub}</small>` : ''}</div>`;
     const cm = d.comision, cmTxt = !cm ? 'sin cargar' : cm.estado === 'pagada' ? `Pagada ${corta(cm.pagada_en)}` : cm.estado === 'verificada' ? 'Verificada, por pagar' : cm.estado === 'enviada' ? 'Por revisar' : cm.estado;
     const cmCol = !cm ? '' : cm.estado === 'pagada' ? 'var(--green)' : 'var(--amber)';
     return `<div class="vd-kpis">
-      ${k('Venta', money(venta))}
-      ${k('Costo neto', money(neto), falta ? 'falta algún neto' : '', falta ? 'vt-falta' : '')}
+      ${k('Venta', money(venta), '', '', '', true)}
+      ${k('Costo neto', money(neto), falta ? 'falta algún neto' : '', falta ? 'vt-falta' : '', '', true)}
       ${k('Margen', falta ? '—' : money(margen), falta ? 'incompleto' : venta > 0 ? `${Math.round(margen / venta * 100)} % de la venta` : '', falta ? 'vt-falta' : margen >= 0 ? 'lt-ok' : 'lt-debe')}
       ${k('Queda en caja', money(caja), 'cobrado − pagado al proveedor', caja < 0 ? 'lt-debe' : '')}
       ${k('Comisión asesor', cm ? money(n(cm.total)) : '—', esc(cmTxt), '', cmCol)}
