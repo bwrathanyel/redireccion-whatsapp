@@ -39,6 +39,8 @@ const CSS = `
 .de-bt:hover{background:var(--line);color:var(--txt);border-color:var(--line2)}
 .de-bt.pri{color:var(--accent-ink)}
 .de-fila.off{opacity:.62}
+.de-ico.mini{overflow:hidden;background:repeating-conic-gradient(#7b828c 0 25%,#8f96a0 0 50%) 0 0/10px 10px}
+.de-ico.mini img{width:100%;height:100%;object-fit:contain;padding:3px}
 .de-carp{display:flex;align-items:center;gap:13px;width:100%;padding:11px 9px;border:0;border-top:1px solid var(--line);border-radius:12px;background:transparent;color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:background .16s}
 .de-lista>:first-child{border-top-color:transparent}
 .de-carp:hover,.de-carp:focus-visible{background:color-mix(in srgb,var(--txt) 5%,transparent)}
@@ -123,7 +125,7 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
   const admin = rol === 'admin';
   let montado = false, datos = null, pedido = 0, tq = null, subiendo = false;
   let vis = null, visTk = 0, visId = null, compId = null;
-  const blobs = new Map(), abiertas = new Set();
+  const blobs = new Map(), abiertas = new Set(), mini = new Map(), pidiendoMini = new Set();
   const filtro = { q: '', categoria: '', estado: 'vigente' };
   const $ = sel => raiz.querySelector(sel);
   const fecha = iso => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
@@ -209,8 +211,38 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
       acciones.push(d.estado === 'archivado' ? btn('restaurar', 'fa-box-open', 'Restaurar') : d.estado === 'vigente' ? btn('archivar', 'fa-box-archive', 'Archivar') : '');
     }
     return `<div class="de-fila${d.estado !== 'vigente' ? ' off' : ''}" data-de="ver" data-id="${d.id}" data-cat="${esc(d.categoria)}" role="button" tabindex="0" aria-label="Ver ${esc(d.titulo)}">
-      <div class="de-ico"><i class="fas ${c.i}"></i></div>
+      ${icono(d, c)}
       <div class="de-txt"><div class="de-tit">${esc(d.titulo)}</div><div class="de-meta">${meta(d)}</div></div>${vence(d)}<div class="de-acc">${acciones.join('')}</div></div>`;
+  }
+
+  // Miniatura de las imágenes: se baja una vez y queda en localStorage (96 px, pocos KB).
+  const claveMini = d => `de-mini:${d.id}:${d.actualizado_en}`;
+  function leerMini(d) {
+    if (mini.has(d.id)) return mini.get(d.id);
+    try { const v = localStorage.getItem(claveMini(d)); if (v) { mini.set(d.id, v); return v; } } catch {}
+    return null;
+  }
+  function icono(d, c) {
+    if (!esImg(d)) return `<div class="de-ico"><i class="fas ${c.i}"></i></div>`;
+    const u = leerMini(d);
+    return u ? `<div class="de-ico mini"><img src="${u}" alt=""></div>` : `<div class="de-ico mini" data-mini="${d.id}"><i class="fas ${c.i}"></i></div>`;
+  }
+  async function miniaturas() {
+    for (const n of [...raiz.querySelectorAll('[data-mini]')]) {
+      const id = n.dataset.mini, d = doc(id);
+      if (!d || pidiendoMini.has(id)) continue;
+      pidiendoMini.add(id);
+      const r = await funcion({ accion: 'url', id });
+      if (!r.ok) continue;
+      const img = new Image(); img.crossOrigin = 'anonymous'; img.src = r.url;
+      try { await img.decode(); } catch { continue; }
+      const s = 96, k = Math.min(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * k, h = img.naturalHeight * k;
+      const cv = document.createElement('canvas'); cv.width = cv.height = s;
+      const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
+      let u; try { u = cv.toDataURL('image/png'); } catch { continue; }
+      mini.set(id, u); try { localStorage.setItem(claveMini(d), u); } catch {}
+      raiz.querySelectorAll(`[data-mini="${id}"]`).forEach(x => { x.removeAttribute('data-mini'); x.innerHTML = `<img src="${u}" alt="">`; });
+    }
   }
 
   // Tres o más documentos del mismo tipo se agrupan en una carpeta plegable.
@@ -239,6 +271,7 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
     const docs = lista(), pv = Number(datos.por_vencer || 0);
     $('#de-aviso').innerHTML = pv ? `<span class="de-chip"><i class="fas fa-clock"></i> ${pv} ${pv === 1 ? 'vence' : 'vencen'} en 30 días o ya ${pv === 1 ? 'venció' : 'vencieron'}</span>` : '';
     const filtrando = filtro.q || filtro.categoria;
+    setTimeout(miniaturas);
     $('#de-cuerpo').innerHTML = docs.length ? agrupado(docs)
       : `<div class="de-vacio"><i class="fas ${filtrando ? 'fa-magnifying-glass' : 'fa-folder-open'}"></i><div>${filtrando ? 'Nada coincide con la búsqueda.' : admin ? 'Todavía no hay documentos.' : 'Todavía no hay documentos compartidos.'}</div>${!filtrando && admin ? '<button class="btn-sm lt-primario" type="button" data-de="subir" style="min-height:44px"><i class="fas fa-upload"></i> Subir el primero</button>' : ''}</div>`;
   }
