@@ -5721,7 +5721,7 @@ const rvMargenPct = (tipo, provId) => {
   return (ms.find(m => m.proveedor_id === provId) || ms.find(m => m.proveedor_id == null))?.porcentaje ?? null;
 };
 // Texto de dónde salió el neto automático (margen_modo/margen_fuente, migración 20261130110000).
-const RV_MARGEN_FUENTE = { producto: 'del producto', proveedor: 'del proveedor', general: 'general del tipo' };
+const RV_MARGEN_FUENTE = { producto: 'del producto', proveedor: 'del proveedor', destino: 'del destino', general: 'general del tipo' };
 function rvMargenOrigen(m, prov, producto) {
   if (m.fuente === 'tarifa_base') return `tarifa base${prov ? ' de ' + prov : ''}`;
   if (m.porcentaje == null) return 'sin %';
@@ -23530,7 +23530,8 @@ async function loadFacturas() {
     });
     const prov_saldo = [...provs.values()].reduce((a, p) => a + p.saldo, 0);
     const neto_sin_proveedor = conServ ? Math.max(0, Number(f.reserva_costo_servicios) - provMonto) : 0;
-    return { ...f, costo_neto, netos_faltan: netosFaltan, proveedor, proveedor_pagado: cxps.length ? sumar(cxps, 'monto_abonado') : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null,
+    const neto_estimado = costo_neto != null && Number(f.servicios_estimados) > 0 && (costoReserva == null || (!fichaIncluyeBt && Number(f.reserva_costo_bt) > 0));
+    return { ...f, costo_neto, neto_estimado, netos_faltan: netosFaltan, proveedor, proveedor_pagado: cxps.length ? sumar(cxps, 'monto_abonado') : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null,
       prov_monto: provMonto, prov_saldo, proveedores: [...provs.values()], neto_sin_proveedor: neto_sin_proveedor > 0.5 ? neto_sin_proveedor : 0 };
   });
   ULTIMA_CARGA.balance = 0; // el balance se alimenta de estas facturas: que se recargue al volver
@@ -23692,7 +23693,7 @@ function renderVentas() {
       </div>
       <div class="vt-cifras">
         <div class="vt-venta"><span class="vt-lbl">Venta</span><b>${money(f.venta_total)}</b></div>
-        <div class="vt-mg"><span>Neto <b>${conCosto ? money(f.costo_neto) : 'sin cargar'}</b></span><span>Margen ${conCosto ? `<b class="${f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${money(f.margen)}</b> ${pctReal} %` : '<b class="vt-falta">falta neto</b>'}</span></div>
+        <div class="vt-mg"><span${f.neto_estimado ? ' title="Neto calculado con el % por defecto (general, del destino o del proveedor). Cuenta igual para margen y comisiones; cárgalo en la reserva si tienes el real."' : ''}>Neto <b>${conCosto ? money(f.costo_neto) : 'sin cargar'}</b>${f.neto_estimado ? ' <small class="vt-estimado">estimado</small>' : ''}</span><span>Margen ${conCosto ? `<b class="${f.margen >= 0 ? 'lt-ok' : 'lt-debe'}">${money(f.margen)}</b> ${pctReal} %` : '<b class="vt-falta">falta neto</b>'}</span></div>
       </div>
       ${anulada ? '' : `<div class="vt-sem">
         <div class="vt-grupo">
@@ -24652,7 +24653,7 @@ function prpEjemplo(modo, v) {
 }
 function prpFila(x) {
   const h = x.heredado || {};
-  const her = h.fuente === 'tarifa_base' ? 'tarifa base' : h.porcentaje != null ? `${prvPct(h.porcentaje)} ${h.fuente === 'proveedor' ? 'del proveedor' : 'general'}` : 'sin %';
+  const her = h.fuente === 'tarifa_base' ? 'tarifa base' : h.porcentaje != null ? `${prvPct(h.porcentaje)} ${h.fuente === 'proveedor' ? 'del proveedor' : h.fuente === 'destino' ? 'del destino' : 'general'}` : 'sin %';
   const real = Number(x.venta) > 0 ? Math.round(1000 * (x.venta - x.neto) / x.venta) / 10 : null;
   const vendido = x.ventas ? `<small>${fmt(x.ventas)} ${x.ventas === 1 ? 'venta' : 'ventas'} · margen real ${prvPct(real)}</small>` : '';
   const b = PRP.borr[x.id], modo = b ? b.modo : x.modo || '', v = b ? b.v : x.porcentaje != null ? String(Number(x.porcentaje)) : '';
