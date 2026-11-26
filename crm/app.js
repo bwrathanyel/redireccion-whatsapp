@@ -4449,10 +4449,24 @@ const finanzasVenta = () => FINANZAS_VENTA ||= crearFinanzasVenta({ sb, esc, mon
   verFactura: f => panelU().factura(f),
   verEmpresa: id => panelU().empresa(id),
   empresaDe: reservaId => panelU().empresaDeReserva(reservaId),
-  verReserva: (id, codigo) => abrirReservaDeLead(id, codigo),
+  verReserva: (id, codigo, tab) => abrirReservaDeLead(id, codigo).then(() => { if (tab && RV_RESERVA_ID === id) rvTab(tab); }),
   verCliente: id => trasCerrarDrawer(() => abrirClienteDesdeFacturacion(id)),
+  verChat: id => trasCerrarDrawer(async () => { const { data, error } = await sb.from('leads').select('*').eq('id', id).single(); if (error || !data) errToast('No se pudo cargar el cliente'); else openDrawer(data, { seccion: 'historial' }); }),
+  ok: okToast, uid: () => MI_USUARIO_ID,
+  verComprobante: abrirArchivoVouchers,
+  verDocumento: (id, btn) => rvDescargar(id, btn),
+  leerComprobante: async file => { const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } }); return error || !data?.ok ? null : data.datos; },
+  alCambiar: () => loadCuentasPorPagar(true).then(() => FACT_VENTAS_CACHE.length ? loadFacturas() : null),
   pdf: id => exportarVentaPdf(id),
   anular: id => anularFacturaUI(id) });
+// Comprobantes y vouchers importados viven en el bucket vouchers-pdf: URL firmada de 5 min.
+async function abrirArchivoVouchers(path, btn) {
+  if (btn) btn.disabled = true;
+  const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(path, 300);
+  if (btn) btn.disabled = false;
+  if (error || !data?.signedUrl) { errToast('No se pudo abrir el archivo'); return; }
+  if (esRutaPdf(path)) verPdf(data.signedUrl, path.split('/').pop() || 'Documento.pdf'); else window.open(data.signedUrl, '_blank', 'noopener');
+}
 function abrirDrawerPanel() { const d = document.getElementById('drawer'), ya = d.classList.contains('open'); d.classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!ya) navPush({ type: 'drawer' }); }
 // Panel lateral universal: la venta es la primera hoja; desde ahí proveedor, pago, cobro, factura y empresa.
 let PANEL_U = null;
@@ -4467,13 +4481,7 @@ const panelU = () => PANEL_U ||= crearPanelUniversal({ sb, esc, money, rol: ROL,
   pagar: (proveedorId, cxpIds) => finanzasPorPagar().abrirPago({ proveedorId, preCxp: cxpIds }),
   irCuenta: id => trasCerrarDrawer(() => ventaIrACxp(id)),
   verReserva: (id, codigo) => abrirReservaDeLead(id, codigo),
-  verComprobante: async (path, btn) => {
-    if (btn) btn.disabled = true;
-    const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(path, 300);
-    if (btn) btn.disabled = false;
-    if (error || !data?.signedUrl) { errToast('No se pudo abrir el comprobante'); return; }
-    if (esRutaPdf(path)) verPdf(data.signedUrl, 'Comprobante.pdf'); else window.open(data.signedUrl, '_blank', 'noopener');
-  },
+  verComprobante: abrirArchivoVouchers,
   pdf: id => exportarVentaPdf(id),
   anular: id => anularFacturaUI(id) });
 window.abrirVentaDrawer = id => { const f = FACT_VENTAS_CACHE.find(x => x.id === id); if (f) panelU().nuevaVenta(f); };
@@ -5673,7 +5681,9 @@ const RV_MONEDAS = ['USD', 'VES', 'EUR', 'USDT', 'COP'];
 const RV_VOUCHER_PAQUETE = new Map();
 const RV_VOUCHER_PAGOS = ['Zelle', 'Pago móvil', 'Transferencia bancaria', 'Efectivo USD', 'Efectivo Bs', 'Binance / USDT', 'Punto de venta', 'Otro'];
 // Método de los abonos (abonos.js, METODOS) -> opción equivalente del voucher, para no pedirlo dos veces.
-const RV_METODO_A_VOUCHER = { 'Pago móvil': 'Pago móvil', Zelle: 'Zelle', Efectivo: 'Efectivo USD', Transferencia: 'Transferencia bancaria', TDC: 'Punto de venta', Binance: 'Binance / USDT' };
+const RV_METODO_A_VOUCHER = { 'Pago móvil': 'Pago móvil', Zelle: 'Zelle', Efectivo: 'Efectivo USD', Transferencia: 'Transferencia bancaria', TDC: 'Punto de venta', Binance: 'Binance / USDT', 'Banesco Panamá': 'Transferencia bancaria' };
+// Hay abonos guardados ya con la etiqueta del voucher ('Binance / USDT', 'Transferencia bancaria'): se aceptan tal cual.
+const rvFormaVoucher = m => RV_VOUCHER_PAGOS.includes(m) ? m : RV_METODO_A_VOUCHER[m] || '';
 const RV_TIPO_DOC = { cedula: 'Cédula', pasaporte: 'Pasaporte', rif: 'RIF', otro: 'Otro' };
 const RV_DOC_TIPOS = { voucher: 'Voucher', boleto: 'Boleto', comprobante: 'Comprobante', documento_identidad: 'Documento de identidad', otro: 'Otro' };
 const RV_DOC_MIMES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
@@ -6447,7 +6457,7 @@ async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
       console.error('voucher: abonos', e);
     }
   }
-  const formaPago = prev.formaPago || r.forma_pago || RV_METODO_A_VOUCHER[ultimo?.metodo] || '';
+  const formaPago = rvFormaVoucher(prev.formaPago) || rvFormaVoucher(r.forma_pago) || rvFormaVoucher(ultimo?.metodo);
   const referencia = prev.referencia || r.referencia_pago || ultimo?.referencia || '';
   const faltan = [];
   if (!cliente || /^sin nombre$/i.test(cliente)) faltan.push('nombre');
@@ -6473,7 +6483,7 @@ async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
     campos[campos.indexOf(null)] = rvRecibosCampo(abonos, lista => {
       const ok = lista.filter(x => x.estado === 'ok'), x = ok.find(r => r.abono) || ok[0];
       if (!x) return;
-      const forma = RV_METODO_A_VOUCHER[x.abono?.metodo] || rvMetodoRecibo(x.datos.metodo), ref = x.datos.referencia || x.abono?.referencia || '';
+      const forma = rvFormaVoucher(x.abono?.metodo) || rvMetodoRecibo(x.datos.metodo), ref = x.datos.referencia || x.abono?.referencia || '';
       const sel = document.getElementById(`csc-${iForma}`), inp = document.getElementById(`csc-${iRef}`);
       if (sel && forma && (!sel.value || sel.value === auto.forma)) { sel.value = forma; auto.forma = forma; }
       if (inp && ref && (!inp.value.trim() || inp.value === auto.ref)) { inp.value = ref; auto.ref = ref; }
@@ -35579,7 +35589,7 @@ function abonosModulo() {
       const { v } = rvArmarVoucherPaquete({
         cliente: [t?.nombre, t?.apellido].filter(Boolean).join(' ').trim() || c.nombre || r.cliente || '',
         documento: t?.numero_documento || '', telefono: t?.telefono || c.telefono || r.telefono || '',
-        formaPago: r.forma_pago || RV_METODO_A_VOUCHER[metodo] || metodo || '', referencia: r.referencia_pago || referencia || '' });
+        formaPago: rvFormaVoucher(r.forma_pago) || rvFormaVoucher(metodo) || r.forma_pago || metodo || '', referencia: r.referencia_pago || referencia || '' });
       return { ...v, numero_factura: '', total_general: Math.round((Number(pagado) + Number(saldo)) * 100) / 100, monto_pagado: Number(pagado), resta: Number(saldo) };
     },
     prepararAdjunto: async (reservaId, servicioId, pdf, nombre) => {
