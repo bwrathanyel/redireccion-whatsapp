@@ -83,7 +83,7 @@ export function crearFinanzasVenta(c) {
       const chips = [a.respaldo || a.saldo_anterior ? chip('Inicial reserva', 'var(--blue)') : '', !vivo ? chip('Anulado', 'var(--muted)') : '',
         vivo && a.por_conciliar ? chip('Por conciliar', 'var(--amber)') : '', vivo && a.estado === 'por_verificar' ? chip('Por verificar', 'var(--amber)') : '',
         vivo && a.estado === 'rechazado' ? chip('Rechazado', 'var(--danger)') : ''].join('');
-      const comp = a.comprobante_path ? peq('ver-comp', 'fa-image', 'Comprobante', ` data-path="${esc(a.comprobante_path)}"`)
+      const comp = a.comprobante_path ? peq('ver-comp', 'fa-image', 'Comprobante', ` data-path="${esc(a.comprobante_path)}" data-nombre="Comprobante ${esc(String(a.fecha || '').slice(0, 10))}"`)
         : vivo && c.uid?.() ? peq('adjuntar', 'fa-paperclip', 'Adjuntar', ` data-abono="${a.id}" style="--c:var(--amber)"`) : '';
       return `<li class="vd-fila${!vivo || a.estado === 'rechazado' ? ' vd-tachada' : ''}${x.cls}"${x.at}>
         <div class="vd-fila-txt"><b>${esc(fecha(a.fecha))} · ${esc(a.metodo || 'Abono')}</b><small>${esc(a.referencia || 'sin referencia')}</small>${chips ? `<div class="vd-chips">${chips}</div>` : ''}</div>
@@ -171,7 +171,7 @@ export function crearFinanzasVenta(c) {
     const reemplazado = v && (d.documentos || []).some(x => x.tipo === 'voucher' && String(x.creado_en) > String(v.creado_en));
     const fila = (ic, t, sub, extra) => `<div class="vd-doc"><span class="vd-doc-ic"><i class="fas ${ic}"></i></span><div class="vd-fila-txt"><b>${t}</b><small>${sub}</small></div>${extra}</div>`;
     const vou = v ? fila('fa-file-lines', `Voucher N° ${esc(String(v.numero))} · rev. ${esc(String(v.revision))}`, `${esc(corta(v.creado_en))} · refleja ${money(n(v.monto_pagado))} pagado`,
-      (reemplazado ? chip('Reemplazado', 'var(--muted)') : n(v.monto_pagado) + 0.005 >= cobrado ? chip('Al día', 'var(--green)') : chip('Desactualizado', 'var(--amber)')) + (v.pdf_path ? peq('ver-comp', 'fa-file-pdf', 'Abrir', ` data-path="${esc(v.pdf_path)}"`) : '')) : '';
+      (reemplazado ? chip('Reemplazado', 'var(--muted)') : n(v.monto_pagado) + 0.005 >= cobrado ? chip('Al día', 'var(--green)') : chip('Desactualizado', 'var(--amber)')) + (v.pdf_path ? peq('ver-comp', 'fa-file-pdf', 'Abrir', ` data-path="${esc(v.pdf_path)}" data-nombre="Voucher ${esc(String(v.numero))} rev ${esc(String(v.revision))}"`) : '')) : '';
     const docs = (d.documentos || []).map(x => fila(DOC_IC[x.tipo] || 'fa-file', esc(DOC_TXT[x.tipo] || x.tipo), `${esc(corta(x.creado_en))} · ${esc(x.nombre || '')}`,
       c.verDocumento ? peq('doc', 'fa-arrow-up-right-from-square', 'Abrir', ` data-doc="${x.id}"`) : '')).join('');
     const fac = fila('fa-file-invoice', `Factura #${esc(String(f.numero_factura ?? d.factura?.numero ?? ''))}`, 'PDF de la venta', peq('pdf', 'fa-file-pdf', 'PDF'));
@@ -217,7 +217,7 @@ export function crearFinanzasVenta(c) {
     const raiz = c.drawer();
     if (!raiz) return;
     const listo = !cargando && d && d.ok !== false;
-    raiz.innerHTML = `<div class="vd" role="region" aria-labelledby="vd-titulo">${cabecera(f, listo ? d : null)}${rapidas(f, listo ? d : null)}
+    raiz.innerHTML = `<div class="vd" role="region" aria-labelledby="vd-titulo" data-rid="${Number(f.reserva_id)}">${cabecera(f, listo ? d : null)}${rapidas(f, listo ? d : null)}
       ${cargando ? '<p class="vd-nota"><i class="fas fa-spinner fa-spin"></i> Cargando la venta…</p>'
         : !listo ? `<div class="vt-aviso" style="--c:var(--danger)"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el detalle de esta venta.</div>`
         : `${resumen(d, ab)}<div class="vd-cols"><div class="vd-col">${viajeros(d)}${cobro(d, ab)}</div><div class="vd-col">${proveedores(d)}${documentos(f, d, ab)}</div></div>${historia(f, d, ab)}`}
@@ -226,6 +226,8 @@ export function crearFinanzasVenta(c) {
     vd.onclick = e => accion(e.target.closest('[data-vd]'), f, d, ab, vd);
     const arch = vd.querySelector('[data-vd-archivo]');
     if (arch) arch.onchange = () => { const file = arch.files?.[0]; arch.value = ''; if (file) adjuntar(Number(arch.dataset.abono), file, f); };
+    // Comprobantes y voucher importado se firman de una vez: el clic en «Comprobante» ya no espera la firma.
+    if (listo) c.prefirmar?.([...(ab?.abonos || []).map(a => a.comprobante_path), d.voucher?.pdf_path], (d.documentos || []).some(x => x.mime === 'application/pdf'));
     if (listo && !provs && d.servicios.some(s => !s.proveedor_id && n(s.costo_usd) > 0)) cargarProveedores().then(() => { if (actual === f && c.drawer()?.querySelector('.vd-asignar')) pintar(f, d, ab, false); });
   }
 
@@ -296,32 +298,73 @@ export function crearFinanzasVenta(c) {
       case 'cobro': { const a = ab?.abonos?.[Number(b.dataset.i)]; return a && c.verCobro?.(a, f); }
       case 'empresa': return c.verEmpresa?.(Number(b.dataset.emp));
       case 'asignar': return asignarProveedor(b, d, f);
-      case 'ver-comp': return c.verComprobante?.(b.dataset.path, b);
-      case 'doc': return c.verDocumento?.(Number(b.dataset.doc), b);
+      case 'ver-comp': {
+        const p = b.dataset.path, ext = (p.split('.').pop() || 'pdf').toLowerCase();
+        return c.verComprobante?.(p, b, `${`${b.dataset.nombre || 'Comprobante'} ${f.reserva_codigo || ''}`.trim()}.${ext}`);
+      }
+      case 'doc': {
+        const x = (d.documentos || []).find(y => y.id === Number(b.dataset.doc)) || {};
+        const base = x.nombre || `${DOC_TXT[x.tipo] || 'Documento'} ${f.reserva_codigo || ''}`.trim();
+        const ext = String(x.mime || 'application/pdf').split('/')[1]?.replace('jpeg', 'jpg') || 'pdf';
+        return c.verDocumento?.(Number(b.dataset.doc), b, { mime: x.mime, nombre: /\.[a-z0-9]{2,5}$/i.test(base) ? base : `${base}.${ext}` });
+      }
       case 'adjuntar': { const i = vd.querySelector('[data-vd-archivo]'); if (i) { i.dataset.abono = b.dataset.abono; i.click(); } return; }
     }
   }
 
-  async function abrir(f) {
+  // Caché por reserva (las dos RPC tardan 0,3-0,7 s, medido 26-nov): reabrir una venta pinta al
+  // instante con lo último visto y se actualiza detrás; solo se repinta si algo cambió.
+  const cache = new Map(), enCurso = new Map();
+  async function traer(rid) {
+    const t0 = Date.now();
+    const [det, ab] = await Promise.all([
+      sb.rpc('venta_finanzas_detalle', { p_reserva_id: rid }),
+      sb.rpc('reserva_abonos_lista', { p_reserva_id: rid }),
+    ]);
+    const r = { det, ab: ab.data?.ok === false ? null : ab.data, en: t0 };
+    // Un pedido viejo que llega tarde no pisa uno más nuevo.
+    if (!det.error && det.data && det.data.ok !== false && !(cache.get(rid)?.en > t0)) {
+      cache.delete(rid); cache.set(rid, r);
+      if (cache.size > 30) cache.delete(cache.keys().next().value);
+    }
+    return r;
+  }
+  const pedir = rid => { if (!enCurso.has(rid)) enCurso.set(rid, traer(rid).finally(() => enCurso.delete(rid))); return enCurso.get(rid); };
+  // Mouse sobre la venta en la lista: el detalle se pide antes del clic (si no se trajo hace poco).
+  function precargar(f) {
+    const rid = f?.reserva_id;
+    if (rid && !enCurso.has(rid) && Date.now() - (cache.get(rid)?.en || 0) > 20000) pedir(rid).catch(() => {});
+  }
+  const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  // fresco = recién se cambió algo (pago, anulación, proveedor, comprobante): se ignora lo guardado.
+  async function abrir(f, fresco) {
     if (!f?.reserva_id) { c.error('Esta factura no tiene reserva asociada.'); return; }
     actual = f;
-    const mio = ++pedido;
-    pintar(f, null, null, true);
+    const mio = ++pedido, rid = f.reserva_id;
+    const previo = fresco ? null : cache.get(rid);
+    const mostrando = Number(c.drawer()?.querySelector('.vd')?.dataset.rid) === Number(rid) && c.abierto();
+    if (previo) pintar(f, previo.det.data, previo.ab, false);
+    else if (!mostrando) pintar(f, null, null, true);
     c.abrirDrawer();
-    const [det, ab] = await Promise.all([
-      sb.rpc('venta_finanzas_detalle', { p_reserva_id: f.reserva_id }),
-      sb.rpc('reserva_abonos_lista', { p_reserva_id: f.reserva_id }),
-    ]);
+    // Recién precargado (mouse sobre la fila): no hace falta volver a pedirlo.
+    if (previo && Date.now() - previo.en < 20000) return;
+    const r = await (fresco ? traer(rid) : pedir(rid)).catch(e => ({ det: { error: e }, ab: null }));
     if (mio !== pedido || !c.drawer()?.querySelector('.vd')) return;
-    if (det.error) c.error('No se pudo cargar la venta: ' + det.error.message);
-    pintar(f, det.data, ab.data?.ok === false ? null : ab.data, false);
+    if (r.det.error) {
+      c.error('No se pudo cargar la venta: ' + (r.det.error.message || 'error de red'));
+      if (previo || mostrando) return;
+    }
+    if (previo && igual(previo.det.data, r.det.data) && igual(previo.ab, r.ab)) return;
+    pintar(f, r.det.data, r.ab, false);
   }
   // Tras pagar, anular, asignar o adjuntar: recarga solo si el drawer sigue mostrando esta venta.
+  // La vista actual queda puesta hasta que llega la nueva (sin parpadeo de «Cargando…»).
   function refrescar() {
     if (!actual || !c.drawer()?.querySelector('.vd') || !c.abierto()) return;
     const f = c.buscar(actual.id) || actual;
     actual = f;
-    abrir(f);
+    abrir(f, true);
   }
-  return { abrir, refrescar };
+  return { abrir, refrescar, precargar };
 }

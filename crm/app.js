@@ -4454,18 +4454,21 @@ const finanzasVenta = () => FINANZAS_VENTA ||= crearFinanzasVenta({ sb, esc, mon
   verChat: id => trasCerrarDrawer(async () => { const { data, error } = await sb.from('leads').select('*').eq('id', id).single(); if (error || !data) errToast('No se pudo cargar el cliente'); else openDrawer(data, { seccion: 'historial' }); }),
   ok: okToast, uid: () => MI_USUARIO_ID,
   verComprobante: abrirArchivoVouchers,
-  verDocumento: (id, btn) => rvDescargar(id, btn),
+  verDocumento: rvVerDocumento,
+  prefirmar: (paths, hayPdf) => { prefirmar('vouchers-pdf', paths); if (hayPdf) precalentarPdf(); },
   leerComprobante: async file => { const { data, error } = await sb.functions.invoke('leer-comprobante', { body: { mime: file.type, imagen: await archivoABase64(file) } }); return error || !data?.ok ? null : data.datos; },
   alCambiar: () => loadCuentasPorPagar(true).then(() => FACT_VENTAS_CACHE.length ? loadFacturas() : null),
   pdf: id => exportarVentaPdf(id),
   anular: id => anularFacturaUI(id) });
-// Comprobantes y vouchers importados viven en el bucket vouchers-pdf: URL firmada de 5 min.
-async function abrirArchivoVouchers(path, btn) {
+// Comprobantes y vouchers importados (bucket vouchers-pdf) se ven dentro del CRM: el PDF en el visor,
+// que se abre ya mientras se firma y se baja; la foto en el lightbox.
+async function abrirArchivoVouchers(path, btn, nombre) {
+  const nom = nombre || path.split('/').pop() || 'Documento.pdf';
+  if (esRutaPdf(path)) { verPdf(urlFirmada('vouchers-pdf', path), nom, 1, 'vouchers-pdf:' + path); return; }
   if (btn) btn.disabled = true;
-  const { data, error } = await sb.storage.from('vouchers-pdf').createSignedUrl(path, 300);
-  if (btn) btn.disabled = false;
-  if (error || !data?.signedUrl) { errToast('No se pudo abrir el archivo'); return; }
-  if (esRutaPdf(path)) verPdf(data.signedUrl, path.split('/').pop() || 'Documento.pdf'); else window.open(data.signedUrl, '_blank', 'noopener');
+  try { verImagenOArchivo(await urlFirmada('vouchers-pdf', path), nom); }
+  catch { errToast('No se pudo abrir el archivo'); }
+  finally { if (btn) btn.disabled = false; }
 }
 function abrirDrawerPanel() { const d = document.getElementById('drawer'), ya = d.classList.contains('open'); d.classList.add('open'); document.getElementById('drawerBg').classList.add('open'); if (!ya) navPush({ type: 'drawer' }); }
 // Panel lateral universal: la venta es la primera hoja; desde ahí proveedor, pago, cobro, factura y empresa.
@@ -4485,6 +4488,9 @@ const panelU = () => PANEL_U ||= crearPanelUniversal({ sb, esc, money, rol: ROL,
   pdf: id => exportarVentaPdf(id),
   anular: id => anularFacturaUI(id) });
 window.abrirVentaDrawer = id => { const f = FACT_VENTAS_CACHE.find(x => x.id === id); if (f) panelU().nuevaVenta(f); };
+// Mouse quieto 120 ms sobre una venta: su detalle se pide antes del clic.
+let precargaVentaT = 0;
+window.precargarVenta = id => { clearTimeout(precargaVentaT); if (id) precargaVentaT = setTimeout(() => { const f = FACT_VENTAS_CACHE.find(x => x.id === id); if (f) finanzasVenta().precargar(f); }, 120); };
 let METODOS_PAGO = null;
 const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
@@ -8471,7 +8477,27 @@ async function rvSubirDocumento(btn) {
   if (inp) inp.value = '';
   okToast('Documento subido'); rvTrasCambio();
 }
+// Documento de la reserva (bucket privado: la URL la firma la Edge Function, ~0,9 s medido 26-nov).
+async function rvUrlDocumento(id) {
+  const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: id } });
+  if (error || !data?.ok) { const m = await msgErrorFn(error, data); throw Object.assign(new Error(m), { aviso: 'No se pudo abrir: ' + (RV_ERR[m] || m) }); }
+  return data;
+}
+// Ver dentro del CRM: el PDF abre el visor al instante (la firma y la descarga corren detrás) y queda
+// guardado para reabrirlo; la foto va al lightbox.
+async function rvVerDocumento(id, btn, doc = {}) {
+  const mime = doc.mime || 'application/pdf', nombre = doc.nombre || 'Documento.pdf';
+  const k = 'rvdoc:' + id;
+  if (mime === 'application/pdf') { verPdf(chatBlobs.get(k) || rvUrlDocumento(id).then(x => x.url), nombre, 1, k); return; }
+  if (btn) btn.disabled = true;
+  try { verImagenOArchivo((await rvUrlDocumento(id)).url, nombre, mime); }
+  catch (e) { console.error('rvVerDocumento', e); errToast(e.aviso || 'No se pudo abrir el documento'); }
+  finally { if (btn) btn.disabled = false; }
+}
 async function rvDescargar(id, btn) {
+  // En la PC se ve dentro del CRM; en el celular sigue la hoja de compartir (botón «Compartir»).
+  const doc = (RV_DET?.documentos || []).find(x => x.id === id);
+  if (doc && !docTactil()) return rvVerDocumento(id, btn, { mime: doc.mime, nombre: rvDocNombreArchivo(doc) });
   btn.disabled = true;
   try {
     const { data, error } = await sb.functions.invoke('reservas-documentos', { body: { accion: 'descargar', documento_id: id } });
@@ -17966,6 +17992,11 @@ async function cargarPdfjs() {
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.worker.min.mjs`;
   return pdfjsLib;
 }
+// Un solo worker de pdf.js para el visor y las miniaturas: crear uno por apertura volvía a cargar y
+// compilar ~1,3 MB de worker cada vez. Pasado a getDocument, destroy() del documento no lo cierra.
+let pdfWorkerComun = null;
+const pdfWorker = lib => (!pdfWorkerComun || pdfWorkerComun.destroyed ? pdfWorkerComun = new lib.PDFWorker() : pdfWorkerComun);
+const precalentarPdf = () => (window.requestIdleCallback || setTimeout)(() => cargarPdfjs().then(pdfWorker).catch(() => {}));
 
 async function textoDelPdf(file) {
   const lib = await cargarPdfjs();
@@ -20192,7 +20223,7 @@ function lyraAdjEl(a, local) {
   if (a.k !== 'audio' && !a.img) return lyraAdjChip(a);
   const el = document.createElement(a.k === 'audio' ? 'audio' : 'img');
   if (a.k === 'audio') { el.className = 'lyra-adj-audio'; el.controls = true; el.preload = 'metadata'; }
-  else { el.className = 'lyra-adj-img'; el.alt = a.n; el.onclick = () => window.open(el.src, '_blank', 'noopener'); }
+  else { el.className = 'lyra-adj-img'; el.alt = a.n; el.onclick = () => openLightbox([el.src], 0); }
   el.onerror = () => el.replaceWith(lyraAdjChip(a));
   if (local) el.src = local;
   else if (!a.r) return lyraAdjChip(a);
@@ -23750,7 +23781,7 @@ function renderVentas() {
     const chip = anulada ? `<span class="vt-chip" style="--c:var(--muted)"><i class="fas fa-ban"></i> Anulada</span>`
       : s.viaje.t ? `<span class="vt-chip" style="--c:${s.viaje.col}"><i class="fas ${s.viaje.ic}"></i> ${esc(s.viaje.t)}</span>` : '';
     const barra = (pct, c, lbl) => `<div class="lt-barra" style="--c:${c}" role="progressbar" aria-label="${lbl}" aria-valuenow="${Math.round(pct * 100)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${Math.round(pct * 100)}%"></i></div>`;
-    return `<article class="lt-card vt-card${anulada ? ' lt-card-hecha' : ''}" tabindex="0" aria-label="Venta factura #${fmt(f.numero_factura)}, ${esc(f.cliente || '')}" style="--i:${Math.min(i, 20)};--vc:${anulada ? 'var(--muted)' : s.cli.c}" onclick="if(!event.target.closest('button,a'))abrirVentaDrawer(${f.id})" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();abrirVentaDrawer(${f.id})}">
+    return `<article class="lt-card vt-card${anulada ? ' lt-card-hecha' : ''}" tabindex="0" aria-label="Venta factura #${fmt(f.numero_factura)}, ${esc(f.cliente || '')}" style="--i:${Math.min(i, 20)};--vc:${anulada ? 'var(--muted)' : s.cli.c}" onclick="if(!event.target.closest('button,a'))abrirVentaDrawer(${f.id})" onpointerenter="precargarVenta(${f.id})" onpointerleave="precargarVenta(0)" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();abrirVentaDrawer(${f.id})}">
       <div class="vt-top">${chip}<span class="vt-codigos" title="Reserva · N° de factura">${[f.reserva_codigo, '#' + fmt(f.numero_factura)].filter(Boolean).map(esc).join(' · ')}</span></div>
       <div class="vt-cab">
         <span class="vt-avatar" aria-hidden="true" style="--ac:${anulada ? 'var(--muted)' : colAsesor(f.asesor)}">${esc(ini)}</span>
@@ -24070,9 +24101,9 @@ async function docEntregarBlob(blob, nombre, mime = 'application/pdf') {
   }
   if (!/^(application\/pdf|image\/)/.test(file.type)) { descargarArchivo(file, nombre); return; }
   if (file.type === 'application/pdf') { verPdf(file, nombre); return; }
-  const u = URL.createObjectURL(file), w = window.open(u, '_blank');
-  if (w) w.opener = null; else descargarArchivo(file, nombre);
-  setTimeout(() => URL.revokeObjectURL(u), 60000);
+  const u = URL.createObjectURL(file);
+  openLightbox([u], 0);
+  setTimeout(() => URL.revokeObjectURL(u), 600000);
 }
 function docToastCompartir(file, texto) {
   const t = document.createElement('div'); t.className = 'toast';
@@ -24081,17 +24112,23 @@ function docToastCompartir(file, texto) {
   document.getElementById('toasts').appendChild(t); setTimeout(() => t.classList.add('show'), 30);
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 15000);
 }
-async function exportarVentaPdf(id) {
+function exportarVentaPdf(id) {
   const f = FACT_VENTAS_CACHE.find(x => x.id === id);
   if (!f) return;
+  verPdf(ventaPdfBlob(f), docNombre([`Factura ${String(f.numero_factura).padStart(6, '0')}`, f.cliente || `Cliente ${f.lead_id}`, docFecha(f.fecha_emision)]));
+}
+// El visor ya está abierto mientras se arma; lead, librerías, letras y logo se piden a la vez.
+async function ventaPdfBlob(f) {
+  const libs = ensureVoucherLibs(), fuentes = cargarFuentesPdf(), logo = cargarImagenBase64('logolotus-negro.png');
+  fuentes.catch(() => {}); logo.catch(() => {});
   const { data: leadPdf } = await sb.from('leads').select('fecha_creacion').eq('id', f.lead_id).maybeSingle();
   const lead_entrada = leadPdf?.fecha_creacion || null;
-  try { await ensureVoucherLibs(); } catch (_e) { errToast('No se pudo cargar el generador de PDF'); return; }
+  try { await libs; } catch (_e) { throw Object.assign(new Error('libs'), { aviso: 'No se pudo cargar el generador de PDF' }); }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'letter' });
   let F = 'helvetica', st = s => (s === 'normal' ? 'normal' : 'bold');
   try {
-    (await cargarFuentesPdf()).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
+    (await fuentes).forEach(([a, e, b]) => { doc.addFileToVFS(a, b); doc.addFont(a, 'Poppins', e); });
     F = 'Poppins'; st = s => s;
   } catch (_e) { /* sin Poppins sale en Helvetica */ }
   const C = { navy: [15, 23, 42], naranja: [234, 118, 22], ambar: [245, 158, 11], ambarOsc: [180, 83, 9], txt: [15, 23, 42], gris: [100, 116, 139], claro: [148, 163, 184], linea: [226, 232, 240], suave: [248, 250, 252], verde: [21, 128, 61], rojo: [220, 38, 38], blanco: [255, 255, 255] };
@@ -24123,7 +24160,7 @@ async function exportarVentaPdf(id) {
   doc.setFillColor(...C.naranja); doc.rect(0, 120, 612, 3, 'F');
   doc.setFillColor(...C.ambar); doc.rect(0, 120, 190, 3, 'F');
   doc.setFillColor(255, 255, 255); doc.circle(X0 + 38, 60, 38, 'F');
-  try { doc.addImage(await cargarImagenBase64('logolotus-negro.png'), 'PNG', X0 + 3, 25, 70, 70); } catch (_e) { /* sin logo igual sale */ }
+  try { doc.addImage(await logo, 'PNG', X0 + 3, 25, 70, 70); } catch (_e) { /* sin logo igual sale */ }
   font('bold', 16, C.blanco); doc.text('Destino y Eventos', 130, 54);
   font('bold', 16, C.naranja); doc.text('Lotus 360', 130, 74);
   font('normal', 8.5, C.claro); doc.text('Agencia de viajes · destinoyeventoslotus360.com', 130, 91);
@@ -24258,7 +24295,7 @@ async function exportarVentaPdf(id) {
     doc.text('Destino y Eventos Lotus 360 · Documento de uso interno · Montos en US$', X0, 766);
     doc.text(`Generado el ${generado} · Página ${p} de ${n}`, X1, 766, { align: 'right' });
   }
-  verPdf(doc.output('blob'), docNombre([`Factura ${String(f.numero_factura).padStart(6, '0')}`, f.cliente || `Cliente ${f.lead_id}`, docFecha(f.fecha_emision)]));
+  return doc.output('blob');
 }
 window.exportarVentaPdf = exportarVentaPdf;
 function cargarMasVentas() { factVentasMostrar += TECHO_LISTA; renderVentas(); }
@@ -34519,18 +34556,47 @@ function renderConversacion(forzarAbajo) {
 /* ----- Adjuntos: vista previa dentro del CRM, compartir y WhatsApp ----- */
 const CHAT_ADJ_ACCIONES = '<div class="msg-adj-acc"><button type="button" data-adj-compartir><i class="fas fa-share-nodes"></i> Compartir</button><button type="button" class="wa" data-adj-wa><i class="fab fa-whatsapp"></i> WhatsApp</button></div>';
 const chatEsPdf = m => m.pdf || /\.pdf$/i.test(m.nombre_archivo || m.storage_path || '');
-// Visor de PDF del chat para cualquier PDF del CRM: blob generado o URL (firmada) de Storage.
+// Visor de PDF del chat para cualquier PDF del CRM: blob generado, URL (firmada) de Storage o la promesa
+// de uno de los dos. El visor se abre ya y la firma/descarga/armado corre detrás. Con `clave` el archivo
+// queda guardado y reabrirlo no lo vuelve a bajar.
 let verPdfN = 0;
-function verPdf(fuente, nombre = 'Documento.pdf', zoom = 1) {
-  const blob = fuente instanceof Blob ? fuente : null;
-  return chatVerDoc({ externo: true, pdf: true, blob, url: blob ? null : fuente, nombre_archivo: nombre, storage_path: `pdf:${++verPdfN}`, peso_bytes: blob?.size || 0, zoom });
+function verPdf(fuente, nombre = 'Documento.pdf', zoom = 1, clave) {
+  const blob = fuente instanceof Blob ? fuente : null, espera = typeof fuente?.then === 'function' ? fuente : null;
+  espera?.catch(() => {});
+  return chatVerDoc({ externo: true, pdf: true, blob, espera, url: blob || espera ? null : fuente, nombre_archivo: nombre, storage_path: clave || `pdf:${++verPdfN}`, peso_bytes: blob?.size || 0, zoom });
 }
 const esRutaPdf = p => /\.pdf(\?|$)/i.test(p || '');
+const esRutaImagen = p => /\.(jpe?g|png|webp|gif|avif)(\?|$)/i.test(p || '');
+// Archivo guardado que no es PDF: la foto en el lightbox, el resto se descarga con su nombre.
+function verImagenOArchivo(url, nombre, mime = '') {
+  if (mime.startsWith('image/') || esRutaImagen(url) || esRutaImagen(nombre)) openLightbox([url], 0);
+  else chatDescargar({ url, nombre_archivo: nombre });
+}
+// URLs firmadas reutilizables: firmar cuesta 300-900 ms por archivo (medido 26-nov); se usan hasta 1 min antes de vencer.
+const FIRMAS = new Map();
+async function urlFirmada(bucket, path, seg = 600) {
+  const k = `${bucket}:${path}`, c = FIRMAS.get(k);
+  if (c && c.hasta > Date.now() + 60000) return c.url;
+  const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, seg);
+  if (error || !data?.signedUrl) throw Object.assign(new Error('sin_firma'), { aviso: 'No se pudo abrir el archivo' });
+  if (FIRMAS.size > 300) FIRMAS.clear();
+  FIRMAS.set(k, { url: data.signedUrl, hasta: Date.now() + seg * 1000 });
+  return data.signedUrl;
+}
+// Firma en un solo pedido los archivos que una pantalla puede abrir; con algún PDF deja pdf.js listo.
+async function prefirmar(bucket, paths) {
+  const faltan = [...new Set(paths.filter(Boolean))].filter(p => !(FIRMAS.get(`${bucket}:${p}`)?.hasta > Date.now() + 120000));
+  if (paths.some(esRutaPdf)) precalentarPdf();
+  if (!faltan.length) return;
+  const { data } = await sb.storage.from(bucket).createSignedUrls(faltan, 600).catch(() => ({}));
+  (data || []).forEach(x => { if (x.signedUrl && !x.error) FIRMAS.set(`${bucket}:${x.path}`, { url: x.signedUrl, hasta: Date.now() + 600000 }); });
+}
 const chatMsgDe = el => msgMensajes.find(x => x.id === Number(el.closest('.chat-msg')?.dataset.mid));
 const chatBlobs = new Map();
 async function chatBlobAdj(m) {
   if (m.blob) return m.blob;
   if (chatBlobs.has(m.storage_path)) return chatBlobs.get(m.storage_path);
+  if (m.espera) { const v = await m.espera; if (v instanceof Blob) return m.blob = v; m.url ||= v; }
   const url = m.url || msgUrlsAdjuntos[m.storage_path]; if (!url) throw new Error('sin_url');
   const res = await fetch(url); if (!res.ok) throw new Error('sin_archivo');
   const blob = await res.blob();
@@ -34572,7 +34638,7 @@ async function chatCargarMini(path) {
   let src = '';
   try {
     const lib = await cargarPdfjs();
-    const pdf = await lib.getDocument({ data: await (await chatBlobAdj(m)).arrayBuffer() }).promise;
+    const pdf = await lib.getDocument({ data: await (await chatBlobAdj(m)).arrayBuffer(), worker: pdfWorker(lib) }).promise;
     const page = await pdf.getPage(1), vp = page.getViewport({ scale: 1 }), w = 320;
     const c = document.createElement('canvas'); c.width = w; c.height = Math.min(Math.round(w / vp.width * vp.height), Math.round(w * 1.1));
     const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
@@ -34654,10 +34720,9 @@ async function chatVerDoc(m) {
   navPush({ type: 'chat-doc' });
   const cont = el.querySelector('.cdv-paginas');
   try {
-    const lib = await cargarPdfjs();
-    const blob = await chatBlobAdj(m);
+    const [lib, blob] = await Promise.all([cargarPdfjs(), chatBlobAdj(m)]);
     m.peso_bytes ||= blob.size;
-    const pdf = await lib.getDocument({ data: await blob.arrayBuffer() }).promise;
+    const pdf = await lib.getDocument({ data: await blob.arrayBuffer(), worker: pdfWorker(lib) }).promise;
     if (chatDocVisor !== s) { pdf.destroy(); return; }
     s.pdf = pdf;
     el.querySelector('.cdv-titulo small').textContent = `${formatBytes(m.peso_bytes)} · ${pdf.numPages} ${pdf.numPages === 1 ? 'página' : 'páginas'}`;
@@ -34681,7 +34746,7 @@ async function chatVerDoc(m) {
     c.width = c.height = 0;
   } catch (e) {
     console.error('visor chat', e);
-    if (chatDocVisor === s) cont.innerHTML = '<div class="cdv-aviso"><i class="fas fa-triangle-exclamation"></i> No se pudo abrir el documento. Usa Compartir o Descargar.</div>';
+    if (chatDocVisor === s) cont.innerHTML = `<div class="cdv-aviso"><i class="fas fa-triangle-exclamation"></i> ${esc(e?.aviso || 'No se pudo abrir el documento. Usa Compartir o Descargar.')}</div>`;
   }
 }
 function chatDocZoom(dir) {
@@ -36722,8 +36787,7 @@ window.verVoucherPdf = async function verVoucherPdf(pdfPath, numeroFactura) {
   try {
     await ensureVoucherLibs();
     const pdfBytes = await construirVoucherPdf(registro);
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    window.open(URL.createObjectURL(blob), '_blank');
+    verPdf(new Blob([pdfBytes], { type: 'application/pdf' }), docNombrePorTipo('voucher', registro));
   } catch (e) {
     console.error('verVoucherPdf reconstruir', e);
     errToast('No se pudo generar el PDF reconstruido');
