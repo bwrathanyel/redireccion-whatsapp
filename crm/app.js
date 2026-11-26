@@ -23532,7 +23532,7 @@ async function loadFacturas() {
     const neto_sin_proveedor = conServ ? Math.max(0, Number(f.reserva_costo_servicios) - provMonto) : 0;
     const neto_estimado = costo_neto != null && Number(f.servicios_estimados) > 0 && (costoReserva == null || (!fichaIncluyeBt && Number(f.reserva_costo_bt) > 0));
     return { ...f, costo_neto, neto_estimado, netos_faltan: netosFaltan, proveedor, proveedor_pagado: cxps.length ? sumar(cxps, 'monto_abonado') : null, abonado, venta_total, margen: costo_neto != null ? venta_total - costo_neto : null,
-      prov_monto: provMonto, prov_saldo, proveedores: [...provs.values()], neto_sin_proveedor: neto_sin_proveedor > 0.5 ? neto_sin_proveedor : 0 };
+      prov_monto: provMonto, prov_saldo, proveedores: [...provs.values()], prov_lineas: ventaProvLineas(f.servicios, provs), neto_sin_proveedor: neto_sin_proveedor > 0.5 ? neto_sin_proveedor : 0 };
   });
   ULTIMA_CARGA.balance = 0; // el balance se alimenta de estas facturas: que se recargue al volver
   poblarFiltrosVentas();
@@ -23567,6 +23567,21 @@ function filtrarVentasKpi(clave) {
   factVentasMostrar = TECHO_LISTA;
   renderVentas();
 }
+// Proveedores de la tarjeta, uno por chip con el emoji de lo que da (✈️ vuelo, 🏨 hotel…). El servicio
+// sin proveedor va aparte con su nombre: sin eso «Sin proveedor» parecía mentir cuando sí había otros.
+const VT_EMOJI_TIPO = { hospedaje: '🏨', boleto_aereo: '✈️', traslado_terrestre: '🚐', traslado_maritimo: '🚤', full_day: '🏝️', seguro: '🛡️', otro: '📌' };
+function ventaProvLineas(servicios, provs) {
+  const lineas = new Map();
+  (servicios || []).forEach(s => {
+    const k = s.proveedor_id != null ? 'p' + s.proveedor_id : 's' + lineas.size;
+    const l = lineas.get(k) || { sin: s.proveedor_id == null, nombre: s.proveedor_id != null ? (s.proveedor || provs.get(s.proveedor_id)?.nombre || 'Proveedor') : (s.desc || VT_TIPO_LBL[s.tipo] || 'Servicio'), tipos: new Set() };
+    l.tipos.add(VT_EMOJI_TIPO[s.tipo] || '📌');
+    lineas.set(k, l);
+  });
+  if (!lineas.size) provs.forEach((p, k) => lineas.set(k, { sin: false, nombre: p.nombre, tipos: new Set(['🏢']) }));
+  return [...lineas.values()].map(l => ({ ...l, tipos: [...l.tipos].join('') })).sort((a, b) => a.sin - b.sin);
+}
+const VT_TIPO_LBL = { hospedaje: 'Hospedaje', boleto_aereo: 'Boleto aéreo', traslado_terrestre: 'Traslado terrestre', traslado_maritimo: 'Traslado marítimo', full_day: 'Full day', seguro: 'Seguro', otro: 'Otro servicio' };
 // Dos semáforos de la venta (mismo vocabulario que el PDF y Pagos a proveedores): cuánto pagó
 // el cliente y cuánto le pagamos al proveedor. Rojo si ya viaja en ≤7 días (o viajó) y se debe.
 function semaforosVenta(f) {
@@ -23677,7 +23692,7 @@ function renderVentas() {
     const anulada = f.estado === 'anulada', conCosto = f.costo_neto != null, s = semaforosVenta(f);
     const pctReal = conCosto && f.venta_total > 0 ? Math.round(f.margen / f.venta_total * 100) : 0;
     const ini = (f.cliente || '').trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '#';
-    const provs = (f.proveedores || []).map(p => p.nombre);
+    const provLin = f.prov_lineas || [];
     const aPagar = anulada ? 0 : (f.proveedores || []).filter(p => p.id && p.saldo > 0.005).reduce((a, p) => a + p.saldo, 0);
     const chip = anulada ? `<span class="vt-chip" style="--c:var(--muted)"><i class="fas fa-ban"></i> Anulada</span>`
       : s.viaje.t ? `<span class="vt-chip" style="--c:${s.viaje.col}"><i class="fas ${s.viaje.ic}"></i> ${esc(s.viaje.t)}</span>` : '';
@@ -23703,7 +23718,7 @@ function renderVentas() {
         <div class="vt-grupo">
           <div class="vt-fila"><span class="vt-lbl">Proveedor</span><span class="vt-pills">${vtPill(s.prov, false, f)}${s.extras.map(e => vtPill(e, true, f)).join('')}</span></div>
           <div class="vt-avance">${barra(s.provPct, s.prov.c, 'Pagado al proveedor')}<span class="vt-num">${s.prov.sub || '—'}</span></div>
-          ${provs.length ? `<div class="vt-provs" title="${esc(provs.join(' · '))}">${provs.map(p => esc(p)).join(' · ')}</div>` : ''}
+          ${provLin.length ? `<div class="vt-provs" title="${esc(provLin.map(l => `${l.tipos} ${l.nombre}${l.sin ? ' (sin proveedor)' : ''}`).join('\n'))}">${provLin.slice(0, provLin.length > 3 ? 2 : 3).map(l => `<span class="vt-prov${l.sin ? ' sin' : ''}"><i aria-hidden="true">${l.tipos}</i><span>${esc(l.nombre)}</span>${l.sin ? '<em>sin proveedor</em>' : ''}</span>`).join('')}${provLin.length > 3 ? `<span class="vt-prov mas">+${provLin.length - 2}</span>` : ''}</div>` : ''}
         </div>
       </div>`}
       <div class="vt-pie">
