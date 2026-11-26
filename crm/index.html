@@ -7950,7 +7950,16 @@ button.vt-pill:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
   .pl-volver,.pl-cerrar{min-height:44px;padding:0 11px}
   .pl-migas button{max-width:10ch}
 }
-@media(max-width:899px){.vd-cols{grid-template-columns:minmax(0,1fr)}}
+.vd-col{display:flex;flex-direction:column;gap:22px;min-width:0}
+.vd-blq{min-width:0}
+@media(min-width:900px){
+  .vd-col .vd-linea{display:flex;flex-direction:column;overflow:visible;padding:4px 0 0 5px}
+  .vd-col .vd-linea li{padding:0 0 11px 16px;border-top:0;border-left:1px solid var(--line2,var(--line))}
+  .vd-col .vd-linea li:last-child{padding-bottom:0;border-left-color:transparent}
+  .vd-col .vd-linea li.vd-fut{border-left-style:dashed}
+  .vd-col .vd-linea li::before{left:-5px;top:2px}
+}
+@media(max-width:899px){.vd-cols{display:flex;flex-direction:column}.vd-col{display:contents}}
 @media(max-width:760px){
   .vd-res-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .vd-res-k:nth-child(3){border-left:0}

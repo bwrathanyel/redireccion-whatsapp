@@ -220,6 +220,22 @@ export function crearFinanzasVenta(c) {
     </div>`;
   }
 
+  // Dos columnas por peso (≈ filas) para no dejar huecos: Cobro a la izquierda, Proveedores a la derecha,
+  // Viajeros y Documentos a la más liviana. Historia entra vertical en el hueco si cabe; si no, va a lo ancho.
+  // `order` es el orden de una sola columna (≤899, donde .vd-col es display:contents).
+  const peso = h => 1.5 + (h.match(/<li/g) || []).length + 3 * (h.match(/vd-asignar"/g) || []).length
+    + 2 * (h.match(/class="vd-prov"/g) || []).length + (h.match(/vd-nota/g) || []).length + 0.5 * (h.match(/vd-chips/g) || []).length;
+  function columnas(f, d, ab) {
+    const blq = (h, o) => `<div class="vd-blq" style="order:${o}">${h}</div>`;
+    const izq = { h: [blq(cobro(d, ab), 1)], p: 0 }, der = { h: [blq(proveedores(d), 2)], p: 0 };
+    izq.p = peso(izq.h[0]); der.p = peso(der.h[0]);
+    [[viajeros(d), 3], [documentos(f, d, ab), 4]].forEach(([h, o]) => { const col = izq.p <= der.p ? izq : der; col.h.push(blq(h, o)); col.p += peso(h) + 0.5; });
+    const hist = historia(f, d, ab), liv = izq.p <= der.p ? izq : der, pes = liv === izq ? der : izq;
+    const cabe = liv.p + peso(hist) + 0.5 <= pes.p;
+    if (cabe) liv.h.push(blq(hist, 5));
+    return `<div class="vd-cols"><div class="vd-col">${izq.h.join('')}</div><div class="vd-col">${der.h.join('')}</div></div>${cabe ? '' : hist}`;
+  }
+
   function pintar(f, d, ab, cargando) {
     const raiz = c.drawer();
     if (!raiz) return;
@@ -227,7 +243,7 @@ export function crearFinanzasVenta(c) {
     raiz.innerHTML = `<div class="vd" role="region" aria-labelledby="vd-titulo" data-rid="${Number(f.reserva_id)}">${cabecera(f, listo ? d : null)}${rapidas(f, listo ? d : null)}
       ${cargando ? '<p class="vd-nota"><i class="fas fa-spinner fa-spin"></i> Cargando la venta…</p>'
         : !listo ? `<div class="vt-aviso" style="--c:var(--danger)"><i class="fas fa-triangle-exclamation"></i> No se pudo cargar el detalle de esta venta.</div>`
-        : `${resumen(d, ab)}${pendientes(f, d, ab)}<div class="vd-cols">${cobro(d, ab)}${proveedores(d)}${viajeros(d)}${documentos(f, d, ab)}</div>${historia(f, d, ab)}`}
+        : `${resumen(d, ab)}${pendientes(f, d, ab)}${columnas(f, d, ab)}`}
       ${pie(f, d)}</div>`;
     const vd = raiz.querySelector('.vd');
     vd.onclick = e => accion(e.target.closest('[data-vd]'), f, d, ab, vd);
