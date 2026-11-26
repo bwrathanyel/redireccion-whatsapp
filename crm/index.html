@@ -6453,6 +6453,15 @@ button.pv-falta-i:hover{background:color-mix(in srgb,var(--amber) 30%,transparen
 .ss-tira i{flex:1;background:rgba(255,255,255,.04)}
 .ss-tira i.st{background:#ef4444}
 .ss-tira i.rq{background:#e0a030}
+/* Stop Sales desde Disponibilidad (2026-11-26): verde = cupo confirmado, con quién y cuándo. */
+.ss-tira i.ok{background:var(--green)}
+.ss-dia.ok{background:color-mix(in srgb,var(--green) 18%,transparent);border-color:color-mix(in srgb,var(--green) 40%,transparent)}
+.ss-leyenda i.ss-ley-ok{background:color-mix(in srgb,var(--green) 18%,transparent);border:1px solid color-mix(in srgb,var(--green) 40%,transparent)}
+.ss-hotel-chip.ok:not(.on) span{background:color-mix(in srgb,var(--green) 20%,transparent);color:var(--green)}
+.ss-v-noche.sd{background:transparent;border-color:var(--line2)}
+.ss-proc{font-size:11px;color:var(--muted2);margin-top:4px;line-height:1.5}
+.ss-fuera{flex:none;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border:1px dashed var(--line2);border-radius:999px;padding:1px 7px}
+.ss-destinos{flex-wrap:wrap}
 /* Hover de las tarjetas, acotado a esta sección: .vig-item lo comparte la hoja
    de vigencias del tarifario, que no es parte de este pedido. */
 #sec-stop-sales .vig-item{transition:transform .12s,border-color .15s}
@@ -13431,9 +13440,10 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
          esconde toda la SECCIÓN del menú, y acá la sección entera sí debe
          verse -- solo esta caja de adentro es admin-only. -->
     <section class="section" id="sec-stop-sales">
-      <div class="seg-group" role="group" aria-label="Destino de Stop Sales">
-        <button type="button" class="seg on" data-ss-destino="bt" aria-pressed="true">BT Travel</button>
-        <button type="button" class="seg" data-ss-destino="roques" aria-pressed="false">Los Roques</button>
+      <!-- Pestañas por destino: las pinta ssPintarDestinos desde stop_sales_tablero. -->
+      <div class="seg-group chips-scroll ss-destinos" id="ss-destinos" role="group" aria-label="Destino de Stop Sales">
+        <button type="button" class="seg on" data-ss-destino="margarita" aria-pressed="true">Margarita</button>
+        <button type="button" class="seg" data-ss-destino="los roques" aria-pressed="false">Los Roques</button>
       </div>
       <div class="ss-fresco" id="ss-fresco">
         <div><i class="fas fa-file-lines"></i><span id="ss-pdf-meta">Buscando el último PDF de BT…</span></div>
@@ -13443,7 +13453,7 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
       <!-- Calendario y chips primero: es lo que se viene a mirar (pedido del dueño 2026-10-16). -->
       <div class="card">
         <h2><i class="fas fa-calendar-xmark"></i> Calendario de bloqueos</h2>
-        <div class="csub">Bloqueos publicados de hoy en adelante. Toca un día marcado para ver los hoteles y cuándo termina cada bloqueo.</div>
+        <div class="csub">Bloqueos y cupos confirmados de hoy en adelante: el PDF de BT, las cargas manuales y cada respuesta de Disponibilidad. Gana la confirmación más reciente. Toca un día marcado para ver quién lo confirmó y cuándo.</div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap">
           <input type="text" class="ei" id="ss-vig-buscar" placeholder="Buscar hotel..." style="flex:1;min-width:150px">
           <div class="view-switch" id="ss-view-switch"></div>
@@ -13475,8 +13485,13 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
         </div>
         <div class="ss-guia-it" style="--c:var(--green)">
           <i class="fas fa-circle-check"></i>
-          <div><b>Libre</b>
-            <p>No hay un bloqueo registrado para esas noches. Confirma cupo y tarifa con el proveedor antes de cerrar.</p></div>
+          <div><b>Cupo confirmado</b>
+            <p>El proveedor confirmó cupo esa noche; se ve cuándo y quién. Si la confirmación tiene días, vuelve a preguntar antes de cobrar.</p></div>
+        </div>
+        <div class="ss-guia-it" style="--c:var(--muted)">
+          <i class="fas fa-circle-question"></i>
+          <div><b>Sin dato</b>
+            <p>No hay bloqueo ni confirmación registrada para esas noches. Confirma cupo y tarifa con el proveedor antes de cerrar.</p></div>
         </div>
       </div>
 
@@ -13505,19 +13520,20 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
         <div id="ss-mapeo"></div>
         <div id="ss-preview"></div>
         <div id="ss-publicar-box" style="display:none;margin-top:14px">
-          <div class="csub" style="margin-bottom:8px"><i class="fas fa-triangle-exclamation" style="color:#f59e0b"></i> Publicar reemplaza los bloqueos del PDF anterior de BT. Los bloqueos manuales, como los de Los Roques, se conservan.</div>
+          <div class="csub" style="margin-bottom:8px"><i class="fas fa-triangle-exclamation" style="color:#f59e0b"></i> Publicar reemplaza los bloqueos del PDF anterior de BT. Los bloqueos manuales y los «no disponible» de Disponibilidad se conservan.</div>
           <button class="dbtn save" id="ss-publicar"><i class="fas fa-check"></i> Confirmar y publicar</button>
         </div>
         </div>
       </details>
 
-      <!-- Disponibilidad por texto (Gremary manda «3 a 5 / 1 doble»): solo pestaña Los Roques y oficina. -->
+      <!-- Disponibilidad por texto (Gremary manda «3 a 5 / 1 doble»): oficina, cualquier destino menos Margarita (hoteles del destino). -->
       <details class="dsec ss-admin" id="ss-disp-box" style="margin-top:14px;display:none">
         <summary><i class="fas fa-paste dsec-ic"></i> Cargar disponibilidad por texto <span class="ss-admin-meta" id="ss-disp-ultima"></span><i class="fas fa-chevron-down dsec-arrow"></i></summary>
         <div class="dsec-body">
         <div class="ce-intro">
-          Pega el mensaje tal como lo manda la posada (Gremary: «Disponibilidad Enero», «3 a 5», «1 doble»…).
-          Cada rango es <b>entrada a salida</b>. Las noches del mes que no aparecen en ningún rango quedan <b>sin cupo</b>.
+          Pega el mensaje tal como lo manda la posada (por ejemplo Gremary: «Disponibilidad Enero», «3 a 5», «1 doble»…).
+          Cada rango es <b>entrada a salida</b>. Las noches del mes que no aparecen en ningún rango quedan <b>sin cupo</b>;
+          esta carga reemplaza todo el mes del hotel, también lo que haya llegado por Disponibilidad.
           Nada se publica hasta que confirmes.
         </div>
         <div class="ss-disp-form">
