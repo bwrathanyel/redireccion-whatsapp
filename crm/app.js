@@ -31294,7 +31294,8 @@ function tgCabeceraHtml(x, nombre, fotos, n) {
   const chip = (ic, txt) => `<span class="tg-dato"><i class="fas ${ic}"></i>${esc(txt)}</span>`;
   const datos = [b?.check_in ? chip('fa-clock', 'Check-in ' + b.check_in) : '', b?.check_out ? chip('fa-clock-rotate-left', 'Check-out ' + b.check_out) : '',
     precioChip ? chip('fa-coins', precioChip) : '',
-    x.tipo === 'hotel' && vivas.some(tarDeBtTravel) && ROL !== 'marketing' ? '<button type="button" class="tg-dato tg-pdf" data-tar-pdf><i class="fas fa-file-pdf"></i>Ver en tarifario BT Travel</button>' : ''].filter(Boolean).join('');
+    x.tipo === 'hotel' && vivas.some(tarDeBtTravel) && ROL !== 'marketing' ? '<button type="button" class="tg-dato tg-pdf" data-tar-pdf><i class="fas fa-file-pdf"></i>Ver en tarifario BT Travel</button>' : '',
+    ['hotel', 'posada', 'apartamento'].includes(x.tipo) && ['admin', 'asesor', 'administrativo'].includes(ROL) ? '<button type="button" class="tg-dato tg-pdf" data-tar-disp><i class="fas fa-calendar-check"></i>Pedir disponibilidad</button>' : ''].filter(Boolean).join('');
   const foto = (src, i, alt) => `<div class="tg-foto" style="--bg:url('${esc(src.replace(/'/g, '%27'))}')"><img src="${esc(src)}" alt="${esc(alt)}"${i ? ' loading="lazy"' : ''} data-drawer-foto="${i}"></div>`;
   const sub = [tarLugar(x), TAR_TAB_LABEL[x.tipo] || TAR_TAB_LABEL[tarTab], vivas.length ? `${vivas.length} tarifa${vivas.length > 1 ? 's' : ''} vigente${vivas.length > 1 ? 's' : ''}` : 'Sin tarifas vigentes'].filter(Boolean).join(' · ');
   return `<div class="tg-cab">
@@ -32003,6 +32004,7 @@ function openProductoDrawer(x, tipoForzado = null, solicitud = null) {
   document.getElementById('tar-editar-promo')?.addEventListener('click', () => tarAbrirEditorPromo(x.id));
   document.querySelectorAll('[data-drawer-foto]').forEach(el => el.addEventListener('click', () => openLightbox(fotosOrig, +el.dataset.drawerFoto)));
   document.querySelector('#drawerContent [data-tar-pdf]')?.addEventListener('click', e => abrirPdfBtTravel(e.currentTarget, x.id, x.nombre));
+  document.querySelector('#drawerContent [data-tar-disp]')?.addEventListener('click', () => disponibilidad().pedir({ producto: x }));
   document.querySelector('#drawerContent .tg-ubic-mapa')?.addEventListener('click', e => { e.preventDefault(); tgMapaAbrir(x); });
   tarActivarSeleccion();
   tarWireDescClamp();
@@ -38560,9 +38562,11 @@ window.cbPedirDisponibilidad = () => {
   const hoteles = cbItems.map((it, i) => ({ it, i })).filter(({ it }) => it.tipo === 'hotel' && cbTitulo(it));
   if (!hoteles.length) return errToast('Agrega primero un hotel a la cotización');
   const f = hoteles.find(({ it }) => it.ida && it.vuelta)?.it || {};
-  const ad = Math.max(1, Number(f.adultos) || 2), ni = Number(f.ninos) || 0, inf = Number(f.infantes) || 0;
+  const ad = Math.max(1, Number(f.adultos) || 2), inf = Number(f.infantes) || 0;
+  // Sin la edad cargada en la cotización el niño viaja con edad vacía: el formulario la pide (antes salía «0 años»).
+  const ninos = cbEdadesLista(f).map(v => String(v).trim() === '' ? null : Number(v));
   disponibilidad().pedir({ lead: cbLead || null, cliente: document.getElementById('cb-cliente')?.value.trim() || cbLead?.nombre || '', check_in: f.ida || '', check_out: f.vuelta || '',
-    habitaciones: [{ adultos: ad, ninos: Array(ni).fill(0), infantes: inf }], canal: 'cotizacion',
+    habitaciones: [{ adultos: ad, ninos, infantes: inf }], canal: 'cotizacion',
     items: hoteles.map(({ it, i }) => ({ producto_id: it.producto_id ? Number(it.producto_id) : undefined, alojamiento: cbTitulo(it), tipo: 'hotel', plan: it.plan || '', habitacion: it.hab || '', cotizacion_item_idx: i })) });
 };
 async function cbDesdeDisponibilidad(s, d) {
@@ -44248,6 +44252,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
+  { fecha: '2026-11-25', emoji: '🏨', titulo: 'Disponibilidad más rápida y ordenada', texto: 'Pedir disponibilidad ahora va en tres pasos: alojamiento (con buscador y precio «desde» del Tarifario), fechas con botones de noches y personas. La edad de cada niño es obligatoria. Cliente, notas y urgente quedan en «Más datos». También puedes pedirla desde la ficha de un hotel en el Tarifario. Las tarjetas muestran fechas, personas, estado de cada alojamiento y quién la atiende; Respondidas muestra las 6 más recientes y el resto con «Ver más».', roles: ['admin', 'administrativo', 'asesor'] },
   { id: '2026-11-25-centro-novedades', fecha: '2026-11-25', emoji: '🔔', titulo: 'Centro de novedades', texto: 'Ahora hay una campana arriba. El número que ves es lo que se agregó desde la última vez que entraste, y al tocarla lees solo eso, con un ejemplo y un botón para ir directo. Después de actualizar el CRM te aparece solita la hoja «Esto es lo nuevo». También te avisa del Tarifario: alojamientos nuevos, precios que bajaron o subieron y tarifas nuevas (con un puntico en la campana). Filtra por Todo, Tarifario o CRM.', ejemplo: 'Hotel X pasó de desde $60 a desde $50: ejemplo $50 × 2 personas × 3 noches = $300.', donde: { sec: 'actualizaciones', label: 'Ver el archivo completo' }, roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'] },
   { fecha: '2026-11-25', emoji: '💵', titulo: 'Ventas: cobro y pago al proveedor de un vistazo', texto: 'Cada venta en Finanzas › Ventas muestra dos estados: cuánto pagó el cliente y cuánto le pagamos al proveedor, con botón Pagar directo. Al tocar la tarjeta se abre el detalle de la venta con los abonos, los pagos a cada proveedor y su estado de cuenta. Desde Pagos a proveedores, el código de la reserva abre esa misma venta.', roles: ['admin', 'administrativo'] },
   { fecha: '2026-11-24', emoji: '🏷️', titulo: 'Tarifario: botón Cotizar en la tarjeta', texto: 'El botón Cotizar de cada tarjeta del Tarifario abre Cotizaciones con ese hotel ya elegido.', roles: ['admin', 'administrativo', 'asesor'] },

@@ -2,32 +2,61 @@
 // la toma, consulta al proveedor por WhatsApp y responde cada alojamiento. Escritura solo por RPC disp_*.
 // Plan: ~/.claude/plans/vamos-a-crear-una-joyful-boot.md
 const CSS = `
-.dp-top{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:0 0 14px}
-.dp-top h2{flex:1 1 auto;margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em}
-.dp-seg{display:inline-flex;border:1px solid var(--line2);border-radius:9px;overflow:hidden}
-.dp-seg button{background:transparent;border:0;padding:7px 12px;font:inherit;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer}
+.dp-top{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:0 0 14px}
+.dp-tit{flex:1 1 auto;min-width:0}
+.dp-tit h2{margin:0;font-size:18px;font-weight:800;letter-spacing:-.02em}
+.dp-tit p{margin:2px 0 0;font-size:11.5px;color:var(--muted)}
+.dp-seg{display:inline-flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.dp-seg button{background:transparent;border:0;padding:7px 14px;font:inherit;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:background .16s,color .16s}
 .dp-seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-ink)}
-.dp-met{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:7px;margin:0 0 14px}
-.dp-met div{padding:9px 11px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
-.dp-met b{display:block;font-size:18px;font-weight:800}
-.dp-met small{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-.dp-met p{margin:4px 0 0;font-size:11px;color:var(--muted)}
+.dp-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:0 0 9px}
+.dp-kpi{display:flex;align-items:center;gap:11px;min-width:0;padding:11px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.dp-kpi>i{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;font-size:14px;background:var(--accent-soft);color:var(--accent-ink)}
+.dp-kpi[data-c="azul"]>i{background:rgba(74,158,255,.14);color:var(--blue)}
+.dp-kpi[data-c="verde"]>i{background:rgba(16,185,129,.15);color:var(--green)}
+.dp-kpi[data-c="ambar"]>i{background:rgba(245,181,68,.15);color:var(--amber)}
+.dp-kpi div{min-width:0}
+.dp-kpi small{display:block;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.dp-kpi b{display:block;font-size:18px;font-weight:800;line-height:1.2}
+.dp-kpi span{display:block;font-size:11px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dp-rend{margin:0 0 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.dp-rend summary{display:flex;align-items:center;gap:7px;padding:9px 14px;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer;list-style:none}
+.dp-rend summary::-webkit-details-marker,.dp-mas-op summary::-webkit-details-marker{display:none}
+.dp-rend summary::after,.dp-mas-op summary::after{content:'▾';margin-left:auto;transition:transform .16s}
+.dp-rend[open] summary::after,.dp-mas-op[open] summary::after{transform:rotate(180deg)}
+.dp-rend-g{display:grid;grid-template-columns:1fr 1fr;gap:22px;padding:2px 14px 14px}
+.dp-rend h4{margin:0 0 7px;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.dp-rend h4 small{font-weight:600;letter-spacing:0;text-transform:none;color:var(--muted2)}
+.dp-rfila{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 9px;align-items:center;padding:4px 0;font-size:12px}
+.dp-rfila>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.dp-rfila em{font-style:normal;font-size:11px;color:var(--muted)}
+.dp-barrita{grid-column:1/-1;height:4px;border-radius:999px;background:var(--line)}
+.dp-barrita i{display:block;height:100%;border-radius:inherit;background:var(--accent)}
 .dp-tabs{display:none;gap:4px;margin:0 0 9px;overflow-x:auto}
 .dp-tabs button{flex:1 0 auto;background:var(--panel-solid);border:1px solid var(--line2);border-radius:999px;padding:7px 11px;font:inherit;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer}
 .dp-tabs button[aria-pressed="true"]{border-color:var(--accent-ink);color:var(--accent-ink)}
 .dp-kanban{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;align-items:start}
-.dp-col{display:flex;flex-direction:column;gap:7px;min-height:120px;padding:9px;border:1px solid var(--line);border-radius:14px;background:var(--bg2)}
+.dp-col{display:flex;flex-direction:column;min-width:0;min-height:120px;border:1px solid var(--line);border-radius:14px;background:var(--bg2);transition:border-color .16s}
 .dp-col.sobre{border-color:var(--accent-ink)}
-.dp-col h3{display:flex;align-items:center;gap:7px;margin:0 0 2px;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.dp-col h3 span{margin-left:auto;font-size:11px;letter-spacing:0}
-.dp-card{display:flex;flex-direction:column;gap:6px;padding:11px;border:1px solid var(--line2);border-radius:12px;background:var(--panel);cursor:pointer;transition:border-color .16s}
+.dp-col h3{display:flex;align-items:center;gap:7px;margin:0;padding:11px 11px 9px;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.dp-col h3 span{margin-left:auto;min-width:22px;padding:2px 7px;border-radius:999px;background:var(--line);font-size:11px;letter-spacing:0;text-align:center;color:var(--txt)}
+.dp-col-l{display:flex;flex-direction:column;gap:7px;padding:0 9px 9px}
+.dp-mas{min-height:36px;border:1px dashed var(--line2);border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;transition:border-color .16s,color .16s}
+.dp-mas:hover{border-color:var(--accent-ink);color:var(--accent-ink)}
+.dp-card{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid var(--line2);border-radius:12px;background:var(--panel);cursor:pointer;transition:border-color .16s}
 .dp-card:hover{border-color:var(--accent-ink)}
-.dp-card.urg{border-left:3px solid var(--danger)}
+.dp-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dp-card.urg{box-shadow:inset 3px 0 0 var(--danger)}
+.dp-card.apagada{opacity:.62}
 .dp-cab{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:800}
 .dp-cab span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dp-cab small{font-size:11px;font-weight:600;color:var(--muted)}
+.dp-meta{display:flex;flex-wrap:wrap;gap:4px 11px;font-size:11.5px;color:var(--muted)}
+.dp-meta span{display:inline-flex;align-items:center;gap:4px}
+.dp-meta b{color:var(--txt);font-weight:700}
+.dp-meta i{font-size:10px;opacity:.75}
 .dp-chips{display:flex;flex-wrap:wrap;gap:4px}
-.dp-chip{font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:var(--line);color:var(--muted)}
+.dp-chip{font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:var(--line);color:var(--muted);white-space:nowrap}
 .dp-chip.rojo{background:rgba(239,68,68,.14);color:var(--danger)}
 .dp-chip.ambar{background:rgba(245,181,68,.15);color:var(--amber)}
 .dp-chip.azul{background:rgba(74,158,255,.14);color:var(--blue)}
@@ -35,19 +64,35 @@ const CSS = `
 .dp-chip.acc{background:var(--accent-soft);color:var(--accent-ink)}
 .dp-linea{font-size:11.5px;color:var(--muted)}
 .dp-linea b{color:var(--txt);font-weight:700}
-.dp-alos{display:flex;flex-direction:column;gap:3px;margin:0;padding:0;list-style:none}
-.dp-alos li{display:flex;align-items:center;gap:7px;font-size:12px}
+.dp-alos{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.dp-alos li{display:flex;align-items:center;gap:7px;min-width:0;font-size:12px}
 .dp-alos li label{display:flex;align-items:center;gap:7px;min-width:0;flex:1;cursor:pointer}
 .dp-alos li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-alos li>span:nth-child(2){flex:1}
+.dp-alos em{margin-left:auto;font-style:normal;font-size:11px;font-weight:800;white-space:nowrap;color:var(--muted)}
+.dp-alos em.verde{color:var(--green)}.dp-alos em.rojo{color:var(--danger)}.dp-alos em.ambar{color:var(--amber)}
 .dp-alos input{width:16px;height:16px;accent-color:var(--accent);flex:none}
-.dp-punto{width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted2)}
-.dp-punto.consultando{background:var(--blue)}.dp-punto.disponible{background:var(--green)}.dp-punto.no_disponible{background:var(--danger)}.dp-punto.alternativa{background:var(--amber)}
-.dp-pie{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
-.dp-pie .btn-sm{margin-left:auto}
+.dp-punto{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none;background:var(--muted2)}
+.dp-punto.tomada{background:var(--amber)}.dp-punto.consultando{background:var(--blue)}.dp-punto.disponible{background:var(--green)}.dp-punto.no_disponible{background:var(--danger)}.dp-punto.alternativa{background:var(--amber)}
+.dp-pie{display:flex;align-items:center;gap:7px;min-width:0;padding-top:7px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+.dp-quien{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dp-quien i{font-size:9px;opacity:.7}
+.dp-t{margin-left:auto;white-space:nowrap}
+.dp-ava{flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;font-size:9px;font-weight:800;background:var(--accent-soft);color:var(--accent-ink)}
+.dp-ava[data-c="1"]{background:rgba(74,158,255,.14);color:var(--blue)}
+.dp-ava[data-c="2"]{background:rgba(16,185,129,.15);color:var(--green)}
+.dp-ava[data-c="3"]{background:rgba(245,181,68,.15);color:var(--amber)}
+.dp-ava[data-c="4"]{background:rgba(160,107,255,.15);color:var(--purple)}
 .dp-cargando{opacity:.75;pointer-events:none}.dp-cargando::after{content:'';display:inline-block;width:.8em;height:.8em;margin-left:.45em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-.12em;animation:dp-gira .6s linear infinite}
 @keyframes dp-gira{to{transform:rotate(360deg)}}
 .dp-vacio{padding:14px 4px;text-align:center;font-size:11.5px;color:var(--muted2)}
-.dp-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:9px}
+.dp-nada{display:flex;flex-direction:column;align-items:center;gap:9px;padding:28px 14px;border:1px dashed var(--line2);border-radius:14px;text-align:center;color:var(--muted)}
+.dp-nada>i{font-size:22px;color:var(--accent-ink)}
+.dp-nada p{max-width:440px;margin:0;font-size:12.5px;line-height:1.5}
+.dp-grupo{margin:0 0 22px}
+.dp-grupo>h3{display:flex;align-items:center;gap:7px;margin:0 0 9px;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.dp-grupo>h3 span{padding:2px 7px;border-radius:999px;background:var(--line);font-size:11px;letter-spacing:0;color:var(--txt)}
+.dp-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:9px}
 .dp-barra{position:sticky;bottom:calc(11px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:14px;padding:9px 11px;border:1px solid var(--accent-ink);border-radius:12px;background:var(--panel-solid);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .dp-barra span{flex:1 1 auto;font-size:12px;font-weight:700}
 .dp-velo{position:fixed;inset:0;z-index:1200;display:flex;justify-content:flex-end;background:rgba(0,0,0,.45)}
@@ -56,15 +101,22 @@ const CSS = `
 .dp-velo.centro .dp-panel{height:auto;max-height:92%;border:1px solid var(--line2);border-radius:14px}
 .dp-pcab{display:flex;align-items:center;gap:9px;padding:14px 14px 11px;border-bottom:1px solid var(--line)}
 .dp-pcab h3{flex:1;margin:0;font-size:15px;font-weight:800}
-.dp-x{width:36px;height:36px;border:1px solid var(--line2);border-radius:9px;background:transparent;color:var(--txt);cursor:pointer;font-size:14px}
+.dp-x{flex:none;width:36px;height:36px;border:1px solid var(--line2);border-radius:9px;background:transparent;color:var(--txt);cursor:pointer;font-size:14px}
 .dp-cuerpo{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
-.dp-bloque{display:flex;flex-direction:column;gap:7px}
+.dp-bloque{display:flex;flex-direction:column;gap:9px}
 .dp-bloque>h4{margin:0;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.dp-datos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg2)}
+.dp-datos small{display:block;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.dp-datos b{display:block;margin-top:2px;font-size:12.5px;font-weight:700}
+.dp-datos span{display:block;font-size:11px;color:var(--muted)}
+.dp-nota{display:flex;align-items:baseline;gap:7px;padding:9px 11px;border-radius:10px;background:var(--bg2);font-size:12px;color:var(--muted)}
+.dp-nota b{color:var(--txt)}
 .dp-acc{display:flex;flex-wrap:wrap;gap:7px}
 .dp-item{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid var(--line2);border-radius:12px}
 .dp-item.viejo{opacity:.62}
 .dp-item h5{display:flex;align-items:center;gap:7px;margin:0;font-size:13px;font-weight:800}
 .dp-item h5 span{flex:1}
+.dp-item h5 .dp-punto,.dp-item h5 .dp-chip{flex:none}
 .dp-precio{font-size:14px;font-weight:800;color:var(--green)}
 .dp-alt{display:flex;align-items:center;gap:7px;padding:7px 9px;border:1px dashed var(--line2);border-radius:9px;font-size:12px}
 .dp-alt span{flex:1}
@@ -72,38 +124,93 @@ const CSS = `
 .dp-form .ancho{grid-column:1/-1}
 .dp-campo{display:flex;flex-direction:column;gap:4px;min-width:0}
 .dp-campo>span{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-.dp-campo input,.dp-campo select,.dp-campo textarea,.dp-chat textarea{width:100%;box-sizing:border-box;min-height:40px;padding:8px 10px;border:1px solid var(--line2);border-radius:9px;background:var(--bg2);color:var(--txt);font:inherit;font-size:13px}
+.dp-campo input,.dp-campo select,.dp-campo textarea,.dp-chat textarea,.dp-busca input,.dp-edades input{width:100%;box-sizing:border-box;min-height:40px;padding:8px 10px;border:1px solid var(--line2);border-radius:10px;background:var(--bg2);color:var(--txt);font:inherit;font-size:13px}
 .dp-campo textarea{min-height:64px;resize:vertical}
-.dp-campo input:focus,.dp-campo select:focus,.dp-campo textarea:focus,.dp-chat textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.dp-campo input:focus,.dp-campo select:focus,.dp-campo textarea:focus,.dp-chat textarea:focus,.dp-busca input:focus,.dp-edades input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .dp-fila{display:flex;flex-wrap:wrap;align-items:flex-end;gap:7px;padding:9px;border:1px solid var(--line);border-radius:12px}
 .dp-fila .dp-campo{flex:1 1 90px}
 .dp-fila .dp-campo.grande{flex:3 1 200px}
-.dp-sug{display:flex;flex-direction:column;border:1px solid var(--line2);border-radius:9px;background:var(--panel-solid);max-height:180px;overflow:auto}
-.dp-sug button{text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);padding:8px 10px;color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer}
-.dp-sug button:hover{background:var(--accent-soft)}
-.dp-check{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600}
+.dp-sug{display:flex;flex-direction:column;border:1px solid var(--line2);border-radius:10px;background:var(--panel-solid);max-height:260px;overflow:auto}
+.dp-sug button{display:flex;align-items:center;gap:9px;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);padding:9px 11px;color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer}
+.dp-sug button:last-child{border-bottom:0}
+.dp-sug button:hover,.dp-sug button:focus-visible{background:var(--accent-soft);outline:none}
+.dp-sug button>i{flex:none;width:14px;font-size:11px;color:var(--muted)}
+.dp-sug button>span{flex:1;min-width:0;font-weight:600}
+.dp-sug small{display:block;font-size:11px;font-weight:400;color:var(--muted)}
+.dp-sug em{flex:none;font-style:normal;font-size:11.5px;font-weight:800;color:var(--green)}
+.dp-check{display:flex;align-items:center;gap:9px;min-height:44px;font-size:12.5px;font-weight:600}
 .dp-check input{width:18px;height:18px;accent-color:var(--accent)}
-.dp-ppie{display:flex;justify-content:flex-end;gap:7px;padding:11px 14px calc(11px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
+.dp-ppie{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:7px;padding:11px 14px calc(11px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
 .dp-ppie .btn-acc,.dp-ppie .btn-sec{min-height:40px}
+.dp-resumen{flex:1 1 160px;min-width:0;font-size:11.5px;color:var(--muted)}
+.dp-pform{display:flex;flex-direction:column;gap:22px}
+.dp-paso{display:flex;flex-direction:column;gap:9px}
+.dp-paso>h4{display:flex;align-items:center;gap:7px;margin:0;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.dp-paso>h4 b{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);font-size:10px;letter-spacing:0}
+.dp-busca{position:relative}
+.dp-busca input{min-height:44px;font-size:14px}
+.dp-busca .dp-sug{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:3;box-shadow:0 12px 30px rgba(0,0,0,.35)}
+.dp-elegido{display:flex;flex-direction:column;gap:9px;padding:11px;border:1px solid var(--line2);border-radius:12px;background:var(--bg2)}
+.dp-elegido-cab{display:flex;align-items:flex-start;gap:9px}
+.dp-elegido-cab>i{margin-top:3px;color:var(--accent-ink)}
+.dp-elegido-cab div{flex:1;min-width:0}
+.dp-elegido-cab b{display:block;font-size:13.5px;font-weight:800}
+.dp-elegido-cab small{display:block;font-size:11.5px;color:var(--muted)}
+.dp-ops{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.dp-ops>span{margin-right:4px;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.dp-op{min-height:32px;padding:4px 11px;border:1px solid var(--line2);border-radius:999px;background:transparent;color:var(--txt);font:inherit;font-size:12px;cursor:pointer;transition:border-color .16s,background .16s}
+.dp-op:hover{border-color:var(--accent-ink)}
+.dp-op[aria-pressed="true"]{border-color:var(--accent-ink);background:var(--accent-soft);color:var(--accent-ink);font-weight:700}
+.dp-fechas{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.dp-hab{display:flex;flex-direction:column;gap:2px;padding:7px 11px;border:1px solid var(--line);border-radius:12px}
+.dp-hab-cab{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:800;color:var(--muted)}
+.dp-step{display:flex;align-items:center;justify-content:space-between;gap:9px;min-height:44px}
+.dp-step>span:first-child{font-size:13px;font-weight:600}
+.dp-step small{font-size:11px;font-weight:400;color:var(--muted)}
+.dp-step-c{display:inline-flex;align-items:center;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.dp-step-c button{width:40px;height:38px;border:0;background:transparent;color:var(--txt);font:inherit;font-size:16px;cursor:pointer;transition:background .16s}
+.dp-step-c button:hover:not(:disabled){background:var(--accent-soft)}
+.dp-step-c button:disabled{opacity:.35;cursor:default}
+.dp-step-c output{min-width:30px;text-align:center;font-size:14px;font-weight:800}
+.dp-edades{display:flex;flex-wrap:wrap;gap:7px;padding:2px 0 7px}
+.dp-edades label{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+.dp-edades input{width:72px;min-height:36px}
+.dp-edades input.falta{border-color:var(--danger)}
+.dp-mas-op{border:1px solid var(--line);border-radius:12px}
+.dp-mas-op summary{display:flex;align-items:center;gap:7px;min-height:44px;padding:0 11px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;list-style:none}
+.dp-mas-op .dp-form{padding:2px 11px 11px}
+.dp-link{align-self:flex-start;background:transparent;border:0;padding:4px 0;color:var(--accent-ink);font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.dp-link:hover{text-decoration:underline}
 .dp-tl{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
 .dp-tl li{font-size:11.5px;color:var(--muted);padding-left:11px;border-left:2px solid var(--line2)}
 .dp-tl li b{color:var(--txt)}
 .dp-chat{display:flex;flex-direction:column;gap:7px}
-.dp-msgs{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto}
-.dp-msg{max-width:82%;padding:7px 10px;border-radius:12px;background:var(--bg2);font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere}
-.dp-msg.mio{align-self:flex-end;background:var(--accent-soft)}
-.dp-msg small{display:block;font-size:10px;color:var(--muted);margin-bottom:2px}
+.dp-msgs{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto}
+.dp-msg{max-width:82%;padding:7px 11px;border-radius:12px 12px 12px 4px;background:var(--bg2);font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.dp-msg.mio{align-self:flex-end;border-radius:12px 12px 4px 12px;background:var(--accent-soft)}
+.dp-msg small{display:block;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:2px}
 .dp-chat form{display:flex;gap:7px;align-items:flex-end}
 .dp-chat textarea{min-height:40px;max-height:120px;resize:none}
 .dp-wa{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid var(--line2);border-radius:12px}
 .dp-wa pre{margin:0;padding:9px;border-radius:9px;background:var(--bg2);font:inherit;font-size:12px;white-space:pre-wrap}
+@media (min-width:821px){
+  .dp-col-l{max-height:68vh;overflow:auto;overscroll-behavior:contain}
+}
+@media (max-width:1100px) and (min-width:821px){
+  .dp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 @media (max-width:820px){
   .dp-tabs{display:flex}
+  .dp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dp-kpi{padding:9px 11px}
+  .dp-kpi>i{display:none}
+  .dp-rend-g{grid-template-columns:1fr}
   .dp-kanban{grid-template-columns:1fr}
   .dp-kanban .dp-col{display:none}
   .dp-kanban .dp-col.activa{display:flex}
   .dp-form{grid-template-columns:1fr}
   .dp-panel{border-left:0}
+  .dp-resumen{flex-basis:100%}
 }
 `;
 const COLS = [['en_cola', 'En cola'], ['tomada', 'Tomada'], ['consultando', 'Consultando'], ['respondida', 'Respondida']];
@@ -140,8 +247,22 @@ const fCorta = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
 const noches = s => Math.round((new Date(s.check_out) - new Date(s.check_in)) / DIA);
 const hace = t => { const m = Math.max(0, Math.round((Date.now() - new Date(t)) / 6e4)); return m < 60 ? m + ' min' : m < 1440 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : Math.floor(m / 1440) + ' d'; };
 const hora = t => new Date(t).toLocaleString('es-VE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' });
-const habTxt = h => (h || []).map((x, i) => `Hab ${i + 1}: ${x.adultos}A` + ((x.ninos || []).length ? `+${x.ninos.length}N (${x.ninos.join(', ')} años)` : '') + (x.infantes ? `+${x.infantes}inf` : '')).join(' · ');
-const habLargo = h => (h || []).map((x, i) => `Hab ${i + 1}: ${x.adultos} adulto${x.adultos > 1 ? 's' : ''}` + ((x.ninos || []).length ? ` + ${x.ninos.length} niño${x.ninos.length > 1 ? 's' : ''} (${x.ninos.join(', ')} años)` : '') + (x.infantes ? ` + ${x.infantes} infante${x.infantes > 1 ? 's' : ''}` : '')).join('\n');
+// Edad vacía = el asesor no la cargó (antes salía «0 años» desde Cotizaciones).
+const ninosTxt = ns => ns.map(e => e == null || e === '' ? '?' : e).join(', ');
+const habTxt = h => (h || []).map((x, i) => `Hab ${i + 1}: ${x.adultos}A` + ((x.ninos || []).length ? `+${x.ninos.length}N (${ninosTxt(x.ninos)} años)` : '') + (x.infantes ? `+${x.infantes}inf` : '')).join(' · ');
+const habLargo = h => (h || []).map((x, i) => `Hab ${i + 1}: ${x.adultos} adulto${x.adultos > 1 ? 's' : ''}` + ((x.ninos || []).length ? ` + ${x.ninos.length} niño${x.ninos.length > 1 ? 's' : ''} (${ninosTxt(x.ninos)} años)` : '') + (x.infantes ? ` + ${x.infantes} infante${x.infantes > 1 ? 's' : ''}` : '')).join('\n');
+const plural = (n, s, p) => `${n} ${n === 1 ? s : (p || s + 's')}`;
+const paxTxt = h => {
+  const t = (h || []).reduce((a, x) => ({ a: a.a + (+x.adultos || 0), n: a.n + (x.ninos || []).length, i: a.i + (+x.infantes || 0) }), { a: 0, n: 0, i: 0 });
+  return [plural(t.a, 'adulto'), t.n && plural(t.n, 'niño'), t.i && plural(t.i, 'infante')].filter(Boolean).join(' + ') + ((h || []).length > 1 ? ` · ${h.length} hab.` : '');
+};
+// leads.personas es texto libre («2», «2 adultos», «{{cuf_…}}»): solo se usa si dice claramente cuántos adultos.
+const paxDeLead = p => { const s = String(p || ''), m = s.match(/(\d{1,2})\s*adult/i) || (/ni[ñn]/i.test(s) ? null : s.match(/^\s*(\d{1,2})\s*(personas?|pax)?\s*$/i)); const n = m ? +m[1] : 0; return n >= 1 && n <= 12 ? n : 2; };
+const sumarDias = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const TIPOS = ['hotel', 'posada', 'apartamento'];
+const iniciales = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+const tono = n => [...String(n || '')].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % 5;
+const precioCorto = it => `${it.moneda === 'EUR' ? '€' : it.moneda === 'VES' ? 'Bs ' : '$'}${Number(it.precio_confirmado).toLocaleString('es-VE', { maximumFractionDigits: 0 })}`;
 const pronto = s => (new Date(s.check_in) - new Date(hoyISO())) / DIA <= 7;
 const viejo = it => it.respondida_en && ['disponible', 'alternativa'].includes(it.estado) && Date.now() - new Date(it.respondida_en) > DIA;
 const telWa = t => { let d = String(t || '').replace(/\D/g, ''); if (d.startsWith('0')) d = '58' + d.slice(1); return d.length >= 10 ? d : ''; };
@@ -161,8 +282,9 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
   }
 
   function badge() {
-    const n = admin ? lista.filter(s => s.estado === 'en_cola').length : lista.reduce((a, s) => a + (s.no_leidos || 0), 0);
-    const b = document.getElementById('nav-disp-count'); if (b) { b.textContent = n; b.hidden = !n; }
+    const n = admin ? lista.filter(s => ['en_cola', 'tomada', 'consultando'].includes(s.estado)).length : lista.reduce((a, s) => a + (s.no_leidos || 0), 0);
+    const b = document.getElementById('nav-disp-count'); if (b) { b.textContent = n; b.hidden = !n; b.style.display = n ? '' : 'none'; }
+    if (admin) document.querySelector('#sidebar-nav > .nav-item[data-sec="disponibilidad"]')?.classList.toggle('pendientes', n > 0);
   }
   async function traer() {
     const d = await rpc('disp_listar', { p_vista: vista, p_dias: 7 }, true);
@@ -178,7 +300,11 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     if (raiz?.offsetParent) pintar();
     if (id && d && tk === abrirTk) abrir(id, true, d);
   }
-  function programar() { if (Date.now() < silencio) return; clearTimeout(recarga); recarga = setTimeout(() => refrescar(abierta, true), 400); }
+  // Un mensaje de chat ajeno no se calla aunque llegue justo tras una acción propia: antes se perdía hasta el próximo evento.
+  function programar(ev) {
+    const ajeno = ev?.table === 'disponibilidad_mensajes' && ev.new?.usuario_id && ev.new.usuario_id !== uid();
+    if (Date.now() < silencio && !ajeno) return; clearTimeout(recarga); recarga = setTimeout(() => refrescar(abierta, true), 400);
+  }
   function vigilar() {
     if (vigilando || !puedeCrear) return; vigilando = true;
     canal = sb.channel('disp-' + Math.random().toString(36).slice(2));
@@ -199,43 +325,59 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       s.cambio_tras_consulta && '<span class="dp-chip acc">CAMBIÓ</span>', s.fuera_horario && s.estado === 'en_cola' && '<span class="dp-chip">FUERA DE HORARIO</span>',
       s.no_leidos && `<span class="dp-chip azul"><i class="fas fa-comment"></i> ${s.no_leidos}</span>`, s.padre_id && `<span class="dp-chip">ALT. DE #${s.padre_id}</span>`].filter(Boolean).join('');
   }
+  const ava = n => n ? `<span class="dp-ava" data-c="${tono(n)}" title="${esc(n)}">${esc(iniciales(n))}</span>` : '';
   function tarjeta(s, conSel) {
-    const espera = s.estado === 'en_cola' ? 'Espera ' + hace(s.creado_en) : s.estado === 'respondida' ? 'Respondida ' + hace(s.respondida_en) : (s.tomada_por_nombre || '') + ' · ' + hace(s.tomada_en || s.creado_en);
+    const t = s.estado === 'en_cola' ? 'espera ' + hace(s.creado_en) : s.estado === 'respondida' ? 'hace ' + hace(s.respondida_en) : hace(s.tomada_en || s.creado_en);
     const items = (s.items || []).map(it => {
       const marcable = conSel && admin && ['pendiente', 'consultando'].includes(it.estado);
+      const der = it.estado === 'disponible' && it.precio_confirmado != null ? `<em class="verde">${esc(precioCorto(it))}</em>`
+        : ['disponible', 'no_disponible', 'alternativa'].includes(it.estado) ? `<em class="${COLOR_ITEM[it.estado]}">${ESTADO_ITEM[it.estado]}</em>` : '';
       const txt = `<span class="dp-punto ${it.estado}" title="${ESTADO_ITEM[it.estado]}"></span><span>${esc(it.alojamiento)}</span>`;
-      return `<li>${marcable ? `<label data-no-abrir><input type="checkbox" data-sel="${it.id}"${sel.has(it.id) ? ' checked' : ''}>${txt}</label>` : txt}</li>`;
+      return `<li>${marcable ? `<label data-no-abrir><input type="checkbox" data-sel="${it.id}"${sel.has(it.id) ? ' checked' : ''} aria-label="Elegir ${esc(it.alojamiento)}">${txt}</label>` : txt}${der}</li>`;
     }).join('');
-    return `<article class="dp-card${s.urgente ? ' urg' : ''}" data-abrir="${s.id}" draggable="${admin}" tabindex="0">
+    const ch = chips(s);
+    const quien = admin ? `${ava(s.creado_por_nombre)}<span class="dp-quien">${esc(s.creado_por_nombre || '')}${s.tomada_por_nombre && s.estado !== 'en_cola' ? ` <i class="fas fa-arrow-right"></i> ${esc(s.tomada_por_nombre)}` : ''}</span>`
+      : s.estado === 'en_cola' ? `<span class="dp-chip">Puesto ${s.puesto || '—'} en la cola</span>`
+      : `${ava(s.tomada_por_nombre)}<span class="dp-chip ${s.estado === 'respondida' ? 'verde' : s.estado === 'cancelada' ? 'rojo' : 'azul'}">${ESTADO_SOL[s.estado]}</span>`;
+    return `<article class="dp-card${s.urgente ? ' urg' : ''}${s.estado === 'cancelada' ? ' apagada' : ''}" data-abrir="${s.id}" draggable="${admin}" tabindex="0">
       <div class="dp-cab"><span>${esc(s.cliente_nombre || s.destino || 'Solicitud')}</span><small>#${s.id}</small></div>
-      <div class="dp-chips">${chips(s)}</div>
-      <div class="dp-linea"><b>${fCorta(s.check_in)} → ${fCorta(s.check_out)}</b> · ${noches(s)} n · ${esc(habTxt(s.habitaciones))}</div>
+      <div class="dp-meta"><span><i class="fas fa-calendar"></i><b>${fCorta(s.check_in)} → ${fCorta(s.check_out)}</b>· ${noches(s)} n</span><span><i class="fas fa-user-group"></i>${esc(paxTxt(s.habitaciones))}</span></div>
+      ${ch ? `<div class="dp-chips">${ch}</div>` : ''}
       <ul class="dp-alos">${items}</ul>
-      <div class="dp-pie"><span>${admin ? esc(s.creado_por_nombre || '') + ' · ' : ''}${esc(espera)}</span>
-        ${admin && s.estado === 'en_cola' ? `<button class="btn-sm" data-tomar="${s.id}" data-no-abrir>Tomar</button>` : ''}
-        ${!admin && s.estado === 'en_cola' ? `<span class="dp-chip">Puesto ${s.puesto || '—'}</span>` : ''}
-        ${!admin && s.estado !== 'en_cola' ? `<span class="dp-chip ${s.estado === 'respondida' ? 'verde' : 'azul'}">${ESTADO_SOL[s.estado]}</span>` : ''}</div>
+      <div class="dp-pie">${quien}<span class="dp-t">${esc(t)}</span>${admin && s.estado === 'en_cola' ? `<button class="btn-sm" data-tomar="${s.id}" data-no-abrir>Tomar</button>` : ''}</div>
       ${!admin && s.estado === 'en_cola' && s.fuera_horario ? '<div class="dp-linea">Se atenderá desde las 7:00</div>' : ''}
     </article>`;
   }
 
+  let verResp = false, rendAbierto = false;
+  const COL_PUNTO = { en_cola: '', tomada: 'tomada', consultando: 'consultando', respondida: 'disponible' };
+  const GRUPOS = [['Esperando al admin', s => ['en_cola', 'tomada'].includes(s.estado)], ['Consultando al proveedor', s => s.estado === 'consultando'],
+    ['Respondidas', s => s.estado === 'respondida'], ['Canceladas', s => s.estado === 'cancelada']];
+  const nada = txt => `<div class="dp-nada"><i class="fas fa-calendar-check"></i><p>${txt}</p>${puedeCrear ? '<button class="btn-acc" data-nueva><i class="fas fa-plus"></i> Pedir disponibilidad</button>' : ''}</div>`;
   function pintar() {
-    const cab = `<div class="dp-top"><h2>Disponibilidad</h2>
-      ${admin ? `<div class="dp-seg" role="group"><button data-vista="tablero" aria-pressed="${vista === 'tablero'}">Tablero</button><button data-vista="mias" aria-pressed="${vista === 'mias'}">Mis solicitudes</button></div>` : ''}
+    const abiertas = lista.filter(s => ['en_cola', 'tomada', 'consultando'].includes(s.estado)), urg = abiertas.filter(s => s.urgente).length;
+    const sub = (abiertas.length ? plural(abiertas.length, 'abierta') + (urg ? ` · ${plural(urg, 'urgente')}` : '') : 'Nada pendiente') + ' · últimos 7 días';
+    const cab = `<div class="dp-top"><div class="dp-tit"><h2>Disponibilidad</h2><p>${sub}</p></div>
+      ${admin ? `<div class="dp-seg" role="group" aria-label="Vista"><button data-vista="tablero" aria-pressed="${vista === 'tablero'}">Tablero</button><button data-vista="mias" aria-pressed="${vista === 'mias'}">Mis solicitudes</button></div>` : ''}
       ${puedeCrear ? '<button class="btn-acc" data-nueva><i class="fas fa-plus"></i> Pedir disponibilidad</button>' : ''}</div>
-      ${admin && vista === 'tablero' ? '<div class="dp-met" id="dp-met"></div>' : ''}`;
+      ${admin && vista === 'tablero' ? '<div id="dp-met"></div>' : ''}`;
     if (vista === 'tablero') {
       const por = Object.fromEntries(COLS.map(([k]) => [k, lista.filter(s => s.estado === k)]));
+      por.respondida.sort((a, b) => String(b.respondida_en || '').localeCompare(String(a.respondida_en || '')));
+      const col = (k, t) => {
+        const xs = por[k], ver = k === 'respondida' && !verResp ? xs.slice(0, 6) : xs;
+        const mas = xs.length > ver.length ? `<button class="dp-mas" data-mas-resp>Ver ${xs.length - ver.length} más</button>` : k === 'respondida' && verResp && xs.length > 6 ? '<button class="dp-mas" data-mas-resp>Ver menos</button>' : '';
+        return `<section class="dp-col${colMovil === k ? ' activa' : ''}" data-columna="${k}"><h3><i class="dp-punto ${COL_PUNTO[k]}"></i>${t}<span>${xs.length}</span></h3>
+          <div class="dp-col-l">${ver.map(s => tarjeta(s, k !== 'respondida')).join('') || '<div class="dp-vacio">Nada aquí</div>'}${mas}</div></section>`;
+      };
       raiz.innerHTML = cab + `<div class="dp-tabs" role="group">${COLS.map(([k, t]) => `<button data-col="${k}" aria-pressed="${colMovil === k}">${t} ${por[k].length}</button>`).join('')}</div>
-        <div class="dp-kanban">${COLS.map(([k, t]) => `<section class="dp-col${colMovil === k ? ' activa' : ''}" data-columna="${k}"><h3>${t}<span>${por[k].length}</span></h3>
-          ${por[k].map(s => tarjeta(s, k !== 'respondida')).join('') || '<div class="dp-vacio">Nada aquí</div>'}</section>`).join('')}</div>
+        <div class="dp-kanban">${COLS.map(([k, t]) => col(k, t)).join('')}</div>
         <div class="dp-barra" id="dp-barra"${sel.size ? '' : ' hidden'}><span>${sel.size} alojamiento${sel.size === 1 ? '' : 's'} elegido${sel.size === 1 ? '' : 's'}</span>
           <button class="btn-sec" data-limpiar>Quitar selección</button><button class="btn-acc" data-juntas><i class="fa-brands fa-whatsapp"></i> Consultar juntas</button></div>`;
-      if (lista.length) metricasPintar();
+      metricasPintar();
     } else {
-      const abiertas = lista.filter(s => !['respondida', 'cancelada'].includes(s.estado)), cerradas = lista.filter(s => ['respondida', 'cancelada'].includes(s.estado));
-      raiz.innerHTML = cab + (lista.length ? `<div class="dp-lista">${[...abiertas, ...cerradas].map(s => tarjeta(s, false)).join('')}</div>`
-        : '<div class="dp-vacio">No tienes solicitudes en los últimos 7 días. Pide disponibilidad desde aquí, desde una cotización o desde el lead.</div>');
+      raiz.innerHTML = cab + (lista.length ? GRUPOS.map(([t, f]) => { const xs = lista.filter(f); return xs.length ? `<section class="dp-grupo"><h3>${t}<span>${xs.length}</span></h3><div class="dp-lista">${xs.map(s => tarjeta(s, false)).join('')}</div></section>` : ''; }).join('')
+        : nada('No tienes solicitudes en los últimos 7 días. Puedes pedir desde aquí, desde una cotización, desde el lead, desde la ficha del Tarifario o escribiéndole a Lyra por WhatsApp.'));
     }
   }
 
@@ -244,12 +386,14 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
   function metricasPintar() {
     const box = document.getElementById('dp-met'); if (!box || !ultMet) return;
     const m = ultMet, min = v => v == null ? '—' : v < 60 ? Math.round(v) + ' min' : (v / 60).toFixed(1) + ' h';
-    box.innerHTML = `<div><small>Pendientes</small><b>${m.pendientes ?? 0}</b><p>${m.en_cola ?? 0} en cola</p></div>
-      <div><small>Hasta tomarla</small><b>${min(m.min_tomar)}</b><p>mediana · 7 días</p></div>
-      <div><small>Hasta responder</small><b>${min(m.min_respuesta)}</b><p>mediana · 7 días</p></div>
-      <div><small>Disponible</small><b>${m.pct_disponible != null ? Math.round(m.pct_disponible) + ' %' : '—'}</b><p>${m.creadas ?? 0} pedidas</p></div>
-      ${(m.por_admin || []).length ? `<div><small>Por admin</small><p>${m.por_admin.map(a => `${esc(a.nombre)}: ${a.respondidas} · ${min(a.min_mediana)}`).join('<br>')}</p></div>` : ''}
-      ${(m.por_proveedor || []).length ? `<div><small>Por proveedor</small><p>${m.por_proveedor.slice(0, 4).map(p => `${esc(p.nombre || 'Sin proveedor')}: ${p.consultas} · ${min(p.min_mediana)}`).join('<br>')}</p></div>` : ''}`;
+    const kpi = (c, ic, t, v, s) => `<div class="dp-kpi" data-c="${c}"><i class="fas ${ic}"></i><div><small>${t}</small><b>${v}</b><span>${s}</span></div></div>`;
+    const filas = (xs, n, nom) => { const max = Math.max(1, ...xs.map(n)); return xs.map(x => `<div class="dp-rfila"><span>${esc(nom(x))}</span><em>${n(x)} · ${min(x.min_mediana)}</em><div class="dp-barrita"><i style="width:${Math.round(n(x) / max * 100)}%"></i></div></div>`).join('') || '<div class="dp-vacio">Sin datos</div>'; };
+    const pa = (m.por_admin || []).filter(a => !String(a.nombre || '').startsWith('__gate')), pp = (m.por_proveedor || []).slice(0, 6);
+    box.innerHTML = `<div class="dp-kpis">${kpi('acc', 'fa-inbox', 'Pendientes', m.pendientes ?? 0, `${m.en_cola ?? 0} en cola`)}${kpi('ambar', 'fa-hand', 'Hasta tomarla', min(m.min_tomar), 'mediana')}${kpi('azul', 'fa-stopwatch', 'Hasta responder', min(m.min_respuesta), 'mediana')}${kpi('verde', 'fa-circle-check', 'Disponible', m.pct_disponible != null ? Math.round(m.pct_disponible) + ' %' : '—', `de ${m.creadas ?? 0} pedidas`)}</div>
+      ${pa.length || pp.length ? `<details class="dp-rend"${rendAbierto ? ' open' : ''}><summary><i class="fas fa-chart-simple"></i> Rendimiento por admin y proveedor · 7 días</summary><div class="dp-rend-g">
+        <div><h4>Por admin <small>· respondidas · mediana</small></h4>${filas(pa, x => x.respondidas, x => x.nombre)}</div>
+        <div><h4>Por proveedor <small>· consultas · mediana</small></h4>${filas(pp, x => x.consultas, x => x.nombre || 'Sin proveedor')}</div></div></details>` : ''}`;
+    box.querySelector('details')?.addEventListener('toggle', e => { rendAbierto = e.target.open; });
   }
 
   raiz.addEventListener('click', async e => {
@@ -257,6 +401,7 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     if (t.dataset.vista) { vista = t.dataset.vista; sel.clear(); return cargar(); }
     if (t.dataset.col) { colMovil = t.dataset.col; return pintar(); }
     if (t.dataset.nueva !== undefined) return pedir({});
+    if (t.dataset.masResp !== undefined) { verResp = !verResp; return pintar(); }
     if (t.dataset.sel) { const id = +t.dataset.sel; t.checked ? sel.add(id) : sel.delete(id); const b = document.getElementById('dp-barra'); if (b) { b.hidden = !sel.size; b.querySelector('span').textContent = `${sel.size} alojamiento${sel.size === 1 ? '' : 's'} elegido${sel.size === 1 ? '' : 's'}`; } return; }
     if (t.dataset.limpiar !== undefined) { sel.clear(); return pintar(); }
     if (t.dataset.juntas !== undefined) return consultar([...sel]);
@@ -327,11 +472,15 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       <div data-resp-form></div></div>`).join('');
     const v = panel(`#${s.id} · ${esc(s.cliente_nombre || s.destino || 'Solicitud')}`, `
       <div class="dp-bloque"><div class="dp-chips"><span class="dp-chip ${s.estado === 'respondida' ? 'verde' : s.estado === 'cancelada' ? 'rojo' : 'azul'}">${ESTADO_SOL[s.estado]}</span>${chips(s)}<span class="dp-chip">${CANALES[s.canal] || s.canal}</span></div>
-        <div class="dp-linea"><b>${fCorta(s.check_in)} → ${fCorta(s.check_out)}</b> · ${noches(s)} noches${s.destino ? ' · ' + esc(s.destino) : ''}</div>
-        <div class="dp-linea">${esc(habTxt(s.habitaciones))}</div>
-        <div class="dp-linea">Pidió <b>${esc(s.creado_por_nombre || '')}</b> ${hora(s.creado_en)}${s.tomada_por_nombre ? ` · atiende <b>${esc(s.tomada_por_nombre)}</b>` : ''}${s.estado === 'en_cola' ? ` · puesto ${s.puesto || '—'} en la cola` : ''}</div>
-        ${s.estado === 'en_cola' && s.fuera_horario ? '<div class="dp-linea">Llegó fuera de horario: se atenderá desde las 7:00.</div>' : ''}
-        ${s.notas ? `<div class="dp-linea">${esc(s.notas)}</div>` : ''}
+        <div class="dp-datos">
+          <div><small>Fechas</small><b>${fCorta(s.check_in)} → ${fCorta(s.check_out)}</b><span>${plural(noches(s), 'noche')}</span></div>
+          <div><small>Personas</small><b>${esc(paxTxt(s.habitaciones))}</b>${(s.habitaciones || []).some(h => (h.ninos || []).length) || (s.habitaciones || []).length > 1 ? `<span>${esc(habTxt(s.habitaciones))}</span>` : ''}</div>
+          ${s.destino ? `<div><small>Destino</small><b>${esc(s.destino)}</b></div>` : ''}
+          <div><small>Pidió</small><b>${esc(s.creado_por_nombre || '')}</b><span>${hora(s.creado_en)}</span></div>
+          <div><small>Atiende</small><b>${esc(s.tomada_por_nombre || (s.estado === 'en_cola' ? 'En cola' : '—'))}</b>${s.estado === 'en_cola' ? `<span>puesto ${s.puesto || '—'}</span>` : ''}</div>
+        </div>
+        ${s.estado === 'en_cola' && s.fuera_horario ? '<div class="dp-nota"><i class="fas fa-moon"></i> Llegó fuera de horario: se atenderá desde las 7:00.</div>' : ''}
+        ${s.notas ? `<div class="dp-nota"><i class="fas fa-note-sticky"></i> ${esc(s.notas)}</div>` : ''}
         <div class="dp-acc">${accs}</div></div>
       <div class="dp-bloque"><h4>Alojamientos</h4>${items}</div>
       ${bloqueLyra(d)}
@@ -404,9 +553,11 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       default: return ev.accion.replace(/_/g, ' ');
     }
   }
+  const CANAL_MSG = { telegram: 'Telegram', lyra: 'vía Lyra' };
   function pintarChat(d) {
     const box = document.getElementById('dp-msgs'); if (!box) return;
-    box.innerHTML = (d.mensajes || []).map(m => `<div class="dp-msg${m.mio ? ' mio' : ''}"><small>${esc(m.usuario_nombre || '')} · ${hora(m.creado_en)}${m.canal === 'telegram' ? ' · Telegram' : ''}</small>${esc(m.texto)}</div>`).join('') || '<div class="dp-vacio">Sin mensajes. Pregunta aquí en vez de WhatsApp.</div>';
+    box.innerHTML = (d.mensajes || []).map(m => `<div class="dp-msg${m.mio ? ' mio' : ''}"><small>${m.mio ? 'Tú' : esc(m.usuario_nombre || '')} · ${hora(m.creado_en)}${CANAL_MSG[m.canal] ? ' · ' + CANAL_MSG[m.canal] : ''}</small>${esc(m.texto)}</div>`).join('')
+      || `<div class="dp-vacio">Sin mensajes. Lo que escribas aquí le llega al ${admin && d.solicitud?.creado_por_id !== uid() ? 'asesor' : 'admin'} al momento.</div>`;
     box.scrollTop = box.scrollHeight;
   }
 
@@ -552,86 +703,177 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
   }
 
   // ---------- Formulario (nueva o editar) ----------
+  // Lo mínimo es alojamiento + fechas + personas (decisión del dueño 2026-11-25). Plan y habitación salen
+  // de las tarifas vigentes del producto; cliente, destino y notas quedan plegados.
   let buscarTk = 0;
-  function pedir({ editar, lead, cotizacion, items: pre, canal: canalIn, habitaciones, check_in, check_out, cliente, destino } = {}) {
+  const infoProd = new Map();
+  async function infoProductos(ids) {
+    const faltan = [...new Set(ids.filter(id => id && !infoProd.has(id)))];
+    if (faltan.length) {
+      const { data } = await sb.from('tarifas').select('producto_id,plan,habitacion,precio_desde_usd').in('producto_id', faltan).eq('vigente', true).limit(1000);
+      faltan.forEach(id => infoProd.set(id, { planes: new Map(), habs: new Map(), desde: null }));
+      (data || []).forEach(t => {
+        const x = infoProd.get(t.producto_id); if (!x) return;
+        [['planes', t.plan], ['habs', t.habitacion]].forEach(([k, val]) => { const s = String(val || '').trim(); if (s && !x[k].has(s.toLowerCase())) x[k].set(s.toLowerCase(), s); });
+        const p = Number(t.precio_desde_usd); if (p > 0 && (x.desde == null || p < x.desde)) x.desde = p;
+      });
+    }
+    return Object.fromEntries(ids.filter(Boolean).map(id => [id, infoProd.get(id)]));
+  }
+  const lugarDe = p => [...new Set([p.localidad, p.destino].filter(Boolean))].join(' · ');
+
+  function pedir({ editar, lead, cotizacion, producto, items: pre, canal: canalIn, habitaciones, check_in, check_out, cliente, destino } = {}) {
     if (!puedeCrear) return error('Tu rol no pide disponibilidad');
-    const s = editar || {};
-    const habs = s.habitaciones || habitaciones || [{ adultos: 2, ninos: [], infantes: 0 }];
-    const alos = editar ? s.items.map(i => ({ id: i.id, producto_id: i.producto_id, alojamiento: i.alojamiento, tipo: i.tipo, plan: i.plan, habitacion: i.habitacion, cotizacion_item_idx: i.cotizacion_item_idx })) : (pre?.length ? pre : [{}]);
+    const s = editar || {}, hoy = hoyISO();
     const leadSel = editar ? (s.lead_id ? { id: s.lead_id } : null) : lead || null;
-    const ci = s.check_in || check_in || lead?.fecha_viaje_desde || '', co = s.check_out || check_out || lead?.fecha_viaje_hasta || '';
-    const v = panel(editar ? `Editar solicitud #${s.id}` : 'Pedir disponibilidad', `<form class="dp-form" id="dp-f" novalidate>
-      ${editar && ['consultando'].includes(s.estado) ? '<div class="dp-linea ancho">Ya se consultó al proveedor: si cambias fechas o habitaciones, el admin recibe aviso y se vuelve a consultar.</div>' : ''}
-      ${leadSel ? `<div class="dp-linea ancho">Lead: <b>${esc(leadSel.nombre || '#' + leadSel.id)}</b></div>` : ''}
-      <label class="dp-campo"><span>Cliente</span><input name="cliente" maxlength="120" value="${esc(s.cliente_nombre || cliente || leadSel?.nombre || '')}"></label>
-      <label class="dp-campo"><span>Destino</span><input name="destino" maxlength="120" value="${esc(s.destino || destino || lead?.destino || '')}"></label>
-      <label class="dp-campo"><span>Entrada</span><input name="check_in" type="date" required min="${editar ? '' : hoyISO()}" value="${ci}"></label>
-      <label class="dp-campo"><span>Salida</span><input name="check_out" type="date" required value="${co}"></label>
-      <div class="dp-campo ancho"><span>Alojamientos</span><div data-alos></div><button type="button" class="btn-sm" data-alo-mas>+ Alojamiento</button></div>
-      <div class="dp-campo ancho"><span>Habitaciones</span><div data-habs></div><button type="button" class="btn-sm" data-hab-mas>+ Habitación</button></div>
-      <label class="dp-check ancho"><input type="checkbox" name="urgente"${s.urgente ? ' checked' : ''}> Urgente: el cliente está en línea esperando</label>
-      <label class="dp-campo ancho"><span>Notas</span><textarea name="notas" maxlength="1000" placeholder="Vista al mar, cama matrimonial, llegada tarde…">${esc(s.notas || '')}</textarea></label>
-    </form>`, `<button class="btn-sec" data-cerrar>Cancelar</button><button class="btn-acc" data-enviar>${editar ? 'Guardar cambios' : 'Enviar solicitud'}</button>`);
-    const f = v.querySelector('#dp-f'), cAlos = f.querySelector('[data-alos]'), cHabs = f.querySelector('[data-habs]');
-    const filaHab = (h = { adultos: 2, ninos: [], infantes: 0 }) => {
-      const d = document.createElement('div'); d.className = 'dp-fila';
-      d.innerHTML = `<label class="dp-campo"><span>Adultos</span><input data-h="adultos" type="number" min="1" max="12" value="${h.adultos ?? 2}"></label>
-        <label class="dp-campo grande"><span>Edades de niños</span><input data-h="ninos" inputmode="numeric" placeholder="Ej: 6, 9" value="${(h.ninos || []).join(', ')}"></label>
-        <label class="dp-campo"><span>Infantes</span><input data-h="infantes" type="number" min="0" max="6" value="${h.infantes || 0}"></label>
-        <button type="button" class="btn-sm" data-x aria-label="Quitar habitación">✕</button>`;
-      cHabs.appendChild(d);
+    const habs = (s.habitaciones || habitaciones || [{ adultos: lead ? paxDeLead(lead.personas) : 2, ninos: [], infantes: 0 }])
+      .map(h => ({ adultos: Math.max(1, +h.adultos || 1), ninos: [...(h.ninos || [])], infantes: +h.infantes || 0 }));
+    const alos = editar ? s.items.map(i => ({ id: i.id, producto_id: i.producto_id, alojamiento: i.alojamiento, tipo: i.tipo, plan: i.plan || '', habitacion: i.habitacion || '', cotizacion_item_idx: i.cotizacion_item_idx }))
+      : producto ? [{ producto_id: producto.id, alojamiento: producto.nombre, tipo: TIPOS.includes(producto.tipo) ? producto.tipo : 'otro', lugar: lugarDe(producto), plan: '', habitacion: '' }]
+      : pre?.length ? pre.map(a => ({ ...a, plan: a.plan || '', habitacion: a.habitacion || '' })) : [{}];
+    const leadCi = lead?.fecha_viaje_desde >= hoy ? lead.fecha_viaje_desde : '';
+    const ci = s.check_in || check_in || leadCi, co = s.check_out || check_out || (leadCi && lead.fecha_viaje_hasta > leadCi ? lead.fecha_viaje_hasta : '');
+    let destAuto = !(s.destino || destino || lead?.destino), ultNoches = 0;
+    const v = panel(editar ? `Editar solicitud #${s.id}` : 'Pedir disponibilidad', `<form class="dp-pform" id="dp-f" novalidate>
+      ${editar && s.estado === 'consultando' ? '<div class="dp-nota"><i class="fas fa-circle-info"></i> Ya se consultó al proveedor: si cambias fechas o personas, el admin recibe aviso y vuelve a consultar.</div>' : ''}
+      ${leadSel ? `<div class="dp-nota"><i class="fas fa-user"></i><span>Para el lead <b>${esc(leadSel.nombre || '#' + leadSel.id)}</b></span></div>` : ''}
+      <section class="dp-paso"><h4><b>1</b> Alojamiento</h4><div class="dp-paso" data-alos></div><button type="button" class="dp-link" data-alo-mas>+ Otro alojamiento</button></section>
+      <section class="dp-paso"><h4><b>2</b> Fechas</h4>
+        <div class="dp-fechas"><label class="dp-campo"><span>Entrada</span><input name="check_in" type="date" required min="${editar ? '' : hoy}" value="${ci}"></label>
+          <label class="dp-campo"><span>Salida</span><input name="check_out" type="date" required min="${ci ? sumarDias(ci, 1) : hoy}" value="${co}"></label></div>
+        <div class="dp-ops"><span>Noches</span>${[1, 2, 3, 4, 5, 7].map(n => `<button type="button" class="dp-op" data-n="${n}" aria-pressed="false">${n}</button>`).join('')}</div></section>
+      <section class="dp-paso"><h4><b>3</b> Personas</h4><div class="dp-paso" data-habs></div><button type="button" class="dp-link" data-hab-mas>+ Otra habitación</button></section>
+      <label class="dp-check"><input type="checkbox" name="urgente"${s.urgente ? ' checked' : ''}> Urgente: el cliente está en línea esperando</label>
+      <details class="dp-mas-op"${editar && (s.notas || s.cliente_nombre) ? ' open' : ''}><summary><i class="fas fa-sliders"></i> Más datos (opcional): cliente, destino, notas</summary><div class="dp-form">
+        <label class="dp-campo"><span>Cliente</span><input name="cliente" maxlength="120" value="${esc(s.cliente_nombre || cliente || leadSel?.nombre || '')}"></label>
+        <label class="dp-campo"><span>Destino</span><input name="destino" maxlength="120" value="${esc(s.destino || destino || lead?.destino || producto?.destino || '')}"></label>
+        <label class="dp-campo ancho"><span>Notas para el admin</span><textarea name="notas" maxlength="1000" placeholder="Vista al mar, cama matrimonial, llegada tarde…">${esc(s.notas || '')}</textarea></label></div></details>
+    </form>`, `<span class="dp-resumen" id="dp-res" aria-live="polite"></span><button class="btn-sec" data-cerrar>Cancelar</button><button class="btn-acc" data-enviar>${editar ? 'Guardar cambios' : 'Enviar solicitud'}</button>`);
+    const f = v.querySelector('#dp-f'), cAlos = f.querySelector('[data-alos]'), cHabs = f.querySelector('[data-habs]'), res = v.querySelector('#dp-res'), ultSug = new Map();
+
+    const ops = (k, i, titulo, mapa, actual) => {
+      const vals = [...(mapa?.values() || [])]; if (actual && !vals.some(x => x.toLowerCase() === actual.toLowerCase())) vals.unshift(actual);
+      if (!vals.length) return '';
+      return `<div class="dp-ops"><span>${titulo}</span>${['', ...vals.slice(0, 8)].map(x => `<button type="button" class="dp-op" data-op="${i}:${k}" data-v="${esc(x)}" aria-pressed="${(actual || '').toLowerCase() === x.toLowerCase()}">${x ? esc(x) : 'El que tenga'}</button>`).join('')}</div>`;
     };
-    const filaAlo = (a = {}) => {
-      const d = document.createElement('div'); d.className = 'dp-fila'; if (a.id) d.dataset.id = a.id; if (a.producto_id) d.dataset.prod = a.producto_id; if (a.cotizacion_item_idx != null) d.dataset.idx = a.cotizacion_item_idx;
-      d.innerHTML = `<label class="dp-campo grande"><span>Hotel, posada o apartamento</span><input data-a="alojamiento" autocomplete="off" placeholder="Busca en el tarifario o escribe el nombre" value="${esc(a.alojamiento || '')}"${a.id ? ' readonly' : ''}><div class="dp-sug" hidden></div></label>
-        <label class="dp-campo"><span>Tipo</span><select data-a="tipo"${a.id ? ' disabled' : ''}>${['hotel', 'posada', 'apartamento', 'otro'].map(k => `<option${(a.tipo || 'hotel') === k ? ' selected' : ''}>${k}</option>`).join('')}</select></label>
-        <label class="dp-campo"><span>Plan</span><input data-a="plan" maxlength="120" value="${esc(a.plan || '')}" placeholder="Todo incluido…"></label>
-        <label class="dp-campo"><span>Habitación</span><input data-a="habitacion" maxlength="120" value="${esc(a.habitacion || '')}" placeholder="Estándar…"></label>
-        <button type="button" class="btn-sm" data-x aria-label="Quitar alojamiento">✕</button>`;
-      cAlos.appendChild(d);
+    function pintarAlos() {
+      cAlos.innerHTML = alos.map((a, i) => {
+        if (!a.alojamiento) return `<div class="dp-busca"><input data-buscar="${i}" autocomplete="off" placeholder="Escribe el hotel, posada o apartamento…" aria-label="Buscar alojamiento en el tarifario"><div class="dp-sug" hidden></div></div>`;
+        const inf = a.producto_id ? infoProd.get(a.producto_id) : null, libre = !a.producto_id;
+        const sub = libre ? (a.id ? '' : 'Fuera del tarifario') : [a.lugar, inf?.desde ? `desde $${Math.round(inf.desde)} en el tarifario` : ''].filter(Boolean).join(' · ');
+        return `<div class="dp-elegido" data-prod="${a.producto_id || ''}" data-idx="${a.cotizacion_item_idx ?? ''}"><div class="dp-elegido-cab"><i class="fas fa-hotel"></i><div><b>${esc(a.alojamiento)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>
+            ${alos.length > 1 || !a.id ? `<button type="button" class="dp-x" data-quitar="${i}" aria-label="Quitar ${esc(a.alojamiento)}">✕</button>` : ''}</div>
+          ${libre ? `<div class="dp-form"><label class="dp-campo"><span>Plan</span><input data-campo="${i}:plan" maxlength="120" value="${esc(a.plan)}" placeholder="Opcional"></label><label class="dp-campo"><span>Habitación</span><input data-campo="${i}:habitacion" maxlength="120" value="${esc(a.habitacion)}" placeholder="Opcional"></label></div>`
+            : inf ? ops('plan', i, 'Plan', inf.planes, a.plan) + ops('habitacion', i, 'Habitación', inf.habs, a.habitacion) : '<div class="dp-linea">Buscando planes en el tarifario…</div>'}</div>`;
+      }).join('');
+    }
+    const paso = (i, k, titulo, sub, val, mn, mx) => `<div class="dp-step"><span>${titulo}${sub ? ` <small>${sub}</small>` : ''}</span><span class="dp-step-c">
+      <button type="button" data-paso="${i}:${k}:-1" aria-label="Quitar ${titulo.toLowerCase()}"${val <= mn ? ' disabled' : ''}>−</button><output>${val}</output>
+      <button type="button" data-paso="${i}:${k}:1" aria-label="Agregar ${titulo.toLowerCase()}"${val >= mx ? ' disabled' : ''}>+</button></span></div>`;
+    function pintarHabs() {
+      cHabs.innerHTML = habs.map((h, i) => `<div class="dp-hab">${habs.length > 1 ? `<div class="dp-hab-cab">Habitación ${i + 1}<button type="button" class="dp-link" data-hab-x="${i}">Quitar</button></div>` : ''}
+        ${paso(i, 'adultos', 'Adultos', '', h.adultos, 1, 12)}${paso(i, 'ninos', 'Niños', '', h.ninos.length, 0, 8)}
+        ${h.ninos.length ? `<div class="dp-edades">${h.ninos.map((e, j) => `<label>Edad ${h.ninos.length > 1 ? 'niño ' + (j + 1) : 'del niño'}<input data-edad="${i}:${j}" type="number" inputmode="numeric" min="0" max="17" value="${e ?? ''}" placeholder="años"></label>`).join('')}</div>` : ''}
+        ${paso(i, 'infantes', 'Infantes', 'bebés', h.infantes, 0, 6)}</div>`).join('');
+    }
+    function resumir() {
+      const n = f.check_in.value && f.check_out.value > f.check_in.value ? Math.round((new Date(f.check_out.value) - new Date(f.check_in.value)) / DIA) : 0;
+      const na = alos.filter(a => a.alojamiento).length;
+      res.textContent = [n && plural(n, 'noche'), paxTxt(habs), na && plural(na, 'alojamiento')].filter(Boolean).join(' · ');
+      f.querySelectorAll('[data-n]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.n === n)));
+    }
+    async function elegir(i, p) {
+      alos[i] = { producto_id: p.id, alojamiento: p.nombre, tipo: TIPOS.includes(p.tipo) ? p.tipo : 'otro', lugar: lugarDe(p), plan: '', habitacion: '' };
+      if (destAuto && p.destino) f.destino.value = p.destino;
+      pintarAlos(); resumir();
+      if (!f.check_in.value) f.check_in.focus();
+      await infoProductos([p.id]); if (v.isConnected) pintarAlos();
+    }
+    const pintarSug = (sug, i, q, xs, info) => {
+      sug.innerHTML = xs.map((p, k) => `<button type="button" data-sug="${i}:${k}"><i class="fas fa-hotel"></i><span>${esc(p.nombre)}${lugarDe(p) ? `<small>${esc(lugarDe(p))}</small>` : ''}</span>${info?.[p.id]?.desde ? `<em>desde $${Math.round(info[p.id].desde)}</em>` : ''}</button>`).join('')
+        + `<button type="button" data-libre="${i}"><i class="fas fa-pen"></i><span>Usar «${esc(q)}»<small>No está en el tarifario: el admin lo busca igual</small></span></button>`;
+      sug.hidden = false;
     };
-    habs.forEach(filaHab); alos.forEach(filaAlo);
-    f.addEventListener('click', e => {
-      if (e.target.closest('[data-hab-mas]')) filaHab();
-      if (e.target.closest('[data-alo-mas]')) filaAlo();
-      const x = e.target.closest('[data-x]'); if (x && x.closest('[data-habs],[data-alos]').children.length > 1) x.closest('.dp-fila').remove();
-      const op = e.target.closest('[data-prod-op]');
-      if (op) { const fila = op.closest('.dp-fila'), inp = fila.querySelector('[data-a="alojamiento"]'); inp.value = op.dataset.nombre; fila.dataset.prod = op.dataset.prodOp; fila.querySelector('[data-a="tipo"]').value = op.dataset.tipo; op.parentElement.hidden = true; }
-    });
+
+    f.addEventListener('submit', e => e.preventDefault());
     f.addEventListener('input', async e => {
-      const inp = e.target; if (inp.dataset.a !== 'alojamiento' || inp.readOnly) return;
-      const fila = inp.closest('.dp-fila'), sug = fila.querySelector('.dp-sug'); delete fila.dataset.prod;
-      const q = inp.value.trim(), tk = ++buscarTk; if (q.length < 3) { sug.hidden = true; return; }
-      await new Promise(r => setTimeout(r, 250)); if (tk !== buscarTk) return;
-      const { data } = await sb.from('productos').select('id,nombre,destino,tipo').in('tipo', ['hotel', 'posada', 'apartamento']).ilike('nombre', `%${q.replace(/[%_,()]/g, ' ')}%`).limit(8);
+      const t = e.target;
+      if (t.name === 'destino') { destAuto = false; return; }
+      if (t.dataset.campo) { const [i, k] = t.dataset.campo.split(':'); alos[+i][k] = t.value; return; }
+      if (t.dataset.edad) { const [i, j] = t.dataset.edad.split(':').map(Number); habs[i].ninos[j] = t.value === '' ? null : Math.max(0, Math.min(17, Math.trunc(+t.value))); t.classList.remove('falta'); return; }
+      if (t.dataset.buscar === undefined) return;
+      const i = +t.dataset.buscar, sug = t.parentElement.querySelector('.dp-sug'), q = t.value.trim(), tk = ++buscarTk;
+      if (q.length < 2) { sug.hidden = true; return; }
+      await new Promise(r => setTimeout(r, 220)); if (tk !== buscarTk) return;
+      const { data } = await sb.from('productos').select('id,nombre,destino,localidad,tipo').in('tipo', TIPOS).eq('activo', true).ilike('nombre', `%${q.replace(/[%_,()]/g, ' ')}%`).order('nombre').limit(8);
       if (tk !== buscarTk) return;
-      sug.innerHTML = (data || []).map(p => `<button type="button" data-prod-op="${p.id}" data-nombre="${esc(p.nombre)}" data-tipo="${['hotel', 'posada', 'apartamento'].includes(p.tipo) ? p.tipo : 'otro'}">${esc(p.nombre)}${p.destino ? ` · <small>${esc(p.destino)}</small>` : ''}</button>`).join('');
-      sug.hidden = !data?.length;
+      const dl = (f.destino.value || '').trim().toLowerCase(), cerca = p => !!dl && String(p.destino || '').toLowerCase() === dl;
+      const xs = (data || []).sort((a, b) => cerca(b) - cerca(a));
+      ultSug.set(i, xs); pintarSug(sug, i, q, xs);
+      if (xs.length) infoProductos(xs.map(p => p.id)).then(info => { if (tk === buscarTk && !sug.hidden) pintarSug(sug, i, q, xs, info); });
     });
-    f.addEventListener('focusout', e => { if (e.target.dataset?.a === 'alojamiento') setTimeout(() => { const s2 = e.target.closest('.dp-fila')?.querySelector('.dp-sug'); if (s2) s2.hidden = true; }, 200); });
+    f.addEventListener('change', e => {
+      if (e.target.name === 'check_in' && f.check_in.value) {
+        f.check_out.min = sumarDias(f.check_in.value, 1);
+        if (!f.check_out.value || f.check_out.value <= f.check_in.value) f.check_out.value = sumarDias(f.check_in.value, ultNoches || 2);
+      }
+      resumir();
+    });
+    f.addEventListener('keydown', e => {
+      if (e.target.dataset?.buscar === undefined) return;
+      const sug = e.target.parentElement.querySelector('.dp-sug');
+      if (e.key === 'Enter') { e.preventDefault(); if (!sug.hidden) sug.querySelector('button')?.click(); }
+      else if (e.key === 'ArrowDown' && !sug.hidden) { e.preventDefault(); sug.querySelector('button')?.focus(); }
+      else if (e.key === 'Escape' && !sug.hidden) { e.stopPropagation(); sug.hidden = true; }
+    });
+    f.addEventListener('focusout', e => {
+      const caja = e.target.closest?.('.dp-busca'); if (!caja || caja.contains(e.relatedTarget)) return;
+      setTimeout(() => { if (!caja.contains(document.activeElement)) { const sg = caja.querySelector('.dp-sug'); if (sg) sg.hidden = true; } }, 180);
+    });
+    f.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.sug) { const [i, k] = b.dataset.sug.split(':').map(Number), p = ultSug.get(i)?.[k]; if (p) elegir(i, p); return; }
+      if (b.dataset.libre) { const i = +b.dataset.libre, q = cAlos.querySelector(`[data-buscar="${i}"]`)?.value.trim(); if (q) { alos[i] = { alojamiento: q.slice(0, 160), tipo: 'hotel', plan: '', habitacion: '' }; pintarAlos(); resumir(); } return; }
+      if (b.dataset.quitar) { const i = +b.dataset.quitar; if (alos.length > 1) alos.splice(i, 1); else alos[0] = {}; pintarAlos(); resumir(); cAlos.querySelector('[data-buscar]')?.focus(); return; }
+      if (b.dataset.op) { const [i, k] = b.dataset.op.split(':'); alos[+i][k] = b.dataset.v; pintarAlos(); return; }
+      if (b.dataset.aloMas !== undefined) { if (alos.length >= 10) return error(ERRORES.demasiados_alojamientos); alos.push({}); pintarAlos(); cAlos.querySelector(`[data-buscar="${alos.length - 1}"]`)?.focus(); return; }
+      if (b.dataset.n) { if (!f.check_in.value) { f.check_in.focus(); return error('Elige primero la fecha de entrada'); } ultNoches = +b.dataset.n; f.check_out.value = sumarDias(f.check_in.value, ultNoches); resumir(); return; }
+      if (b.dataset.paso) {
+        const [i, k, d] = b.dataset.paso.split(':'), h = habs[+i], dd = +d;
+        if (k === 'ninos') { if (dd > 0) h.ninos.push(null); else h.ninos.pop(); }
+        else h[k] = Math.max(k === 'adultos' ? 1 : 0, Math.min(k === 'adultos' ? 12 : 6, h[k] + dd));
+        pintarHabs(); resumir();
+        if (k === 'ninos' && dd > 0) cHabs.querySelector(`[data-edad="${i}:${h.ninos.length - 1}"]`)?.focus();
+        else cHabs.querySelector(`[data-paso="${b.dataset.paso}"]:not(:disabled)`)?.focus();
+        return;
+      }
+      if (b.dataset.habMas !== undefined) { habs.push({ adultos: 2, ninos: [], infantes: 0 }); pintarHabs(); resumir(); return; }
+      if (b.dataset.habX) { habs.splice(+b.dataset.habX, 1); pintarHabs(); resumir(); }
+    });
     v.querySelector('[data-enviar]').addEventListener('click', async e => {
       const b = e.currentTarget;
-      const habitacionesN = [...cHabs.children].map(r => ({ adultos: +r.querySelector('[data-h="adultos"]').value || 0,
-        ninos: r.querySelector('[data-h="ninos"]').value.split(/[^\d]+/).filter(Boolean).map(Number), infantes: +r.querySelector('[data-h="infantes"]').value || 0 }));
-      const itemsN = [...cAlos.children].map(r => ({ id: r.dataset.id ? +r.dataset.id : undefined, producto_id: r.dataset.prod ? +r.dataset.prod : undefined,
-        alojamiento: r.querySelector('[data-a="alojamiento"]').value.trim(), tipo: r.querySelector('[data-a="tipo"]').value,
-        plan: r.querySelector('[data-a="plan"]').value.trim(), habitacion: r.querySelector('[data-a="habitacion"]').value.trim(),
-        cotizacion_item_idx: r.dataset.idx != null ? +r.dataset.idx : undefined })).filter(i => i.id || i.producto_id || i.alojamiento);
-      if (!f.check_in.value || !f.check_out.value) return error(ERRORES.faltan_fechas);
+      const itemsN = alos.filter(a => a.alojamiento).map(a => ({ id: a.id, producto_id: a.producto_id || undefined, alojamiento: a.alojamiento, tipo: a.tipo || 'hotel',
+        plan: (a.plan || '').trim(), habitacion: (a.habitacion || '').trim(), cotizacion_item_idx: a.cotizacion_item_idx ?? undefined }));
+      if (!itemsN.length) { cAlos.querySelector('[data-buscar]')?.focus(); return error('Elige el alojamiento'); }
+      if (!f.check_in.value || !f.check_out.value) { (f.check_in.value ? f.check_out : f.check_in).focus(); return error(ERRORES.faltan_fechas); }
       if (f.check_out.value <= f.check_in.value) return error(ERRORES.salida_antes_de_entrada);
-      if (!itemsN.length) return error(ERRORES.falta_alojamiento);
+      const sinEdad = [...cHabs.querySelectorAll('[data-edad]')].filter(x => x.value === '');
+      if (sinEdad.length) { sinEdad.forEach(x => x.classList.add('falta')); sinEdad[0].focus(); return error(sinEdad.length > 1 ? 'Escribe la edad de cada niño' : 'Escribe la edad del niño'); }
       const p = { cliente_nombre: f.cliente.value.trim(), destino: f.destino.value.trim(), check_in: f.check_in.value, check_out: f.check_out.value,
-        habitaciones: habitacionesN, urgente: f.urgente.checked, notas: f.notas.value.trim(), items: itemsN };
+        habitaciones: habs.map(h => ({ adultos: h.adultos, ninos: h.ninos.map(Number), infantes: h.infantes })), urgente: f.urgente.checked, notas: f.notas.value.trim(), items: itemsN };
       const listo = ocupado(b);
       let r;
       if (editar) r = await rpc('disp_editar', { p_id: s.id, p });
       else r = await rpc('disp_crear', { p: { ...p, canal: canalIn || (cotizacion ? 'cotizacion' : lead ? 'lead' : 'crm'), lead_id: leadSel?.id || null, cotizacion_id: cotizacion || null } });
       if (!r) return listo();
-      if (editar) { ok(r.reabiertos ? 'Guardado: el admin vuelve a consultar' : 'Guardado'); }
+      if (editar) ok(r.reabiertos ? 'Guardado: el admin vuelve a consultar' : 'Guardado');
       else ok(r.fuera_horario && !p.urgente ? 'Enviada. Llegó fuera de horario: se atenderá desde las 7:00' : `Enviada · puesto ${r.puesto} en la cola`);
       await refrescar(editar ? s.id : r.solicitud_id); listo();
     });
-    setTimeout(() => f.querySelector(alos[0]?.alojamiento ? '[name="check_in"]' : '[data-a="alojamiento"]')?.focus(), 50);
+    pintarAlos(); pintarHabs(); resumir();
+    const conProd = alos.map(a => a.producto_id).filter(Boolean);
+    if (conProd.length) infoProductos(conProd).then(() => { if (v.isConnected) pintarAlos(); });
+    setTimeout(() => (alos.some(a => !a.alojamiento) ? cAlos.querySelector('[data-buscar]') : !f.check_in.value ? f.check_in : v.querySelector('[data-enviar]'))?.focus(), 50);
   }
 
   return { cargar, vigilar, pedir, abrir };
