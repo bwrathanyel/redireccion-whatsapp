@@ -6427,7 +6427,10 @@ async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
   const prev = RV_VOUCHER_PAQUETE.get(RV_RESERVA_ID) || {};
   const cliente = (([titular?.nombre, titular?.apellido].filter(Boolean).join(' ').trim()) || String(c?.nombre || r.cliente || '').trim()).replace(/\s+/g, ' ');
   // La cédula sale del pasajero: el titular, y si no tiene, el primero que la tenga.
-  const documento = titular?.numero_documento || pax.find(p => p.numero_documento)?.numero_documento || prev.documento || '';
+  const fuenteDoc = titular?.numero_documento ? titular : pax.find(p => p.numero_documento) || null;
+  const documento = fuenteDoc?.numero_documento || prev.documento || '';
+  // Lo que se escriba en la hoja queda en este pasajero (el que dio la cédula, o el titular).
+  const paxDoc = fuenteDoc || titular;
   const telefono = titular?.telefono || c?.telefono || r.telefono || prev.telefono || '';
   // Forma de pago y referencia: lo confirmado antes en este voucher, la reserva, y si no el último abono vigente.
   // Sin acceso a los abonos (boletería) o si falla la lectura, sale el voucher sin la tabla de abonos.
@@ -6452,11 +6455,13 @@ async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
   if (!telefono) faltan.push('teléfono');
   if (!formaPago) faltan.push('forma de pago');
   let datos = { cliente, documento, telefono, formaPago, referencia };
-  let recibos = [];
+  let recibos = [], guardoPax = false;
   if (faltan.length) {
     const campos = [
       { id: 'cliente', label: 'Nombre y apellido', valor: cliente, requerido: true, placeholder: 'Titular de la reserva' },
-      { id: 'documento', label: 'Cédula del titular', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
+      { id: 'tipoDoc', label: 'Documento del titular', tipo: 'select', valor: prev.tipoDoc || fuenteDoc?.tipo_documento || 'cedula', requerido: true, opciones: Object.entries(RV_TIPO_DOC).map(([v, t]) => ({ v, t })) },
+      { id: 'documento', label: 'Número de documento', valor: documento, requerido: true, placeholder: 'V-12.345.678' },
+      { id: 'nacionalidad', label: 'Nacionalidad', valor: prev.nacionalidad ?? paxDoc?.nacionalidad ?? '', placeholder: 'Venezolana' },
       { id: 'telefono', label: 'Teléfono', valor: telefono, requerido: true, placeholder: '0414-1234567' },
       null,
       { id: 'formaPago', label: 'Forma de pago', tipo: 'select', valor: formaPago, requerido: true, opciones: [{ v: '', t: 'Elige una...' }, ...RV_VOUCHER_PAGOS.map(p => ({ v: p, t: p }))] },
@@ -6465,7 +6470,7 @@ async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
     const iForma = campos.findIndex(c => c?.id === 'formaPago'), iRef = campos.findIndex(c => c?.id === 'referencia');
     // Lo que se lee de los recibos solo llena campos vacíos (o que llenó un recibo antes): lo escrito a mano se respeta.
     const auto = { forma: '', ref: '' };
-    campos[3] = rvRecibosCampo(abonos, lista => {
+    campos[campos.indexOf(null)] = rvRecibosCampo(abonos, lista => {
       const ok = lista.filter(x => x.estado === 'ok'), x = ok.find(r => r.abono) || ok[0];
       if (!x) return;
       const forma = RV_METODO_A_VOUCHER[x.abono?.metodo] || rvMetodoRecibo(x.datos.metodo), ref = x.datos.referencia || x.abono?.referencia || '';
@@ -6473,15 +6478,21 @@ async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
       if (sel && forma && (!sel.value || sel.value === auto.forma)) { sel.value = forma; auto.forma = forma; }
       if (inp && ref && (!inp.value.trim() || inp.value === auto.ref)) { inp.value = ref; auto.ref = ref; }
     });
-    const f = await confirmarSheet({
+    const hoja = confirmarSheet({
       titulo: 'Datos del voucher de la reserva',
-      detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher.`,
+      detalle: `Falta completar: ${faltan.join(', ')}. Estos datos van impresos en el voucher y la cédula queda en Pasajeros.`,
       textoOk: 'Generar voucher',
       campos,
     });
+    const csc = id => document.getElementById(`csc-${campos.findIndex(c => c?.id === id)}`);
+    rvDocEnlazar(csc('tipoDoc'), csc('documento'), csc('nacionalidad'), { prefijoVacio: false });
+    const f = await hoja;
     if (!f) return;
     ({ recibos, ...datos } = f);
+    // Enter en el número no pasa por el blur que limpia una «V-» sola.
+    if (datos.tipoDoc === 'cedula' && !rvDocDigitos(datos.documento)) { errToast('Falta el número de cédula del titular.'); return; }
     RV_VOUCHER_PAQUETE.set(RV_RESERVA_ID, datos);
+    guardoPax = await rvVoucherDocAPasajero(paxDoc, datos);
     if (recibos?.length) await rvGuardarRecibos(recibos);
   }
   // Un recibo asociado completa la referencia y el método del abono que no los tenía (solo en el PDF).
@@ -6506,13 +6517,30 @@ async function rvGenerarVoucherReserva(btn, { ver = false } = {}) {
     try { falla = await vcAdjuntarVoucherReemplazando(RV_RESERVA_ID, null, blob, nombre, deAbonos); } catch (e) { falla = e?.message || 'error de red'; }
     if (ver) verPdf(blob, nombre); else vcDescargarConHora(blob, nombre);
     const hecho = ver ? 'generado' : 'generado y descargado';
-    if (falla) errToast(`${que} ${hecho}, pero no se adjuntó a la reserva: ${falla}`);
+    if (falla) { errToast(`${que} ${hecho}, pero no se adjuntó a la reserva: ${falla}`); if (guardoPax) rvCargar(); }
     else { okToast(`${que} ${ver ? 'generado y adjunto' : 'generado, descargado y adjunto'}` +(pax.length ? '' : ' · sin pasajeros cargados')); rvCargar(); }
   } catch (e) {
     errToast(`No se pudo generar el ${que.toLowerCase()}: ` + (e?.message || e));
   } finally {
     if (btn?.isConnected) { btn.disabled = false; btn.innerHTML = previo; }
   }
+}
+// La cédula escrita en la hoja del voucher también queda en Pasajeros; sin pasajeros, entra el titular.
+async function rvVoucherDocAPasajero(p, { cliente, tipoDoc, documento, nacionalidad }) {
+  if (rvVista() === 'boleteria') return false;
+  const tipo = RV_TIPO_DOC[tipoDoc] ? tipoDoc : 'cedula';
+  const num = tipo === 'cedula' ? rvDocMostrar(documento, 'cedula') : String(documento || '').trim().replace(/\./g, '').toUpperCase();
+  const nac = String(nacionalidad || '').trim();
+  if (!num || (p && p.numero_documento === num && (p.tipo_documento || 'cedula') === tipo && (p.nacionalidad || '') === nac)) return false;
+  const datos = { tipo_documento: tipo, numero_documento: num, nacionalidad: nac };
+  if (!p) {
+    const nom = String(cliente || '').trim().replace(/\s+/g, ' '), i = nom.indexOf(' ');
+    if (!nom) return false;
+    Object.assign(datos, { nombre: i < 0 ? nom : nom.slice(0, i), apellido: i < 0 ? '' : nom.slice(i + 1), titular: true });
+  }
+  const { data, error } = await sb.rpc('guardar_pasajero', { p_reserva_id: RV_RESERVA_ID, p_pasajero_id: p?.id ?? null, p_datos: datos });
+  if (error || !data?.ok) { errToast('El voucher sale igual, pero la cédula no quedó en Pasajeros: ' + (RV_ERR[data?.error || error?.message] || rvErr(error, data))); return false; }
+  return true;
 }
 function rvCostoHtml(s) {
   if (s.costo_centavos == null) {
@@ -8226,6 +8254,25 @@ function rvDocMostrar(v, tipo) {
   const d = rvDocDigitos(s);
   return d ? pref + rvDocPuntos(d) : pref;
 }
+const rvNacionalidadDoc = (tipo, num) => tipo === 'cedula' && /^V-\s*\d/i.test(String(num || '').trim()) ? 'Venezolana' : '';
+// Tipo + número de documento (+ nacionalidad), en Pasajeros y en la hoja del voucher. Una cédula «V-» pone
+// «Venezolana» solo si la nacionalidad está vacía o la había puesto esto mismo: lo escrito a mano se respeta.
+function rvDocEnlazar(tipoSel, num, nac, { prefijoVacio = true } = {}) {
+  let nacAuto = '';
+  const nacion = () => { if (!nac) return; const n = rvNacionalidadDoc(tipoSel.value, num.value); if (!nac.value.trim() || nac.value === nacAuto) { nac.value = n; nacAuto = n; } };
+  const formatear = () => { if (tipoSel.value === 'cedula' && (prefijoVacio || rvDocDigitos(num.value))) num.value = rvDocMostrar(num.value, 'cedula'); };
+  const aplicar = () => {
+    formatear();
+    if (!prefijoVacio && tipoSel.value === 'cedula' && !rvDocDigitos(num.value)) num.value = '';
+    num.inputMode = tipoSel.value === 'cedula' ? 'numeric' : 'text';
+    nacion();
+  };
+  aplicar();
+  tipoSel.onchange = () => { if (tipoSel.value !== 'cedula') num.value = num.value.replace(/^[VEve]-\s*/, '').replace(/\./g, ''); aplicar(); };
+  num.oninput = () => { formatear(); nacion(); };
+  num.onblur = aplicar;
+  return aplicar;
+}
 function rvFormPasajero(p) {
   const x = RV_FORM.id ? (RV_DET.pasajeros || []).find(y => y.id === RV_FORM.id) : null;
   if (RV_FORM.id && !x) { RV_FORM = null; return rvRenderPasajeros(); }
@@ -8243,12 +8290,7 @@ function rvFormPasajero(p) {
       <div class="csub">El pasaporte se elige arriba, en «Documento».</div>
     </div></details>
     ${rvBotones('guardar-pasajero', x ? `<button class="dbtn gh rv-danger" type="button" data-rv-accion="borrar-pasajero" data-id="${x.id}" style="margin-top:9px"><i class="fas fa-trash"></i> Borrar pasajero</button>` : '')}</div>`;
-  const tipoSel = p.querySelector('#rv-p-tipodoc'), num = p.querySelector('#rv-p-numdoc');
-  const aplicar = () => { if (tipoSel.value === 'cedula') num.value = rvDocMostrar(num.value, 'cedula'); num.inputMode = tipoSel.value === 'cedula' ? 'numeric' : 'text'; };
-  aplicar();
-  tipoSel.onchange = () => { if (tipoSel.value !== 'cedula') num.value = num.value.replace(/^[VEve]-\s*/, '').replace(/\./g, ''); aplicar(); };
-  num.oninput = () => { if (tipoSel.value === 'cedula') num.value = rvDocMostrar(num.value, 'cedula'); };
-  num.onblur = aplicar;
+  const aplicar = rvDocEnlazar(p.querySelector('#rv-p-tipodoc'), p.querySelector('#rv-p-numdoc'), p.querySelector('#rv-p-nacionalidad'));
   p.querySelector('#rv-p-leer').onchange = e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) rvLeerDocumento(p, f, aplicar); };
 }
 // EF analizar-documento-identidad: prellena; el pasajero se guarda recién con «Guardar».
@@ -8277,6 +8319,7 @@ async function rvPasajeroRapido(btn) {
   const datos = {
     nombre: i < 0 ? nom : nom.slice(0, i), apellido: i < 0 ? '' : nom.slice(i + 1).trim(),
     tipo_documento: 'cedula', numero_documento: rvDocDigitos(ced) ? rvDocMostrar(ced, 'cedula') : '',
+    nacionalidad: rvDocDigitos(ced) ? rvNacionalidadDoc('cedula', rvDocMostrar(ced, 'cedula')) : '',
     titular: !(RV_DET?.pasajeros || []).length,
   };
   const previo = btn.innerHTML;
@@ -37221,12 +37264,14 @@ async function construirVoucherPdf(v) {
     F = 'Poppins'; st = s => s;
   } catch (_e) { /* sin Poppins sale en Helvetica */ }
   const nuevoDoc = () => {
-    const d = new jsPDF({ unit: 'pt', format: 'letter' });
+    // Sin compress, las 4 Poppins viajan crudas: ~1 MB por voucher (82 s de subida con conexión lenta).
+    const d = new jsPDF({ unit: 'pt', format: 'letter', compress: true });
     fuentes.forEach(([a, e, b]) => { d.addFileToVFS(a, b); d.addFont(a, 'Poppins', e); });
     return d;
   };
   let logo = null;
-  try { const d = await cargarImagenBase64('logo-bn.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
+  // Negro puro (dueño 26-nov): logo-bn.png es gris y lo sigue usando el membrete de facturas de empresa.
+  try { const d = await cargarImagenBase64('logo-negro-pdf.png'); if (d.startsWith('data:image/png')) logo = d; } catch (_e) { /* sin logo el membrete igual sale, solo sin la imagen */ }
   const ctx = { F, st, logo, recibo: !!v.recibo_simple };
   const pl = (n, s, p) => (n ? `${n} ${n === 1 ? s : p}` : '');
   const lista = Array.isArray(v.servicios) ? v.servicios : [], boletos = lista.filter(s => s.tipo === 'boleto');
