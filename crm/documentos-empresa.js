@@ -39,6 +39,14 @@ const CSS = `
 .de-bt:hover{background:var(--line);color:var(--txt);border-color:var(--line2)}
 .de-bt.pri{color:var(--accent-ink)}
 .de-fila.off{opacity:.62}
+.de-carp{display:flex;align-items:center;gap:13px;width:100%;padding:11px 9px;border:0;border-top:1px solid var(--line);border-radius:12px;background:transparent;color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:background .16s}
+.de-lista>:first-child{border-top-color:transparent}
+.de-carp:hover,.de-carp:focus-visible{background:color-mix(in srgb,var(--txt) 5%,transparent)}
+.de-carp .de-ico{--dc:var(--accent);font-size:18px}
+.de-carp .de-flecha{flex:0 0 44px;text-align:center;color:var(--muted);transition:transform .2s}
+.de-carp[aria-expanded=true] .de-flecha{transform:rotate(90deg)}
+.de-hijos{margin:0 0 6px 30px;padding-left:10px;border-left:2px solid var(--line)}
+.de-hijos .de-fila:first-child{border-top-color:transparent}
 .de-vacio{padding:34px 12px;text-align:center;color:var(--muted);font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:11px}
 .de-vacio>i{font-size:26px;opacity:.5}
 .de-esq{height:64px;margin:6px 4px;border-radius:12px;background:linear-gradient(90deg,var(--line),transparent,var(--line));background-size:200% 100%;animation:de-brillo 1.4s linear infinite}
@@ -90,6 +98,7 @@ const CSS = `
   .de-fila{flex-wrap:wrap;gap:10px 12px}
   .de-fila .de-vence{order:3}
   .de-acc{order:4;width:100%;justify-content:flex-end;border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
+  .de-hijos{margin-left:10px;padding-left:8px}
   .de-vis{padding:0}
   .de-caja{border-radius:0;border:0}
   .de-info{margin-left:0;width:100%}
@@ -115,7 +124,7 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
   const admin = rol === 'admin';
   let montado = false, datos = null, pedido = 0, tq = null, subiendo = false;
   let vis = null, visTk = 0, visId = null, compId = null;
-  const blobs = new Map();
+  const blobs = new Map(), abiertas = new Set();
   const filtro = { q: '', categoria: '', estado: 'vigente' };
   const $ = sel => raiz.querySelector(sel);
   const fecha = iso => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
@@ -164,6 +173,7 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
       raiz.querySelectorAll('.de-cat').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
       cargar();
     }
+    else if (a === 'carpeta') { const k = b.dataset.k; abiertas.has(k) ? abiertas.delete(k) : abiertas.add(k); render(); raiz.querySelector(`.de-carp[data-k="${window.CSS.escape(k)}"]`)?.focus(); }
     else if (a === 'ver') visor(b.dataset.id);
     else if (a === 'bajar') abrir(d, true);
     else if (a === 'compartir') compartir(d);
@@ -204,11 +214,33 @@ export function crearDocumentosEmpresa({ sb, esc, ok, error, confirmar, rol = 'a
       <div class="de-txt"><div class="de-tit">${esc(d.titulo)}</div><div class="de-meta">${meta(d)}</div></div>${vence(d)}<div class="de-acc">${acciones.join('')}</div></div>`;
   }
 
+  // Tres o más documentos del mismo tipo se agrupan en una carpeta plegable.
+  function agrupado(docs) {
+    const clave = d => (d.tipo || '').trim().toLowerCase();
+    const n = new Map();
+    docs.forEach(d => clave(d) && n.set(clave(d), (n.get(clave(d)) || 0) + 1));
+    const hechas = new Set();
+    return docs.map(d => {
+      const k = clave(d);
+      if (!k || n.get(k) < 3) return fila(d);
+      if (hechas.has(k)) return '';
+      hechas.add(k);
+      const hijos = docs.filter(x => clave(x) === k)
+        .sort((a, b) => (a.nombre_archivo || a.titulo).localeCompare(b.nombre_archivo || b.titulo, 'es', { numeric: true }));
+      const abierta = abiertas.has(k) || !!filtro.q, t = d.tipo.trim();
+      const nombre = /[aeiouáéó]$/i.test(t) ? `${t}s` : `${t}es`;
+      return `<button class="de-carp" type="button" data-de="carpeta" data-k="${esc(k)}" aria-expanded="${abierta}">
+        <div class="de-ico"><i class="fas ${abierta ? 'fa-folder-open' : 'fa-folder'}"></i></div>
+        <div class="de-txt"><div class="de-tit">${esc(nombre)}</div><div class="de-meta">Carpeta<span class="de-sep">·</span>${hijos.length} archivos</div></div>
+        <i class="fas fa-chevron-right de-flecha" aria-hidden="true"></i></button>${abierta ? `<div class="de-hijos">${hijos.map(fila).join('')}</div>` : ''}`;
+    }).join('');
+  }
+
   function render() {
     const docs = lista(), pv = Number(datos.por_vencer || 0);
     $('#de-aviso').innerHTML = pv ? `<span class="de-chip"><i class="fas fa-clock"></i> ${pv} ${pv === 1 ? 'vence' : 'vencen'} en 30 días o ya ${pv === 1 ? 'venció' : 'vencieron'}</span>` : '';
     const filtrando = filtro.q || filtro.categoria;
-    $('#de-cuerpo').innerHTML = docs.length ? docs.map(fila).join('')
+    $('#de-cuerpo').innerHTML = docs.length ? agrupado(docs)
       : `<div class="de-vacio"><i class="fas ${filtrando ? 'fa-magnifying-glass' : 'fa-folder-open'}"></i><div>${filtrando ? 'Nada coincide con la búsqueda.' : admin ? 'Todavía no hay documentos.' : 'Todavía no hay documentos compartidos.'}</div>${!filtrando && admin ? '<button class="btn-sm lt-primario" type="button" data-de="subir" style="min-height:44px"><i class="fas fa-upload"></i> Subir el primero</button>' : ''}</div>`;
   }
 
