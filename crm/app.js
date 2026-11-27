@@ -29473,7 +29473,7 @@ const tarObserver = new IntersectionObserver((entries, obs) => {
 }, { rootMargin: '200px' });
 function tarHidratarTarjeta(el, x) {
   if (!x) return;
-  const fotos = fotosRotadas(x, 256);
+  const fotos = fotosRotadas(x, 640);
   if (tarView === 'fichas') {
     const media = el.querySelector('.tf-media');
     if (media) attachHoverCarousel(el, media, fotos, url => { media.style.backgroundImage = `url('${url}')`; }, media.querySelector('.carrusel-dots'));
@@ -29799,7 +29799,7 @@ function tarCardHtml(x) {
     const retirar = tarPuedeRetirar(x, x.productos?.nombre, destinoDe(x)) ? `<button type="button" class="promo-retirar" data-retirar-tarifa="${x.id}"><i class="fas fa-box-archive"></i> Retirar del catálogo</button>` : '';
     const precio = tarPrecioCorto(x);
     return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}${tarTab === 'hotsale' ? ' tc-en-hs' : ''}" data-id="${x.id}">
-      ${tarCardThumbHtml(fotosRotadas(x, 256)[0], true, destinoDe(x), precio, (precio ? tcPrecioTagHtml(x) : '') + tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x) + tcHideBtnHtml(x.id, 'tarifas', 'vigente'))}
+      ${tarCardThumbHtml(fotosRotadas(x, 640)[0], true, destinoDe(x), precio, (precio ? tcPrecioTagHtml(x) : '') + tcHsBtnHtml(x, 'tc-hs', tarTab === 'hotsale') + tcIaBtnHtml(x) + tcHideBtnHtml(x.id, 'tarifas', 'vigente'))}
       ${tarNinosHtml(nino, 'tc-ninos')}
       <div class="tc-body">
         ${hotel}
@@ -29824,7 +29824,7 @@ function tarCardHtml(x) {
   const tag = precio ? tcPrecioTagHtml(tarifaPrecio) : '';
   const ubic = tcUbicHtml(x);
   return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), precio, tag + tcCmpBtnHtml(x) + tcHideBtnHtml(x.id, 'productos', 'activo'), precio ? tarFormaPagoHtml(tarFormaPago(tarifaPrecio, x)) : '')}
+    ${tarCardThumbHtml(fotosDe(x, 640)[0], false, destinoDe(x), precio, tag + tcCmpBtnHtml(x) + tcHideBtnHtml(x.id, 'productos', 'activo'), precio ? tarFormaPagoHtml(tarFormaPago(tarifaPrecio, x)) : '')}
     ${tarNinosHtml(nino, 'tc-ninos')}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
@@ -29861,7 +29861,7 @@ function tarFechaCorta(t) {
 function tarFichaHtml(x) {
   const esPromo = tarTab === 'promo' || tarTab === 'hotsale';
   const nombre = esPromo ? tarNombrePromo(x) : x.nombre;
-  const foto = fotosRotadas(x, 256)[0];
+  const foto = fotosRotadas(x, 640)[0];
   const tarifa = !esPromo ? mejorPrecio(x) : null;
   const precio = esPromo ? x.precio_texto : tarifa?.precio_texto;
   const vigencia = esPromo ? x.vigencia_texto : tarifa?.vigencia_texto;
@@ -31054,11 +31054,15 @@ function tarNinoGratis(t) {
   const dmy = re => { const m = re.exec(s); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
   const hasta = dmy(/reservando hasta el (\d{2})\/(\d{2})\/(\d{4})/i) || dmy(/viajando del \d{2}\/\d{2}\/\d{4} al (\d{2})\/(\d{2})\/(\d{4})/i) || tarVentaHasta(t);
   if (hasta && hasta < hoy()) return null;
+  // Desde (dueño 2026-11-27): inicio del viaje del texto; si no, inicio de venta; si no, del disfrute.
+  const ventanaDesde = (t.ventanas || []).map(v => v?.desde).filter(Boolean).sort()[0] || null;
+  const desde = dmy(/viajando del (\d{2})\/(\d{2})\/(\d{4})/i) || t.venta_desde || t.disfrute_desde || ventanaDesde;
+  const dm = f => `${f.slice(8, 10)}/${f.slice(5, 7)}`;
   const cantidad = Number((/(?:^|\()\s*(\d+)\s*\)?\s*ni[nñ]/i.exec(s) || [])[1]) || t.ninos_gratis_cantidad || 1;
   const edades = (/\((\d+\s*-\s*\d+)\)/.exec(s) || [])[1] || null;
-  const label = `${cantidad > 1 ? `${cantidad} niños gratis` : 'Niño gratis'}${edades ? ` (${edades.replace(/\s/g, '')})` : ''}${hasta ? ` hasta ${hasta.slice(8, 10)}/${hasta.slice(5, 7)}` : ''}`;
+  const label = `${cantidad > 1 ? `${cantidad} niños gratis` : 'Niño gratis'}${edades ? ` (${edades.replace(/\s/g, '')})` : ''}${desde && hasta ? ` del ${dm(desde)} al ${dm(hasta)}` : desde ? ` desde ${dm(desde)}` : hasta ? ` hasta ${dm(hasta)}` : ''}`;
   const detalle = (/—\s*solo\s+(.+)$/i.exec(s) || [])[1] || null;
-  return { cantidad, hasta, label, detalle: detalle && detalle[0].toUpperCase() + detalle.slice(1), txt: txt || label };
+  return { cantidad, desde, hasta, label, detalle: detalle && detalle[0].toUpperCase() + detalle.slice(1), txt: txt || label };
 }
 // El del hotel: entre sus tarifas vendibles hoy, la que regala por más tiempo
 // (sin fecha = abierta, gana).
