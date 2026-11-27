@@ -27212,6 +27212,8 @@ let tarAutoFirma = '';
 let tarDestinoChip = '', tarFechaViaje = '';
 // Consultas de los últimos 30 días por texto de destino (RPC tarifario_demanda_destinos).
 let TAR_DEMANDA = null, tarDemandaPedida = false;
+// Veces que los asesores cotizaron cada hotel en Cotizaciones (RPC tarifario_hoteles_cotizados).
+let TAR_COTIZADOS = null;
 const tarComparar = new Set();
 const tarHotelesAbiertos = new Set();
 const tarExcAbiertos = new Set();
@@ -29091,6 +29093,8 @@ function renderTarifario() {
     const porDestino = {};
     filtered.forEach(x => (porDestino[destinoDe(x) || 'Otros'] ??= []).push(x));
     const destinos = tarOrdenDestinos(Object.keys(porDestino));
+    // Dentro de cada destino, los más cotizados primero; el empate conserva el alfabético.
+    if (TAR_COTIZADOS) destinos.forEach(d => porDestino[d].sort((a, b) => (TAR_COTIZADOS.get(String(b.id)) || 0) - (TAR_COTIZADOS.get(String(a.id)) || 0)));
     const firma = JSON.stringify([q, fTipo, fPrecio, fGrupo, fNinos, fVigente, fOcultas, tarFechaViaje, tarDestinoChip]);
     if (firma !== tarAutoFirma) { tarAutoFirma = firma; tarDestinosCerrados.clear(); }
     const filtrando = !!(fTipo || fPrecio != null || fGrupo || fNinos || tarFechaViaje);
@@ -29186,14 +29190,18 @@ const TAR_DEMANDA_ALIAS = { Tucacas: ['morrocoy'], Chichiriviche: ['morrocoy'], 
 async function tarCargarDemanda() {
   if (tarDemandaPedida) return;
   tarDemandaPedida = true;
-  try {
-    const { data, error } = await sb.rpc('tarifario_demanda_destinos', { p_dias: 30 });
-    if (error || !Array.isArray(data)) return;
+  // Cada una por su lado: si falla una, la otra igual ordena. Sin datos queda el orden de siempre.
+  const [dem, cot] = await Promise.all([
+    sb.rpc('tarifario_demanda_destinos', { p_dias: 30 }).then(r => r, () => ({})),
+    sb.rpc('tarifario_hoteles_cotizados', { p_dias: 180 }).then(r => r, () => ({})),
+  ]);
+  if (!dem.error && Array.isArray(dem.data)) {
     const m = new Map();
-    data.forEach(r => { const k = tarNorm(r.destino).trim(); if (k) m.set(k, (m.get(k) || 0) + (Number(r.consultas) || 0)); });
+    dem.data.forEach(r => { const k = tarNorm(r.destino).trim(); if (k) m.set(k, (m.get(k) || 0) + (Number(r.consultas) || 0)); });
     TAR_DEMANDA = m;
-    if (tarTab === 'hotel') renderTarifario();
-  } catch { /* sin demanda queda el orden fijo de siempre */ }
+  }
+  if (!cot.error && Array.isArray(cot.data)) TAR_COTIZADOS = new Map(cot.data.map(r => [String(r.producto_id), Number(r.veces) || 0]));
+  if ((TAR_DEMANDA || TAR_COTIZADOS) && tarTab === 'hotel') renderTarifario();
 }
 function tarDemandaDe(d) {
   if (!TAR_DEMANDA || !d || d === 'Otros') return 0;
@@ -29219,24 +29227,62 @@ function tarDestChipsPintar(base) {
   };
   box.innerHTML = chip('', base.length) + tarOrdenDestinos(Object.keys(cuenta)).map(d => chip(d, cuenta[d])).join('');
 }
-// «Desde» del destino: el más bajo por persona, en USD si hay alguno (no se mezclan monedas).
-function tarDestResumen(items) {
-  let min = null, ninos = 0, cap = 0;
+// El régimen real vive en `tarifas.plan` (texto del PDF/flyer: «FULL PENSIÓN», «TODO
+// INCLUIDO», «Plan Plus (desayuno, …)»); `incluye_tags` casi no se usa en hoteles.
+const TAR_PLANES = [
+  ['ti', 'Todo incluido', /todo incluido|all inclusive/],
+  ['pc', 'Pensión completa', /full pension|pension completa/],
+  ['mp', 'Media pensión', /media pension/],
+  ['sa', 'Solo alojamiento', /solo alojamiento|sin desayuno/],
+  ['sd', 'Solo desayuno', /solo desayuno|alojamiento y desayuno|con desayuno/],
+];
+function tarPlanDe(t) {
+  const txt = tarNorm(t?.plan).trim();
+  if (!txt) return null;
+  const hit = TAR_PLANES.find(([, , re]) => re.test(txt));
+  return hit ? { k: hit[0], label: hit[1] } : { k: txt, label: String(t.plan).trim() };
+}
+// Planes que el hotel vende hoy (o para «Viaja el»), en orden fijo: TI, PC, MP, SA, SD, otros.
+function tarPlanesHotel(x) {
+  const f = tarTab === 'hotel' ? tarFechaViaje : '';
+  const vistos = new Map();
+  (x.tarifas || []).filter(t => f ? tarSirveEn(t, f) : tarVendibleHoy(t)).forEach(t => { const p = tarPlanDe(t); if (p && !vistos.has(p.k)) vistos.set(p.k, p.label); });
+  const rango = k => { const i = TAR_PLANES.findIndex(p => p[0] === k); return i < 0 ? 99 : i; };
+  return [...vistos].sort((a, b) => rango(a[0]) - rango(b[0])).map(([, label]) => label);
+}
+// «Desde» del encabezado por destino con el régimen que se vende ahí (dueño 2026-11-26):
+// Margarita = el todo incluido más barato; Los Roques = la full pensión más barata.
+const TAR_DESDE_PLAN = { Margarita: 'ti', 'Los Roques': 'pc' };
+// Más barato por persona: USD antes que otra moneda (no se comparan monedas distintas).
+const tarMasBarato = (a, b) => !a ? b : !b ? a : (b.m === 'USD') !== (a.m === 'USD') ? (b.m === 'USD' ? b : a) : (b.m === a.m && b.v < a.v ? b : a);
+function tarDesdePlan(x, planK) {
+  const f = tarTab === 'hotel' ? tarFechaViaje : '';
+  let min = null;
+  for (const t of x.tarifas || []) {
+    if (!(f ? tarSirveEn(t, f) : tarVendibleHoy(t)) || tarPlanDe(t)?.k !== planK) continue;
+    const v = t.precios ? tarPrecioPorPersona(t) : (t.origen === 'flyer' ? t.precio_desde_usd : null);
+    if (v != null) min = tarMasBarato(min, { v: Math.round(v * 100) / 100, m: String(t.moneda || 'USD').toUpperCase() });
+  }
+  return min;
+}
+function tarDestResumen(d, items) {
+  const planK = TAR_DESDE_PLAN[d];
+  let min = null, minPlan = null, ninos = 0, cap = 0;
   for (const x of items) {
     const ag = agregarHotel(x);
-    if (ag.precioMin != null) {
-      const e = { v: ag.precioMin, m: ag.precioMinMoneda || 'USD' };
-      if (!min || (e.m === 'USD' && min.m !== 'USD') || (e.m === min.m && e.v < min.v)) min = e;
-    }
+    if (ag.precioMin != null) min = tarMasBarato(min, { v: ag.precioMin, m: ag.precioMinMoneda || 'USD' });
+    if (planK) minPlan = tarMasBarato(minPlan, tarDesdePlan(x, planK));
     if (ag.ninosMax > 0) ninos++;
     if (ag.capacidadMax > cap) cap = ag.capacidadMax;
   }
-  return { min, ninos, cap };
+  // Sin ninguna tarifa de ese régimen a la venta, cae al más barato general (sin rótulo).
+  const plan = minPlan ? TAR_PLANES.find(p => p[0] === planK)[1].toLowerCase() : '';
+  return { min: minPlan || min, plan, ninos, cap };
 }
 function tarDestHeaderHtml(d, items) {
-  const r = tarDestResumen(items);
+  const r = tarDestResumen(d, items);
   const meta = [
-    r.min ? `desde <b>${esc(tarMonto(r.min.v, r.min.m))}</b> p/p` : '',
+    r.min ? `desde <b>${esc(tarMonto(r.min.v, r.min.m))}</b> p/p${r.plan ? ' ' + r.plan : ''}` : '',
     r.ninos ? `${r.ninos} con niños gratis` : '',
     r.cap ? `hasta ${r.cap} por habitación` : '',
   ].filter(Boolean).join(' · ');
@@ -29287,7 +29333,7 @@ function tarCmpPintarSheet() {
   const campos = [
     ['Destino', ({ x }) => esc([tarLugar(x), x.ubicacion_corta].filter(Boolean).join(' · ')) || '—'],
     ['Precio', f => { const p = tarCmpPrecio(f.x, f.ag); return p ? `<b class="tcs-precio${f === masBarato ? ' mejor' : ''}">${esc(p)}</b>` : '<span class="tcs-nd">Consultar</span>'; }],
-    ['Plan', ({ ag }) => ag.tags.length ? ag.tags.map(t => esc(TAG_LABEL[t] || t)).join(', ') : '—'],
+    ['Plan', ({ x }) => esc(tarPlanesHotel(x).join(', ')) || '—'],
     ['Niños gratis', ({ ag }) => ag.ninosMax ? `Hasta ${ag.ninosMax}` : 'No'],
     ['Por habitación', ({ ag }) => ag.capacidadMax ? `Hasta ${ag.capacidadMax} personas` : '—'],
     ['Se vende hasta', ({ t }) => esc(tarFechaCorta(t)?.txt.replace(/^Hasta /, '') || '—')],
@@ -29307,7 +29353,7 @@ function tarCmpPintarSheet() {
 function tarCmpTexto() {
   const bloques = tarCmpHoteles().map((x, i) => {
     const ag = agregarHotel(x);
-    const det = [tarCmpPrecio(x, ag) || 'Precio a consultar', ag.tags.map(t => TAG_LABEL[t] || t).join(', '),
+    const det = [tarCmpPrecio(x, ag) || 'Precio a consultar', tarPlanesHotel(x).join(', '),
       ag.ninosMax ? `${ag.ninosMax} niño${ag.ninosMax > 1 ? 's' : ''} gratis` : ''].filter(Boolean).join(' · ');
     return `*${i + 1}. ${x.nombre}*${tarLugar(x) ? ` (${tarLugar(x)})` : ''}\n${det}`;
   });
@@ -44759,7 +44805,7 @@ function setupTutoriales() {
    nuevo relevante para el equipo (no hace falta registrar cada fix chico). */
 const ROLES_TODOS = ['admin', 'asesor', 'marketing', 'boleteria'];
 const ACTUALIZACIONES_LOG = [
-  { fecha: '2026-11-26', emoji: '🏨', titulo: 'Tarifario › Hoteles más rápido de usar', texto: 'Arriba hay chips por destino, ordenados por lo que más piden los clientes. Cada destino muestra su precio desde, cuántos hoteles tienen niños gratis y cuántas personas caben por habitación. Al buscar o filtrar, los destinos con resultados se abren solos. Nuevo filtro «Viaja el»: muestra solo los hoteles con tarifa para ese día y su precio de esa fecha. Con el botón de balanza puedes comparar hasta 3 hoteles y copiar la comparación para WhatsApp.', roles: ['admin', 'administrativo', 'asesor'] },
+  { fecha: '2026-11-26', emoji: '🏨', titulo: 'Tarifario › Hoteles más rápido de usar', texto: 'Arriba hay chips por destino, ordenados por lo que más piden los clientes. Cada destino muestra su precio desde (en Margarita el todo incluido más barato; en Los Roques la full pensión más barata), cuántos hoteles tienen niños gratis y cuántas personas caben por habitación. Dentro de cada destino, primero los hoteles más cotizados por el equipo. Al buscar o filtrar, los destinos con resultados se abren solos. Nuevo filtro «Viaja el»: muestra solo los hoteles con tarifa para ese día y su precio de esa fecha. Con el botón de balanza puedes comparar hasta 3 hoteles y copiar la comparación para WhatsApp.', roles: ['admin', 'administrativo', 'asesor'] },
   { fecha: '2026-11-26', emoji: '🪪', titulo: 'Cédula del voucher a Pasajeros', texto: 'En Reservas > Servicios, si al generar el voucher falta la cédula, la ventana ahora pide también el tipo de documento (cédula, pasaporte, RIF u otro) y lo que escribes queda guardado en el pasajero titular, sin volver a cargarlo en Pasajeros. Una cédula que empieza con V- pone «Venezolana» como nacionalidad sola, aquí y en Pasajeros. El voucher sale con el logo en negro puro y pesa mucho menos, así sube rápido aunque la conexión esté lenta.', roles: ['admin', 'asesor'] },
   { fecha: '2026-11-25', emoji: '🏨', titulo: 'Disponibilidad más rápida y ordenada', texto: 'Pedir disponibilidad ahora va en tres pasos: alojamiento (con buscador y precio «desde» del Tarifario), fechas con botones de noches y personas. La edad de cada niño es obligatoria. Cliente, notas y urgente quedan en «Más datos». También puedes pedirla desde la ficha de un hotel en el Tarifario. Las tarjetas muestran fechas, personas, estado de cada alojamiento y quién la atiende; Respondidas muestra las 6 más recientes y el resto con «Ver más».', roles: ['admin', 'administrativo', 'asesor'] },
   { id: '2026-11-25-centro-novedades', fecha: '2026-11-25', emoji: '🔔', titulo: 'Centro de novedades', texto: 'Ahora hay una campana arriba. El número que ves es lo que se agregó desde la última vez que entraste, y al tocarla lees solo eso, con un ejemplo y un botón para ir directo. Después de actualizar el CRM te aparece solita la hoja «Esto es lo nuevo». También te avisa del Tarifario: alojamientos nuevos, precios que bajaron o subieron y tarifas nuevas (con un puntico en la campana). Filtra por Todo, Tarifario o CRM.', ejemplo: 'Hotel X pasó de desde $60 a desde $50: ejemplo $50 × 2 personas × 3 noches = $300.', donde: { sec: 'actualizaciones', label: 'Ver el archivo completo' }, roles: ['admin', 'administrativo', 'asesor', 'asesor_prueba', 'marketing', 'boleteria'] },
