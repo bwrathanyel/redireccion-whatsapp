@@ -2197,6 +2197,21 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tg-mapa-capas{position:absolute;z-index:1000;top:10px;left:10px;display:flex;border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .tg-mapa-capas button{border:0;background:#fff;color:#1f2937;font:inherit;font-size:12.5px;font-weight:600;padding:9px 14px;min-height:38px;cursor:pointer}
 .tg-mapa-capas button.is-on{background:#1f2937;color:#fff}
+.tg-mapa-ptm{background:none;border:0}
+.tg-mapa-ptm span{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#0b6e7a;color:#fff;font-size:12px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.tg-mapa-ptm span[data-t=aeropuerto],.tg-mapa-pt[data-t=aeropuerto] i{background:#2563eb}
+.tg-mapa-ptm span[data-t=muelle],.tg-mapa-pt[data-t=muelle] i{background:#7c3aed}
+.tg-mapa-ptm span[data-t=playa],.tg-mapa-pt[data-t=playa] i{background:#d97706}
+.tg-mapa-ptm span[data-t=restaurante],.tg-mapa-pt[data-t=restaurante] i{background:#dc2626}
+.tg-mapa-ptm span[data-t=comercio],.tg-mapa-pt[data-t=comercio] i{background:#059669}
+.tg-mapa-dist{background:#1f2937;color:#fff;border:0;font-size:12px;font-weight:600;padding:3px 8px;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.tg-mapa-dist:before{display:none}
+.tg-mapa-pts{display:flex;gap:8px;overflow-x:auto;padding:10px 12px;border-top:1px solid var(--line);scrollbar-width:thin}
+.tg-mapa-pts[hidden]{display:none}
+.tg-mapa-pt{flex:0 0 auto;display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:transparent;color:inherit;font:inherit;font-size:12.5px;border-radius:999px;padding:4px 12px 4px 4px;min-height:34px;cursor:pointer;white-space:nowrap}
+.tg-mapa-pt i{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#0b6e7a;color:#fff;font-size:12px}
+.tg-mapa-pt b{font-weight:700}
+.tg-mapa-pt.is-on{background:#1f2937;color:#fff;border-color:#1f2937}
 .tg-mapa-pie{display:flex;border-top:1px solid var(--line)}
 .tg-mapa-ext{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:12px 8px;color:var(--accent-ink);font-size:12.5px;font-weight:700;text-decoration:none}
 .tg-mapa-ext+.tg-mapa-ext{border-left:1px solid var(--line)}
@@ -12315,6 +12330,10 @@ body.rol-asesor #tar-tabs [data-tab="ia"]{display:none!important}
 
         <div class="edit-err" id="prov-err"></div>
 
+        <div id="prov-margen-tarifas-wrap" hidden style="margin-top:10px">
+          <label class="fl">Margen por habitación y tarifa (venta − costo del proveedor)</label>
+          <div id="prov-margen-tarifas"></div>
+        </div>
         <div id="prov-productos-wrap" hidden style="margin-top:10px">
           <label class="fl">Productos del tarifario que se le pagan</label>
           <div id="prov-productos"></div>

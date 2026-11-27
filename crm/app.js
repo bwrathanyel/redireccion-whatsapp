@@ -25031,8 +25031,49 @@ function abrirProveedorSheet(id = null) {
   document.getElementById('prov-tabs').hidden = !p;
   document.getElementById('prov-correos-wrap').hidden = !p;
   document.getElementById('prov-productos-wrap').hidden = !p;
-  if (p) { provCargarReservas(p); cargarCorreoProveedor(p); provCargarProductos(p); }
+  document.getElementById('prov-margen-tarifas-wrap').hidden = true;
+  if (p) { provCargarReservas(p); cargarCorreoProveedor(p); provCargarProductos(p); pmtCargar(p); }
   openSheet('proveedor-sheet');
+}
+// Margen por habitación/tarifa: precios (venta) − precios_netos (costo) de las tarifas vigentes con netos cargados.
+const PMT_CLAVE = k => ({ dbl: 'DBL', sgl: 'SGL', tpl: 'TPL', cpl: 'CPL', cdp: 'CDP', pax_adic: 'Pax adicional' }[k] || k.replace(/^chd_(\d+)_(\d+)$/, 'Niño $1-$2').replace(/_/g, ' '));
+const pmtNum = n => Number(n).toLocaleString('es-VE', { maximumFractionDigits: 2 });
+function pmtLineas(t) {
+  const v = t.precios || {}, n = t.precios_netos || {}, g = new Map();
+  Object.keys(n).forEach(k => {
+    const a = Number(v[k]), b = Number(n[k]); if (!(a > 0) || !(b >= 0)) return;
+    const c = a + '|' + b; if (!g.has(c)) g.set(c, { a, b, ks: [] }); g.get(c).ks.push(PMT_CLAVE(k));
+  });
+  return [...g.values()];
+}
+async function pmtCargar(p) {
+  const wrap = document.getElementById('prov-margen-tarifas-wrap'), caja = document.getElementById('prov-margen-tarifas');
+  const { data, error } = await sb.rpc('listar_margen_tarifas', { p_proveedor_id: p.id });
+  if (PROV_EDITANDO !== p) return;
+  if (error || !data?.ok) { wrap.hidden = true; return; }
+  const ts = (data.tarifas || []).filter(t => pmtLineas(t).length);
+  if (!ts.length) { wrap.hidden = true; return; }
+  const multi = new Set(ts.map(t => t.producto_id)).size > 1;
+  let prod = null;
+  const filas = ts.map(t => {
+    const mon = t.moneda && t.moneda !== 'USD' ? ' ' + esc(t.moneda) : '';
+    const base = t.precios?.base === 'habitacion' ? 'por habitación' : t.precios?.base ? 'por persona' : '';
+    const vent = (t.ventanas || []).map(w => w.texto).filter(Boolean).join(' · ');
+    const sub = [t.plan, base, vent].filter(Boolean).map(esc).join(' · ');
+    const cab = multi && t.producto_id !== prod ? `<tr><td colspan="5" style="padding-top:10px"><b>${esc(t.producto)}</b></td></tr>` : '';
+    prod = t.producto_id;
+    return cab + pmtLineas(t).map((l, i) => {
+      const m = l.a - l.b, neg = m < 0;
+      return `<tr><td>${i ? '' : `<b>${esc(t.habitacion || t.producto)}</b>${sub ? `<small style="display:block;color:var(--muted)">${sub}</small>` : ''}`}</td>
+        <td>${esc(l.ks.join(' / '))}</td><td style="text-align:right">$${pmtNum(l.a)}${mon}</td><td style="text-align:right">$${pmtNum(l.b)}${mon}</td>
+        <td style="text-align:right;font-weight:700;color:var(${neg ? '--red' : '--green'})">${neg ? '−' : '+'}$${pmtNum(Math.abs(m))} · ${prvPct(Math.round(1000 * m / l.a) / 10)}</td></tr>`;
+    }).join('');
+  }).join('');
+  caja.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr style="text-align:left;color:var(--muted)"><th>Habitación</th><th>Tarifa</th><th style="text-align:right">Venta (rack)</th><th style="text-align:right">Costo</th><th style="text-align:right">Margen</th></tr></thead>
+    <tbody>${filas}</tbody></table></div>
+    <div class="csub" style="margin-top:6px">Margen = venta − costo; el % es sobre la venta. Solo tarifas vigentes con costo cargado.</div>`;
+  wrap.hidden = false;
 }
 // Productos del tarifario con este proveedor (Fase 2.1): de ahí nace la CxP de cada servicio vendido.
 async function provCargarProductos(p) {
@@ -31985,6 +32026,7 @@ function tgMapaAbrir(x) {
   el.innerHTML = `<div class="tg-mapa-box" role="dialog" aria-modal="true" aria-label="Mapa de ${esc(x.nombre || '')}">
     <header class="tg-mapa-head"><div><b>${esc(x.nombre || '')}</b>${x.ubicacion_corta ? `<small>${esc(x.ubicacion_corta)}</small>` : ''}</div><button type="button" class="tg-mapa-x" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></header>
     <div class="tg-mapa-frame">${c ? '<div class="tg-mapa-lienzo"></div><div class="tg-mapa-capas" role="group" aria-label="Tipo de mapa"><button type="button" class="is-on" data-capa="calle">Mapa</button><button type="button" data-capa="sat">Satélite</button></div>' : embed}</div>
+    <div class="tg-mapa-pts" hidden></div>
     ${pie ? `<div class="tg-mapa-pie">${pie}</div>` : ''}
   </div>`;
   el.addEventListener('click', e => { if (e.target === el || e.target.closest('.tg-mapa-x')) tgMapaCerrar(); });
@@ -32012,11 +32054,56 @@ function tgMapaAbrir(x) {
     L.marker(c, { title: x.nombre || '', keyboard: false, icon: L.divIcon({ className: 'tg-mapa-pin', html: '<i class="fas fa-location-dot" aria-hidden="true"></i>', iconSize: [36, 44], iconAnchor: [18, 42] }) }).addTo(mapa);
     tgMapaInst = mapa;
     requestAnimationFrame(() => mapa.invalidateSize());
+    tgMapaPuntos(L, mapa, el, x, c);
   }).catch(() => {
     if (tgMapaEl !== el) return;
     el.querySelector('.tg-mapa-capas')?.remove();
     el.querySelector('.tg-mapa-frame').innerHTML = embed;
   });
+}
+// Puntos cercanos (producto_puntos): propios del hotel o compartidos por destino (aeropuerto, muelle).
+// La distancia es en línea recta (haversine), no por carretera.
+const TG_PUNTO_ICONO = { aeropuerto: 'fa-plane', muelle: 'fa-anchor', playa: 'fa-umbrella-beach', restaurante: 'fa-utensils', comercio: 'fa-bag-shopping', centro: 'fa-city', atraccion: 'fa-star' };
+function tgMapaDist(a, b) {
+  const r = Math.PI / 180, dLat = (b[0] - a[0]) * r, dLng = (b[1] - a[1]) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLng / 2) ** 2;
+  return 12742000 * Math.asin(Math.sqrt(h));
+}
+const tgMapaDistTxt = m => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`;
+async function tgMapaPuntos(L, mapa, el, x, c) {
+  if (x.id == null) return;
+  const q = sb.from('producto_puntos').select('id,tipo,nombre,lat,lng,orden');
+  const dest = [x.destino, x.localidad].filter(Boolean);
+  let filas = [];
+  try {
+    const rs = await Promise.all([q.eq('producto_id', x.id), ...(dest.length ? [sb.from('producto_puntos').select('id,tipo,nombre,lat,lng,orden').overlaps('destinos', dest)] : [])]);
+    rs.forEach(r => { if (!r.error && r.data) filas = filas.concat(r.data); });
+  } catch (_) { return; }
+  if (tgMapaEl !== el || !filas.length) return;
+  const vistos = new Set();
+  const pts = filas.filter(p => !vistos.has(p.id) && vistos.add(p.id)).map(p => ({ ...p, d: tgMapaDist(c, [p.lat, p.lng]) })).sort((a, b) => a.d - b.d);
+  const barra = el.querySelector('.tg-mapa-pts');
+  barra.innerHTML = pts.map((p, i) => `<button type="button" class="tg-mapa-pt" data-i="${i}" data-t="${esc(p.tipo)}"><i class="fas ${TG_PUNTO_ICONO[p.tipo] || 'fa-location-dot'}" aria-hidden="true"></i><span>${esc(p.nombre)}</span><b>${tgMapaDistTxt(p.d)}</b></button>`).join('');
+  barra.hidden = false;
+  requestAnimationFrame(() => mapa.invalidateSize());
+  let linea = null, sel = -1;
+  pts.forEach((p, i) => {
+    const m = L.marker([p.lat, p.lng], { title: p.nombre, keyboard: false, icon: L.divIcon({ className: 'tg-mapa-ptm', html: `<span data-t="${esc(p.tipo)}"><i class="fas ${TG_PUNTO_ICONO[p.tipo] || 'fa-location-dot'}" aria-hidden="true"></i></span>`, iconSize: [26, 26], iconAnchor: [13, 13] }) }).addTo(mapa);
+    m.on('click', () => elegir(i));
+  });
+  const botones = [...barra.querySelectorAll('.tg-mapa-pt')];
+  function elegir(i) {
+    if (linea) { mapa.removeLayer(linea); linea = null; }
+    botones.forEach((b, j) => b.classList.toggle('is-on', j === i && i !== sel));
+    if (i === sel) { sel = -1; mapa.flyTo(c, 16, { duration: .5 }); return; }
+    sel = i;
+    const p = pts[i];
+    linea = L.polyline([c, [p.lat, p.lng]], { color: '#ef4444', weight: 3, dashArray: '6 6', opacity: .9 }).addTo(mapa);
+    linea.bindTooltip(`${esc(p.nombre)} · ${tgMapaDistTxt(p.d)}`, { permanent: true, className: 'tg-mapa-dist', direction: 'center' }).openTooltip();
+    mapa.flyToBounds(L.latLngBounds([c, [p.lat, p.lng]]), { padding: [60, 60], maxZoom: 17, duration: .5 });
+    botones[i].scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+  barra.addEventListener('click', e => { const b = e.target.closest('.tg-mapa-pt'); if (b) elegir(Number(b.dataset.i)); });
 }
 function tgMapaCerrar(fromNav) {
   if (!tgMapaEl) return;
