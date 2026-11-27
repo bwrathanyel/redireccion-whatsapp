@@ -27270,6 +27270,34 @@ function aplicarTarifarioPorRol() {
   aplicarTabsOcultas();
   actualizarVisibilidadFiltrosTarifario();
 }
+// Filtros y pestaña del tarifario se recuerdan entre visitas (solo en este navegador).
+// "Ver ocultas" no: dispara la carga de ~22k filas apagadas y no debe arrancar solo.
+// La fecha de viaje tampoco: una fecha guardada se vuelve pasada y vaciaría la lista.
+const TAR_PREFS_KEY = 'lotus_tar_prefs', TAR_PREFS_SKIP = new Set(['tar-f-ocultas', 'tar-f-fecha']);
+function tarPrefsGuardar() {
+  try {
+    const f = {};
+    document.querySelectorAll('.tar-f').forEach(el => { if (el.id && !TAR_PREFS_SKIP.has(el.id)) f[el.id] = el.type === 'checkbox' ? el.checked : el.value; });
+    localStorage.setItem(TAR_PREFS_KEY, JSON.stringify({ tab: tarTab, dest: tarDestinoChip, f }));
+  } catch (_) { /* storage bloqueado */ }
+}
+function tarPrefsRestaurar() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem(TAR_PREFS_KEY)); } catch (_) { /* JSON viejo o storage bloqueado */ }
+  if (!p || typeof p !== 'object') return;
+  Object.entries(p.f || {}).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (!el || TAR_PREFS_SKIP.has(id)) return;
+    if (el.type === 'checkbox') el.checked = v === true;
+    else if (el.tagName !== 'SELECT' || [...el.options].some(o => o.value === v)) el.value = v ?? '';
+  });
+  if (typeof p.dest === 'string') tarDestinoChip = p.dest;
+  const b = p.tab && tarTabPermitidaPorRol(p.tab) && document.querySelector(`#tar-tabs .seg[data-tab="${p.tab}"]`);
+  if (b) {
+    document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.toggle('on', x === b));
+    tarTab = p.tab;
+  }
+}
 function setupTarifarioTabs() {
   fill('tar-f-destino', ['Margarita', 'Coche', 'Los Roques', 'Mérida', 'Tucacas', 'Chichiriviche', 'Falcón', 'Canaima', 'Caracas', 'Catatumbo']);
   const mesSel = document.getElementById('tar-f-mes');
@@ -27280,12 +27308,13 @@ function setupTarifarioTabs() {
   document.querySelectorAll('#tar-tabs .seg').forEach(b => b.onclick = () => {
     if (!tarTabPermitidaPorRol(b.dataset.tab) || (tabsOcultas.includes(b.dataset.tab) && !tarVerOcultos())) return;
     document.querySelectorAll('#tar-tabs .seg').forEach(x => x.classList.remove('on'));
-    b.classList.add('on'); tarTab = b.dataset.tab;
+    b.classList.add('on'); tarTab = b.dataset.tab; tarPrefsGuardar();
     const g = esMovil() && b.parentNode; if (g) g.scrollLeft = b.offsetLeft - (g.clientWidth - b.offsetWidth) / 2;
     actualizarVisibilidadFiltrosTarifario();
     loadTarifario();
   });
   setupTarMas();
+  tarPrefsRestaurar();
   actualizarVisibilidadFiltrosTarifario();
   let deb; const debRender = () => { clearTimeout(deb); deb = setTimeout(renderTarifario, 200); };
   document.getElementById('tar-search').addEventListener('input', debRender);
@@ -27294,7 +27323,7 @@ function setupTarifarioTabs() {
     // escritura libre (tar-f-precio, type=number) pasa por el mismo debounce que
     // el buscador: tipear "1500" ya no reconstruye la grilla 4 veces.
     const inmediato = el.type === 'checkbox' || el.tagName === 'SELECT';
-    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? () => renderTarifario() : debRender);
+    el.addEventListener(inmediato ? 'change' : 'input', inmediato ? () => { tarPrefsGuardar(); renderTarifario(); } : () => { tarPrefsGuardar(); debRender(); });
   });
   setupTarHotelesExtras();
   setupTarVerOcultos();
@@ -28048,11 +28077,11 @@ function tarChips() {
   // Cada filtro solo aplica a algunas pestañas (data-tabs); si está oculto para
   // la pestaña abierta no debe contarse aunque tenga un valor viejo guardado.
   const visible = id => { const el = g(id); if (!el) return false; const c = el.closest('[data-tabs]'); return !c || !c.hasAttribute('data-hidden'); };
-  const reset = (id, v) => { const el = g(id); if (!el) return; if (el.type === 'checkbox') el.checked = v; else el.value = v; renderTarifario(); };
+  const reset = (id, v) => { const el = g(id); if (!el) return; if (el.type === 'checkbox') el.checked = v; else el.value = v; tarPrefsGuardar(); renderTarifario(); };
   const chips = [];
   const push = (label, limpiar) => chips.push([label, limpiar]);
   if (visible('tar-f-destino') && val('tar-f-destino')) push('Destino: ' + val('tar-f-destino'), () => reset('tar-f-destino', ''));
-  if (tarTab === 'hotel' && tarDestinoChip) push('Destino: ' + tarDestinoChip, () => { tarDestinoChip = ''; renderTarifario(); });
+  if (tarTab === 'hotel' && tarDestinoChip) push('Destino: ' + tarDestinoChip, () => { tarDestinoChip = ''; tarPrefsGuardar(); renderTarifario(); });
   if (visible('tar-f-fecha') && val('tar-f-fecha')) push('Viaja el ' + fmtFechaCorta(val('tar-f-fecha')), () => reset('tar-f-fecha', ''));
   if (visible('tar-f-tipo') && val('tar-f-tipo')) push('Plan: ' + (TAG_LABEL[val('tar-f-tipo')] || val('tar-f-tipo')), () => reset('tar-f-tipo', ''));
   if (visible('tar-f-mes') && val('tar-f-mes')) push('Mes: ' + (MESL[Number(val('tar-f-mes')) - 1] || val('tar-f-mes')), () => reset('tar-f-mes', ''));
@@ -28073,6 +28102,7 @@ function tarChips() {
     tarDestinoChip = '';
     const n = g('tar-f-ninos'); if (n) n.checked = false;
     const v = g('tar-f-vigente'); if (v) v.checked = true;
+    tarPrefsGuardar();
     if (tarVerOcultos()) { g('tar-ver-ocultos-btn')?.click(); return; }
     renderTarifario();
   };
@@ -28085,8 +28115,11 @@ function montarTarRefrescoAlVolver() {
     if (document.hidden) { oculto = Date.now(); return; }
     if (!oculto || Date.now() - oculto < 120000) return;
     oculto = 0;
-    tarCache = {};
-    if (document.getElementById('sec-tarifario')?.classList.contains('active')) loadTarifario();
+    // Lo que ya está en pantalla se queda visible y se refresca en silencio: vaciar el
+    // caché mandaba al asesor a mirar el cargador cada vez que volvía de otra pestaña.
+    const visible = tarCache[tarTab];
+    tarCache = visible ? { [tarTab]: visible } : {};
+    if (document.getElementById('sec-tarifario')?.classList.contains('active')) loadTarifario(true);
   });
 }
 arrancar(montarTarRefrescoAlVolver);
@@ -28132,7 +28165,8 @@ function cargadorIniciar(el, { titulo = 'Cargando…', icono = 'fa-plane-departu
 }
 const TAR_CARGADOR_TITULO = { hotsale: 'Cargando Hot Sales', ia: 'Cargando curaduría IA', promo: 'Cargando promociones', excursion: 'Cargando excursiones', traslado: 'Cargando traslados', hotel: 'Cargando hoteles', paquete: 'Cargando paquetes', boleteria: 'Cargando boletería' };
 
-async function loadTarifario() {
+async function loadTarifario(silencioso) {
+  const tabInicial = tarTab;
   if (!tarTab) {
     document.getElementById('tar-loading').classList.remove('show');
     document.getElementById('tar-grid').style.display = 'none';
@@ -28151,10 +28185,11 @@ async function loadTarifario() {
   // traer las ~22k apagadas era el 96% de la carga (25-70 s, medido 2026-10-09)
   // para ~900 visibles. IA sí lista apagadas, así que siempre va completa.
   const completo = tarTab === 'ia' || (tarTab === 'promo' && tarVerOcultos());
-  if (tarCache[tarTab] && (tarCache[tarTab]._completo || !completo)) { renderTarifario(); return; }
+  if (silencioso !== true && tarCache[tarTab] && (tarCache[tarTab]._completo || !completo)) { renderTarifario(); return; }
   const loading = document.getElementById('tar-loading'), empty = document.getElementById('tar-empty'), grid = document.getElementById('tar-grid');
-  empty.classList.remove('show'); grid.style.display = 'none';
-  const carga = cargadorIniciar(loading, { titulo: TAR_CARGADOR_TITULO[tarTab] || 'Cargando tarifario' });
+  // Refresco en segundo plano: la lista actual sigue a la vista, sin cargador ni parpadeo.
+  if (silencioso !== true) { empty.classList.remove('show'); grid.style.display = 'none'; }
+  const carga = silencioso === true ? { progreso() {}, fin() {} } : cargadorIniciar(loading, { titulo: TAR_CARGADOR_TITULO[tarTab] || 'Cargando tarifario' });
   // Boletería no es un `tipo`: los vuelos siguen siendo 'paquete' para que el
   // catálogo público los rutee igual. Se filtran por la bandera es_boleteria,
   // y por eso esta pestaña necesita su propio filtro en vez de .eq('tipo', ...).
@@ -28279,7 +28314,12 @@ async function loadTarifario() {
   }
   if (q) ({ data, error } = await q);
   if (!tarTab) { carga.fin(); return; }
-  carga.fin(); grid.style.display = 'grid';
+  carga.fin();
+  if (silencioso === true) {
+    if (error) { console.error(error); return; }
+    if (tarTab !== tabInicial) return;
+  }
+  grid.style.display = 'grid';
   if (error) { console.error(error); errToast('No se pudo cargar el tarifario'); return; }
   // Un paquete puede heredar las fotos de su hotel vinculado (productos.hotel_id)
   // — PostgREST no resuelve bien el embed self-join `productos!hotel_id` (siempre
@@ -28756,6 +28796,21 @@ function promoDisponibleEnMes(p, mesNum) {
 const _agregarHotelCache = new WeakMap();
 // Con «Viaja el» puesto (solo Hoteles) todo lo agregado mira las tarifas que sirven
 // para ESE día: el filtro, el «Desde» de la tarjeta, el encabezado y el comparador.
+// El selector "Plan" manda claves (todo_incluido...), pero las tarifas del PDF traen el plan
+// como texto libre en `tarifas.plan` ("TODO INCLUIDO", "FULL PENSIÓN", "MEDIA PENSION"...) y
+// solo unas pocas filas tienen la clave en incluye_tags. Se acepta cualquiera de las dos.
+const TAR_PLAN_RE = {
+  todo_incluido: /todo\s+incluido|all\s+inclusive/,
+  solo_desayuno: /solo\s+desayuno|american\s+plan|^desayuno$/,
+  media_pension: /media\s+pension/,
+  pension_completa: /pension\s+completa|full\s+pension/,
+};
+function tarCoincidePlan(clave, tags, planes) {
+  if ((tags || []).includes(clave)) return true;
+  const re = TAR_PLAN_RE[clave];
+  if (!re) return false;
+  return (planes || []).some(p => re.test(String(p || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()));
+}
 function agregarHotel(x) {
   const f = tarTab === 'hotel' ? tarFechaViaje : '';
   if (x && typeof x === 'object') {
@@ -28790,6 +28845,7 @@ function _agregarHotelCalc(x, f = '') {
   const menor = precios.reduce((m, e) => (!m || e.v < m.v ? e : m), null);
   return {
     tags: [...new Set(promos.flatMap(p => p.incluye_tags || []))],
+    planes: [...new Set(promos.filter(tarVendibleHoy).map(p => p.plan).filter(Boolean))],
     precioMin: menor ? Math.round(menor.v * 100) / 100 : null,
     precioMinMoneda: menor ? menor.moneda : null,
     precioMinTarifa: menor ? menor.t : null,
@@ -29001,7 +29057,7 @@ function renderTarifario() {
     if (tarTab === 'hotel') {
       // El destino (chip) se aplica después: los chips cuentan con todos los demás filtros.
       const ag = agregarHotel(x);
-      if (fTipo && !ag.tags.includes(fTipo)) return false;
+      if (fTipo && !tarCoincidePlan(fTipo, ag.tags, ag.planes)) return false;
       if (fPrecio != null && ag.precioMin != null && ag.precioMinMoneda === 'USD' && ag.precioMin > fPrecio) return false;
       if (fNinos && ag.ninosMax < 1) return false;
       if ((fVigente || tarFechaViaje) && !ag.algunaVigente) return false;
@@ -29018,7 +29074,7 @@ function renderTarifario() {
       // Promo de un hotel sin foto real: igual que la web, solo sale con el ojo (oficina).
       if (x.productos?.oculto_sin_foto && !fOcultas) return false;
       if (fDestino && destinoDe(x) !== fDestino) return false;
-      if (fTipo && !(x.incluye_tags || []).includes(fTipo)) return false;
+      if (fTipo && !tarCoincidePlan(fTipo, x.incluye_tags, [x.plan])) return false;
       if (fPrecio != null && tarSuperaPrecioMax(x.precio_desde_usd, x.moneda, fPrecio)) return false;
       if (fNinos && !(x.ninos_gratis_cantidad > 0)) return false;
       if (fMes != null && !promoDisponibleEnMes(x, fMes)) return false;
@@ -29366,6 +29422,7 @@ function setupTarHotelesExtras() {
     const b = e.target.closest('[data-dest]');
     if (!b) return;
     tarDestinoChip = b.dataset.dest && b.dataset.dest !== tarDestinoChip ? b.dataset.dest : '';
+    tarPrefsGuardar();
     renderTarifario();
   });
   document.getElementById('tar-cmp-bar')?.addEventListener('click', e => {
@@ -41988,10 +42045,12 @@ function activateSection(sec, fromNav) {
   // entrada de la sección. Va ANTES de mostrar la sección nueva: después forzaba
   // su layout completo en el mismo click (scrollTo/scrollTop esperan layout).
   histGuardarScroll();
+  if (currentSec) SCROLL_SECCION[currentSec] = { y: window.scrollY || document.body.scrollTop || 0, t: Date.now() };
   if (window.scrollY || document.body.scrollTop) { window.scrollTo({ top: 0, behavior: 'auto' }); document.body.scrollTop = 0; }
   if (currentSec === 'leads' && sec !== 'leads') detenerPollLeads();
   if (currentSec === 'whatsapp' && sec !== 'whatsapp') { waDetenerPoll(); if (waActual) waCerrarChat(true, true); }
   currentSec = sec;
+  const yaVista = SECCIONES_CARGADAS.has(sec);
   SECCIONES_CARGADAS.add(sec);
   guardarUltimaSeccion(sec);
   histRegistrar(sec);
@@ -42003,6 +42062,9 @@ function activateSection(sec, fromNav) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active', 'entrando'));
   const secEl = document.getElementById('sec-' + sec);
   secEl.classList.add('active');
+  // Volver a una sección ya vista (hace menos de 30 min) deja el scroll donde estaba.
+  const vuelta = yaVista && SCROLL_SECCION[sec];
+  if (vuelta && vuelta.y > 0 && Date.now() - vuelta.t < 1800000) requestAnimationFrame(() => { window.scrollTo({ top: vuelta.y, behavior: 'auto' }); if (!window.scrollY) document.body.scrollTop = vuelta.y; });
   pintarPestanasNav(sec, secEl);
   if (sec === 'correo' || document.getElementById('correo-nav')) correoMod().navCorreo(sec === 'correo');
   // Clase en .main en vez de .main:has(#sec-x.active): ese :has se re-evaluaba con
@@ -42043,6 +42105,7 @@ function activateSection(sec, fromNav) {
 }
 const CARGA_FRESCA_MS = 30000;
 const ULTIMA_CARGA = {};
+const SCROLL_SECCION = {};
 let DASH_SUCIO = false;
 const SECS_DASH = new Set(['dashboard', 'pipeline', 'gestion-personal']);
 // Con esas secciones ocultas no se reconstruyen sus charts a cada lead nuevo; se pintan al entrar.
