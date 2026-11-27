@@ -4218,7 +4218,10 @@ body.asesor-boleteria :is(#btn-entrar-modo-boleteria,#sheet-entrar-modo-boleteri
 /* Disponibilidad (admin): late con solicitudes abiertas (disponibilidad.js badge) */
 #sidebar-nav > .nav-item[data-sec="disponibilidad"] .badge{background:#ef4444;color:#fff}
 #sidebar-nav > .nav-item[data-sec="disponibilidad"].pendientes{border:1px solid rgba(255,107,107,.75);border-radius:12px;animation:navBolSolLatido 1.3s ease-in-out infinite}
-@media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item[data-sec="disponibilidad"].pendientes{animation:none;background:rgba(239,68,68,.24)}}
+#sidebar-nav > .nav-item[data-sec="disponibilidad"].atendiendo{border:1px solid rgba(74,158,255,.75);border-radius:12px;animation:navDispAtendiendo 1.3s ease-in-out infinite}
+#sidebar-nav > .nav-item[data-sec="disponibilidad"].atendiendo .badge{background:#4a9eff;color:#fff}
+@keyframes navDispAtendiendo{0%,100%{box-shadow:0 0 0 0 rgba(74,158,255,.55);background:rgba(74,158,255,.12)}50%{box-shadow:0 0 0 7px rgba(74,158,255,0);background:rgba(74,158,255,.3)}}
+@media (prefers-reduced-motion:reduce){#sidebar-nav > .nav-item[data-sec="disponibilidad"].pendientes{animation:none;background:rgba(239,68,68,.24)}#sidebar-nav > .nav-item[data-sec="disponibilidad"].atendiendo{animation:none;background:rgba(74,158,255,.24)}}
 body.modo-boleteria #sheet-entrar-modo-boleteria{display:none}
 body:not(.modo-boleteria) #sheet-salir-modo-boleteria{display:none}
 .rol-boleteria #btn-entrar-modo-boleteria,.rol-boleteria #btn-salir-modo-boleteria,.rol-boleteria #sheet-entrar-modo-boleteria,.rol-boleteria #sheet-salir-modo-boleteria{display:none}

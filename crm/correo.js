@@ -497,8 +497,22 @@ export function crearCorreo({ sb, SUPABASE_URL, SUPABASE_KEY, CLIENT_COLORS, see
   };
 
   window.conectarGmail = conectarGmail;
+  // La pantalla roja de Google no se puede maquillar (app sin verificar por los alcances
+  // restringidos), así que se explica antes con un dibujo de cada paso.
+  const GUIA_AVISO_GOOGLE = `<div class="gmail-guia"><ol>
+    <li><span class="gg-n">1</span><div><p class="gg-t">Toca «Configuración avanzada»</p>
+      <div class="gg-mock" aria-hidden="true"><i class="fas fa-exclamation-triangle gg-tri"></i><span class="gg-h">Google no ha verificado esta aplicación</span><span class="gg-l"></span><span class="gg-l" style="width:70%"></span>
+      <span class="gg-fila"><span class="gg-link gg-mark">Configuración avanzada</span><span class="gg-btn">VOLVER A UN SITIO SEGURO</span></span></div></div></li>
+    <li><span class="gg-n">2</span><div><p class="gg-t">Abajo, toca «Ir a crm.destinoyeventoslotus360.com (no seguro)»</p>
+      <div class="gg-mock" aria-hidden="true"><span class="gg-l"></span><span class="gg-l" style="width:85%"></span><span class="gg-link gg-mark">Ir a crm.destinoyeventoslotus360.com (no seguro)</span></div></div></li>
+    <li><span class="gg-n">3</span><div><p class="gg-t">Marca «Seleccionar todo» y toca «Continuar»</p>
+      <div class="gg-mock" aria-hidden="true"><span class="gg-check gg-mark"><i class="fas fa-check"></i>Seleccionar todo</span><span class="gg-check"><i class="fas fa-check"></i>Leer, redactar y enviar correos</span><span class="gg-check"><i class="fas fa-check"></i>Ver tus mensajes de correo</span>
+      <span class="gg-fila" style="justify-content:flex-end"><span class="gg-btn">Continuar</span></span></div></div></li>
+  </ol><p class="gg-nota">Si dejas alguna casilla sin marcar, el CRM no podrá leer o enviar tu correo.</p></div>`;
   async function conectarGmail() {
     document.getElementById('correo-cuenta-menu').style.display = 'none';
+    const seguir = await confirmarSheet({ titulo: 'Conectar tu Gmail', detalle: 'Google va a mostrar un aviso porque todavía no revisó la app del CRM. Es seguro: inicias sesión en la página de Google y el CRM nunca ve tu contraseña.', textoOk: 'Continuar a Google', campos: [{ tipo: 'custom', montar: el => { el.innerHTML = GUIA_AVISO_GOOGLE; } }] });
+    if (!seguir) return;
     const { data: state, error } = await sb.rpc('gmail_iniciar_conexion');
     if (error || !state) { errToast('No fue posible iniciar la conexión con Gmail'); return; }
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');

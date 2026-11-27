@@ -284,7 +284,10 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
   function badge() {
     const n = admin ? lista.filter(s => ['en_cola', 'tomada', 'consultando'].includes(s.estado)).length : lista.reduce((a, s) => a + (s.no_leidos || 0), 0);
     const b = document.getElementById('nav-disp-count'); if (b) { b.textContent = n; b.hidden = !n; b.style.display = n ? '' : 'none'; }
-    if (admin) document.querySelector('#sidebar-nav > .nav-item[data-sec="disponibilidad"]')?.classList.toggle('pendientes', n > 0);
+    if (admin) {
+      const sinTomar = lista.some(s => s.estado === 'en_cola'), li = document.querySelector('#sidebar-nav > .nav-item[data-sec="disponibilidad"]');
+      li?.classList.toggle('pendientes', sinTomar); li?.classList.toggle('atendiendo', n > 0 && !sinTomar);
+    }
   }
   async function traer() {
     const d = await rpc('disp_listar', { p_vista: vista, p_dias: 7 }, true);
@@ -321,7 +324,7 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
   }
 
   function chips(s) {
-    return [s.urgente && '<span class="dp-chip rojo">URGENTE</span>', pronto(s) && s.estado !== 'respondida' && '<span class="dp-chip ambar">≤7 DÍAS</span>',
+    return [s.urgente && ['en_cola', 'tomada', 'consultando'].includes(s.estado) && `<span class="dp-chip ${s.estado === 'en_cola' ? 'rojo' : ''}">URGENTE</span>`, pronto(s) && s.estado !== 'respondida' && '<span class="dp-chip ambar">≤7 DÍAS</span>',
       s.cambio_tras_consulta && '<span class="dp-chip acc">CAMBIÓ</span>', s.fuera_horario && s.estado === 'en_cola' && '<span class="dp-chip">FUERA DE HORARIO</span>',
       s.no_leidos && `<span class="dp-chip azul"><i class="fas fa-comment"></i> ${s.no_leidos}</span>`, s.padre_id && `<span class="dp-chip">ALT. DE #${s.padre_id}</span>`].filter(Boolean).join('');
   }
@@ -339,7 +342,7 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     const quien = admin ? `${ava(s.creado_por_nombre)}<span class="dp-quien">${esc(s.creado_por_nombre || '')}${s.tomada_por_nombre && s.estado !== 'en_cola' ? ` <i class="fas fa-arrow-right"></i> ${esc(s.tomada_por_nombre)}` : ''}</span>`
       : s.estado === 'en_cola' ? `<span class="dp-chip">Puesto ${s.puesto || '—'} en la cola</span>`
       : `${ava(s.tomada_por_nombre)}<span class="dp-chip ${s.estado === 'respondida' ? 'verde' : s.estado === 'cancelada' ? 'rojo' : 'azul'}">${ESTADO_SOL[s.estado]}</span>`;
-    return `<article class="dp-card${s.urgente ? ' urg' : ''}${s.estado === 'cancelada' ? ' apagada' : ''}" data-abrir="${s.id}" draggable="${admin}" tabindex="0">
+    return `<article class="dp-card${s.urgente && s.estado === 'en_cola' ? ' urg' : ''}${s.estado === 'cancelada' ? ' apagada' : ''}" data-abrir="${s.id}" draggable="${admin}" tabindex="0">
       <div class="dp-cab"><span>${esc(s.cliente_nombre || s.destino || 'Solicitud')}</span><small>#${s.id}</small></div>
       <div class="dp-meta"><span><i class="fas fa-calendar"></i><b>${fCorta(s.check_in)} → ${fCorta(s.check_out)}</b>· ${noches(s)} n</span><span><i class="fas fa-user-group"></i>${esc(paxTxt(s.habitaciones))}</span></div>
       ${ch ? `<div class="dp-chips">${ch}</div>` : ''}
