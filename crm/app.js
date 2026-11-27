@@ -29666,7 +29666,7 @@ function tarRowHtml(x) {
 // Foto de la tarjeta: destino arriba-izq, botones de admin arriba-der, puntos del
 // carrusel abajo-izq y el precio en una pastilla abajo-der. `precio` es lo que
 // devuelve tarPrecioCorto (o null: «Consultar»); el texto completo va en el title.
-function tarCardThumbHtml(foto, esPromo, destino, precio, acciones) {
+function tarCardThumbHtml(foto, esPromo, destino, precio, acciones, pago = '') {
   const media = foto
     ? `<img class="tc-thumb" src="${esc(foto)}" alt="" loading="lazy" decoding="async">`
     : `<div class="tc-thumb tc-thumb-vacio"><i class="fas fa-${esPromo ? 'tag' : 'image'}"></i></div>`;
@@ -29674,7 +29674,7 @@ function tarCardThumbHtml(foto, esPromo, destino, precio, acciones) {
   const pastilla = precio
     ? `<div class="tc-precio-foto" title="${esc(precio.title)}">${precio.desde ? '<span class="tcp-d">Desde</span>' : ''}<b class="tcp-m">${esc(precio.monto)}</b>${precio.unidad ? `<span class="tcp-u">${esc(precio.unidad)}</span>` : ''}</div>`
     : '<div class="tc-precio-foto sin-precio">Consultar</div>';
-  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${pastilla}<div class="carrusel-dots"></div>${acciones ? `<div class="tc-acciones">${acciones}</div>` : ''}</div>`;
+  return `<div class="tc-media-wrap">${media}<div class="tc-media-scrim"></div>${chip}${pago ? `<div class="tc-precio-pila">${pago}${pastilla}</div>` : pastilla}<div class="carrusel-dots"></div>${acciones ? `<div class="tc-acciones">${acciones}</div>` : ''}</div>`;
 }
 // Botón "ocultar" al pasar el mouse por la tarjeta (2026-08-27) -- antes había
 // que abrir el engranaje "Configurar visibilidad" y buscar en cientos. Mismo
@@ -29694,6 +29694,31 @@ function tcPrecioTagHtml(t) {
   if (t.origen === 'pdf') return '<span class="tc-precio-tag is-pdf" title="Precio tal cual viene en el PDF del proveedor: no se le sumó fee ni recargo"><i class="fas fa-file-pdf"></i>Precio PDF</span>';
   return '<span class="tc-precio-tag" title="Precio final para el cliente: ya incluye el fee o recargo de Lotus"><i class="fas fa-circle-check"></i>Precio cliente</span>';
 }
+// Cómo se paga el precio mostrado (dueño 2026-11-26). «EUR» es la tasa, no la moneda: el monto
+// va en $ y en Bs se multiplica por la tasa BCV del euro (USD: la del dólar). «Solo divisa» solo
+// con frases sin condición: «reservas a largo plazo: solo divisas» no vale para toda la tarifa.
+// IVA: el +16 % en Bs es tarifario_bloques.iva_en_bs (misma regla que cbBsBase); «incluido» sale de
+// impuestos.iva_incluido o productos.iva_ya_incluido, nunca de tarifas.iva_roques_aplicado.
+const TAR_SOLO_DIVISA_RE = /no se acepta[^.]*bol[ií]var|[uú]nicamente en d[oó]lares|son para pagos en divisa/i;
+const TAR_PAGO_TXT = { bcv: 'Bs a tasa BCV', euro: 'Bs a tasa euro', divisa: 'Solo divisa' };
+const TAR_IVA_TXT = { suma: '+16% IVA en Bs', incluido: 'IVA incluido', confirmar: 'IVA por confirmar' };
+function tarFormaPago(t, prod) {
+  if (!t) return null;
+  const b = tarBloque(t) || {};
+  const texto = [...(t.condiciones || []), ...(b.otras || [])].filter(c => typeof c === 'string').join(' · ');
+  const pago = TAR_SOLO_DIVISA_RE.test(texto) ? 'divisa' : String(t.moneda || 'USD').toUpperCase() === 'EUR' ? 'euro' : 'bcv';
+  const roques = /roques/i.test(prod?.destino || '');
+  const incluido = b.impuestos?.iva_incluido === true || prod?.iva_ya_incluido === true;
+  const iva = b.iva_en_bs ? (pago === 'divisa' ? null : 'suma') : !roques ? null : incluido ? 'incluido' : 'confirmar';
+  return { pago, iva };
+}
+function tarFormaPagoTitle(f) {
+  const pago = f.pago === 'divisa' ? 'Se paga solo en divisa: el hotel no acepta bolívares.'
+    : `Monto en $. En divisa se paga igual; en bolívares, el monto × la tasa BCV del ${f.pago === 'euro' ? 'euro' : 'dólar'}.`;
+  return pago + ({ suma: ' Pagando en Bs se suma 16% de IVA.', incluido: ' El IVA ya está incluido.', confirmar: ' La tarifa no dice si trae el IVA: confírmalo con el proveedor.' }[f.iva] || '');
+}
+const tarFormaPagoHtml = (f, cls = 'tc-pago') => f
+  ? `<span class="${cls} is-${f.pago}" title="${esc(tarFormaPagoTitle(f))}"><i class="fas fa-${f.pago === 'divisa' ? 'dollar-sign' : 'money-bill-wave'}" aria-hidden="true"></i>${TAR_PAGO_TXT[f.pago]}${f.iva ? `<span class="tcpg-iva is-${f.iva}">${TAR_IVA_TXT[f.iva]}</span>` : ''}</span>` : '';
 const tcCotizarBtnHtml = productoId => productoId && usuarioPuedeAbrirSeccion('cotizacion-boletos')
   ? `<button type="button" class="tcm-cotizar" data-cotizar-producto="${productoId}" title="Abrir Cotizaciones con este hotel ya elegido"><i class="fas fa-file-invoice-dollar"></i>Cotizar</button>` : '';
 const tcMapaBtnHtml = x => /^https:\/\//.test(x?.ubicacion_mapa || '')
@@ -29795,10 +29820,11 @@ function tarCardHtml(x) {
   const bullets = resumenBullets(x.descripcion);
   const nino = tarNinoGratisHotel(x);
   const precio = tarPrecioCorto(tarifa, ag);
-  const tag = precio ? tcPrecioTagHtml(ag.precioMin != null ? ag.precioMinTarifa : tarifa) : '';
+  const tarifaPrecio = ag.precioMin != null ? ag.precioMinTarifa : tarifa;
+  const tag = precio ? tcPrecioTagHtml(tarifaPrecio) : '';
   const ubic = tcUbicHtml(x);
   return `<div class="tar-item tar-card${nino ? ' tc-con-ninos' : ''}" data-id="${x.id}">
-    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), precio, tag + tcCmpBtnHtml(x) + tcHideBtnHtml(x.id, 'productos', 'activo'))}
+    ${tarCardThumbHtml(fotosDe(x, 256)[0], false, destinoDe(x), precio, tag + tcCmpBtnHtml(x) + tcHideBtnHtml(x.id, 'productos', 'activo'), precio ? tarFormaPagoHtml(tarFormaPago(tarifaPrecio, x)) : '')}
     ${tarNinosHtml(nino, 'tc-ninos')}
     <div class="tc-body">
       <div class="tc-nombre">${esc(x.nombre)}</div>
@@ -38975,7 +39001,7 @@ let cbProductoPendiente = null;
 let cbFechasPendientes = null;
 function cbDesdeFicha(id, fechas = null) { cbProductoPendiente = Number(id); cbFechasPendientes = fechas; activateSection('cotizacion-boletos'); }
 async function cbAplicarProducto(id, fechas = null) {
-  const p =cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
+  const p =cbHoteles.get(id) || (await sb.from('productos').select('id,nombre,tipo,destino,iva_ya_incluido,producto_fotos(storage_path,orden,es_principal,activo)').eq('id', id).maybeSingle()).data;
   if (!p) { errToast('No se pudo cargar ese producto'); return; }
   cbHoteles.set(id, p);
   const tipo = { hotel: 'hotel', paquete: 'paquete', excursion: 'fullday', traslado: 'traslado' }[p.tipo] || 'otro';
@@ -39694,9 +39720,17 @@ function cbTramosHtml(it) {
       + '</div>';
   }).join('')}</div>`;
 }
+// Misma marca que la tarjeta del Tarifario, sacada de las tarifas que usan los tramos elegidos.
+function cbFormaPagoHtml(it) {
+  if (it._cargando || !it.producto_id || !it.tramos?.length) return '';
+  const filas = cbHotelTarifas.get(Number(it.producto_id)) || [], prod = cbProductoDe(it);
+  const ids = new Set([...it.tramos, ...(it.tramo_salida ? [it.tramo_salida] : [])].map(t => t.tarifa_id));
+  const formas = new Map(filas.filter(t => ids.has(t.id)).map(t => tarFormaPago(t, prod)).filter(Boolean).map(f => [f.pago + '|' + f.iva, f]));
+  return formas.size ? `<div class="cb-pago">${[...formas.values()].map(f => tarFormaPagoHtml(f, 'tc-pago cb-pago-chip')).join('')}</div>` : '';
+}
 function cbHotelPrecioHtml(it, i) {
   if (it.tipo !== 'hotel') return '';
-  return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span class="cb-aviso">⏳ Buscando las tarifas del hotel…</span>' : ''}${it._aviso ? `<p class="cb-aviso"><span aria-hidden="true">💡</span>${esc(it._aviso)}</p>` : ''}
+  return `<div class="cb-tarifario cb-full" aria-live="polite">${it._cargando ? '<span class="cb-aviso">⏳ Buscando las tarifas del hotel…</span>' : ''}${it._aviso ? `<p class="cb-aviso"><span aria-hidden="true">💡</span>${esc(it._aviso)}</p>` : ''}${cbFormaPagoHtml(it)}
     ${it._tarifaError ? '<button type="button" class="dbtn" style="min-height:44px" data-cb-reintentar>Reintentar carga de tarifas</button>' : ''}
     ${it.producto_id && ROL !== 'marketing' && (cbHotelTarifas.get(Number(it.producto_id)) || []).some(tarDeBtTravel) ? '<button type="button" class="btn-sm cb-bt-pdf" data-cb-bt-pdf><i class="fas fa-file-pdf"></i> Ver en tarifario BT Travel</button>' : ''}
     ${cbTramosHtml(it)}
@@ -39727,7 +39761,7 @@ async function cbCargarProductos() {
   if (cbProductosListos) return;
   cbProductosListos = true;
   const [{ data, error }] = await Promise.all([
-    sb.from('productos').select('id,nombre,tipo,destino,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete', 'excursion']).eq('activo', true).order('nombre').limit(1000),
+    sb.from('productos').select('id,nombre,tipo,destino,iva_ya_incluido,producto_fotos(storage_path,orden,es_principal,activo)').in('tipo', ['hotel', 'paquete', 'excursion']).eq('activo', true).order('nombre').limit(1000),
     cbCargarHotSales(),
   ]);
   if (error) { cbProductosListos = false; return; }

@@ -2236,6 +2236,19 @@ body.arrastrando-lead #leads-tabs .seg[data-leads-tab="facturacion"]{
 .tc-precio-foto .tcp-m{font-size:15px;font-weight:800;line-height:1.2;letter-spacing:-.2px;color:var(--precio-sobre-foto)}
 .tc-precio-foto .tcp-d,.tc-precio-foto .tcp-u{font-size:10.5px;font-weight:600;color:rgba(255,255,255,.72)}
 .tc-precio-foto.sin-precio{font-size:11.5px;font-weight:600;color:rgba(255,255,255,.62)}
+/* Forma de pago encima del precio (dueño 2026-11-26): tasa BCV / tasa euro / solo divisa + IVA. */
+.tc-precio-pila{position:absolute;right:10px;bottom:9px;z-index:2;max-width:calc(100% - 84px);display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.tc-precio-pila .tc-precio-foto{position:static;max-width:100%}
+.tc-pago{--pg-ic:#93c5fd;display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:3px 8px;border-radius:999px;background:rgba(6,10,18,.86);border:1px solid rgba(255,255,255,.14);color:#fff;font-size:10.5px;font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}
+.tc-pago i{color:var(--pg-ic);font-size:9.5px;flex-shrink:0}
+.tc-pago.is-euro{--pg-ic:#c4b5fd}
+.tc-pago.is-divisa{--pg-ic:#fbbf24;color:#fde68a}
+.tcpg-iva{padding-left:6px;border-left:1px solid rgba(255,255,255,.22);font-weight:700}
+.tcpg-iva.is-suma{color:#fbbf24}.tcpg-iva.is-incluido{color:#4ade80}.tcpg-iva.is-confirmar{color:rgba(255,255,255,.62);font-weight:600}
+.cb-pago{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.tc-pago.cb-pago-chip{--pg-ic:var(--blue);background:rgba(var(--ink-rgb),.05);border-color:var(--line2);color:var(--txt);font-size:12px;padding:4px 10px}
+.tc-pago.cb-pago-chip.is-euro{--pg-ic:var(--purple)}.tc-pago.cb-pago-chip.is-divisa{--pg-ic:var(--amber);color:var(--txt)}
+.cb-pago-chip .tcpg-iva{border-left-color:var(--line2)}.cb-pago-chip .tcpg-iva.is-suma{color:var(--amber)}.cb-pago-chip .tcpg-iva.is-incluido{color:var(--green)}.cb-pago-chip .tcpg-iva.is-confirmar{color:var(--muted)}
 .tc-media-wrap .carrusel-dots{left:12px;right:auto;bottom:21px;justify-content:flex-start}
 .tc-thumb{width:100%;height:120px;object-fit:cover;display:block;background:var(--panel-solid);transition:opacity .18s ease}
 .tc-thumb.tc-thumb-vacio{width:calc(100% - 36px);height:100px;margin:16px 18px 0;border-radius:10px;display:grid;place-items:center;color:var(--muted2);font-size:22px;border:1px dashed var(--line2)}
