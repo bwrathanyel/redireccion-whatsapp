@@ -111,6 +111,8 @@ const CSS = `
 .dp-datos span{display:block;font-size:11px;color:var(--muted)}
 .dp-nota{display:flex;align-items:baseline;gap:7px;padding:9px 11px;border-radius:10px;background:var(--bg2);font-size:12px;color:var(--muted)}
 .dp-nota b{color:var(--txt)}
+.dp-nota[hidden],.dp-cq[hidden]{display:none}
+.dp-cq{display:grid;gap:8px;padding:10px;border-radius:10px;background:var(--bg2);margin-top:6px}
 .dp-acc{display:flex;flex-wrap:wrap;gap:7px}
 .dp-item{display:flex;flex-direction:column;gap:7px;padding:11px;border:1px solid var(--line2);border-radius:12px}
 .dp-item.viejo{opacity:.62}
@@ -224,6 +226,7 @@ const ERRORES = {
   entrada_en_el_pasado: 'La entrada ya pasó', salida_antes_de_entrada: 'La salida tiene que ser después de la entrada', demasiadas_noches: 'Máximo 60 noches',
   faltan_habitaciones: 'Agrega al menos una habitación', habitacion_invalida: 'Revisa las habitaciones (1 a 12 adultos cada una)', edad_invalida: 'Edad de niño inválida (0 a 17)',
   personas_invalidas: 'Máximo 60 personas', falta_alojamiento: 'Agrega al menos un alojamiento', demasiados_alojamientos: 'Máximo 10 alojamientos',
+  destino_vacio: 'Escribe el destino', destino_ambiguo: 'Hay varios destinos con ese nombre: sé más específico', destino_sin_alojamientos: 'No hay alojamientos con tarifa vigente y sin stop sale en ese destino',
   lead_no_disponible: 'Ese lead no está disponible', cotizacion_no_existe: 'La cotización no existe', ya_cerrada: 'La solicitud ya está cerrada',
   no_existe: 'No existe', estado_invalido: 'Elige una respuesta', precio_invalido: 'Precio inválido', falta_alternativa: 'Escribe la alternativa',
   alternativas_invalidas: 'Alternativas inválidas', moneda_invalida: 'Moneda inválida', alternativa_no_existe: 'Esa alternativa no existe',
@@ -740,7 +743,12 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     const v = panel(editar ? `Editar solicitud #${s.id}` : 'Pedir disponibilidad', `<form class="dp-pform" id="dp-f" novalidate>
       ${editar && s.estado === 'consultando' ? '<div class="dp-nota"><i class="fas fa-circle-info"></i> Ya se consultó al proveedor: si cambias fechas o personas, el admin recibe aviso y vuelve a consultar.</div>' : ''}
       ${leadSel ? `<div class="dp-nota"><i class="fas fa-user"></i><span>Para el lead <b>${esc(leadSel.nombre || '#' + leadSel.id)}</b></span></div>` : ''}
-      <section class="dp-paso"><h4><b>1</b> Alojamiento</h4><div class="dp-paso" data-alos></div><button type="button" class="dp-link" data-alo-mas>+ Otro alojamiento</button></section>
+      <section class="dp-paso"><h4><b>1</b> Alojamiento</h4><div class="dp-paso" data-alos></div><button type="button" class="dp-link" data-alo-mas>+ Otro alojamiento</button>
+        ${editar ? '' : `<button type="button" class="dp-link" data-cq><i class="fas fa-wand-magic-sparkles"></i> Sin posada específica: cualquiera del destino</button>
+        <div class="dp-cq" data-cq-caja hidden><label class="dp-campo"><span>Destino</span><input data-cq-dest maxlength="120" placeholder="Los Roques" value="${esc(s.destino || destino || lead?.destino || producto?.destino || '')}"></label>
+          <div class="dp-acc"><button type="button" class="btn-acc" data-cq-n="3">Las 3 más pedidas</button><button type="button" class="btn-sm" data-cq-n="10">Todas las que haya (hasta 10)</button></div>
+          <div class="dp-linea">Solo con tarifa vigente y sin stop sale en las fechas. Puedes quitar las que no quieras.</div></div>
+        <div class="dp-nota" data-cq-res hidden></div>`}</section>
       <section class="dp-paso"><h4><b>2</b> Fechas</h4>
         <div class="dp-fechas"><label class="dp-campo"><span>Entrada</span><input name="check_in" type="date" required min="${editar ? '' : hoy}" value="${ci}"></label>
           <label class="dp-campo"><span>Salida</span><input name="check_out" type="date" required min="${ci ? sumarDias(ci, 1) : hoy}" value="${co}"></label></div>
@@ -798,6 +806,24 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       sug.hidden = false;
     };
 
+    let auto = null;
+    async function cualquiera(cant, b) {
+      const inp = f.querySelector('[data-cq-dest]'), dest = inp.value.trim();
+      if (dest.length < 2) { inp.focus(); return error(ERRORES.destino_vacio); }
+      const listo = ocupado(b);
+      const r = await rpc('disp_populares', { p_destino: dest, p_cantidad: cant, p_check_in: f.check_in.value || null, p_check_out: f.check_out.value > f.check_in.value ? f.check_out.value : null });
+      listo(); if (!r) return;
+      const nuevos = r.items.filter(x => !alos.some(a => a.producto_id === x.producto_id));
+      const lista = [...alos.filter(a => a.alojamiento), ...nuevos.map(x => ({ producto_id: x.producto_id, alojamiento: x.nombre, tipo: TIPOS.includes(x.tipo) ? x.tipo : 'otro', plan: '', habitacion: '' }))].slice(0, 10);
+      alos.splice(0, alos.length, ...lista);
+      auto = { destino: r.destino, ids: new Set(r.items.map(x => x.producto_id)) };
+      if (!f.destino.value.trim()) { f.destino.value = r.destino; destAuto = false; }
+      const rs = f.querySelector('[data-cq-res]');
+      rs.innerHTML = `<i class="fas fa-wand-magic-sparkles"></i><span>${r.items.length === 1 ? 'Elegí el más pedido' : `Elegí los ${r.items.length} más pedidos`} de <b>${esc(r.destino)}</b>${r.candidatos > r.items.length ? ` (hay ${r.candidatos} con tarifa vigente)` : ''}. Quita con ✕ los que no quieras.${r.con_stop_sale?.length ? ` Con stop sale en esas fechas, omitidos: ${esc(r.con_stop_sale.join(', '))}.` : ''}</span>`;
+      rs.hidden = false; f.querySelector('[data-cq-caja]').hidden = true;
+      pintarAlos(); resumir();
+      infoProductos(r.items.map(x => x.producto_id)).then(() => { if (v.isConnected) pintarAlos(); });
+    }
     f.addEventListener('submit', e => e.preventDefault());
     f.addEventListener('input', async e => {
       const t = e.target;
@@ -835,6 +861,8 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
     });
     f.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.cq !== undefined) { const c = f.querySelector('[data-cq-caja]'); c.hidden = !c.hidden; if (!c.hidden) c.querySelector('input').focus(); return; }
+      if (b.dataset.cqN) { cualquiera(+b.dataset.cqN, b); return; }
       if (b.dataset.sug) { const [i, k] = b.dataset.sug.split(':').map(Number), p = ultSug.get(i)?.[k]; if (p) elegir(i, p); return; }
       if (b.dataset.libre) { const i = +b.dataset.libre, q = cAlos.querySelector(`[data-buscar="${i}"]`)?.value.trim(); if (q) { alos[i] = { alojamiento: q.slice(0, 160), tipo: 'hotel', plan: '', habitacion: '' }; pintarAlos(); resumir(); } return; }
       if (b.dataset.quitar) { const i = +b.dataset.quitar; if (alos.length > 1) alos.splice(i, 1); else alos[0] = {}; pintarAlos(); resumir(); cAlos.querySelector('[data-buscar]')?.focus(); return; }
@@ -862,8 +890,10 @@ export function crearDisponibilidad({ sb, esc, ok, error, confirmar, rol, uid, r
       if (f.check_out.value <= f.check_in.value) return error(ERRORES.salida_antes_de_entrada);
       const sinEdad = [...cHabs.querySelectorAll('[data-edad]')].filter(x => x.value === '');
       if (sinEdad.length) { sinEdad.forEach(x => x.classList.add('falta')); sinEdad[0].focus(); return error(sinEdad.length > 1 ? 'Escribe la edad de cada niño' : 'Escribe la edad del niño'); }
+      const nAuto = auto ? itemsN.filter(i => auto.ids.has(i.producto_id)).length : 0;
+      const notaAuto = nAuto ? `Sin alojamiento específico: se consultaron ${nAuto === 1 ? 'el más pedido' : `los ${nAuto} más pedidos`} de ${auto.destino}. El cliente acepta cualquiera con cupo.` : '';
       const p = { cliente_nombre: f.cliente.value.trim(), destino: f.destino.value.trim(), check_in: f.check_in.value, check_out: f.check_out.value,
-        habitaciones: habs.map(h => ({ adultos: h.adultos, ninos: h.ninos.map(Number), infantes: h.infantes })), urgente: f.urgente.checked, notas: f.notas.value.trim(), items: itemsN };
+        habitaciones: habs.map(h => ({ adultos: h.adultos, ninos: h.ninos.map(Number), infantes: h.infantes })), urgente: f.urgente.checked, notas: [notaAuto, f.notas.value.trim()].filter(Boolean).join(' ').slice(0, 1000), items: itemsN };
       const listo = ocupado(b);
       let r;
       if (editar) r = await rpc('disp_editar', { p_id: s.id, p });
