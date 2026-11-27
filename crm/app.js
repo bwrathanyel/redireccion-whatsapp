@@ -32028,7 +32028,7 @@ function tgMapaAbrir(x) {
   const embed = `<iframe class="tg-mapa-iframe" src="https://www.google.com/maps?q=${encodeURIComponent(tgMapaQuery(x))}&z=15&output=embed" referrerpolicy="no-referrer-when-downgrade" title="Mapa"></iframe>`;
   el.innerHTML = `<div class="tg-mapa-box" role="dialog" aria-modal="true" aria-label="Mapa de ${esc(x.nombre || '')}">
     <header class="tg-mapa-head"><div><b>${esc(x.nombre || '')}</b>${x.ubicacion_corta ? `<small>${esc(x.ubicacion_corta)}</small>` : ''}</div><button type="button" class="tg-mapa-x" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></header>
-    <div class="tg-mapa-frame">${c ? '<div class="tg-mapa-lienzo"></div><div class="tg-mapa-capas" role="group" aria-label="Tipo de mapa"><button type="button" class="is-on" data-capa="calle">Mapa</button><button type="button" data-capa="sat">Satélite</button></div>' : embed}</div>
+    <div class="tg-mapa-frame">${c ? '<div class="tg-mapa-lienzo"></div><div class="tg-mapa-capas" role="group" aria-label="Tipo de mapa"><button type="button" data-capa="calle">Mapa</button><button type="button" class="is-on" data-capa="sat">Satélite</button></div>' : embed}</div>
     <div class="tg-mapa-pts" hidden></div>
     ${pie ? `<div class="tg-mapa-pie">${pie}</div>` : ''}
   </div>`;
@@ -32047,7 +32047,7 @@ function tgMapaAbrir(x) {
       calle: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }),
       sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, maxZoom: 19, attribution: 'Esri, Maxar, Earthstar Geographics' }),
     };
-    let actual = capas.calle.addTo(mapa);
+    let actual = capas.sat.addTo(mapa);
     el.querySelector('.tg-mapa-capas').addEventListener('click', e => {
       const b = e.target.closest('[data-capa]');
       if (!b || !capas[b.dataset.capa] || capas[b.dataset.capa] === actual) return;
