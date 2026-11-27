@@ -29721,8 +29721,8 @@ const tarFormaPagoHtml = (f, cls = 'tc-pago') => f
   ? `<span class="${cls} is-${f.pago}" title="${esc(tarFormaPagoTitle(f))}"><i class="fas fa-${f.pago === 'divisa' ? 'dollar-sign' : 'money-bill-wave'}" aria-hidden="true"></i>${TAR_PAGO_TXT[f.pago]}${f.iva ? `<span class="tcpg-iva is-${f.iva}">${TAR_IVA_TXT[f.iva]}</span>` : ''}</span>` : '';
 const tcCotizarBtnHtml = productoId => productoId && usuarioPuedeAbrirSeccion('cotizacion-boletos')
   ? `<button type="button" class="tcm-cotizar" data-cotizar-producto="${productoId}" title="Abrir Cotizaciones con este hotel ya elegido"><i class="fas fa-file-invoice-dollar"></i>Cotizar</button>` : '';
-const tcMapaBtnHtml = x => /^https:\/\//.test(x?.ubicacion_mapa || '')
-  ? `<a class="tcm-mapa" href="${esc(x.ubicacion_mapa)}" target="_blank" rel="noopener" title="Ver en el mapa" aria-label="Ver en el mapa"><i class="fas fa-map-location-dot"></i></a>` : '';
+const tcMapaBtnHtml = x => (tgMapaCoords(x) || /^https:\/\//.test(x?.ubicacion_mapa || ''))
+  ? `<button type="button" class="tcm-mapa" title="Ver dónde queda en el mapa" aria-label="Ver ubicación en el mapa"><i class="fas fa-location-dot" aria-hidden="true"></i>Ubicación</button>` : '';
 // Sector corto + hasta 3 playas en la tarjeta (dueño 2026-11-25); el detalle queda en la ficha.
 function tcUbicHtml(x) {
   const playas = (x?.playas_cercanas || []).filter(Boolean);
@@ -31886,26 +31886,85 @@ function tgMapaQuery(x) {
   if (m) return decodeURIComponent(m[1].replace(/\+/g, ' '));
   return [x?.nombre, x?.localidad || x?.destino, 'Venezuela'].filter(Boolean).join(', ');
 }
-let tgMapaEl = null;
+// Coordenada exacta del lugar (dueño 2026-11-27). Manda la del enlace de Google Maps: `!3d..!4d..`
+// es el pin del lugar, luego `query=/q=/ll=lat,lng`; el `@lat,lng` es solo el centro de la vista, por
+// eso va último. Sin enlace con coordenada se usa productos.lat/lng. Sin ninguna devuelve null.
+function tgMapaCoords(x) {
+  const n = '(-?\\d+(?:\\.\\d+)?)';
+  const u = String(x?.ubicacion_mapa || '');
+  const m = new RegExp(`!3d${n}!4d${n}`).exec(u) || new RegExp(`[?&](?:query|q|ll|destination)=${n}(?:,|%2C)\\s*${n}`, 'i').exec(u) || new RegExp(`@${n},${n}`).exec(u);
+  const lat = m ? Number(m[1]) : x?.lat == null ? NaN : Number(x.lat);
+  const lng = m ? Number(m[2]) : x?.lng == null ? NaN : Number(x.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? [lat, lng] : null;
+}
+// Leaflet en vez del iframe de Google: el embed sin API key obliga a «dos dedos / Ctrl + rueda» y no
+// deja controlar el gesto. Con Leaflet se arrastra con un dedo o el mouse, la rueda y el pellizco hacen zoom.
+let tgLeafletP = null;
+function tgLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (tgLeafletP) return tgLeafletP;
+  const base = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet';
+  tgLeafletP = new Promise((ok, ko) => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = `${base}.min.css`;
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = `${base}.min.js`; js.onload = () => (window.L ? ok(window.L) : ko(new Error('leaflet vacío'))); js.onerror = () => ko(new Error('leaflet no cargó'));
+    document.head.appendChild(js);
+  }).catch(err => { tgLeafletP = null; throw err; });
+  return tgLeafletP;
+}
+let tgMapaEl = null, tgMapaInst = null;
 const tgMapaEsc = e => { if (e.key === 'Escape') { e.stopPropagation(); tgMapaCerrar(); } };
 function tgMapaAbrir(x) {
   if (!x || tgMapaEl) return;
+  const c = tgMapaCoords(x);
   const el = document.createElement('div');
   el.className = 'tg-mapa-ov';
-  const ext = /^https:\/\//.test(x.ubicacion_mapa || '') ? `<a class="tg-mapa-ext" href="${esc(x.ubicacion_mapa)}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Abrir en Google Maps</a>` : '';
+  const gm = c ? `https://www.google.com/maps/search/?api=1&query=${c[0]},${c[1]}` : /^https:\/\//.test(x.ubicacion_mapa || '') ? x.ubicacion_mapa : '';
+  const ruta = c ? `https://www.google.com/maps/dir/?api=1&destination=${c[0]},${c[1]}` : '';
+  const pie = [gm && `<a class="tg-mapa-ext" href="${esc(gm)}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Abrir en Google Maps</a>`, ruta && `<a class="tg-mapa-ext" href="${esc(ruta)}" target="_blank" rel="noopener"><i class="fas fa-route"></i>Cómo llegar</a>`].filter(Boolean).join('');
+  const embed = `<iframe class="tg-mapa-iframe" src="https://www.google.com/maps?q=${encodeURIComponent(tgMapaQuery(x))}&z=15&output=embed" referrerpolicy="no-referrer-when-downgrade" title="Mapa"></iframe>`;
   el.innerHTML = `<div class="tg-mapa-box" role="dialog" aria-modal="true" aria-label="Mapa de ${esc(x.nombre || '')}">
     <header class="tg-mapa-head"><div><b>${esc(x.nombre || '')}</b>${x.ubicacion_corta ? `<small>${esc(x.ubicacion_corta)}</small>` : ''}</div><button type="button" class="tg-mapa-x" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></header>
-    <iframe class="tg-mapa-frame" src="https://www.google.com/maps?q=${encodeURIComponent(tgMapaQuery(x))}&z=15&output=embed" referrerpolicy="no-referrer-when-downgrade" title="Mapa"></iframe>
-    ${ext}
+    <div class="tg-mapa-frame">${c ? '<div class="tg-mapa-lienzo"></div><div class="tg-mapa-capas" role="group" aria-label="Tipo de mapa"><button type="button" class="is-on" data-capa="calle">Mapa</button><button type="button" data-capa="sat">Satélite</button></div>' : embed}</div>
+    ${pie ? `<div class="tg-mapa-pie">${pie}</div>` : ''}
   </div>`;
   el.addEventListener('click', e => { if (e.target === el || e.target.closest('.tg-mapa-x')) tgMapaCerrar(); });
   document.body.appendChild(el);
   tgMapaEl = el;
   window.addEventListener('keydown', tgMapaEsc, true);
   navPush({ type: 'tg-mapa' });
+  if (!c) return;
+  tgLeaflet().then(L => {
+    if (tgMapaEl !== el) return;
+    const mapa = L.map(el.querySelector('.tg-mapa-lienzo'), { center: c, zoom: 16, minZoom: 3, maxZoom: 19, zoomControl: false, attributionControl: true });
+    L.control.zoom({ position: 'bottomright', zoomInTitle: 'Acercar', zoomOutTitle: 'Alejar' }).addTo(mapa);
+    mapa.attributionControl.setPrefix(false);
+    const capas = {
+      calle: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }),
+      sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, maxZoom: 19, attribution: 'Esri, Maxar, Earthstar Geographics' }),
+    };
+    let actual = capas.calle.addTo(mapa);
+    el.querySelector('.tg-mapa-capas').addEventListener('click', e => {
+      const b = e.target.closest('[data-capa]');
+      if (!b || !capas[b.dataset.capa] || capas[b.dataset.capa] === actual) return;
+      mapa.removeLayer(actual); actual = capas[b.dataset.capa].addTo(mapa);
+      el.querySelectorAll('.tg-mapa-capas button').forEach(o => o.classList.toggle('is-on', o === b));
+    });
+    L.marker(c, { title: x.nombre || '', keyboard: false, icon: L.divIcon({ className: 'tg-mapa-pin', html: '<i class="fas fa-location-dot" aria-hidden="true"></i>', iconSize: [36, 44], iconAnchor: [18, 42] }) }).addTo(mapa);
+    tgMapaInst = mapa;
+    requestAnimationFrame(() => mapa.invalidateSize());
+  }).catch(() => {
+    if (tgMapaEl !== el) return;
+    el.querySelector('.tg-mapa-capas')?.remove();
+    el.querySelector('.tg-mapa-frame').innerHTML = embed;
+  });
 }
 function tgMapaCerrar(fromNav) {
   if (!tgMapaEl) return;
+  try { tgMapaInst?.remove(); } catch (_) { /* ya destruido */ }
+  tgMapaInst = null;
   tgMapaEl.remove(); tgMapaEl = null;
   window.removeEventListener('keydown', tgMapaEsc, true);
   if (!fromNav) navConsume();
