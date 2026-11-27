@@ -34886,7 +34886,8 @@ async function chatBlobAdj(m) {
   if (m.espera) { const v = await m.espera; if (v instanceof Blob) return m.blob = v; m.url ||= v; }
   const url = m.url || msgUrlsAdjuntos[m.storage_path]; if (!url) throw new Error('sin_url');
   const res = await fetch(url); if (!res.ok) throw new Error('sin_archivo');
-  const blob = await res.blob();
+  // res.blob() con el tarifario de BT Travel (12 MB) daba «Failed to fetch» en Chrome (27-nov); arrayBuffer no.
+  const blob = new Blob([await res.arrayBuffer()], { type: res.headers.get('content-type') || '' });
   chatBlobs.set(m.storage_path, blob);
   if (chatBlobs.size > 12) chatBlobs.delete(chatBlobs.keys().next().value);
   return blob;
