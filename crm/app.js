@@ -11,6 +11,7 @@ import { crearMarketing } from './marketing.js';
 import { crearCostosDigitales } from './costos-digitales.js';
 import { crearDocumentosEmpresa } from './documentos-empresa.js';
 import { crearMetodosPago } from './metodos-pago.js';
+import { crearTasas } from './tasas.js';
 import { crearFinanzasBanco } from './finanzas-banco.js';
 import { crearFinanzasPorPagar } from './finanzas-por-pagar.js';
 import { crearFinanzasVenta } from './finanzas-venta.js';
@@ -2058,7 +2059,7 @@ function manejarDeepLinkAsistencia() {
 const IR_SECCIONES = [
   'hoy', 'dashboard', 'mis-ventas', 'leads', 'clientes-asignados', 'mis-notas', 'pipeline', 'postventa', 'historicos',
   'web-reasignados', 'contactos-directos', 'repartir', 'prospeccion', 'llamadas', 'tarifario', 'galeria', 'stop-sales',
-  'facturacion', 'pagos', 'metodos-pago', 'disponibilidad', 'proveedores', 'empresas', 'bt-travel', 'documentos-empresa', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
+  'facturacion', 'pagos', 'metodos-pago', 'tasas', 'disponibilidad', 'proveedores', 'empresas', 'bt-travel', 'documentos-empresa', 'apartamentos', 'voucher', 'importar-vouchers', 'reservas-empresas', 'campanas-wa', 'comisiones', 'ranking', 'boleteria', 'bol-solicitudes', 'cotizacion-boletos', 'boletos-emitidos', 'facturas-empresa',
   'mensajes', 'whatsapp', 'wa-bandeja', 'dms', 'correo', 'clientes-eventos', 'tareas', 'gestion-personal', 'informe-diario',
   'rendimiento-ia', 'costos-digitales', 'ia-atencion', 'propuestas', 'asistente', 'consultor-ia', 'voz-ia', 'redes', 'ads', 'contenido',
   'manual', 'actualizaciones'
@@ -4495,6 +4496,8 @@ let METODOS_PAGO = null;
 const metodosPago = () => METODOS_PAGO ||= crearMetodosPago({ sb, esc, ok: okToast, error: errToast, confirmar: confirmarSheet, rol: ROL,
   raiz: document.getElementById('metodos-pago-root'), hoja: document.getElementById('mp-sheet-root'),
   abrirSheet: openSheet, cerrarSheet: closeSheet, toastCompartir: docToastCompartir, descargar: descargarArchivo });
+let TASAS_CALC = null;
+const tasasCalc = () => TASAS_CALC ||= crearTasas({ sb, esc, ok: okToast, error: errToast, raiz: document.getElementById('tasas-root') });
 // «Datos de pago» desde un chat: el texto elegido se suma a lo que ya estaba escrito.
 const mpInsertarEn = idTexto => t => {
   const ta = document.getElementById(idTexto); if (!ta) return;
@@ -41638,6 +41641,7 @@ const NAV_ITEMS = [
   // Entrada propia desde 2026-10-22 (antes pestaña de Cobros): late en rojo con pagos por verificar (setupAvisoPagos).
   { sec: 'pagos', icon: 'fas fa-money-check-dollar', label: 'Pagos por verificar', padreAdmin: 'grp-cobros', padreAsesor: 'grp-cobros', roles: '', sub: 'Pagos de clientes pendientes de verificar', badge: 'nav-pagos-count', badgeDefault: '0' },
   { sec: 'metodos-pago', icon: 'fas fa-building-columns', label: 'Métodos de pago', padreAdmin: 'grp-herramientas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Cuentas de la agencia para copiar o enviar al cliente en texto o foto' },
+  { sec: 'tasas', icon: 'fas fa-calculator', label: 'Calculadora de tasas', padreAdmin: 'grp-herramientas', roles: 'nav-marketing-ok nav-boleteria-ok nav-modo-boleteria-ok', sub: 'Dólar BCV, euro y Binance: convertir, comparar, regla de 3 e historial' },
   { sec: 'comisiones', icon: 'fas fa-receipt', label: 'Comisiones', padre: 'grp-cobros', roles: '', sub: 'Se calculan solas; pagos el 5 y el 20' },
   // Finanzas Fase 1 (2026-11-14): las facturas a empresas son dinero, salen de Corporativo.
   { sec: 'facturas-empresa', icon: 'fas fa-file-invoice', label: 'Facturas a empresas', padre: 'grp-cobros', roles: 'nav-admin-only', sub: 'Facturas a empresas: emitir, PDF y cobro' },
@@ -41692,6 +41696,7 @@ const NAV_PADRES = [
   { sec: 'grp-cobros', icon: 'fas fa-coins', label: 'Finanzas' },
   { sec: 'pagos', hoja: true },
   { sec: 'metodos-pago', hoja: true },
+  { sec: 'tasas', hoja: true },
   { divisor: 'Gestión' },
   { sec: 'grp-equipo', icon: 'fas fa-people-group', label: 'Equipo', badge: 'nav-tareas-count', badgeDefault: '0' },
   { sec: 'grp-directorio', icon: 'fas fa-briefcase', label: 'Corporativo' },
@@ -41717,7 +41722,7 @@ const NAV_BLOQUES_ADMIN = [
 const NAV_BLOQUES_ASESOR = [
   ['hoy', 'Hoy', ['grp-inicio', 'correo', 'tareas', 'grp-bandeja', 'mensajes']],
   ['vender', 'Vender', ['grp-leads', 'cotizacion-boletos', 'grp-tarifario', 'disponibilidad']],
-  ['clientes', 'Clientes', ['grp-reservas', 'grp-cobros', 'metodos-pago']],
+  ['clientes', 'Clientes', ['grp-reservas', 'grp-cobros', 'metodos-pago', 'tasas']],
   ['mas', 'Más', ['grp-directorio', 'grp-ia', 'grp-ayuda']],
 ];
 const NAV_LABEL_ASESOR = { 'grp-cobros': 'Mis finanzas' };
@@ -42242,6 +42247,7 @@ function cargarSeccion(sec) {
   if (sec === 'costos-digitales') costosDigitales().cargar();
   if (sec === 'documentos-empresa') documentosEmpresa().cargar();
   if (sec === 'metodos-pago') metodosPago().cargar();
+  if (sec === 'tasas') tasasCalc().cargar();
   if (sec === 'disponibilidad') disponibilidad().cargar();
   if (sec === 'prospeccion') prospeccion().cargar();
   if (sec === 'llamadas') llamadasPanel().cargar();
