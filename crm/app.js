@@ -32040,14 +32040,15 @@ function tgMapaAbrir(x) {
   if (!c) return;
   tgLeaflet().then(L => {
     if (tgMapaEl !== el) return;
-    const mapa = L.map(el.querySelector('.tg-mapa-lienzo'), { center: c, zoom: 16, minZoom: 3, maxZoom: 18, zoomControl: false, attributionControl: true });
+    const mapa = L.map(el.querySelector('.tg-mapa-lienzo'), { center: c, zoom: 16, minZoom: 3, maxZoom: 19, zoomControl: false, attributionControl: true });
     L.control.zoom({ position: 'bottomright', zoomInTitle: 'Acercar', zoomOutTitle: 'Alejar' }).addTo(mapa);
     mapa.attributionControl.setPrefix(false);
     const capas = {
-      calle: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }),
-      sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 16, maxZoom: 18, attribution: 'Esri, Maxar, Earthstar Geographics' }),
+      calle: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }),
+      sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 16, maxZoom: 19, attribution: 'Esri, Maxar, Earthstar Geographics' }),
     };
     let actual = capas.sat.addTo(mapa);
+    tgSatNativo(c).then(z => { if (z > capas.sat.options.maxNativeZoom && tgMapaInst === mapa) { capas.sat.options.maxNativeZoom = z; capas.sat.redraw(); } });
     el.querySelector('.tg-mapa-capas').addEventListener('click', e => {
       const b = e.target.closest('[data-capa]');
       if (!b || !capas[b.dataset.capa] || capas[b.dataset.capa] === actual) return;
@@ -32071,6 +32072,14 @@ function tgMapaDist(a, b) {
   const r = Math.PI / 180, dLat = (b[0] - a[0]) * r, dLng = (b[1] - a[1]) * r;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLng / 2) ** 2;
   return 12742000 * Math.asin(Math.sqrt(h));
+}
+// Esri tiene imagen nítida hasta z17-z19 según la zona; pasado su máximo devuelve «Map data not yet available».
+// Su tilemap dice hasta dónde hay imagen en el punto del hotel; de ahí en adelante Leaflet agranda.
+async function tgSatNativo(c) {
+  const tile = z => { const n = 2 ** z, r = c[0] * Math.PI / 180; return [Math.floor((c[1] + 180) / 360 * n), Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n)]; };
+  const hay = async z => { try { const [x, y] = tile(z); const r = await fetch(`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tilemap/${z}/${y}/${x}/1/1?f=json`); return (await r.json())?.data?.[0] === 1; } catch (_) { return false; } };
+  const ok = await Promise.all([17, 18, 19].map(hay));
+  return ok[2] ? 19 : ok[1] ? 18 : ok[0] ? 17 : 16;
 }
 const TG_PUNTO_COLOR = { aeropuerto: '#2563eb', muelle: '#7c3aed', playa: '#d97706', restaurante: '#dc2626', comercio: '#059669' };
 const tgMapaDistTxt = m => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`;
