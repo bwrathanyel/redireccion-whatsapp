@@ -32072,6 +32072,7 @@ function tgMapaDist(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * r) * Math.cos(b[0] * r) * Math.sin(dLng / 2) ** 2;
   return 12742000 * Math.asin(Math.sqrt(h));
 }
+const TG_PUNTO_COLOR = { aeropuerto: '#2563eb', muelle: '#7c3aed', playa: '#d97706', restaurante: '#dc2626', comercio: '#059669' };
 const tgMapaDistTxt = m => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',')} km`;
 async function tgMapaPuntos(L, mapa, el, x, c) {
   if (x.id == null) return;
@@ -32089,21 +32090,42 @@ async function tgMapaPuntos(L, mapa, el, x, c) {
   barra.innerHTML = pts.map((p, i) => `<button type="button" class="tg-mapa-pt" data-i="${i}" data-t="${esc(p.tipo)}"><i class="fas ${TG_PUNTO_ICONO[p.tipo] || 'fa-location-dot'}" aria-hidden="true"></i><span>${esc(p.nombre)}</span><b>${tgMapaDistTxt(p.d)}</b></button>`).join('');
   barra.hidden = false;
   requestAnimationFrame(() => mapa.invalidateSize());
-  let linea = null, sel = -1;
-  pts.forEach((p, i) => {
+  // Estrella hotel→puntos: una línea por punto, siempre visible; la etiqueta va junto al punto,
+  // del lado opuesto al hotel, para que nunca tape la línea.
+  const cosLat = Math.cos(c[0] * Math.PI / 180);
+  const lado = p => { const dx = (p.lng - c[1]) * cosLat, dy = p.lat - c[0]; return Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? ['right', [16, 0]] : ['left', [-16, 0]]) : (dy >= 0 ? ['top', [0, -16]] : ['bottom', [0, 16]]); };
+  const rayos = pts.map((p, i) => {
+    const color = TG_PUNTO_COLOR[p.tipo] || '#0b6e7a', ll = [c, [p.lat, p.lng]];
+    const halo = L.polyline(ll, { color: '#fff', weight: 5, opacity: .5, interactive: false }).addTo(mapa);
+    const linea = L.polyline(ll, { color, weight: 3, opacity: .95, dashArray: '6 6' }).addTo(mapa);
+    linea.on('click', () => elegir(i));
+    const [direction, offset] = lado(p);
     const m = L.marker([p.lat, p.lng], { title: p.nombre, keyboard: false, icon: L.divIcon({ className: 'tg-mapa-ptm', html: `<span data-t="${esc(p.tipo)}"><i class="fas ${TG_PUNTO_ICONO[p.tipo] || 'fa-location-dot'}" aria-hidden="true"></i></span>`, iconSize: [26, 26], iconAnchor: [13, 13] }) }).addTo(mapa);
+    m.bindTooltip(tgMapaDistTxt(p.d), { permanent: true, className: 'tg-mapa-dist', direction, offset, interactive: false }).openTooltip();
     m.on('click', () => elegir(i));
+    return { halo, linea, m };
   });
+  const cerca = pts.filter(p => p.d <= 4000);
+  const vistaGeneral = (anim) => cerca.length ? mapa[anim ? 'flyToBounds' : 'fitBounds'](L.latLngBounds([c, ...cerca.map(p => [p.lat, p.lng])]), { padding: [48, 48], maxZoom: 16, ...(anim ? { duration: .5 } : {}) }) : mapa[anim ? 'flyTo' : 'setView'](c, 16, anim ? { duration: .5 } : {});
+  requestAnimationFrame(() => vistaGeneral(false));
+  let sel = -1;
   const botones = [...barra.querySelectorAll('.tg-mapa-pt')];
   function elegir(i) {
-    if (linea) { mapa.removeLayer(linea); linea = null; }
-    botones.forEach((b, j) => b.classList.toggle('is-on', j === i && i !== sel));
-    if (i === sel) { sel = -1; mapa.flyTo(c, 16, { duration: .5 }); return; }
+    if (i === sel) i = -1;
     sel = i;
+    botones.forEach((b, j) => b.classList.toggle('is-on', j === i));
+    rayos.forEach((r, j) => {
+      const on = i === -1 || j === i, p = pts[j];
+      r.linea.setStyle(j === i ? { weight: 4, opacity: 1, dashArray: null } : { weight: 3, opacity: on ? .95 : .3, dashArray: '6 6' });
+      r.halo.setStyle({ opacity: on ? .5 : .15 });
+      r.m.setOpacity(on ? 1 : .55);
+      r.m.setTooltipContent(j === i ? `${esc(p.nombre)} · ${tgMapaDistTxt(p.d)}` : tgMapaDistTxt(p.d));
+      r.m.getTooltip()?.getElement()?.classList.toggle('is-on', j === i);
+    });
+    if (i === -1) { vistaGeneral(true); return; }
     const p = pts[i];
-    linea = L.polyline([c, [p.lat, p.lng]], { color: '#ef4444', weight: 3, dashArray: '6 6', opacity: .9 }).addTo(mapa);
-    linea.bindTooltip(`${esc(p.nombre)} · ${tgMapaDistTxt(p.d)}`, { permanent: true, className: 'tg-mapa-dist', direction: 'center' }).openTooltip();
-    mapa.flyToBounds(L.latLngBounds([c, [p.lat, p.lng]]), { padding: [60, 60], maxZoom: 17, duration: .5 });
+    rayos[i].halo.bringToFront(); rayos[i].linea.bringToFront();
+    mapa.flyToBounds(L.latLngBounds([c, [p.lat, p.lng]]), { padding: [70, 70], maxZoom: 17, duration: .5 });
     botones[i].scrollIntoView({ block: 'nearest', inline: 'center' });
   }
   barra.addEventListener('click', e => { const b = e.target.closest('.tg-mapa-pt'); if (b) elegir(Number(b.dataset.i)); });
