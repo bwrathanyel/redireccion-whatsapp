@@ -32040,12 +32040,12 @@ function tgMapaAbrir(x) {
   if (!c) return;
   tgLeaflet().then(L => {
     if (tgMapaEl !== el) return;
-    const mapa = L.map(el.querySelector('.tg-mapa-lienzo'), { center: c, zoom: 16, minZoom: 3, maxZoom: 19, zoomControl: false, attributionControl: true });
+    const mapa = L.map(el.querySelector('.tg-mapa-lienzo'), { center: c, zoom: 16, minZoom: 3, maxZoom: 18, zoomControl: false, attributionControl: true });
     L.control.zoom({ position: 'bottomright', zoomInTitle: 'Acercar', zoomOutTitle: 'Alejar' }).addTo(mapa);
     mapa.attributionControl.setPrefix(false);
     const capas = {
-      calle: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }),
-      sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, maxZoom: 19, attribution: 'Esri, Maxar, Earthstar Geographics' }),
+      calle: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }),
+      sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 16, maxZoom: 18, attribution: 'Esri, Maxar, Earthstar Geographics' }),
     };
     let actual = capas.sat.addTo(mapa);
     el.querySelector('.tg-mapa-capas').addEventListener('click', e => {
